@@ -1,0 +1,187 @@
+#!/usr/bin/env python
+
+# mkdirs.py
+# Creates directories, and loads batch files into subdirectories.
+
+import string
+import os,sys
+import shutil
+import read_spr_page
+
+SpiderBatchDir = "/usr8/spider/docs/techs/recon1/Procs"
+
+topleveldir    = "_top_level_project"
+
+class makeDirectories:
+    " target,source are directories, dirobj is created by read_spr_page.py"
+    def __init__(self, target, source=None, dirobj=None, ask=1):
+        # Initialize some variables
+        self.write_all = 0
+        self.quit = 0
+        self.cwd = os.getcwd()
+        
+        if source == None:
+            source = SpiderBatchDir
+        if not os.path.exists(source):
+            self.displayerror('Error', " UNABLE TO FIND PROCEDURE DIRECTORY " + source)
+            return
+        if dirobj != None:
+            D = dirobj
+        else:
+            D = read_spr_page.getproject()
+
+        # Make the main project directory (target)
+        os.chdir(self.cwd)
+        if os.path.exists(target) != 1:
+            if ask:
+                self.displayerror(message=" Directory %s not found." % (target))
+                askstr = "Create " + target + " and subdirectories? (y/n): "
+                yn = self.askinput(askstr)
+            else:
+                yn = 'y'
+            
+            if yn == 'y' or yn == 'Y':
+                #Print "ok"
+                try:
+                    os.mkdir(target, 0775)
+                except:
+                    self.displayerror(message=' Error: Unable to create: ' + target)
+                    return
+            else:
+                return
+            
+        target = os.path.abspath(target)
+        os.chdir(target)
+        # Make the subdirectories and load the batch files
+        dirlist = D['dirlist']
+
+        for dir in dirlist:
+            if dir == topleveldir:   # The top-level project directory
+                procs, subdirs = D[dir]
+                if len(procs) > 0:
+                    self.loadBatch(target, procs, source)
+                    if self.quit: return
+            else:
+                if not self.makeDirectory(dir):
+                    return
+                procs, subdirs = D[dir]
+                if len(procs) > 0:
+                    self.loadBatch(dir, procs, source)
+                    if self.quit: return
+                
+                if len(subdirs) > 0:
+                    os.chdir(dir)
+                    for subdir in subdirs:
+                        self.makeDirectory(subdir)
+                        if self.quit: return
+                    os.chdir(target)
+
+        # end __init__ --------------------------------------
+        
+    def makeDirectory(self,dir):
+        if os.path.exists(dir):
+            return 1
+        try:
+            os.mkdir(dir, 0775)
+            return 1
+        except:
+            self.displayerror(title='Error', message='Unable to create ' + dir)
+            return 0
+
+    def loadBatch(self, target, batchlist, source):
+        for file in batchlist:
+            fullpath = os.path.join(source,file)
+            if not os.path.exists(fullpath):
+                self.displayerror('Error', "Can't find " + fullpath)
+                continue
+
+            if self.write_all == 0:
+                local = os.path.join(target,file)
+                if os.path.exists(local):
+                    if ask:
+                        askstr = "%s exists. Overwrite? (y/n/all/q): " % local
+                        s = self.askinput(askstr)
+                        s = string.lower(s)
+                        if s[0] == 'a':
+                            self.write_all = 1
+                        elif s == 'n':
+                            continue
+                        elif s == 'q':
+                            self.quit = 1
+                            return
+                    else:
+                        self.write_all = 1
+            shutil.copy(fullpath,target)
+            self.printit('copying %s to %s' % (fullpath,target))
+        
+    # redefine these for GUI
+    def displayerror(self, title=None, message=None):
+        print message
+
+    def askinput(self, askstring):
+        return raw_input(askstring)
+
+    def printit(self, text):
+        print text
+        
+
+# ---- end makeDirectories ---
+
+def printDirs():
+    D = read_spr_page.getproject()
+    dirs = D['dirlist']
+    #print dirs
+    for dir in dirs:
+        print dir
+        procs, subdirs = D[dir]
+        for sub in subdirs:
+            print "    " + sub
+
+def printAll():
+    D = read_spr_page.getproject()
+    dirs = D['dirlist']
+    #Print dirs
+    for dir in dirs:
+        print dir
+        procs, subdirs = D[dir]
+        for proc in procs:
+            print "    " + proc
+        for sub in subdirs:
+            print "    " + sub + "/"
+
+def printHelp():
+    help = "Usage: \n" + \
+           "mkdirs.py project_dir  (Creates directories, loads batch files)\n" + \
+           "mkdirs.py -n project_dir (don't ask for confirmation)\n" + \
+           "mkdirs.py -d           (Prints out directory tree)\n" + \
+           "mkdirs.py -b           (Print out batch files and directories)\n" + \
+           "mkdirs.py -h           (this help message)"
+    print help
+
+if __name__ == '__main__':
+    
+    length = len(sys.argv[1:])
+    
+    if length == 0:
+        printHelp()
+        sys.exit()
+    arg = sys.argv[1]
+    if arg == "-d":
+        printDirs()
+    elif arg == "-b":
+        printAll()
+    elif arg == "-n":
+        arg2 = sys.argv[2]
+        md = makeDirectories(arg2, ask=0) 
+    elif arg == "-p":
+        if length < 2:
+            printHelp()
+        else:
+            filename = sys.argv[2]
+            print "pickling %s" % filename
+    elif arg == "-h" or arg == "-help":
+        printHelp()
+    elif arg[0] == "-":
+        printHelp()
+    else:
+        md = makeDirectories(arg) 
