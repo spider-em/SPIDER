@@ -1,0 +1,242 @@
+; <html><head><title>Reference free alignment with self correlation</title></head><body><pre>
+;
+; PURPOSE: Reference free alignment with self correlation 
+; SOURCE:  spider/docs/techs/align2d/ref-free-self-ali.spi
+;
+; I/O PARAMETERS AND FILES ARE SET HERE:
+
+[npart]   = 20   ; Number of images
+
+[niter]   = 8    ; Number of iterations 
+[r1]      = 4     ; First ring for rotational alignment
+[r2]      = 25    ; Last  ring for rotational alignment
+
+;  ------------ Input files ---------------------------------------
+
+[unaligned]  = 'input/savface_stk_rotsh'  ; Unaligned particle image stack
+
+; --------------- Output files  -----------------------------------
+
+[avg-byiter] = 'output/self_avg_byiter'    ; Averaged images stack 
+        
+[aligned]    = 'output/self_ali_'          ; Aligned particle image stack stem
+
+[rfdoc]      = 'output/self_rf_'           ; FSC doc file stem
+
+; -------------- END BATCH HEADER ---------------------------------</b>
+
+MD
+  VB OFF
+
+FI H [size],[ny]              ; Get image dimensions (square)
+  [unaligned]@1
+  NX,NY
+
+IF ([size] .NE. [ny]) THEN
+   VM
+     echo ' Image must be square!!'
+   EN
+ENDIF
+
+[rad]     = [size]/2 -3       ; Radius for alignment
+[cent]    = INT([size]/2)+1   ; SPIDER center
+[size2]   = 2 * [size]        ; Padded size
+[pad]     = INT(([size2]-[size])/2)
+
+MO                            ; Circular Mask for 'RF SN'
+  _9                          ; Mask for 'RF SN'          (output)
+  [size],[size]               ; Size
+  C                           ; Circle
+  [rad]                       ; Radius
+
+[iter] = 1
+
+AS S                          ; Create average image
+  [unaligned]@****            ; Unaligned image stack      (input)
+  1-[npart]                   ; Image numbers
+  A                           ; Average file only
+  [avg-byiter]@{***[iter]}   ; Unaligned avg. image stack (output)
+
+
+MS
+  _6@                         ; Incore for original images (output)
+  [size],[size]               ; Size
+  [npart]                     ; # of images
+
+;  Calculate ACs
+MS
+  _7@                         ; Incore for padded images  (output)                        ; Create inline stack
+   [size2],[size2]            ; Size
+  [npart]                     ; # of images
+
+
+;  Calculate ACs
+DO [ipart]=1,[npart]
+
+  MA                          ; Mask files 
+   [unaligned]@{***[ipart]}   ; Original  files           (input) 
+    _6@{***[ipart]}           ; Masked orig.  files       (output)
+    [rad]                     ; Outer radius
+    G                         ; Gaussian edge 
+    C                         ; Circle mask
+    [cent],[cent]             ; Center
+    3.5                       ; Gaussian edge width
+
+  PD                          ; Pad masked original files
+    _6@{***[ipart]}           ; Masked original files     (input)
+    _1                        ; Padded masked file        (output)
+    [size2],[size2]           ; Size
+    S                         ; Set background
+    0.0                       ; Background
+    [pad],[pad]               ; Top left
+
+  AC NS                       ; Auto correlation
+    _1                        ; Padded masked file        (input)
+    _7@{***[ipart]}           ; Auto correlation files    (output)
+ENDDO
+
+; Iterate alignment
+DO  [iter]=1,[niter]
+  [iterp1]=[iter]+1
+
+  ; Calculate AC of the current average 
+
+
+  ; Filter using doc file.  First register col. should contain 
+  ;    coefficients of a Fourier filter
+  ;;FD                          ; Filter using doc file 
+  ;;  [avg-byiter]@{***[iter]}    ; Average file             (input)
+  ;;  _1                        ; Filtered avg. file       (output)
+  ;;  tanh                      ; Doc file                 (input)
+
+  CP
+     [avg-byiter]@{***[iter]}    ; Average file             (input)
+     _1
+  MA                          ; Mask
+    _1                        ; Filtered avg. file       (input)
+    _3                        ; Masked,filtered avg file (output)
+    (45)
+    G                         ; Gaussian edge 
+    C                         ; Circle mask
+    [cent],[cent]             ; Center
+    3.5                       ; Gaussian edge width
+
+  PD                          ; Pad
+    _3                        ; Masked,filtered avg file  (input)
+    _4                        ; Padded masked file        (output)
+    [size2],[size2]           ; Size
+    B                         ; Using avg background
+    [pad],[pad]               ; Top left
+
+  AC NS                       ; Auto correlation
+    _4                        ; Padded masked file        (input)
+    _1                        ; Auto correlation file     (output)
+
+  FT                          ; Fourier
+    _3                        ; Masked,filtered avg file  (input)
+    _4                        ; Fourier of Masked,filtered avg (output) 
+
+  ; Find all the angles
+  DO [ipart]=1,[npart]
+
+    OR R [ang1]               ; Orientation search
+      _7@{***[ipart]}         ; Auto correlation file     (input)
+      _1                      ; Ref  file                 (input)
+      [r1],[r2],1             ; Radii
+      H                       ; Half ring
+
+    ; Calculate CC using the angle --------------
+    RT SQ                     ; Rotate
+      _6@{***[ipart]}         ;                 (input)
+      _2                      ; Rotated image   (output)
+      [ang1]                  ; Angle
+      0,0                     ; No shift
+
+    CC                        ; Cross correlation
+      _2                      ;                 (input)
+      _4                      ;                 (input)
+      _3                      ; CC image        (output)
+
+    PK M [a],[b],[xsh1],[ysh1],[cc1] ; Peak Search
+      _3                      ; CC image        (input)
+                              ; Use center
+
+;vm
+;echo ' center:  {%f8.2%[xsh1]},{%f8.2%[ysh1]}'
+;
+    ; Calculate CC using the angle+180 ----------
+
+    [ang2] = [ang1] + 180
+
+    RT SQ                     ; Rotate
+      _6@{***[ipart]}         ;                 (input)
+      _8                      ; Rotated image   (output)
+      [ang2]                  ; Angle
+      0,0                     ; No shift
+
+    CC                        ; Cross correlation
+      _8                      ;                 (input)
+      _4                      ;                 (input)
+      _3                      ; CC image        (output)
+
+    PK M [a],[b],[xsh2],[ysh2],[cc2]  ; Peak search
+      _3
+                              ; Use center
+
+    IF ( [cc2] .GT. [cc1] )  THEN
+      [xsh1] = [xsh2]
+      [ysh1] = [ysh2]
+      [ang1] = [ang2]
+    ENDIF
+
+    RT SQ                      ; Rotate
+      _6@{***[ipart]}          ;                 (input)
+      [unaligned]@{***[ipart]} ;              (output)
+      [ang1]                   ; Angle
+      -[xsh1],-[ysh1]          ; Shift
+  ENDDO
+
+  AS S                         ; Average a series
+    [unaligned]@****           ; Unaligned image (input)
+    1-[npart]                  ; # Images
+    A
+    [avg-byiter]@{***[iterp1]} ; Average file    (output)
+
+  RT SQ                        ; Rotate 
+    [avg-byiter]@{***[iterp1]} ; Average file   (input)
+    _1                         ; Rotated avg.   (output)
+    180                        ; Angle
+    0,0                        ; No shift
+  
+  CC N                         ; Cross correlate
+    [avg-byiter]@{***[iterp1]} ; Average file   (input) 
+    _1                         ;                (input)
+    _3                         ; CC file        (output)
+
+  PK M [a],[b],[xsh3],[ysh3]   ; Peak Search
+    _3                         ; CC file        (intput)
+                               ; Use center
+
+  [xsh3] = -[xsh3] / 2
+  [ysh3] = -[ysh3] / 2
+
+  SH                           ; Shift
+    [avg-byiter]@{***[iterp1]} ;                (input)
+    _1                         ; Shifted image  (output)
+    [xsh3],[ysh3]              ; Shifts
+
+  CP
+    _1                         ; Shifted image  (input)
+    [avg-byiter]@{***[iterp1]} ; Shifted image  (output)
+
+  RF SN                        ; FSC
+    [unaligned]@****           ; Image file      (input)
+    1-[npart]                  ; Image numbers
+    _9                         ; Mask file       (input)
+    0.5                        ; Ring width
+    [rfdoc]{***[iterp1]}       ; FSC doc file    (output)
+
+
+ENDDO
+
+RE

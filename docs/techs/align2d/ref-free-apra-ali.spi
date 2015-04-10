@@ -1,0 +1,116 @@
+;
+; PURPOSE: Reference free alignment 
+; SOURCE:  spider/docs/techs/align2d/ref-free-apra-ali.spi
+
+; I/O PARAMETERS AND FILES ARE SET HERE:
+
+[npart] = 40       ; Set number of particles
+
+;  ------------ Input files ---------------------------------------
+
+[unaligned] = 'input/savface_stk_rot4' ; Unaligned image stack
+
+; --------------- Output files  -----------------------------------
+
+[apradoc]  = 'output/apra_ali_doc'     ; Alignment doc file
+[aligned]  = 'output/apra_aligned_stk' ; Aligned images stack         
+
+[casout]   = 'output/apra_pca'         ; PCA files stem        
+[dend]     = 'output/apra_dend_doc'    ; Dendrogram doc file
+[classel]  = 'output/apra_classel_doc' ; Group selection doc file stem
+[grpavg]   = 'output/apra_avg'         ; Group averages stack
+[groups]   = 'output/apra_groups_doc'  ; Group summary doc file
+[dres]     = 'output/apra_dres_doc_'   ; Group FRC doc files
+
+; -------------- END BATCH HEADER ---------------------------------
+
+MD
+  VB OFF
+
+FI H [nx],[ny]           ; Get image dimensions
+  [unaligned]@1
+  NX,NY
+
+[rad] = [nx]/2-2         ; Set radius to NX/2-1
+[rad] 
+
+AP RA
+  [unaligned]@****       ; Template for image files  (input)
+  1-[npart]              ; File numbers 
+  3,[rad],0              ; First and last ring,  Ring skip
+  F                      ; Full or half ring data
+  [apradoc]              ; 'AP RA' doc file          (output)
+
+; Rotate images according doc file angles
+RT SF                    ; Rotate and shift image stack
+  [unaligned]@****       ; Unaligned image stack    (input)
+  1-[npart]              ; File numbers 
+  2,0,0,0                ; Rot, scale, & shift reg
+  [apradoc]              ; Align. doc file         (input)
+  [aligned]@****         ; Aligned image stack     (output)
+
+
+; Create mask file
+MO                       ; Create mask file
+  _1                     ; Mask file     (output)
+  [nx],[ny]              ; Size
+  C                      ; Circle
+  [rad]                  ; Radius
+
+; Perform PCA with 20 factors
+CA S
+  [aligned]@****         ; Aligned image stack    (output)
+  1-[npart]              ; File numbers 
+  _1                     ; Mask file              (input)
+  20                     ; Number of factors
+  P                      ; Use PCA
+  [casout]               ; File prefix            (output)
+
+; Hierarchical Clustering
+CL HC
+  [casout]_IMC           ; File prefix            (input)
+  1-15                   ; Number of factors
+  0                      ; Factor weight
+  2                      ; Clustering criterion (1-5)
+  *                      ; No dendrogram postscript file
+  [dend]                 ; Dendrogram doc. file  (output)
+ 
+; Calculate number of classes for a given threshold
+CL HD
+  70                     ; Cutoff threshold % (0-100)
+  [dend]                 ; Dendrogram doc. file   (input)
+  [groups]               ; Document file
+
+; Create selection docfiles for a given threshold
+CL HE
+  70
+  [dend]                 ; Dendrogram doc. file   (input)
+  [classel]***           ; Class selection doc files (output)
+
+; Find number of groups
+UD N [ngrp]
+  [groups]
+[ngrp]
+
+DO  [grp]=1,[ngrp]       ; Loop over all groups
+
+  ; Calculate group average
+  AS S
+    [aligned]@****       ; Aligned images        (input)
+    [classel]{***[grp]}  ; Group select file     (input)
+    AS                   ; Average and subsets
+    [grpavg]@{***[grp]}  ; Group average         (output)
+    _1                   ; Sub average 1         (output)
+    _2                   ; Sub average 1         (output)
+
+  ; Calculate relative resolution
+  FRC
+    _1                   ; Sub average 1         (input)
+    _2                   ; Sub average 2         (input)
+    0.5                  ; Ring width
+    1                    ; Pixel size (arbitrary)
+    [dres]{***[grp]}     ; FRC doc file        (output)
+    *                    ; No gnuplot file     (output)
+ENDDO
+
+EN

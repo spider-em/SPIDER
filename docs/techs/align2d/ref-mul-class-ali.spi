@@ -1,0 +1,208 @@
+; <html><head><title>Multireference Classification Alignment </title></head><body><pre>
+;
+; PURPOSE: Multireference classification alignment 
+; SOURCE:  spider/docs/techs/align2d/ref-mul-class-ali.spi
+;
+; I/O PARAMETERS AND FILES ARE SET HERE:
+
+[npart]   = 80    ; Number of particles
+
+[nref]    = 1     ; Number of reference images
+
+[ngrps]   = 32    ; Number of groups
+[nfact]   = 8     ; Number of factors in 'CA S'
+[niter]   = 6     ; Number of iterations
+
+[r1]      = 4     ; First ring for rotational alignment
+[r2]      = 25    ; Last  ring for rotational alignment
+
+[shrange] = 4     ; Shift search range  (restricted to +/- this range)
+[skip]    = 1     ; Search range skip.
+
+[class-typ] = 1   ; Can classify by factors or raw data, controlled by: [class-typ]
+                  ; [class-typ]=1   classification on raw data
+                  ; [class-typ]=2   classification on factors, their number is given by [nfact]
+
+;  ------------ Input files ---------------------------------------
+
+[unaligned]    = 'input/savface_stk_rotsh80'     ; Unaligned particle image stack
+
+; --------------- Output files  -----------------------------------
+
+
+[centered]     = 'output/mulclas_centered'       ; Centered image stack
+[cent-sh]      = 'output/mulclas_cent_doc'       ; Centered shift doc file
+[aligned]      = 'output/mulclas_aligned'        ; Aligned image stack FINAL
+
+[pca]          = 'output/mulclas_pca_'           ; PCA file stem
+
+[class]        = 'output/mulclas_class_doc_'     ; Class doc file stem
+
+[class-avg]    = 'output/mulclas_class_avg'      ; Class average stack
+[class-avg-sh] = 'output/mulclas_class_avg_sh'   ; Shifted class average stack
+[class-avg-rt] = 'output/mulclas_class_avg_rt'   ; Rotated class average stack
+
+[class-sel]    = 'output/mulclas_class_sel_doc_' ; Class select doc file stem
+[align-rot]    = 'output/mulclas_align_rot_doc_' ; Rot. align param.
+[align]        = 'output/mulclas_align_doc_'     ; Align param.
+
+; -------------- END BATCH HEADER ---------------------------------</b>
+
+MD
+  VB OFF
+
+FI H [size],[ny]                 ; Get image dimensions
+  [unaligned]@1
+  NX,NY
+IF ([size] .NE. [ny]) THEN
+   VM
+     echo ' Image must be square!!'
+   EN
+ENDIF
+[rad]     = [size]/2 -2           ; Radius for PCA mask
+
+[iter] = 1
+DOC CREATE
+  [align]{**[iter]}               ; Align parameter doc file (output) 
+  5                               ; First 4 registers contain zeros
+  1-[npart]
+
+; Create mask for PCA
+MO
+  _9
+  [size],[size]
+  C                               ; Central circle
+  [rad]                           ; Radius
+
+IF ([class-typ] .EQ. 1) THEN
+  ; Find number of points under the mask
+  FS [max],[min],[img-avg] 
+    _9
+
+  [nfact] = INT([img-avg]*[size]*[size])
+ENDIF
+   VM
+     echo '  Centering images: {***[npart]}'
+
+; Center unaligned input images using rotationa avg.  Uses: _1,_2,_3,_5
+
+@centr ([npart])
+  [unaligned]@***                 ; Unaligned images       (input) 
+  [centered]@***                  ; Centered images        (output)
+  [cent-sh]                       ; Shift doc file         (output)
+
+; Put orig images in: rotated image stack (to start)
+CP
+  [unaligned]@                    ; Unaligned images       (input) 
+  [aligned]@                      ; Rotated particles      (input)
+
+; Iterate multi-reference alignment ------------------------------
+
+DO [iter] =1,[niter]
+  [iterp1] = [iter] + 1
+
+   VM
+     echo '  Iteration: {***[iter]}'
+
+  ; PCA classification analysis
+  CA S
+    [aligned]@****                ; Rotated images         (input)
+    1-[npart]                     ; Number of images
+    _9                            ; Mask
+    [nfact]                       ; Number of factors 
+    PCA
+    [pca]                         ; PCA files              (output)
+
+  DE A                            ; Delete series
+    [class-sel]_001               ; Class img. select files (removed)
+
+  ; Classification
+  CL KM
+    [pca]_SEQ                     ; _SEQ if raw data       (input)
+    [ngrps]                       ; Number of classes
+    1-[nfact]                     ; Factors
+    0                             ; Factor weight (all 1.0)
+    0                             ; Seed (non-random)
+    [class-sel]***                ; Class select template  (output)
+    [class]                       ; Class doc file         (output)
+
+[ngrps]
+
+  ; Get the averages
+  DO  [igrp]=1,[ngrps]
+    AS S
+      [aligned]@****              ; Rotated particles      (input)
+      [class-sel]{***[igrp]}      ; Class img. select file (input)
+      A
+      [class-avg]@{***[igrp]}     ; Class average image    (output)
+  ENDDO
+
+  ; Optional --- Put averages in a decent orientation
+  ; centr would use rotational average to center the images
+  ; @centr([ngrps])
+  ;   [class-avg]@***
+  ;   [class-avg-sh]@***
+  ;   [class-avg-sh-doc]@***
+
+  ; We will use 'CG PH' to center the averages
+  DO  [igrp]=1,[ngrps]
+
+    CG PH [ix],[iy], [xsh],[ysh]
+      [class-avg]@{***[igrp]}
+
+    SH F
+      [class-avg]@{***[igrp]}    ; Class average         (input)
+      [class-avg-sh]@{***[igrp]} ; Shifted class average (input)
+      -[xsh],-[ysh]
+  ENDDO
+
+  ; Align averages rotationally
+  AP RA
+    [class-avg-sh]@***          ; Shifted class averages (input)
+    1-[ngrps]                   ; Number of groups
+    [r1],[r2],0                 ; Radial range, skip
+    F                           ; Full circle
+    [align-rot]{**[iter]}       ; Rot. aligned doc file  (output) 
+
+  RT SF                         ; Rotate images
+    [class-avg-sh]@***          ; Shifted class average  (input)
+    [align-rot]{**[iter]}       ; Selection file
+    2,0,0,0                     ; Angle register, No scale or shifts
+    [align-rot]{**[iter]}       ; Rot. aligned doc file  (input) 
+    [class-avg-rt]@****         ; Rotated class avg      (output)
+
+  ; End of optional alignment of the averages
+
+
+  ; Set current alignment doc file (output)
+  IF ([iter] == 1) THEN
+     [exp-img-align] = '*'
+  ELSE
+    [exp-img-align] = [class]'{**[iter]}'  ; Alignment doc file (output)
+  ENDIF
+
+  ; Multireference alignment, Rotation first
+  AP SHC                        ; Determine align. parameters
+    [class-avg-rt]@***          ; Rotated class average images
+    1-[ngrps]                   ; Ref. image numbers
+    4                           ; Translation range 
+    [r1],[r2],1                 ; Radii, ring skip
+    *                           ; No ref angles doc file
+    [aligned]@****              ; Rotated images               (input)
+    1-[npart]                   ; Image numbers
+    [exp-img-align]             ; Exp image alignment doc file (input)
+    0                           ; Unrestricted angle search
+    N,N                         ; Check mirrored positions, no RTSQ
+    [class]{**[iterp1]}         ; Alignment doc file           (output)
+
+  ; Center images
+  RT SF                         ; Rotate images
+    [unaligned]@***             ; Unaligned images             (input) 
+    1-[npart]                   ; Image numbers
+    6,0,7,8                     ; Angle scale or shift registers
+    [class]{**[iterp1]}         ; Alignment doc file           (input)
+    [aligned]@****              ; Aligned image stack          (output)
+
+ENDDO
+
+EN

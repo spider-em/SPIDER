@@ -1,0 +1,116 @@
+; <html><head><title> Refined reference-based alignment</title></head><body><pre>
+;
+; PURPOSE: Refined reference-based alignment 
+; SOURCE:  spider/docs/techs/align2d/refi-ref-ali.spi
+;
+; I/O PARAMETERS AND FILES ARE SET HERE:
+
+[npart]   = 20    ; Number of particles
+
+[nref]    = 1     ; Number of reference images
+
+[r1]      = 4     ; First ring for rotational alignment
+[r2]      = 25    ; Last  ring for rotational alignment
+
+[shrange] = 4     ; Search range (translations restricted to +/- this range) 
+[skip]    = 1     ; Search range skip.
+
+[niter]   = 7     ; Number of iterations
+
+
+;  ------------ Input files ---------------------------------------
+
+[unaligned]  = 'input/savface_stk_rotsh@'  ; Unaligned particle image stack
+
+; --------------- Output files  -----------------------------------
+
+[select]     = 'output/refi_select_doc' ; Selected particle numbers 
+
+[aligned]    = 'output/refi_ali_'       ; Aligned particle image stacks 
+
+[ref]        = 'output/refi_ref@'       ; Reference image stack
+ 
+[frcdoc]     = 'output/refi_dres_doc_'  ; FRC curve doc file stem
+
+[align]      = 'output/refi_ali_doc_'   ; Alignment doc file stem
+
+[avgodd]     = '_1'                     ; Avg odd 
+[avgeven]    = '_2'                     ; Avg even 
+
+; -------------- END BATCH HEADER ---------------------------------</b>
+
+MD
+  VB OFF
+
+; Create a selection document file. (This image series is consecutive)
+DOC CREATE
+  [select]                       ; Selection doc file    (output)
+  1                              ; Register
+  1-[npart]                      ; Particle numbers
+
+CP                               ; Copy input files to output stack
+   [unaligned]                   ; Unaligned article images  (input)
+   [aligned]001@                 ; Aligned particle images   (output)
+
+
+DO [iter]=1,[niter]              ; Iteration loop ---------------------
+
+  ; Create a reference by averaging all images
+  AS S                            ; Sum all images
+    [aligned]{***[iter]}@****     ; Aligned images           (input)
+    [select]                      ; Particle select file     (input)
+    AS                            ; All images
+    [ref]{***[iter]}              ; Ref image in stack       (output)
+    [avgodd]                      ; Avg of odd               (output)
+    [avgeven]                     ; Avg of even              (output)
+
+  ; Determine resolution
+  DE
+    [frcdoc]{***[iter]}           ; FRC doc file            (removed)
+
+  FRC [half],[res]                ; Fourier ring correlation 
+    [avgodd]                      ; Avg of odd              (input)
+    [avgeven]                     ; Avg of even             (input)
+    0.5                           ; Ring width
+    1                             ; Arbitrary pixel size
+    [frcdoc]{***[iter]}           ; FRC doc file            (output)
+    *                             ; No FRC plot file
+
+  VM
+     echo '  Iteration: {**[iter]}  Relative Res:{%f6.1%[res]}'
+
+  IF([iter] >= [niter]) EXIT      ; Finished
+
+  ; Alignment
+
+  [itert] = [iter] + 1
+
+  DE
+    [align]{***[itert]}           ; Align. doc file         (removed)
+
+  AP SH
+    [ref]***                      ; Ref image stack         (input)
+    [iter]                        ; Ref number in stack
+    [shrange],[skip]              ; Shift
+    [r1],[r2]                     ; Polar rings
+    *                             ; No ref images angles file
+    [aligned]{***[iter]}@****     ; Exp. images             (input)
+    [select]                      ; Selection file          (input)
+    *                             ; Exp images alignment doc file
+    0,0                           ; Range of proj angle search
+    Y                             ; Check mirrored postions, rtsq
+    [align]{***[itert]}           ; Align. doc file         (output)
+
+  ; Rotate/shift images according to alignment parameters
+
+  RT SF                           ; Since consecutive can use whole stack operation
+    [aligned]{***[iter]}@****     ; Aligned image stack     (input)
+    [select]                      ; Particle selection file (input)
+    12,0,13,14                    ; Rot, scale, & shift registers
+    [align]{***[itert]}           ; Alignment doc file      (input)
+    [aligned]{***[itert]}@****    ; Aligned image stack     (output)
+
+ENDDO
+
+EN
+

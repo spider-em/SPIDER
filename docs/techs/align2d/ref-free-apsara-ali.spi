@@ -1,0 +1,264 @@
+;
+; PURPOSE: Reference free alignment 
+; SOURCE:  spider/docs/techs/align2d/ref-free-apsara-ali.spi
+;
+;  Example of the batch procedure implementing reference-free alignment
+;  of the series of images using 'AP SA' and 'AP RA 'commands. The procedure
+;  uses following strategy: initially all the particles are centered
+;  approximately using shift alignment ('AP SA') with 180 degrees
+;  rotation check.  This is followed by a number (up to 9 in this version)
+;  steps of shift and rotational alignment of the input data series.
+;  After each such step the resulting average is centered using
+;  phase approximation of the center of gravity command ('CG PH').
+;  This procedure works for consecutively numbered images only, but the 
+;  numbering does not have to start with one.
+;
+;  Notes:
+;
+;  (1) To start the procedure one has to modify the input file names
+;  and specify input parameters: number of steps required, number
+;  of particles and ring numbers used by 'AP RA' (determined by the
+;  expected radius of the particle).
+;  
+;  (2) The shift alignment step does not enforce centering of the average
+;  by itself.  The average produced by 'AP SA' (AVS*** in the following
+;  procedure) has to be centered explicitly.  In the procedure command
+;  CG PH (phase approximation of the center of gravity) is use for
+;  this purpose.  It is not guaranteed to work for all the possible
+;  shapes and it is advisable to verify whether the average was
+;  shifted correctly.  If not, the command can be easily replaced
+;  by the other mean of centration (for example croscorrelation
+;  with low-pass filtered disk).
+;
+;  (3) Please note that 'CG' PH will NOT work correctly for images
+;  with inverted contrast (dark particle on bright background).
+;  In such case either contrast of the particles has to be inverted,
+;  or the contrast of the average before application of CG PH.
+;
+;  (4) VERY IMPORTANT:  if you want to start the procedure again
+;  from the beginning you have to either delete previously produced
+;  document files or change the names of the existing file.
+;
+;  (5) The procedure can be easily restarted to make additional steps
+;  of alignment. If initially procedure was ran for 5 steps of alignment
+;  than it is enough to change register [nstep] in the input block
+;  to the new iterations limit, remove part of the procedure between "End
+;  of the input parameters" block to the main do-loop  and change
+;  in this line "2" to "6" (in this case, in general to the next step
+;  number).
+;
+;  (6) The procedure makes it possible to calculate the current resolution
+;  of 2D average. The code has to be added by the user in the place marked.
+;
+; %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+;
+;  DESCRIPTION OF THE FILE NAMES USED:
+;
+;  The input data is the set of stacked images:
+;    [unaligned] - input/savface_stk_rot4   1-40
+;
+;  The output data is a separate series of sets of stacked
+;     images one stack for each step of alignment:
+;     [aligned]  = output/apsr_aligned_stk_###@****
+;     ### stands for the number of alignment step, the ****
+;     are reserved for the particle number.
+;
+;  Proedure uses the following document files:
+;  
+;  [apsara_sa_doc]*** - Ending with the number indicating the number of alignment
+;            step. This is the document file produced by the shift
+;            alignment ('AP SA'). Details are in the manual chapter 
+;            APSA.MAN.
+;
+;  [apsara_ra_doc]*** - Ending with the number indicating the number of alignment
+;            step. This is the document file produced by the rotational
+;            alignment ('AP RA'). Details are in the manual chapter 
+;            APRA.MAN.
+;
+;  [apsara_rasa_doc]*** - Ending with the number indicating the number of alignment
+;            step. This is the document file containing the combined alignment
+;            parameters for each particle after all alignment steps made
+;            up to this one. When applied to the initial (input) data
+;            they will produce the aligned and centered series of particles.
+;            The angles (after reversing the sign) can be used in 3D
+;            reconstruction.
+;            This file contains four columns:
+;              1                  2        3         4
+;            Particle number      Angle    X shift   Y shift
+;
+;  [shifts] -  This is a document file containing the X,Y [shifts] needed 
+;            to center the average calculated
+;            after each shift alignment.
+;
+;  The procedure requires specification of the following input: 
+;  [nstep] - number of alignment steps 
+;        First step is the initialization step - shift only ('AP SA')
+;        Next [nstep]-1 double steps are made  - (rotation + shift)
+;
+; %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+; I/O PARAMETERS AND FILES ARE SET HERE:
+
+[nstep] = 5   ; Number of alignment steps 
+              ; First is the initialization step - shift only ('AP SA')
+              ; Next [nstep]-1 double steps are made - (rotation + shift)
+
+[npart] = 40  ; Number of particles
+
+[r1]    = 5   ; First polar ring radius (for 'AP RA')
+[r2]    = 29  ; Last polar ring radius  (for 'AP RA')
+
+;  ------------ Input files ---------------------------------------
+
+[unaligned]       = 'input/savface_stk_rot4'    ; Unaligned image stack
+
+; --------------- Output files  -----------------------------------
+
+[apsara_sa_doc]   = 'output/apsara_sa_doc_'     ; Alignment doc file
+[apsara_ra_doc]   = 'output/apsara_ra_doc_'     ; Alignment doc file
+[apsara_rasa_doc] = 'output/apsara_rasa_doc_'   ; Alignment doc file
+
+[aligned]         = 'output/apsara_aligned_stk_'; Aligned images stack         
+
+[alignavg]        = 'output/apsara_avg_stk_'    ; Averaged images stack         
+[shifts]          = 'output/apsara_shifts_doc ' ; Shifts 
+      
+; -------------- END BATCH HEADER ---------------------------------
+
+MD
+  VB OFF
+
+[step]=1                   ; Current step number
+
+; [apsara_ra_doc]{***[step]} is a dummy document file containing 
+;      particle numbers in the first register column and a dummy
+;      group in the fourth reg. col. In general the particle numbers
+;      do not have to be in consecutive order nor begin with one.
+
+[zero] = 0.0
+[grp]  = 1.0
+DO  [i]=1,[npart]
+   SD [i], [i],[zero],[zero],[grp]
+    [apsara_ra_doc]{***[step]}   ; (output)
+ENDDO
+SD E
+  [apsara_ra_doc]{***[step]}   
+ 
+MY FL
+
+; First shift alignment with 180 degs check to center all the particles.
+AP SA                            ; Shift alignment
+  [unaligned]@***                ; Unaligned exp. images    (input)
+  [apsara_ra_doc]{***[step]}     ; Selection file           (input)   
+  1                              ; Dummy group number
+  Y                              ; Check 180 degree rotation
+ [apsara_sa_doc]{***[step]}      ; Shift Alignment doc file (output)
+ [alignavg]@{***[step]}          ; Aligned avg images stack (output)         
+
+; Calculate center of gravity
+CG PH [xsa],[ysa]                ; [xsa] & [ysa] are integer shifts
+  [alignavg]@{***[step]}         ; Aligned average image    (input) 
+
+SD [step],[xsa],[ysa]            ; [xsa] & [ysa] are integer shift values
+  [shifts]
+
+; Shift and rotate input data using center correction
+;   from 'CG PH'.  Resulting file series will be used
+;   in next alignment step.
+
+DO  [i]=1,[npart]
+  ; For very large image series use 'UD S' instead of 'UD IC'.
+
+  UD IC [i], [ipart],[ang],[dist],[xsh],[ysh],[dist2]
+    [apsara_sa_doc]{***[step]}  ; Shift alignment doc file (input)
+
+  [xsh]  = [xsh] - [xsa]
+  [ysh]  = [ysh] - [ysa]
+
+  RT SQ                         ; Rotate and shift images
+    [unaligned]@{***[ipart]}    ; Unaligned images         (input)       
+    [aligned]_{**[step]}@{*****[ipart]}  ; Aligned         (output)
+    [ang],1                     ; Angle & scale         
+    [xsh],[ysh]                 ; Shifts
+
+  SD [i], [ipart],[ang],[xsh],[ysh]
+    [apsara_rasa_doc]{***[step]}  ; Overall align doc file (output) 
+ENDDO
+
+SD E
+  [apsara_rasa_doc]{***[step]}    ; Overall align doc file (output) 
+
+
+; Main loop - [nstep]-1 steps of alignment --------------------------
+
+DO [i]=2,[nstep]
+
+  [step]     = [i]
+  [laststep] = [step] - 1
+
+  VM 
+    echo " Iteration: {***[step]}"
+
+  ; Rotational alignment
+  AP RA
+    [aligned]_{**[laststep]}@***** ; Aligned images            (input)
+    1-[npart]                      ; Image numbers
+    [r1],[r2]                      ; Radii
+    1                              ; Skip
+    F                              ; Full ring
+    [apsara_ra_doc]{***[step]}     ; Rotation align doc file    (output)
+
+  ; Shift alignment
+  AP SA
+    [aligned]_{**[laststep]}@***** ; Aligned images             (input)
+    [apsara_ra_doc]{***[step]}     ; Rotation align doc file    (input)
+    1                              ; Dummy group number
+    N                              ; Check 180 degree rotation
+    [apsara_sa_doc]{***[step]}     ; Rotation align doc file    (output)
+    [alignavg]@{***[step]}         ; Shift aligned images stack (output)         
+
+  ; Calculate center of gravity
+  CG PH [x],[y], [xsa],[ysa]       ; Center of gravity
+    [alignavg]@{***[step]}         ; Aligned avg images stack (input)         
+
+  SD [step],[xsa],[ysa]            ; Save shift in doc file
+    [shifts]                       ; Step shifts doc file (output)
+
+  ; Advisable to remove previous aligned image series to save disk space.
+
+  ; Rewrite the whole image series combining alignment parameters
+  ;    and applying them to the input image series.  A new, aligned
+  ;    and centered series is produced.
+
+  DO [i] =1,[npart]
+    ; For short image series use 'UD IC' instead 
+
+    UD S [i], [ipart],[ang1],[x1],[y1]  ; Prefious
+      [apsara_rasa_doc]{***[laststep]}  ; Overall align doc file (input)
+
+    UD S [i], [ipart],[ang2],[dist],[x2],[y2],[dist2]
+      [apsara_sa_doc]{***[step]}   ; Shift doc file (input)
+
+    SA P [ang],[xsh],[ysh]          ; Combine angles & shifts
+      [ang1],[x1],[y1]              ; Previous 
+      [ang2],[x2],[y2]              ; Current 
+
+    [sx] = [xsh] - [xsa]
+    [sy] = [ysh] - [ysa]
+
+    RT SQ                           ; Rotate and shift alignment
+      [unaligned]@{***[ipart]}      ; Unaligned images      (input)      
+      [aligned]_{**[step]}@{*****[ipart]} ; Aligned images  (output) 
+      [ang]                         ; Angle
+      [sx],[sy]                     ; Shifts
+
+    SD [i], [ipart],[ang],[sx],[sy]
+      [apsara_rasa_doc]{***[step]}  ; Overall alignment doc file (output)
+  ENDDO
+
+  ;  Calculate resolution using your own procedure ..... 
+
+ENDDO
+
+EN
+

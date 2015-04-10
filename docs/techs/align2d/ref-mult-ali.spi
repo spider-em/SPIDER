@@ -1,0 +1,93 @@
+; <html><head><title>Multi-reference Alignment</title></head><body><pre>
+;
+; PURPOSE: Multi Reference  Alignment 
+; SOURCE:  spider/docs/techs/align2d/ref-multi-ali.spi
+
+; I/O PARAMETERS AND FILES ARE SET HERE:
+
+[npart]    = 80            ; Set number of particles
+[num-refs] = 3             ; Ref. projection file numbers
+
+[useapsh]  = 1             ; Use slower 'AP SH' for alignment (not 'AP REF')
+
+[r1]       = 5.0           ; First radius for 'AP' (Can alter this)
+[alignsh]  = 4             ; Shift search range
+
+[useapsh]  = 1             ; Use slower 'AP SH' for alignment (not 'AP REF')
+;[useapsh]  = 0             ; Use faster 'AP REF' for alignment (not 'AP SH')
+
+;  ------------ Input files ---------------------------------------
+
+[unaligned] = 'input/savface_stk_rotsh80' ; Unaligned image stack
+
+[ref_projs] = 'input/savface_stk_8'       ; Ref image stack
+
+; --------------- Output files  -----------------------------------
+
+[aligndoc]  = 'output/mult_align_doc'     ; Alignment doc file
+
+[aligned]   = 'output/mult_aligned_stk'   ; Aligned images stack         
+
+; -------------- END BATCH HEADER ---------------------------------
+ MD
+   VB OFF
+
+ FI H [nx],[ny]                 ; Get image dimensions
+   [unaligned]@1
+   NX,NY
+
+ [r2]  = [nx]/2-7               ; Set outer radial ring radius 
+
+[r2]
+ DE                             ; Remove existing alignment doc file  
+   [aligndoc]                   ; Alignment parameter doc file  (removed)
+
+ ; Find reference matching current aligned image
+ IF ([useapsh] > 0 ) THEN
+ 
+    AP SH                       ; Better search than 'AP REF' but slower
+      [ref_projs]@******        ; Template for ref. projections    (input)
+      1-[num-refs]              ; Ref. projection file numbers
+      [alignsh],1               ; Shift search range, Step size
+      [r1],[r2],1               ; First, last radial ring, & skip
+      *                         ; No Ref. angles file              
+      [unaligned]@******        ; Template for unaligned images    (input)
+      1-[npart]                 ; Particle numbers                 (input)
+      *                         ; No alignment parameter doc file  
+      0.0                       ; Angular search restriction
+      N,N                       ; Check mir projections, align first
+      [aligndoc]                ; Alignment parameter doc file     (output)
+
+
+ ELSE
+ 
+    DE                          ; Remove existing scratch file  (rare)  
+      [ref_rings]               ; Reference rings scratch file 
+
+    AP REF                      ; Poorer search than 'AP SH' but 4-5x faster
+      [ref_projs]@******        ; Template for ref. projections    (input)
+      (1-[num-refs])            ; Ref. projection file numbers
+      [alignsh]                 ; Shift search range
+      [r1],[r2],1               ; First, last radial ring, & skip
+      *                         ; No Ref. angles file              
+      [ref_rings]               ; No such file if rings fit in-core (rare output)
+      [unaligned]@*****         ; Template for unaligned images     (input)
+      1-[npart]                 ; Particle numbers                  (input)
+      *                         ; No alignment parameter doc file   (input)
+      0.0                       ; Angular search restriction
+      N,N                       ; Check mir projections, align first
+      [aligndoc]                ; Alignment parameter doc file      (output)
+
+ ENDIF
+
+ ; Apply new alignments to original particle images
+ RT SQ                          ; Rotate & shift operation on stack
+   [unaligned]@******           ; Unaligned original stacked images 
+   1-[npart]                    ; Particle selection  
+   6,0,7,8                      ; Reg. #s for angle, scale, & shift
+   [aligndoc]                   ; Alignment parameter doc file      (input)
+   [aligned]@******             ; Aligned images                    (output)
+ 
+ EN
+; </body></pre></html>
+
