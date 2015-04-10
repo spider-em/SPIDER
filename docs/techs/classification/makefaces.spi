@@ -1,0 +1,159 @@
+; SOURCE:   makefaces.spi  
+; PURPOSE:  Create face images, using face.spi
+;           Add noise: ten copies of each head with a SNR (0.2<S/N<0.3)
+; OUTPUT:
+;    x64  : Width, height of image
+;    x20  : Head shape 0 = round, 1 = oval
+;    x21  : Eyes  0 = left, 1 = right, 2 = center
+;    x22  : Mouth 0 = [noise]ll, 1 = large
+
+ x64 = 64  ; Image size
+
+ ; -- OUTPUT FILES --
+
+ [dir]   = 'data'                  ; Directory
+
+ [tmp]   = '[dir]/face_tmpl_stk@'  ; Face templates
+ 
+ [noise] = '[dir]/face_nois_stk@'  ; Faces + noise
+
+ [avg]   = '[dir]/face_aver_stk@'  ; Average of noise images
+
+ [var]   = '[dir]/face_varn_stk@'  ; Variance maps of noise images
+
+ [jnk]   = '[dir]/jnkINT001'       ; Temp. file
+   
+
+ ; ----- END BATCH HEADER -----
+
+ VM
+   mkdir -p [dir]
+
+ MD
+   SET SEED
+   457   ; Random number seed for noise
+
+ VM
+   echo " Making sample faces xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+ ;----- CREATE A ROUND HEAD : EYES LEFT : LARGE MOUTH : [tmp]011
+ x20 = 0 ; Head
+ x21 = 0 ; Eyes
+ x22 = 1 ; Mouth
+
+ @face[x64,x64,x20,x21,x22]
+   [tmp]011
+
+ ;----- CREATE A ROUND HEAD : EYES RIGHT : LARGE MOUTH : [tmp]021
+ x20 = 0 ; Head
+ x21 = 1 ; Eyes
+ x22 = 1 ; Mouth
+
+ @face[x64,x64,x20,x21,x22]
+   [tmp]021
+
+ ;----- CREATE A ROUND HEAD : EYES LEFT : [noise]LL MOUTH : [tmp]031
+ x20 = 0 ; Head
+ x21 = 0 ; Eyes
+ x22 = 0 ; Mouth
+
+ @face[x64,x64,x20,x21,x22]
+   [tmp]031
+
+ ;----- CREATE A ROUND HEAD : EYES RIGHT : [noise]LL MOUTH : [tmp]041
+ x20 = 0 ; Head
+ x21 = 1 ; Eyes
+ x22 = 0 ; Mouth
+
+ @face[x64,x64,x20,x21,x22]
+   [tmp]041
+
+ ;----- CREATE AN OVAL HEAD : EYES LEFT : LARGE MOUTH : [tmp]051
+ x20 = 1 ; Head
+ x21 = 0 ; Eyes
+ x22 = 1 ; Mouth
+
+ @face[x64,x64,x20,x21,x22]
+   [tmp]051
+
+ ;-----( CREATES AN OVAL HEAD : EYES RIGHT : LARGE MOUTH : [tmp]061
+ x20 = 1 ; Head
+ x21 = 1 ; Eyes
+ x22 = 1 ; Mouth
+
+ @face[x64,x64,x20,x21,x22]
+   [tmp]061
+
+ ;----- CREATE AN OVAL HEAD : EYES LEFT : [noise]LL MOUTH : [tmp]071
+ x20 = 1 ; Head
+ x21 = 0 ; Eyes
+ x22 = 0 ; Mouth
+
+ @face[x64,x64,x20,x21,x22]
+ [tmp]071
+
+ ;----- CREATE AN OVAL HEAD : EYES RIGHT : [noise]LL MOUTH  : [tmp]081
+ x20 = 1 ; Head
+ x21 = 1 ; Eyes
+ x22 = 0 ; Mouth
+
+ @face[x64,x64,x20,x21,x22]
+   [tmp]081
+
+
+ ;===============================================================================
+ ; CREATE TEN COPIES OF EACH HEAD WITH A SNR (0.2<S/N<0.3) or greater
+ ;===============================================================================
+
+ x66 = .45            ; SNR
+ VM
+   echo " Adding noise (SNR: {%f3.2%x66}) to sample faces xxxxxxxxxxxxxxx"
+
+ DO x20=1,8             ; Loop over head types
+    x21 = x20*10
+    x22 = x21+1
+    x23 = x21-10.
+
+    AR
+      [tmp]{***x22}       ; Face template    (input)
+      [jnk]               ; Scaled face      (output)
+      ((P1*x66)+0.0)      ; Scale intensity of face by SNR
+
+    ; Make ten random noise images for each type of head
+    DO  x77=1,10        ; Loop over noise sets
+      x24 = x23+x77
+      MO
+        _1               ; File    (output)
+        (x64,x64)        ; Size         
+        R                ; Random noise
+        N                ; Uniform distribution 0...1
+
+      AD               ; Add images
+        _1               ; Noise file
+        [jnk]            ; head  file      (input)
+        [noise]{***x24}  ; Noisy head      (output)
+        *
+    ENDDO
+
+    ; Creates average and variance maps of each group of ten
+    x25 = x23+1.
+    x26 = x23+10.
+
+    AS R
+      [noise]***
+      x25-x26
+      A
+      [avg]{***x21}
+      [var]{***x21}
+ ENDDO
+
+ VM
+   echo " Creating average/variance maps of sets of faces xxxxxxx"
+
+ DE
+   [jnk]           ; Temp. file
+
+ VM
+   echo " "
+
+ EN 
