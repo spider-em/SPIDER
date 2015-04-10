@@ -1,0 +1,214 @@
+ ; SOURCE:   framealign.spi
+ ; PURPOSE:  Remove drift among a series of frames
+ ; USAGE:    clean ; $spid/newspinog spi/dat @framealign
+
+ ;  ----------------- Parameters -----------------------------------------
+
+ [skip]     = 4    ; Exclude frames within this distance when
+                   ; finding refined image shifts.
+
+ [eps-zero] = .07  ; Default shifts to zero if <  this value
+
+ [nvs]      = 1    ; Shift versus this frame
+
+ ;  ----------------- Input files ----------------------------------------
+
+ [files]          = 'filenames'           ; List of frame set file names (without extensions)
+
+ [in_mrc_exts]    = '.frames.mrc'         ; Current frame image stack mrc     
+
+ ;  ----------------- Output files ----------------------------------------
+
+ [filt_stem]      = 'jjnk_filtstk_'       ; Filtered stack  
+ [apscc_doc]      = 'jnk_unused_doc'      ; unused 'AP SCC' Alignment doc file
+ [shift_doc_stem] = 'jjnk_shift_doc_'     ; Alignment doc file
+ [mlr_doc_stem]   = 'jjnk_mlr_shift_doc_' ; Refined alignment doc file
+
+ [sh_stem]        = 'jjnk_shstk_'         ; Aligned frame image stack 
+  
+ [aligned_stem]   = 'jjnk_ali_'           ; Summed aligned image  
+
+ ; ----------------- END BATCH HEADER ------------------------------------
+
+ MD
+   TR OFF
+ MD                                    ; Use 4 processors
+   SET MP
+   4
+
+ DO                                    ; Endless loop to read input sets
+   FR N [fails]                        ; Read next input file name
+     [files]                           ; List of file names  (input)
+     [in]
+   IF ([fails] .NE. 0) EXIT            ; End of input
+
+
+   ; Construct i/o filenames   
+   [in_mrc]    = [in][in_mrc_exts]     ; Current frame image stack mrc     
+   [spi]       = [in]                  ; SPIDER image stack   
+   [filt]      = [filt_stem][in]       ; Filtered stack  
+   [shift_doc] = [shift_doc_stem][in]  ; Alignment doc file
+   [mlr_doc]   = [mlr_doc_stem][in]    ; Refined alignment doc file
+   [sh]        = [sh_stem][in]         ; Aligned image stack   
+   [aligned]   = [aligned_stem][in]    ; Summed aligned image  
+
+
+   ; Convert images from MRC stack format to SPIDER stacks -------------------
+   SYS
+     echo "  xxxxx 'CP FROM MRC'  Convert images from MRC to SPIDER format xxxxxxxxxxxxxxxx "
+
+   CP FROM MRC             ; Convert MRC to: SPIDER
+     [in_mrc]              ; Existing 16 bit stack MRC file (input)
+     [spi]@*               ; SPIDER stack file              (output)
+     1                     ; Stacked image number           
+     NO,YES                ; No byte flip, Flip top
+
+
+lb22
+   SYS  
+     echo "  xxxxx 'FS' ixxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx "
+
+   FI H [maxim],[nx],[ny]  ; Find number of images 
+     [spi]@                ; Image stack               (input)
+     MAXIM,NX,NY           ; Images & size
+ 
+   DO [n]=1,[maxim]
+     FS [max],[min],[avg],[std]
+       [spi]@{**[n]}       ; SPIDER file               (input)
+     SYS
+       echo '  Range ({%I2%[n]}): ({%f10.2%[min]} ... {%f8.2%[max]})'
+   ENDDO
+
+
+   ; Filter frame images to minimize central peak --------------------------
+   SYS  
+     echo "  xxxxx 'DN MED' Filter {%I0%[maxim]} frame images. Size: {%I0%[nx]} x {%I0%[ny]}"
+
+   DO [n] = 1,[maxim]
+
+     DN MED
+       [spi]@{**[n]}       ; SPIDER file                (input)
+       [filt]@{**[n]}      ; Image                      (output)
+       3                   ; Filter length
+       Cross               ; Filter shape
+   ENDDO
+
+   DO [n]=1,[maxim]
+     FS [max],[min],[avg],[std]
+       [filt]@{**[n]}       ; SPIDER file               (input)
+     SYS
+       echo '  Range ({%I2%[n]}): ({%f10.2%[min]} ... {%f8.2%[max]})'
+   ENDDO
+
+
+lb33
+   FI H [maxim],[nx],[ny]  ; Find number of images 
+     [filt]@               ; Image stack                (input)
+     MAXIM,NX,NY           ; Images & size
+ 
+ 
+   ;  Find pair-wise frame shifts ------------------------------------------
+   SYS  
+     echo "  xxxxx 'AP SCC' Find pair-wise alignment shifts for images xxxxxxxxxxx "
+
+   [n2end]   = [maxim]
+   [n2endm1] = [maxim] - 1
+
+   DE
+     [apscc_doc]              ; AP doc file            (removed)
+   DE
+     [shift_doc]              ; Shift doc file         (removed)
+
+   [n]  = 0
+   DO [i] = 1,[n2endm1]
+     [jgo] = [i] + [skip]
+     IF ([jgo] >= [maxim]) EXIT
+
+     DO [j] = [jgo],[maxim]
+  
+       ; Find alignment parameters for each frame pair --------------------
+       AP SCC  [exp],[ref],[xo],[yo],[zo],[pk]         
+         [filt]@{**[i]}       ; Reference frame        (input)
+         150, 150             ; Search area 
+         Yes, No              ; Normalize peak height, pad?  
+         [filt]@{**[j]}       ; Sample frame           (input)
+         [apscc_doc]          ; Doc file               (output)
+
+       SYS
+         echo "  #{%I2%[i]}..{%I2%[j]}  Shift: {%f8.2%[xo]}, {%f8.2%[yo]}  Peak: {%f6.4%[pk]}"
+  
+       ; Default shifts to zero if <  [eps-zero]
+       IF ( ABS([xo]) < [eps-zero] ) [xo] = 0.0 
+       IF ( ABS([yo]) < [eps-zero] ) [yo] = 0.0 
+
+       [n] = [n] + 1
+       SD [n], [i],[j], [xo],[yo]
+         [shift_doc]          ; Shift doc file         (output)
+     ENDDO    
+   ENDDO
+
+lb44
+   ; Refine alignment shifts ---------------------------------------------
+   SYS  
+     echo "  xxxxx 'ML'   Refine alignment shifts xxxxxxxxxxxxxxxxxxxxxx "
+
+   DE
+     [mlr_doc]               ; Refined shift doc file   (removed)
+
+   ML                        ; Multivariable linear regression
+     [shift_doc]             ; Shift doc file           (input)
+     [mlr_doc]               ; Refined shift doc file   (output)
+
+   !SYS
+   !  cat [mlr_doc]*
+
+lb55
+   ; Shift align frame images ---------------------------------------------
+   SYS  
+     echo "  xxxxx 'SH F' Shift align frame images xxxxxxxxxxxxxxxxxxxxx"
+ 
+   DO                         ; Loop over images in sum
+
+     UD NEXT [key], [n],[xs],[ys] 
+       [mlr_doc]              ; Refined shift doc file (input)
+     IF ([key] <= 0)  EXIT    ; End of file 
+
+     SYS
+       echo '  Image: {**[n]}    Shift: {%f6.2%[xs]}, {%f6.2%[ys]}'
+     IF ([n] == [nvs]) CYCLE  ; No shift
+
+     ; Shift image: n to align with image: nvs
+     SH F                     ; Shift operation 
+       [spi]@{**[n]}          ; Image stack            (input)
+       [sh]@{**[n]}           ; Aligned stack          (output)
+       [xs],[ys]              ; Shifts
+
+   ENDDO
+
+   ; Copy the unshifted image into shifted stack
+   CP                         ; Copy
+     [spi]@{**[nvs]}          ; Original stacked image  (input)
+     [sh]@{**[nvs]}           ; Aligned image stack     (output)
+
+lb66
+   [maxim] = 20
+
+   ; Sum the aligned frame images ---------------------------------------------
+   SYS  
+     echo "  xxxxx 'AD S' Sum aligned frame images xxxxxxxxxxxxxxxxxxxx"
+
+   AD S
+     [sh]@**                 ; Aligned images        (input)
+     1-[maxim]               ; Image numbers
+     [aligned]               ; Aligned sum image     (output)
+
+    FS [max],[min]
+      [aligned]              ; Aligned sum image     (output)
+   SYS
+     echo '  Sum image range: ({%f10.2%[min]} ... {%f8.2%[max]})'
+
+ ENDDO
+
+ EN 
+
+ 

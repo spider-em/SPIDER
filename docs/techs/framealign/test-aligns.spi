@@ -1,0 +1,110 @@
+ ; SOURCE:   test-aligns.spi
+ ; PURPOSE:  Compar dosfgpu and my approach results
+ ; USAGE:    clean ; $spid/newspinog spi/dat @test-aligns
+
+ ;  ----------------- Parameters -----------------------------------------
+ 
+ [nvs]  = 1   ; Aligned versus this frame
+
+ ;  ----------------- Input files ----------------------------------------
+
+ ![spi]    = 'gc_14mar11a_rfm_00017gr_00001sq_v04_00032hl_00002en'                     ; Unaligned frame images
+  [spi]    = '14mar11a_rfm_00060gr_00113sq_v01_00044hl_00001en'
+
+ ![mysh]  = 'jjnk_mlr_shift_doc_gc_14mar11a_rfm_00017gr_00001sq_v04_00032hl_00002en'  ; My shift doc file
+  [mysh]  = 'jjnk_mlr_shift_doc_14mar11a_rfm_00060gr_00113sq_v01_00044hl_00001en'
+
+ ![dosh]  = 'dosefgpu-shifts'                                                         ; Dosfgpu shift doc file
+  [dosh]  = 'dosefgpu_shifts_60gr'                                                    ; Dosfgpu shift doc file
+
+ ;  ----------------- Output files ----------------------------------------
+
+ [shtst] = 'jnk_shtst'            ; Shifted test images   
+
+ ; ----------------- END BATCH HEADER ------------------------------------
+
+ MD
+   TR OFF
+ MD                                 ; Use 4 processors
+   SET MP
+   4
+
+ DO [n] = 2,20
+
+   UD IC  [n],[frame],[xs],[ys]
+     [dosh]
+
+   UD IC  [n],[frame],[myxs],[myys]
+     [mysh]
+  
+   !SYS  
+   !  echo "  xxxxx 'SH F' Shift images xxxxxxxxxxxxxxxxxx"
+ 
+   ; Shift image: n to align with image: nvs   use dosefgpu shifts
+   SH F                     ; Shift operation 
+     [spi]@{**[n]}          ; Image stack      (input)
+     [shtst]_do             ; Aligned stack    (output)
+     [xs],[ys]              ; Shifts
+
+   ; Shift image: n to align with image: nvs use my shifts
+   SH F                     ; Shift operation 
+     [spi]@{**[n]}          ; Image stack      (input)
+     [shtst]_my             ; Aligned stack    (output)
+     [myxs],[myys]          ; Shifts
+
+   !SYS  
+   !  echo "  xxxxx 'CC C' Image pair alignment test xxxxxxxxxxxxxxxxxxxxxxxx"
+
+   CC C  [doccc],[av1],[sd1],[av2],[sd2],[doeud]
+     [spi]@{**[nvs]}        ; Reference frame  (input)
+     [shtst]_do             ; Aligned image    (input)
+     jjnk_blank             ; Mask
+
+
+   CC C  [myccc],[av1],[sd1],[av2],[sd2],[myeud]
+     [spi]@{**[nvs]}        ; Reference frame  (input)
+     [shtst]_my             ; Aligned image   (input)
+     jjnk_blank             ; Mask
+
+   [better] = 'B'
+   IF ([doccc] > [myccc]) THEN
+      [better] = '-'
+   ENDIF
+   [betterd] = 'B'
+   IF ([myeud] > [doeud]) THEN
+      [betterd] = '-'
+   ENDIF
+
+   SYS
+     echo '  {**[n]} [better]: my CCC: {%f10.5%[myccc]} vs {%f10.5%[doccc]}   [betterd] my EuD:{%f14.1%[myeud]} vs {%f14.1%[doeud]}'
+
+  ENDDO
+
+  SYS
+    echo
+
+EN !!!!------------------------------------------------------------
+
+SYS  
+   echo "  xxxxx 'AP SCC' Image pair alignment test xxxxxxxxxxxxxxxxxxxxxxxx"
+
+ AP SCC  [exp],[ref],[xo],[yo],[zo],[pk]         
+   [spi]@{**[nvs]}        ; Reference frame  (input)
+   150, 150               ; Search area 
+   Yes, No                ; Normalize peak height, pad?  
+   [shtst]_do       ; Sample frame     (input)
+   jnk_doc                ; Doc file         (output)
+
+ SYS
+   echo "  #{%I2%[nvs]}..dose  Shift: {%f8.2%[xo]}, {%f8.2%[yo]}  Peak: {%f6.4%[pk]}"
+
+ AP SCC  [exp],[ref],[xo],[yo],[zo],[pk]         
+   [spi]@{**[nvs]}        ; Reference frame  (input)
+   150, 150               ; Search area 
+   Yes, No                ; Normalize peak height, pad?  
+   [shtst]_my       ; Sample frame     (input)
+   jnk_doc                ; Doc file         (output)
+
+ SYS
+   echo "  #{%I2%[nvs]}..my    Shift: {%f8.2%[xo]}, {%f8.2%[yo]}  Peak: {%f6.4%[pk]}"
+
