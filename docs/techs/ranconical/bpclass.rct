@@ -1,0 +1,183 @@
+;------------------------------------------------------------------------------!
+; Adapted from b12.fed/hbl : 3D Reconstruction from the tilted-speci;en images 
+;        corresponding to the three image classes obtained from MSA :
+;------------------------------------------------------------------------------!
+
+; NOTE:
+;   Make sure that the view of the untilted class numbers in this batch file
+;   are the ones you want, and that they correspond to the correct symmetry file.
+;   For example, untilted class average #4 may not be the end-on view in your
+;   own image set
+
+; --------------------- Parameters ---------------------
+[single-class]  = 0   ; class number to calculate reconstruction (0==all)
+[multiref-iter] = -1  ; iteration of multireference alignment to use as input (<0 == last)
+[natprot-yn]    = 0   ; using Nature Protocols data set? (0==No, 1==Yes)
+[flipflop-yn]   = 0   ; compute reconstructions for "flip" and "noflip" subclasses?
+
+; -------------------- Input files --------------------
+fr l
+[class_dir]Zerodegr/Multiref{*[iter]}                  ; input directory
+fr l
+[class_list][class_dir]/goodviews                      ; list of classes (if reconstructing multiple classes)
+fr l
+[class_select_doc][class_dir]/goodsel{***[class-num]}  ; class selection doc filename template
+fr l
+[multiref_tracking_doc]Zerodegr/docmultiref            ; list of multireference alignment iterations 
+fr l
+[aligned_tilted]Tilted/stk3-cent@*****                 ; tilted aligned tilted image filename template
+;;[aligned_tilted]Tilted/Aligned/cent*****               ; tilted aligned tilted image filename template
+fr l
+[angles_doc]Tilted/dangles                             ; Euler angle doc file
+fr l
+[symmetry_doc]*                                        ; no symmetry doc file
+;[symmetry_doc]Volumes/d6side                           ; (optional) side-view symmetry doc file
+;[symmetry_doc]Volumes/d6top                             ; (optional) top-view symmetry doc file
+
+; -------------------- Output files --------------------
+fr l
+[volume_dir]Volumes                            ; output reconstruction directory
+fr l
+[class_vol][volume_dir]/vcla{***[class-num]}   ; class volume filename template
+
+; ---------------------- END BATCH HEADER ----------------------
+
+;----------------------------------------------------------------------!
+; REMARK :  You might want to speed up the reconstruction.
+; if bp rp to slow on your computer, you can also try operation "BP 3F"
+;----------------------------------------------------------------------!
+
+vm
+echo "if(! -d [volume_dir]) mkdir [volume_dir]"|csh
+
+md
+set mp
+(0)
+
+; For Nature Protocols data set
+if([natprot-yn].ge.1) goto lb4
+
+; GET ITERATION NUMBER
+
+; if input iteration-specified
+if([multiref-iter].gt.0) then
+    [iter] = [multiref-iter]
+
+; if input iteration not specified
+else
+    ; look for last iteration number
+    ud n [last-iter-key]
+    [multiref_tracking_doc]
+    
+    ; get iteration number
+    ud [last-iter-key], [iter]
+    [multiref_tracking_doc]
+    ud e  ; close doc
+endif
+
+vm
+echo "Using classification/alignements from [class_dir]"; echo
+
+
+; check if all classes or single class specified
+if([single-class].eq.0) then
+    ; get #classes
+    ud n [num-classes]
+    [class_list]
+    
+    vm
+    echo "Reconstructing all {***[num-classes]} classes listed in [class_list]" ; echo
+else
+    vm
+    echo "Reconstructing only class #{***[single-class]}" ; echo
+    
+    [num-classes] = 1
+    [class-num]   = [single-class]
+endif
+
+; loop through classes
+do lb1 [class-key] = 1,[num-classes]
+    ; get class# if not a single class
+    if([single-class].eq.0) then
+        ud ic [class-key], [class-num]
+        [class_list]
+    endif
+    
+    @bp3f
+    [class-num]         ; PARAMETER: class number
+    [class_select_doc]  ; INPUT: selection doc
+    [angles_doc]        ; INPUT: angles doc
+    [aligned_tilted]    ; INPUT: tilted-image template
+    [symmetry_doc]      ; INPUT: symmetry doc (optional)
+    [class_vol]         ; OUTPUT: reconstruction
+    
+    ; check for flip+noflip files
+    iq fi [flipflop-exists]
+    [class_select_doc]-flip
+    
+    ; if it exists...
+    if([flipflop-exists].eq.1) then
+        ; if requested, compute reconstructions
+        if([flipflop-yn].eq.1) then
+            @bp3f
+            [class-num]                 ; PARAMETER: class number
+            [class_select_doc]-noflip   ; INPUT: selection doc
+            [angles_doc]                ; INPUT: angles doc
+            [aligned_tilted]            ; INPUT: tilted-image template
+            [symmetry_doc]              ; INPUT: symmetry doc (optional)
+            [class_vol]-noflip          ; OUTPUT: reconstruction
+            
+            @bp3f
+            [class-num]               ; PARAMETER: class number
+            [class_select_doc]-flip   ; INPUT: selection doc
+            [angles_doc]              ; INPUT: angles doc
+            [aligned_tilted]          ; INPUT: tilted-image template
+            [symmetry_doc]            ; INPUT: symmetry doc (optional)
+            [class_vol]-flip          ; OUTPUT: reconstruction
+        else
+            vm
+            echo "Found [class_select_doc]-flip but reconstruction not requested." ; echo
+        endif
+    endif
+lb1
+; end class-loop
+
+vm
+echo ; echo "Done" ; date
+
+en d
+
+lb4
+
+@bp3f
+(1)                 ; PARAMETER: class number
+[class_select_doc]  ; INPUT: selection doc
+[angles_doc]        ; INPUT: angles doc
+[aligned_tilted]    ; INPUT: tilted-image template
+Volumes/d6side      ; INPUT: side-view symmetry doc
+[class_vol]         ; OUTPUT: reconstruction
+
+@bp3f
+(3)                 ; PARAMETER: class number
+[class_select_doc]  ; INPUT: selection doc
+[angles_doc]        ; INPUT: angles doc
+[aligned_tilted]    ; INPUT: tilted-image template
+Volumes/d6side      ; INPUT: side-view symmetry doc
+[class_vol]         ; OUTPUT: reconstruction
+
+@bp3f
+(4)                 ; PARAMETER: class number
+[class_select_doc]  ; INPUT: selection doc
+[angles_doc]        ; INPUT: angles doc
+[aligned_tilted]    ; INPUT: tilted-image template
+Volumes/d6top       ; INPUT: top-view symmetry doc
+[class_vol]         ; OUTPUT: reconstruction
+
+vm
+echo "Done" ; date
+
+en d
+
+; Modified 2014-03-28
+;    2014-03-06 (trs) -- reading images from stacks
+;    2014-03-04 (trs) -- looks for last iteration of multireference alignment

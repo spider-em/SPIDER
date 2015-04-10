@@ -1,0 +1,306 @@
+; MERGES ALIGNED VOLUMES
+
+;--------------------------------------------------------------------------!
+; Adapted from b15.fed/hbl
+;                merging of the conical tilt series in a single group
+;                after modifying the eulerian angles of each image accordingly
+;                Finally computation of a "multi-cone" or "merged" 3D
+;                reconstruction volume (devoid of the missing cone artifact)
+;--------------------------------------------------------------------------!
+
+; ---------------- Parameter ----------------
+
+[multiref-iter] = -1     ; iteration of multireference alignment to use as input (<0 == last)
+[pixel-size]    = -1     ; pixel size (<0 -> get from PARAMS)
+[filter-type]   = 7      ; filter type (7==Butterworth, 5==Fermi, 3==Gaussian, 1==Tophat)
+[filter-param1] = 37.6   ; pass-band for Butterworth, else filter radius (Angstroms)
+[filter-param2] = 28.2   ; stop band for Butterworth, temperature for Fermi, else unused (Angstroms)
+[classvols-yn]  = 0      ; reconstruct separate, unmerged class volumes? (diagnostic, 1==Yes)
+
+; ------------------ Inputs ------------------
+fr l
+[part_angles_doc]Tilted/dangles              ; pre-merged particle angle doc file
+fr l
+[volalign_dir]Volumes/Alignment              ; volume-alignment directory
+fr l
+[class_list][volalign_dir]/list2merge        ; list of classes (to skip a class, set SOLUTIONNUM to 0)
+;        CLASS_NUM    SOLUTIONNUM
+fr l
+[vol_align_doc][volalign_dir]/dalv***        ; volume alignment doc file
+fr l
+[multiref_dir]Zerodegr/Multiref{*[iter]}     ; final multireference-alignment directory
+fr l
+[class_part_list][multiref_dir]/goodsel***   ; class particle list
+fr l
+[multiref_tracking_doc]Zerodegr/docmultiref  ; list of multireference alignment iterations 
+fr l
+[aligned_tilted]Tilted/stk3-cent@*****       ; tilted aligned tilted image filename template
+;;[aligned_tilted]Tilted/Aligned/cent*****     ; tilted aligned tilted image filename template
+fr l
+[parameter_doc]params                        ; parameter doc file (required if pixel size not specified above)
+
+; ------------------ Outputs ------------------
+fr l
+[merged_angle_doc]Tilted/dang-merged          ; merged-angle doc
+fr l
+[merged_select_doc][multiref_dir]/mergedsel   ; merged selection doc
+;[merged_select_doc][multiref_dir]/dsel001     ; merged selection doc
+fr l
+[vol_dir]Volumes                              ; volume directory
+fr l
+[merged_vol][vol_dir]/vtot999                 ; merged volume(s)
+fr l
+[filtered_vol][vol_dir]/vtot999-flt           ; filtered, merged volume
+
+; ------------- END BATCH HEADER -------------
+
+; Temporary files
+fr l
+[temp_part_angles_rekeyed]tmpdocangles_rekeyed
+fr l
+[temp_part_angles_renum]tmpdocangles_renumbered
+fr l
+[temp_part_angles_merged]tmpdocangles_merged
+fr l
+[temp_class_angles]tmpdocclass_angles
+fr l
+[temp_class_angles_rekey]tmpdocclass_angles_rekeyed
+fr l
+[temp_part_angles_unsorted]tmpdocangles_unsorted
+
+[part-counter] = 0
+
+; re-key particle-angles doc
+doc key
+[part_angles_doc]
+[temp_part_angles_rekeyed]
+; (VO RA stops at non-consecutive key, until SPIDER version 20.17.)
+
+; renumber particle-angles doc
+doc ren
+[part_angles_doc]
+[temp_part_angles_renum]
+; (Re-keyed docfile will be a lookup table.)
+
+; GET ITERATION NUMBER
+
+; if input iteration-specified
+if([multiref-iter].gt.0) then
+    [iter] = [multiref-iter]
+
+; if input iteration not specified
+else
+    ; look for last iteration number
+    ud n [last-iter-key]
+    [multiref_tracking_doc]
+    
+    ; get iteration number
+    ud [last-iter-key], [iter]
+    [multiref_tracking_doc]
+    ud e  ; close doc
+endif
+
+vm
+echo "Merging alignements from [multiref_dir]"; echo
+
+
+; get #classes
+ud n [num-classes]
+[class_list]
+
+; loop through classes
+do lb1 [class-key] = 1,[num-classes]
+    ; read class#
+    ud ic [class-key], [class-num],[soln-num]
+    [class_list]
+
+    ; if deselected, skip
+    if([soln-num].eq.0) then
+        vm
+        echo "Skipping class number {***[class-num]}..."
+        
+        goto lb1
+    endif
+
+    ; read class-volume alignment parameters
+    ud [soln-num], x11,x12,x13,x14,x15,[delta-phi],[delta-theta],[delta-psi]
+    [vol_align_doc][class-num]
+    ud e
+
+    vm
+    echo "Rotating members of [class_part_list][class-num] by ({%f7.2%[delta-phi]},{%f7.2%[delta-theta]},{%f7.2%[delta-psi]})"
+
+    ; delete pre-existing files
+    de
+    [temp_part_angles_merged]
+    de
+    [temp_part_angles_unsorted]
+    de
+    [merged_angle_doc]
+    de
+    [merged_select_doc]
+
+    ; combine class-volume alignment parameters with unmerged angles
+    vo ra
+    [temp_part_angles_renum]    ; INPUT
+    [delta-psi],[delta-theta]
+    [delta-phi]
+    [temp_part_angles_merged]   ; OUTPUT
+    ; (Intermediate file will be for all particles, not only current class.)
+
+    ; intersect class particle-list with (re-keyed) lookup table
+    doc and
+    [temp_part_angles_rekeyed]     ; INPUT
+    [class_part_list][class-num]   ; INPUT
+    [temp_class_angles]            ; OUTPUT
+    (1)                            ; column# to check: particle#
+    ; (Keys will be non-consecutive, and particle# will be in column #1.)
+
+    ; re-key class-list
+    doc key
+    [temp_class_angles]
+    [temp_class_angles_rekey]
+    ; (Keys will be consecutive, and particle# will be in column #2.)
+
+    ; get #particles in class
+    ud n [class-parts]
+    [temp_class_angles_rekey]
+
+    ; loop through particles
+    do lb2 [part-key] = 1,[class-parts]
+        ; read renumbered particle#, original particle#
+        ud ic [part-key], [new-partnum],[orig-partnum]
+        [temp_class_angles_rekey]
+
+        ; read combined angles
+        ud ic [new-partnum], [merged-angle1],[merged-angle2],[merged-angle3]
+        [temp_part_angles_merged]
+
+        ; write to merged-angle doc (with particle# as key)
+        sd [orig-partnum], [merged-angle1],[merged-angle2],[merged-angle3], [new-partnum],[orig-partnum]
+        [temp_part_angles_unsorted]   ; WAS [merged_angle_doc]
+
+        ; increment particle-counter
+        [part-counter] = [part-counter] + 1
+
+        ; write to selection doc
+        sd [part-counter], [orig-partnum],[new-partnum]
+        [merged_select_doc]
+    lb2
+    ; end particle-loop
+
+    ; close docs
+    ud ice
+    [temp_class_angles_rekey]
+    ud ice
+    [temp_part_angles_merged]
+lb1
+; end class-loop
+
+; sort angle doc
+sd e
+[temp_part_angles_unsorted]   ; WAS [merged_angle_doc]
+doc sort
+[temp_part_angles_unsorted]
+[merged_angle_doc]
+(0)   ; column# to sort: particle#
+N,Y   ; renumber keys?, remove duplicates?
+
+; close docs
+SD /      ANGLE_PSI    ANGLE_THETA    ANGLE_PHI
+[merged_angle_doc]
+sd e
+[merged_angle_doc]
+ud ice
+[class_list]
+sd e
+[merged_select_doc]
+de
+[temp_part_angles_rekeyed]
+de
+[temp_part_angles_renum]
+de
+[temp_part_angles_merged]
+de
+[temp_class_angles]
+de
+[temp_class_angles_rekey]
+de
+[temp_part_angles_unsorted]
+
+
+; COMPUTE GROUP RECONSTRUCTIONS (diagnostic)
+
+if([classvols-yn].eq.1) then
+    vm
+    echo ; echo "Computing optional class reconstructions"
+
+    ; loop through classes
+    do lb3 [class-key3] = 1,[num-classes]
+        ; read class#
+        ud ic [class-key3], [class-num3],[soln-num3]
+        [class_list]
+
+        ; if deselected, skip
+        if([soln-num3].eq.0) goto lb3
+
+        vm
+        echo "Working on [class_part_list][class-num3]"
+
+        ; compute reconstruction
+        bp 3f
+        [aligned_tilted]
+        [class_part_list][class-num3]
+        [merged_angle_doc]
+        *    ; no symmetry
+        [merged_vol][class-num3]
+    lb3
+    ; end class-loop
+
+    ud ice
+    [class_list]
+endif
+
+
+; COMPUTE MERGED RECONSTRUCTION
+
+vm
+echo ; echo "Computing merged reconstruction"
+
+bp 3f
+[aligned_tilted]
+[merged_select_doc]
+[merged_angle_doc]
+*    ; no symmetry
+[merged_vol][filenum]
+
+
+; FILTER
+
+; get pixel-size
+if([pixel-size].le.0) then
+    ud 5, [pixel-size]
+    [parameter_doc]
+    ud e
+endif
+
+; compute radius in px^-1
+[param1-px] = [pixel-size]/[filter-param1]
+[param2-px] = [pixel-size]/[filter-param2]
+
+vm
+echo ; echo "Filtering merged reconstruction"
+
+; filter volume
+fq np
+[merged_vol]
+[filtered_vol]
+[filter-type]
+[param1-px],[param2-px]
+
+en d
+
+; Modified 2014-03-04
+;    2014-03-04 (trs) -- looks for last iteration of multireference alignment
+;    2012-10-12 (trs) -- filters merged volume
+

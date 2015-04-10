@@ -1,0 +1,221 @@
+; RUNS K-MEANS CLASSIFICATION
+
+; -------------- Parameters --------------
+x20 = 4   ; desired number of classes
+x56 = 3   ; progress message printed every Nth class
+x27 = 7   ; number of factors to use
+x36 = 2   ; decimation factor applied to input images
+
+; ---------------- Inputs ----------------
+fr l
+[parameter_doc]params                     ; parameter doc file
+fr l
+[cas_prefix]Zerodegr/MSA/cas              ; correspondence-analysis output prefix
+fr l
+[particles]Zerodegr/stk4-filtered@*****   ; particle file-pattern
+;;[particles]Zerodegr/Filtered/flt*****     ; particle file-pattern
+
+; ---------------- Outputs ----------------
+fr l
+[class_dir]Zerodegr/Kmeans                ; output directory
+fr l
+[dendrogram_doc][class_dir]/docassign     ; dendrogram doc
+fr l
+[class_doc][class_dir]/docclass           ; class-membership doc prefix, for each class
+fr l
+[class_avg][class_dir]/classavg           ; class-average prefix, for each class
+fr l
+[class_var][class_dir]/classvar           ; class-variance prefix, for each class
+fr l
+[class_stats_doc][class_dir]/listclasses  ; class-size document
+
+; ----------- END BATCH HEADER -----------
+
+; set temporary filenames
+fr l
+[circular_mask_incore]_6
+fr l
+[class_doc_unsorted_incore]tmpdocclass_incore
+
+
+; GENERATE CIRCULAR MASK
+
+; get window dimension
+ud 17,x65
+[parameter_doc]
+ud e
+
+; divide by decimation-factor
+x65=x65/x36
+
+; mask radius
+x32=(x65-1)/2
+
+; make circular mask
+mo
+[circular_mask_incore]
+x65,x65  ; dimensions
+C        ; _C_ircle
+x32      ; radius
+
+
+vm
+echo "if(! -d [class_dir]) mkdir [class_dir]"|csh
+
+md
+set mp
+0
+
+vm
+echo "Running K-means classification"; date
+
+; run k-means classification
+cl km x21,x22,x23,x24,x25
+[cas_prefix]_IMC
+x20                    ; number of classes
+(1-x27)                ; factors to use
+(0)                    ; no factor weighting
+(0)                    ; no random seed
+[class_doc]****_noccc  ; OUTPUT (temp): class-list doc
+[dendrogram_doc]
+
+;sd -1,x21,x22,x23,x24,x25
+;dockm
+
+; GENERATE CLASS AVERAGES
+vm
+echo "Generating class averages"; date
+
+; initialize maximum class-size
+[max-size] = -1
+
+; loop through classes
+do lb2 x16=1,x20
+    if (int(x16/x56).eq.x16/x56) then
+        vm
+        echo "Working on {***x16}th class out of {***x20}"
+    endif
+
+    ; calculate average
+    as r
+    [particles]
+    [class_doc]{****x16}_noccc  ; INPUT: class list
+    A                           ; _A_ll images
+    [class_avg]{***x16}         ; OUTPUT: class average
+    [class_var]{***x16}         ; OUTPUT: class variance
+
+    ; get standard deviation of the variance (x44)
+    fs m,x41,x42,x43,x44
+    [class_var]{***x16}
+    [circular_mask_incore]
+
+
+    ; CALCULATE CCC OF PARTICLES AGAINST CLASS AVERAGE
+
+    de
+    [class_doc]{****x16}_unsort
+
+    ; initialize CCC-sum
+    x34 = 0
+
+    ; get class size
+    ud n,x69
+    [class_doc]{****x16}_noccc
+
+    ; update maximum
+    if(x69.gt.[max-size]) [max-size]=x69
+
+    ; initialize in-core doc file
+    sd ic new
+    [class_doc_unsorted_incore]
+    (2,x69)  ; #columns, #keys
+
+    ; loop through particles
+    do lb6 x60=1,x69
+        ; read particle# (x61)
+        ud ic x60,x61
+        [class_doc]{****x16}_noccc
+
+        ; calculate CCC (x62)
+        cc c,x62
+        [particles]x61
+        [class_avg]{***x16}
+        [circular_mask_incore]
+
+        ; update CCC-sum (x34)
+        x34 = x34 + x62
+
+        ; write to unsorted doc
+        sd ic x60, x61,x62
+        [class_doc_unsorted_incore]  ; WAS [class_doc]{****x16}_unsort
+    lb6
+    ; end particle-loop
+
+    ; clean up
+    ud ice
+    [class_doc]{****x16}_noccc
+    de
+    [class_doc]{****x16}_noccc
+    sd ic copy
+    [class_doc_unsorted_incore]
+    [class_doc]{****x16}_unsort
+    sd ice
+    [class_doc_unsorted_incore]
+
+    ; sort by CCC
+    doc sort
+    [class_doc]{****x16}_unsort
+    [class_doc]{****x16}
+    (2)  ; column for CCC
+    Y    ; renumber?
+
+    ; label and clean up
+    SD /      PART_NUM    CCC_VS_AVG
+    [class_doc]{****x16}
+    sd e
+    [class_doc]{****x16}
+    de
+    [class_doc]{****x16}_unsort
+
+    ; average CCC-sum
+    x34 = x34/x69
+    ; x69==#particles
+
+    ; write to doc file
+    sd x16,x16,x34,x44,x69
+    [class_stats_doc]_unsort
+    ; x44=sdvar
+lb2
+; end class-loop
+
+; sort class-list
+doc sort
+[class_stats_doc]_unsort
+[class_stats_doc]
+(2)  ; column for CCC
+Y    ; renumber?
+
+; label+close doc
+SD /      CLASSNUM       CCC        VARIANCE_SD  NUMPARTS
+[class_stats_doc]
+sd e
+[class_stats_doc]
+de
+[class_stats_doc]_unsort
+
+vm m
+echo ;
+echo "Done" ;
+echo "Maximum class size: {****[max-size]}" ;
+date
+.
+
+en d
+
+; Modified 2014-03-06
+;    2014-03-06 (trs) -- reading images from stacks
+;    2009-07-27 (trs) -- prints largest class
+;    2009-07-27 (trs) -- sorted list classes
+;    2009-07-27 (trs) -- sorted particles by CCC against average
+;    2008-04-06 (trs) -- added doc file with class size
+;    2005-08-24 (trs) -- adapted from classify.spi

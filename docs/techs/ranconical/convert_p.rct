@@ -1,0 +1,151 @@
+[x12,x33]       
+; x12 : micrograph number
+; x33 : decimation factor (1=full size, 2=half size, etc, 0 = use param file)
+
+fr
+?the parameter file? [params]
+; params
+fr
+?input micrograph? [raw]
+; raw{****x12}
+fr
+?output spider file? [spider]
+; mic
+
+; get zip (x80) and format (x81) flags from parameter file
+ud 1,x80
+[params]
+ud 2,x81
+[params]
+
+; ----------- checks if files are gzipped -------------------
+
+IF (x80*x81.GT.0) THEN     ; both tif & zip flags set
+    vm
+    gunzip [raw].tif.gz
+    GOTO LB3
+ENDIF
+
+IF (x80.GT.0) THEN     ; zip, but not tif, flag set
+    VM
+    echo "unzipping file "
+    vm
+    gunzip [raw].$DATEXT.gz
+    GOTO LB3
+ENDIF
+
+LB3
+
+; ----------- conversion based on scanner type -------------------
+
+; it is already a spider file, put in output file
+IF (x81.eq.0) THEN
+   CP
+   [raw]
+   [spider]
+
+   GOTO LB5
+ENDIF
+	    
+; if HiScan tif, get X,Y size parameters 
+IF (x81.eq.1) THEN
+    UD 3,x51    
+    [params]
+    UD 4,x52          
+    [params]
+
+    cp from raw
+    (16)
+    [raw].tif
+    x51,x52
+    (342)
+    (1)
+    n
+    _1
+
+    ar
+    [raw]
+    [spider]
+    p1*(-1)+5
+
+ENDIF 
+
+; if from Perkin Elmer
+IF (x81.eq.2) THEN
+    ar
+    _1
+    [spider]
+    log(p1+1)
+ENDIF
+
+; if it's a ZI tif, extract overview 
+; NB OVERVIEW SHOULD ALWAYS = 1, USE DC S TO REDUCE SIZE
+IF (x81.eq.3) THEN     
+
+    VM
+    zi2spi [raw].tif [spider].$DATEXT 1
+
+ENDIF
+
+; if HiScan tif, get X,Y size parameters 
+IF (x81.eq.1) THEN
+    UD 3,x51    
+    [params]
+    UD 4,x52          
+    [params]
+
+    cp from raw
+    (16)
+    [raw].tif
+    x51,x52
+    (342)
+    (1)
+    n
+    _1
+
+    ar
+    [raw]
+    [spider]
+    p1*(-1)+5
+
+ENDIF 
+
+LB5
+
+; rezip if necessary
+IF (x80*x81.GT.0) THEN     ; both tif & zip flags set
+    vm
+    gzip [raw].tif
+	GOTO LB4
+ENDIF
+
+IF (x80.eq.1) THEN     ; only zip flag
+    vm
+    gzip [raw].$DATEXT
+    GOTO LB4
+ENDIF
+
+LB4
+
+; size reduction, if any
+IF (x33.EQ.1) GOTO LB7   ; no reduction
+
+IF (x33.LT.1) THEN
+   ud 16,x33   ; get reduction factor from param file
+   [params]
+
+   IF (x33.LE.1) GOTO LB7
+ENDIF
+
+DC S
+[spider]
+_1
+x33,x33
+
+CP
+_1
+[spider]
+
+LB7
+
+RE

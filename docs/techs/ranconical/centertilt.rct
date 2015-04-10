@@ -1,0 +1,264 @@
+;-----------------------------------------------------------------------------!
+; Adapted from b06.fed/hbf : - Centering of the tilted-specimen images 
+;
+; NOTE: May require center1.rct, depending on parameter [cg-option]
+;-----------------------------------------------------------------------------!
+
+; ---------------------- Parameter ----------------------
+[cg-option]     = 1     ; center-of-gravity option (0==None, 1==CG PH, 2=RT180)
+[verified-yn]   = 0     ; use verified particles? (0==No, 1==Yes)
+[multiref-iter] = -1    ; iteration of multireference alignment to use as input (<0 == last/none)
+[filt-param1]   = 37.6  ; low-pass (Butterworth) pass-band (Angstroms) for temporary filtered images
+[filt-param2]   = 28.2  ; low-pass filter stop-band, Angstroms
+
+; --------------------- Input files ---------------------
+fr l
+[parameter_doc]params                                   ; parameter doc file
+fr l
+[preverified_list]listparticles                         ; pre-verification particle list (see option above)
+fr l
+[verified_list]Zerodegr/Multiref{*[iter]}/combinedgood  ; verified particle list (see option above)
+fr l
+[multiref_tracking_doc]Zerodegr/docmultiref             ; list of multireference alignment iterations 
+;                                                       ; (required if using verified particles and automatic iteration-tracker)
+;fr l
+;[selection_list]listparticles                           ; particle list
+;;[selection_list]Zerodegr/Multiref2/combinedgood         ; particle list
+fr l
+[tilted_images]Tilted/stk2-winrot@*****                 ; tilted windowed image filename template
+;;[tilted_images]Tilted/Winrot/tilt*****                  ; tilted windowed image filename template
+
+; --------------------- Output files ---------------------
+fr l
+[tilted_dir]Tilted                        ; output directory
+;;fr l
+;;[aligned_dir][tilted_dir]/Aligned         ; centered-image directory
+fr l
+[aligned_stack][tilted_dir]/stk3-cent     ; tilted-image stack (w/o "@")
+fr l
+[aligned_images][aligned_stack]@*****     ; tilted aligned tilted image filename template
+;;[aligned_images][aligned_dir]/cent*****   ; tilted aligned tilted image filename template
+fr l
+[dummy_rotate][tilted_dir]/dummyalign     ; tilted rotation doc filename template
+fr l
+[shift_doc_tilt][tilted_dir]/dshiftt001   ; intermediate tilted shift doc filename
+fr l
+[apsa_avg_tilt][tilted_dir]/avg1_apsa     ; intermediate tilted avg filename
+fr l
+[apsa_avg_cent][tilted_dir]/avg2_cent     ; centered tilted avg filename
+fr l
+[alignment_doc][tilted_dir]/dalt001       ; final tilted alignment doc filename
+fr l
+[tilted_avg][tilted_dir]/avg3_tilt        ; final tilted centered average filename
+fr l
+[tilted_var][tilted_dir]/var3_tilt        ; tilted variance for centered avg
+
+; ------------------- END BATCH HEADER -------------------
+
+fr l
+[temp_filt]_11
+
+; create output directories if needed
+vm
+echo "if(! -d [tilted_dir]) mkdir -p [tilted_dir]"|csh
+;vm
+;echo "if(! -d [aligned_dir]) mkdir -p [aligned_dir]"|csh
+de
+[aligned_stack]@
+
+; get pixel-size, window dimension (x50)
+ud 5,[pixel-size]
+[parameter_doc]
+ud 17,x50
+[parameter_doc]
+ud e
+
+x51=x50/2+1  ; image center coordinates
+x47=x50/2-1  ; mask radius
+
+; change filter radii to reciprocal pixels
+[filt-param1] = [pixel-size]/[filt-param1]  ; pass-band if Butterworth
+[filt-param2] = [pixel-size]/[filt-param2]  ; stop-band
+
+; Create a dummy doc file corresponding to a rotational alignment
+; where a zero degree rotation angle would be found for all images
+
+; dummy variables for initial doc file
+X31=0.0
+x32=1.
+
+; delete pre-existing files
+de
+[dummy_rotate]
+de
+[shift_doc_tilt]
+
+; check which particle list to use, i.e., before or after verification
+if([verified-yn].lt.0.5) then
+    [selection_list] = [preverified_list]
+else
+    ; if input iteration-specified
+    if([multiref-iter].gt.0) then
+        [iter] = [multiref-iter]
+
+    ; if input iteration not specified
+    else
+        ; look for last iteration number
+        ud n [last-iter-key]
+        [multiref_tracking_doc]
+        
+        ; get iteration number
+        ud [last-iter-key], [iter]
+        [multiref_tracking_doc]
+        ud e  ; close doc
+    endif
+
+    [selection_list] = [verified_list]
+endif
+
+vm
+echo "Using particles in [selection_list].$DATEXT" ; echo
+
+
+vm
+echo "Masking and filtering particles"; date
+
+; get #particles
+ud n,x62
+[selection_list]
+
+DO LB1 X11=1,x62
+    ; get particle# (x10)
+    ud ic,x11,x10
+    [selection_list]
+
+    SD X11,X10,X31,X32,X32
+    [dummy_rotate]
+
+    ; low-pass filter
+    fq np
+    [tilted_images]X10
+    [temp_filt]   ; OUTPUT
+    (7)           ; Butterworth low-pass filter
+    [filt-param1],[filt-param2]
+    
+    ; Apply a circular mask on all the images 
+    ma
+    [temp_filt]   ; WAS [tilted_images]X10
+    [aligned_images]X10
+    x47      ; mask radius
+    G        ; Gaussian cutoff
+    C        ; background set to _C_ircumference average
+    x51,x51  ; mask center
+    (2.5)    ; Gaussian falloff
+LB1
+
+ud ice
+[selection_list]
+sd e
+[dummy_rotate]
+
+vm
+echo ; echo "Finding translational parameters"; date ; echo
+
+; Alignment by translation on all the masked images
+AP SA
+[aligned_images]x32
+[dummy_rotate]
+(1)               ; group number from AP RA (set to dummy variable x32=1)
+N                 ; check 180-degree range?
+[shift_doc_tilt]  ; OUTPUT: doc file
+[apsa_avg_tilt]   ; OUTPUT: average
+
+my fl
+
+if([cg-option].eq.1) then
+    vm
+    echo "Centering average using CG PH"
+    
+    ; Search the center of gravity of the global average map AVSTX71
+    cg ph X21,X22
+    [apsa_avg_tilt]
+    
+    ; shift
+    sh
+    [apsa_avg_tilt]
+    [apsa_avg_cent]
+    -x21,-x22
+elseif([cg-option].eq.2) then
+    vm
+    echo "Centering average by rotating 180 degrees and aligning"
+    
+    ; center by rotating by 180 degrees and self-alignment
+    @center1(x21,x22)
+    [apsa_avg_tilt]
+    [apsa_avg_cent]
+else
+    vm
+    echo "Not centering average"
+    
+    ; no centering
+    x21=0   ; x-shift
+    x22=0   ; y-shift
+    
+    ; copy
+    cp
+    [apsa_avg_tilt]
+    [apsa_avg_cent]
+endif
+
+vm
+echo ; echo "Applying translations"; date
+
+; Apply X&Y translation (minus location of center of gravity) 
+; to all raw tilted-specimen images
+DO LB4 X37=1,x62
+    ; get x- and y-shifts (x34 & x35)
+    UD IC X37,X31,X32,X33,X34,X35,X36
+    [shift_doc_tilt]
+
+    ; subtract center of gravity offset from shifts
+    X54=X34-X21   ; x-shift
+    X55=X35-X22   ; y-shift
+
+    SD X37,X31,X52,X54,X55
+    [alignment_doc]
+
+    RT SQ
+    [tilted_images]X31
+    _1
+    X52      ; rotation angle
+    X54,X55  ; x-,y-shift
+
+    ; Apply a circular mask on the centrered images 
+    ma
+    _1       ; INPUT: aligned image
+    [aligned_images]X31
+    x47      ; mask radius
+    G        ; Gaussian cutoff
+    C        ; background set to _C_ircumference average
+    x51,x51  ; mask center
+    (2.5)    ; Gaussian falloff
+LB4
+
+vm
+echo ; echo "Computing average"; date
+
+;   Compute average and variance maps 
+AS R
+[aligned_images]
+[selection_list]
+A
+[tilted_avg]
+[tilted_var]
+
+vm
+echo ; echo "Done"; date
+
+en d
+
+; Modified 2014-03-06
+;    2014-03-06 (trs) -- using stacks
+;    2014-03-04 (trs) -- looks for last iteration
+;    2014-03-04 (trs) -- added option for centering only verified particles
+;    2012-09-26 (trs) -- added low-pass filter

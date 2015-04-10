@@ -1,0 +1,316 @@
+; PREPARES FILES FOR PROJECTION-MATCHING
+
+; ------------------ Parameter ------------------
+
+[dummy-defocus] = 33333    ; dummy defocus value
+
+; -------------------- Inputs --------------------
+fr l
+[old_params]params                      ; parameter doc file
+fr l
+[old_volume]Volumes/vtot999-flt         ; volume to use as reference
+;[old_volume]Volumes/vflt002             ; volume to use as reference
+fr l
+[mic_pair_doc]docmicpairs               ; micrograph-pairing list
+fr l
+[rct_particle_list]listparticles        ; particle list
+;      PARTICLE_NUM  MICROGRAPH
+fr l
+[mic2particle_table]order_picked        ; micrograph-to-particle lookup-table
+;       UNTILTED_MIC   NUM_PARTS     CUM_TOTAL     FIRSTPART     LAST_PART
+fr l
+[old_coords_doc]Micrographs/dct***      ; tilted coords template
+;              PART    XCOORD      YCOORD
+fr l
+[tilted_parts]Tilted/stk2-winrot@*****  ; tilted-image template
+
+; ------------------- Outputs -------------------
+fr l
+[prjmatch_dir]myproject                         ; output directory
+;[prjmatch_dir]Projmatch                         ; output directory
+fr l
+[new_params]params                              ; parameter doc file
+fr l
+[new_volume]reference_volume                    ; reference volume
+fr l
+[group_list]Power_Spectra/sel_group             ; group list
+;[group_list]Alignment/sel_group                 ; group list
+;        GRP_NUM     AVG_DEFOCUS
+fr l
+[micrograph_list]sel_micrograph                 ; micrograph list
+;        TILTEDMIC    UNTILTEDMIC
+fr l
+[def_avg]Power_Spectra/def_avg                  ; defocus table (dummy file)
+;         MIC_NUM       DEFOCUS       GRP_NUM     AVG_DEFOCUS 
+fr l
+[stacked_imgs]Particles/win/winser_****         ; particle stacks for each micrograph
+fr l
+[parts_by_mic]Particles/good/ngood****          ; particle list for each micrograph
+;[parts_by_mic]Particles/win/sel_particle_****   ; particle list for each micrograph
+;        MIC_SLICE     GLOBALNUM      DCT_KEY
+fr l
+[new_coords_doc]Particles/coords/sndc****       ; particle coordinates for each micrograph
+;         X_COORD       Y_COORD      MIC_SLICE      PEAK_HT 
+
+; --------------- END BATCH HEADER ---------------
+
+; Temporary files
+fr l
+[temp_mic_list]tmpmiclist
+;fr l
+;[temp_mics_tilted]tmpmics_tilted
+fr l
+[temp_parts_bymic]tmpselparticles***
+
+vm
+echo "if(! -d [prjmatch_dir]) mkdir [prjmatch_dir]"|csh
+
+; copy PARAMS
+vm
+cp [old_params].$DATEXT [prjmatch_dir]/[new_params].$DATEXT
+
+; copy volume as reference
+cp
+[old_volume]
+[prjmatch_dir]/[new_volume]
+
+vm
+echo "Copied [old_params].$DATEXT and [old_volume].$DATEXT to [prjmatch_dir]/"
+
+
+; write dummy SEL_GROUP file
+de
+[prjmatch_dir]/[group_list]
+[one] = 1
+sd [one], [one],[dummy-defocus]
+[prjmatch_dir]/[group_list]
+SD /       GRP_NUM     AVG_DEFOCUS
+[prjmatch_dir]/[group_list]
+sd e
+[prjmatch_dir]/[group_list]
+
+vm
+echo "Wrote [group_list].$DATEXT" ; echo
+
+
+; initialize previous micrograph#
+[prev-untilted] = -999
+[prev-tilted]   = -999
+
+; initialize micrograph particle#
+[mic-part] = 0
+
+; initialize micrograph-counter
+[mic-counter] = 0
+
+; get #micrographs in ORDER_PICKED
+ud n [picked-mics]
+[mic2particle_table]
+
+; get #micrographs from RCT docfile
+ud n [paired-mics]
+[mic_pair_doc]
+
+; get #particles
+ud n [rct-particles]
+[rct_particle_list]
+
+; loop through particles
+do lb1 [part-key] = 1,[rct-particles]
+    ; get unstacked particle#, micrograph#
+    ud ic [part-key], [global-part],[untilted-mic1]
+    [rct_particle_list]
+
+    ; if new micrograph, close & update
+    if([untilted-mic1].ne.[prev-untilted]) then
+        ; FIGURE OUT MICROGRAPH KEY IN MICPAIRDOC
+        ; (TO DO: replace loop with UD FIND)
+
+        ; loop through micrographs
+        do lb3 [mic-key3] = 1,[paired-mics]
+            ; read untilted and tilted micrograph #s
+            ud ic [mic-key3], [untilted-mic3],[tilted-mic]
+            [mic_pair_doc]
+
+            ; if micrograph# is current one, then exit loop
+            if([untilted-mic3].eq.[untilted-mic1]) goto lb4
+        lb3
+        ; end micrograph-loop
+
+        vm
+        echo ; echo "ERROR! Micrograph #{****[untilted-mic1]} not found in [mic_pair_doc].$DATEXT"
+        vm
+        echo "Check doc files and try again"
+
+        en
+
+        lb4   ; jump here when untilted micrograph found
+        
+        vm
+        echo "Writing old files with untilted micrograph #{****[untilted-mic1]} to new files using tilted micrograph# {****[tilted-mic]}"
+
+        ; FIGURE OUT KEY IN ORDER_PICKED
+        ; (TO DO: replace loop with UD FIND)
+
+        ; loop through micrographs
+        do lb6 [mic-key6] = 1,[picked-mics]
+            ; read micrograph#, first-particle# from ORDER_PICKED
+            ud ic [mic-key6], [untilted-order],x99,x99,[first-part]
+            [mic2particle_table]
+
+            ; if micrograph# is current one, then exit loop
+            if([untilted-order].eq.[untilted-mic1]) goto lb7
+        lb6
+        ; end micrograph-loop
+
+        vm
+        echo ; echo "ERROR! Micrograph #{****[untilted-mic1]} not found in [mic2particle_table].$DATEXT"
+        vm
+        echo "Check doc files and try again"
+
+        en
+
+        lb7   ; jump here when untilted micrograph found
+
+        [mic-counter] = [mic-counter] + 1
+
+        ; write to micrograph list
+        sd [mic-counter], [tilted-mic], [untilted-mic3]
+        [temp_mic_list]
+        
+        sd e
+        [prjmatch_dir]/[parts_by_mic][prev-tilted]
+
+        [mic-part] = 0
+        [prev-untilted] = [untilted-mic1]
+        [prev-tilted]   = [tilted-mic]
+    endif
+
+    ; increment particle-counter
+    [mic-part] = [mic-part] + 1
+    
+    ; compute key from DCT coordinate file (each micrograph re-starting from 1)
+    [dct-part] = [global-part] - [first-part] + 1
+    
+    ; write to micrograph particle-list
+    sd [mic-part], [mic-part],[global-part],[dct-part]
+    [prjmatch_dir]/[parts_by_mic][tilted-mic]
+    ; (Now, files will be numbered according to their TILTED micrograph number.)
+lb1
+; end particle-loop
+
+; close docs
+ud ice
+[rct_particle_list]
+sd e
+[temp_mic_list]
+ud ice
+[mic_pair_doc]
+sd e
+[prjmatch_dir]/[parts_by_mic][tilted-mic]   ; last micrograph's docfile
+
+; remove possible duplicates from micrograph list
+at it
+[temp_mic_list]
+[prjmatch_dir]/[micrograph_list]
+SD /      TILTEDMIC    UNTILTEDMIC
+[prjmatch_dir]/[micrograph_list]
+sd e
+[prjmatch_dir]/[micrograph_list]
+
+de
+[temp_mic_list]
+
+; get #micrographs
+ud n [num-mics]
+[prjmatch_dir]/[micrograph_list]
+
+vm
+echo ; echo "Wrote {***[num-mics]} micrographs to [micrograph_list].$DATEXT" ; echo 
+
+
+; MAKE SECOND PASS AND COPY IMAGES
+
+; loop through micrographs
+do lb2 [mic-key2] = 1,[num-mics]
+    ; get micrograph#
+    ud ic [mic-key2], [tilted-mic2],[untilted-mic2]
+    [prjmatch_dir]/[micrograph_list]
+
+    ; write to DEF_AVG
+    sd [mic-key2], [tilted-mic2],[dummy-defocus],[one],[dummy-defocus]
+    [prjmatch_dir]/[def_avg]
+
+    ; renumber particle-list (in case keys are non-consecutive)
+    doc ren
+    [prjmatch_dir]/[parts_by_mic][tilted-mic2]
+    [prjmatch_dir]/[parts_by_mic][tilted-mic2]
+
+    SD /      MIC_SLICE     GLOBALNUM      DCT_KEY
+    [prjmatch_dir]/[parts_by_mic][tilted-mic2]
+    sd e
+    [prjmatch_dir]/[parts_by_mic][tilted-mic2]
+    
+    ; delete pre-existing particle stack
+    de
+    [stacked_imgs][tilted-mic2]@
+
+    ; get #particles in micrograph
+    ud n [mic-parts]
+    [prjmatch_dir]/[parts_by_mic][tilted-mic2]
+    
+    vm
+    echo "Copying {*****[mic-parts]} particles listed in [parts_by_mic][tilted-mic2].$DATEXT to [stacked_imgs][tilted-mic2].$DATEXT"
+
+    ; loop through particles
+    do lb5 [part-key5] = 1,[mic-parts]
+        ; get unstacked particle#
+        ud ic [part-key5], [part-key5],[global-part5],[dct-part5]
+        [prjmatch_dir]/[parts_by_mic][tilted-mic2]
+
+        ; read old coordinates
+        ud ic [dct-part5],x99,[x-coord],[y-coord]
+        [old_coords_doc][untilted-mic2]
+
+        ; write new coordinates
+        sd [part-key5], [x-coord],[y-coord],[part-key5],[one]
+        [prjmatch_dir]/[new_coords_doc][tilted-mic2]
+
+        ; copy tilted particle to micrograph particle stack
+        cp
+        [tilted_parts][global-part5]
+        [prjmatch_dir]/[stacked_imgs][tilted-mic2]@{****[part-key5]}
+    lb5
+    ; end particle-loop
+
+    ; close docs
+    ud ice
+    [old_coords_doc][untilted-mic2]
+    SD /       X_COORD       Y_COORD      MIC_SLICE      PEAK_HT 
+    [prjmatch_dir]/[new_coords_doc][tilted-mic2]
+    sd e
+    [prjmatch_dir]/[new_coords_doc][tilted-mic2]
+    vm
+    echo "Wrote coordinates for {*****[mic-parts]} particles to [new_coords_doc][tilted-mic2].$DATEXT" ; echo
+    ud ice
+    [prjmatch_dir]/[parts_by_mic][tilted-mic2]
+lb2
+; end micrograph-loop
+
+; close docs
+ud ice
+[prjmatch_dir]/[micrograph_list]
+SD /       MIC_NUM       DEFOCUS       GRP_NUM     AVG_DEFOCUS 
+[prjmatch_dir]/[def_avg]
+sd e
+[prjmatch_dir]/[def_avg]
+ud ice
+[mic2particle_table]
+
+vm
+echo "Wrote {***[num-mics]} micrographs to [def_avg].$DATEXT" ; echo
+
+en d
+
+; Modified 2014-03-28
+;    2014-03-06 (trs) -- reading images from stacks

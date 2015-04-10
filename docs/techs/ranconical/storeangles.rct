@@ -1,0 +1,282 @@
+;---------------------------------------------------------------------------------!
+; Adapted from b07.fed/hbl : reads the Euler angles and stores them in a doc file :
+;---------------------------------------------------------------------------------!
+
+; ----------------------- Parameter -----------------------
+
+[multiref-iter] = -1  ; iteration of multireference alignment to use as input (<0 == last)
+[mirror-yn]    = 0    ; mirror flag (1==mirroring, see documentation)
+
+; ------------------------ Inputs ------------------------
+fr l
+[selection_list]listparticles                             ; particle list
+;      PARTICLE_NUM  MICROGRAPH
+fr l
+[tilt_params_doc]Micrographs/dcb***                       ; tilt-parameter doc file template
+fr l
+[untilted_align_doc]Zerodegr/Multiref{*[iter]}/docalign   ; untilted-alignment doc
+;       MIRRORFLAG     CC_ROT    INPLANEANGLE    XSHIFT       YSHIFT    PARTICLE_NUM
+fr l
+[multiref_tracking_doc]Zerodegr/docmultiref               ; list of multireference alignment iterations 
+
+; ------------------------ Output ------------------------
+fr l
+[angles_doc]Tilted/dangles         ; Euler angle doc file template
+fr l
+[angles_unrot]Tilted/dang-unrot    ; Euler angle doc file template
+;        ANGLEPSI    ANGLETHETA    ANGLEPHI
+fr l
+[summary_doc]docstoreanglesbymic   ; summary doc file
+
+; ------------------- END BATCH HEADER -------------------
+
+; SAMPLE INPUT FROM TILT_PARAM_DOC:
+;------------------------------------------------------------------------------!
+;  ; hbl/hbl  dcb001.hbl   Tue Feb 13 17:18:19 2002
+; TILTANGLE, AXIS DIR. IN:  0 DEG IM.  THETA GAMMA PHI
+; 0124 6   48.954857   -0.237597   -0.333951    0.000000    0.000000    
+;            tilt      tilt dir     tilt dir 
+;          magnitude   untilted      tilted
+;------------------------------------------------------------------------------!
+
+fr l
+[temp_angles_doc]tmp_angles_unmod
+fr l
+[temp_angles_unrot]tmp_angles_unrot
+
+; delete pre-existing summary doc
+de
+[summary_doc]
+
+; initialize micrograph-counter
+[mic-counter] = 0
+
+; relevant key# in TILT_PARAMS_DOC
+[tilt-key] = 124
+
+; initialize previous-micrograph#
+[prev-mic] = -1
+
+; GET ITERATION NUMBER
+
+; if input iteration-specified
+if([multiref-iter].gt.0) then
+    [iter] = [multiref-iter]
+
+; if input iteration not specified
+else
+    ; look for last iteration number
+    ud n [last-iter-key]
+    [multiref_tracking_doc]
+    
+    ; get iteration number
+    ud [last-iter-key], [iter]
+    [multiref_tracking_doc]
+    ud e  ; close doc
+endif
+
+vm
+echo "Using angles from [untilted_align_doc]"; echo
+
+
+; check alignment docfile format
+ud n [aligndoc-parts],[aligndoc-cols]
+[untilted_align_doc]
+
+if([aligndoc-cols].eq.15) then
+    vm
+    echo "Reading AP SH format doc [untilted_align_doc]" ; echo
+elseif([aligndoc-cols].eq.6) then
+    vm
+    echo "Reading AP MQ format doc [untilted_align_doc]" ; echo
+else
+    vm
+    echo "Alignment doc [angles_doc] has unknown format.  Exiting..." ; echo
+    
+    en
+endif
+
+if(abs([mirror-yn]).eq.1) then
+    vm
+    echo "Mirroring reconstruction" ; echo
+endif
+; (abs(): maybe someone will enter -1 to mirror)
+
+; get #particles
+ud n [num-parts]
+[selection_list]
+
+; loop through particles
+do lb1 [part-key] = 1,[num-parts]
+    ; get particle#, micrograph#
+    ud ic [part-key], [part-num],[mic-num]
+    [selection_list]
+
+    ; if micrograph different from previous...
+    if([mic-num].ne.[prev-mic]) then
+        ; close previous micrograph tilt-parameter doc
+        ud ice
+        [tilt_params_doc][prev-mic]
+        
+        ; read new micrograph tilt parameters
+        ud ic [tilt-key], [tilt-magnitude],[tilt-untilted],[tilt-tilted]
+        [tilt_params_doc][mic-num]
+        ; (The direction of the tilt axis isn't necessarily the same in both micrographs.)
+        
+        ; write to doc file
+        [mic-counter] = [mic-counter] + 1
+;        sd [mic-counter], [mic-num],[tilt-magnitude],[tilt-untilted],[tilt-tilted]   ; WAS ,[prev-mic]
+        sd [mic-num], [tilt-magnitude],[tilt-untilted],[tilt-tilted]
+        [summary_doc]
+        
+        vm
+        echo "Micrograph {****[mic-num]}:  Theta={%f10.5%[tilt-magnitude]}, Gamma={%f10.5%[tilt-untilted]}, Phi={%f10.5%[tilt-tilted]}"
+        
+        ; updte previous micrograph#
+        [prev-mic] = [mic-num]
+    endif
+
+    
+    ; get in-plane angle, mirror-flag
+    
+    ; AP SH format
+    if([aligndoc-cols].eq.15) then
+        ud ic [part-num], x81,x82,x83,x84,x85,[inplane-angle],[x-shift],[y-shift],x89,x90,x91,x92,x93,x94,[mirror-flag]
+        [untilted_align_doc]
+    
+    ; AP MQ format
+    else
+        ud ic [part-key], [mirror-flag],x99,[inplane-angle],x99,x99,[angles-num]
+        [untilted_align_doc]
+        ; (Key in AP SH is particle#, as opposed to in AP MQ.)
+
+        ; check if particle# from list is same as from alignment doc
+        if([part-num].ne.[angles-num]) then
+            vm m
+            echo "Particle number from selection list {*****[part-num]} not equal to that from alignment doc {*****[angles-num]}"; 
+            echo "Fix and re-start"
+.
+            en
+        endif
+    endif
+    
+    [euler-angle1] = 0   ; WAS [tilt-tilted]
+    [unrot-angle1] = [tilt-tilted]
+    
+    ; optional mirroring 
+    if(abs([mirror-yn]).ne.1) then
+        [euler-angle2] = [tilt-magnitude]
+        [unrot-angle2] = [tilt-magnitude]
+    else
+        [euler-angle2] = -[tilt-magnitude]
+        [unrot-angle2] = -[tilt-magnitude]
+    endif
+
+    ; correct for sign convention and subtract relative rotation between particle and micrograph
+    [euler-angle3] = -[inplane-angle]   ; WAS -[inplane-angle] - [tilt-untilted]
+    [unrot-angle3] = -[inplane-angle] - [tilt-untilted]
+
+    ; if mirroring necessary
+    if([mirror-flag].lt.0) then
+        [euler-angle1] = 180 + [euler-angle1]
+        [euler-angle2] = 180 - [euler-angle2]
+        [euler-angle3] = 180 - [euler-angle3]
+        
+        [unrot-angle1] = 180 + [unrot-angle1]
+        [unrot-angle2] =     - [euler-angle2]
+        [unrot-angle3] = 180 - [unrot-angle3]
+    endif
+    
+    ; store the Euler angles psi, theta, & phi in a doc file
+    sd [part-num], [euler-angle1],[euler-angle2],[euler-angle3]   ; WAS [inplane-angle],[tilt-tilted],[tilt-untilted], [ang-dif],[mirror-flag]
+    [temp_angles_doc]
+    sd [part-num], [unrot-angle1],[unrot-angle2],[unrot-angle3], [mic-num],[inplane-angle],[tilt-untilted],[mirror-flag]
+    [temp_angles_unrot]
+lb1
+; end particle-loop
+
+; close docs
+ud ice
+[selection_list]
+ud ice
+[tilt_params_doc][mic-num]
+ud ice
+[untilted_align_doc]
+sd e
+[temp_angles_doc]
+sd e
+[temp_angles_unrot]
+SD /MIC   ANG_THETA     ANG_GAMMA      ANG_PHI
+[summary_doc]
+SD /    TILTMAGNITUDE TILT_UNTILTED  TILT_TILTED
+[summary_doc]
+sd e
+[summary_doc]
+
+;------------------------------------------------------------------------------!
+;   For clarity, we add or subtract 360 to angle phi so that its value is
+;   restricted between 0 AND 360 (it helps if you want to check angles)
+;------------------------------------------------------------------------------!
+
+de
+[angles_doc]
+de
+[angles_unrot]
+SD /      ANGLE_PSI    ANGLE_THETA    ANGLE_PHI
+[angles_doc]
+SD /      ANGLE_PSI    ANGLE_THETA    ANGLE_PHI      MIC_NUM       INPLANE    TILT_UNTILTED  MIRROR_FLAG
+[angles_unrot]
+
+; loop through particles
+do lb8 [part-key] = 1,[num-parts]
+    ; get particle#
+    ud ic [part-key], [part-num]
+    [selection_list]
+
+    ; get Euler angles
+    ud ic [part-num], [angle-psi],[angle-theta],[angle-phi]   ; WAS [inplane-angle8],[tilt-tilted8],[tilt-untilted8], [ang-dif],[mirror-flag]
+    [temp_angles_doc]
+    ud ic [part-num], [unrot-psi],[unrot-theta],[unrot-phi], [mic-num8],[inplane-angle8],[tilt-untilted8],[mirror-flag8]
+    [temp_angles_unrot]
+
+    ; force phi between 0 and 360
+    if([angle-phi].lt.0)   [angle-phi] = [angle-phi] + 360
+    if([angle-phi].gt.360) [angle-phi] = [angle-phi] - 360
+    if([unrot-phi].lt.0)   [unrot-phi] = [unrot-phi] + 360
+    if([unrot-phi].gt.360) [unrot-phi] = [unrot-phi] - 360
+
+    ; force psi greater than 180
+    if([angle-psi].lt.-180) [angle-psi] = [angle-psi] + 360
+    if([unrot-psi].lt.-180) [unrot-psi] = [unrot-psi] + 360
+
+    ; save to final docs
+    sd [part-num], [angle-psi],[angle-theta],[angle-phi]   ; WAS , [inplane-angle8],[tilt-tilted8],[tilt-untilted8]   ; WAS [ang-dif],[mirror-flag]
+    [angles_doc]
+    sd [part-num], [unrot-psi],[unrot-theta],[unrot-phi], [mic-num8],[inplane-angle8],[tilt-untilted8],[mirror-flag8]
+    [angles_unrot]
+lb8
+; end particle-loop
+
+; close docs
+ud ice
+[selection_list]
+ud ice
+[temp_angles_doc]
+ud ice
+[temp_angles_unrot]
+de
+[temp_angles_doc]
+de
+[temp_angles_unrot]
+sd e
+[angles_doc]
+sd e
+[angles_unrot]
+
+en d
+
+; Modified 2014-03-26
+;    2014-03-04 (trs) -- looks for last iteration of multireference alignment
+;    2012-09-30 (trs) -- writes angle information to screen and summary docfile
+;    2012-09-27 (trs) -- added option to flip angle for mirroring
+;    2012-09-20 (trs) -- added option for AP MQ alignment file

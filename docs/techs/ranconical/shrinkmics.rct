@@ -1,0 +1,102 @@
+; SHRINKS MICROGRAPHS
+
+; ------------ Parameters ------------
+[progress-interval]  = 2              ; progress message displayed every Nth micrograph
+[decimation-factor]  = 5              ; decimation factor
+[invert-yn]          = 0              ; reverse contrast? (1==yes)
+[filter-radius]      = 0              ; high-pass (Fermi) filter radius, Angstroms (0==no filtration)
+;[filter-radius]      = 1500           ; high-pass (Fermi) filter radius, Angstroms (0==no filtration)
+[temperature-factor] = 2500           ; filter temperature factor, Angstroms
+
+; -------------- Inputs --------------
+fr l
+[parameter_doc]params                 ; parameter doc file
+fr l
+[FILENUMS]filenums                    ; micrograph list
+fr l
+[input_micros]Micrographs/mic****     ; micrographs
+
+; -------------- Output --------------
+fr l
+[small_micros]Micrographs/sm-mic****  ; reduced micrographs
+
+; --------- END BATCH HEADER ---------
+
+; get pixel size
+ud 5,[pixel-size]
+[parameter_doc]
+ud e
+
+; convert filter parameters to px^-1
+if([filter-radius].gt.0) then
+    [radius-px]      = [pixel-size]*[decimation-factor]/[filter-radius]
+    [temperature-px] = [pixel-size]*[decimation-factor]/[temperature-factor]
+endif
+
+; get #micrographs
+ud n [num-micros]
+[FILENUMS]
+
+vm
+echo "Shrinking micrographs by a factor of {%i2%[decimation-factor]}"; date
+
+if([invert-yn].ge.1) then
+    vm
+    echo ; echo "Reversing contrast" ; echo
+endif
+
+; loop through micrographs
+do lb1 [index] = 1,[num-micros]
+    ; get micrograph#
+    ud ic [index], [micro-num]
+    [FILENUMS]
+
+    if (int([index]/[progress-interval]).eq.[index]/[progress-interval]) then
+        vm
+        echo "Working on micrograph #{****[micro-num]}, {****[index]} out of {****[num-micros]}"
+    endif
+
+    ; reverse contrast if necessary
+    if([invert-yn].ge.1) then
+        neg
+        [input_micros][micro-num]
+        _2  ; OUTPUT: inverted image
+    else
+        cp
+        [input_micros][micro-num]
+        _2  ; OUTPUT
+    endif
+
+    ; shrink image
+    dc s
+    _2  ; WAS [input_micros][micro-num]
+    _1  ; OUTPUT: shrunken image  ; WAS [small_micros][micro-num]
+    [decimation-factor],[decimation-factor]
+
+    if([filter-radius].gt.0) then
+        ; high-pass filter
+        fq np
+        _1   ; INPUT: shrunken image
+        [small_micros][micro-num]
+        (6)  ; filter type: Fermi high-pass
+        [radius-px]
+        [temperature-px]
+    else
+        cp
+        _1   ; INPUT: shrunken image
+        [small_micros][micro-num]
+    endif
+lb1
+; end micrograph-loop
+
+ud ice
+[FILENUMS]
+
+vm
+echo "Done"; date
+
+en d
+
+; Modified 2014-03-12
+;    2014-02-14 (trs) -- added option to reverse contrast
+;    2014-02-14 (trs) -- bug fix for unfiltered case
