@@ -1,0 +1,338 @@
+; SPR_RefSep ---REFINEMENT OF SEPARATION---
+;---------------------------------------------
+;   BEGINING OF INPUT PARAMETERS
+
+; INPUT FILE THAT CONTAINS THE MOLECULE
+FR 
+?INPUT LOW-PASS FILTERED VOLUME NAME ?<1>
+;output/vol_fq_ip
+
+; CREATE A SPHERICAL MASK THAT WILL JUST CONTAIN THE MOLECULE
+; (e.g. 30S OR 50S)THAT YOU ARE TRYING TO SEPARATE RNA AND PROTEIN FROM. 
+; THE CENTER OF THE MASK SHOULD BE AT THE CENTER OF THE MOLECULE AND 
+; THE FILE SIZE (NSAM, NROW AND NSLICE) SHOULD BE SAME AS THE FILE SIZE 
+; OF THE MOLECULE.
+
+FR 
+?LARGE SPHERICAL MASK FILE NAME (USED FOR 'CC C')?<2>
+;maskball      
+
+; PROTEIN MASK AS DETERMINED BY THE INITIAL SEPARATION STEP
+FR 
+?PROTEIN MASK FILE NAME (FOUND BY INITIAL SEPARATION)?<3>
+;output/mask-Protein004120mu090-g002 
+
+; RNA MASK AS DETERMINED BY THE INITIAL SEPARATION STEP
+FR 
+?RNA MASK FILE NAME (FOUND BY INITIAL SEPARATION)?<4>
+;output/mask120mu090-RNA002
+
+; THE FUNNY VOLUME
+FR 
+?THE FUNNY VOLUME FILE NAME ?<5>
+;output/funny_volume
+
+; FRACTION OF TOTAL MASS OCCUPIED BY PROTEIN ABOVE A THRESHOLD
+FR 
+?THE histoPROTEIN-percent FILE NAME ?<6>
+;output/histoPROTEIN-percent      
+
+; FRACTION OF TOTAL MASS OCCUPIED BY RNA ABOVE A THRESHOLD
+FR 
+?THE histoRNA-percent FILE NAME ?<7>
+;output/histoRNA-percent          
+
+;DENSITY THRESHOLD AT WHICH ONLY RNA (IN FRAGMENTED FORM) IS  VISIBLE
+;CAN BE FOUND BY LOOKING AT THE PROTEIN AND RNA HISTOGRAMS
+RR X41
+? DENSITY THRESHOLD AT WHICH ONLY RNA (IN FRAGMENTED FORM) IS  VISIBLE ?
+;X41=120
+
+;DENSITY THRESHOLD AT MAXIMUM PEAK OF RNA HISTOGRAM
+;THRESHOLD PARAMETERS AS IN INITIAL SEPARATION
+;CAN BE FOUND BY LOOKING AT THE RNA HISTOGRAM
+RR X42
+? DENSITY THRESHOLD AT MAXIMUM PEAK OF RNA HISTOGRAM ?
+;X42=90
+
+
+;THRESHOLD FOR SEED CLUSTER
+;SINGLE VOXELS ARE REMOVED ; x30 = 4 USED IN SOME ROUTINES
+X30=1
+
+;VOLUME OF RNA PARTITION
+;% OF RNA VOLUME DERIVED FROM MW AND DENSITY (HYDRATION, LOW RESOLUTION)
+;THIS NUMBER CAN BE CHANGED  TO DECREASE/INCREASE RNA VOLUME IN FINAL
+;OUTPUT
+RR X31
+? % OF RNA VOLUME DERIVED FROM MW AND DENSITY ?
+
+
+;VOLUME OF PROTEIN PARTITION
+;% OF PROTEIN VOLUME DERIVED FROM MW AND DENSITY (HYDRATION, LOW RESOLUTION)
+;THESE NUMBERS CAN BE CHANGED TO DECREASE/INCREASE PROTEIN VOLUME IN FINAL
+;OUTPUT 
+RR X32
+? % OF PROTEIN VOLUME DERIVED FROM MW AND DENSITY ?
+
+
+;THIS SEEMS TO BE ARBITRARY BUT IS REALED TO PIXEL SIZE. 
+;FOR PIXEL SIZE = 2.93, X34 = 100 SEEMS TO WORK FINE WITH CHRISTIAN'S TEST.
+;FOR PIXEL SIZE = 3.72, X34 = 50 SEEMS TO WORK FINE WITH MY TEST. WITH X34 > 50,
+;I MISSED PROTEINS IN THE SEPARATED VOLUME.
+;CLUSTER SIZE TO REMOVE SMALL RNA OR PROTEIN CLUSTER
+RR X34
+? CLUSTER SIZE TO REMOVE SMALL RNA OR PROTEIN CLUSTER ?
+;X34 = 50 
+
+;THRESHOLD LEVEL FOR UNRESTRICTED GROWTH. CAN BE CHANGED TO FILL THE 
+;EM-DENSITY MAP
+RR X43
+? THRESHOLD LEVEL 1 FOR UNRESTRICTED GROWTH ?
+
+;X43=35    ; LOWEST THRESHOLD FOR PROTEINS (THRESHOLD AT WHICH YOU VISUALIZE
+           ; THE MOLECULE USING EXPLORER)
+RR X44
+? THRESHOLD LEVEL 2 FOR UNRESTRICTED GROWTH ?
+;X44=25     ; LOWEST THRESHOLD FOR PROTEINS - 10 
+
+
+;10% RNA VOLUME IN VOXEL (WITHOUT SOLVENT)
+RR X21
+? 10% RNA VOLUME IN VOXEL (WITHOUT SOLVENT) ? 
+
+
+;10% PROTEIN VOLUME IN VOXEL  (WITHOUT SOLVENT)
+RR X25
+? 10% PROTEIN VOLUME IN VOXEL  (WITHOUT SOLVENT) ?
+
+
+; THRESHOLD FOR 20% OF THE PROTEIN AND RNA VOLUMES, RESPECTIVELY
+; NUMBERS OBTAINED FROM histoPROTEIN-percent.dat AND histoRNA-percent.dat 
+; LOOKING AT THE 5TH COLUMN (= 3RD REGISTER) FOR THE VALUE ~.20 AND THE 
+; CORRESPONDING VALUE IN THE 3RD COLUMN (= 1ST REGISTER)
+RR X61
+? THRESHOLD FOR 20% OF THE PROTEIN ?
+;x61 = 74    ; FOR PROTEIN
+
+
+RR X62
+? THRESHOLD FOR 20% OF THE RNA ?
+;x62 = 103   ; FOR RNA
+
+
+; X92 = THE HISTOGRAM (PROTEIN) BIN CORRESPONDING TO 30 % OF PROTEIN VOLUME.
+; THIS NUMBER NUMBER IS OBTAINED FROM histoPROTEIN-percent.dat BY 
+; LOOKING AT THE 5TH COLUMN (= 3RD REGISTER) FOR THE VALUE ~.30 AND THE 
+; CORRESPONDING VALUE IN THE 1ST COLUMN (KEY)
+
+RR X92
+? THE HISTOGRAM (PROTEIN) BIN CORRESPONDING TO 30 % OF PROTEIN VOLUME ?
+;X92 = 62
+
+; END OF INPUT PARAMETERS
+;---------------------------------------------
+
+
+; USE ALL PROCESSORS AVAILABLE
+MD
+SET MP
+0
+
+
+X22=X21*2
+X23=X21*3
+
+
+X26=X25*2
+X27=X25*3
+
+; COPY FILES TO MEMORY FOR QUICK ACCESS
+CP
+<1>
+_15
+
+cp
+<2>
+_17
+
+CP 
+<3>
+_18
+
+CP 
+<4>
+_19
+
+
+; FIND THE SIZE OF THE FILE
+FI [NSAM],[NROW],[NSLICE]
+<1>
+12,2,1
+
+X49 = [NSAM]
+
+; NO. OF VOXELS
+X33 = X49 * X49 * X49
+
+
+
+;CREATES SEED FOR REFINEMENT BY MASKING
+;SEED SHOULD HAVE 20% OF RNA OR PROTEIN VOLUME (ESTIMATED FROM MW)
+;ALL POINTS HAVE SUFFICIENT DENSITY (ABOVE 30% LEVEL IN ORIGINAL MASK)
+;THEREFORE NO VOXELS WILL BE REMOVED DURING FIRST ROUND OF GROWING
+
+@p_fun[x22,x23,x26,x27]
+_15                             ;inputvolume
+_19                             ;RNA mask 
+_18                             ;PROTEIN mask
+<5>                             ;diffrential mask after peak search
+output/seed{***x41}mu{***x42}-RNA001
+output/seed{***x41}mu{***x42}-Protein001
+
+; NOTE: IF YOU MISS A KNOWN PROTEIN THEN PLANT A SEED AT THE KNOWN PROTEIN LOCATION IN 
+; SEED150MU???-PROTEIN???.DAT . FOR RNA ONE CAN USE THE SAME TECHNIQUE WITH SEED???MU???-RNA001.DAT
+
+
+;---------------------------------------------
+;REMOVES SINGLE NOT CONNECTED VOXEL
+
+@p_cluster1[x49]
+output/seed{***x41}mu{***x42}-Protein001
+output/cluster-seed{***x41}mu{***x42}-Protein001
+output/cluster-seed{***x41}mu{***x42}-Protein001-histogram
+
+@p_cluster1[x49]
+output/seed{***x41}mu{***x42}-RNA001
+output/cluster-seed{***x41}mu{***x42}-RNA001
+output/cluster-seed{***x41}mu{***x42}-RNA001-histogram
+
+;x30=4
+@p_thc1[x30]
+output/cluster-seed{***x41}mu{***x42}-Protein001
+output/cluster-seed{***x41}mu{***x42}-Protein001-histogram
+output/seed{***x41}mu{***x42}-Protein002
+
+;x30=1
+@p_thc1[x30]
+output/cluster-seed{***x41}mu{***x42}-RNA001
+output/cluster-seed{***x41}mu{***x42}-RNA001-histogram
+output/seed{***x41}mu{***x42}-RNA002
+
+;---------------------------------------------
+
+; IF 
+; ERROR IN IDENTITY IS OBVIOUS, SHIFT CLUSTER FROM PROTEIN TO RNA.
+; NUMBER OF CLUSTER THAT SHALL BE SHIFTED IS INPUTED IN 
+; p_thc2.spi PROCEDURE WITH RR X55 COMMAND
+
+; ***USER (WITH EXPERT KNOWLEDGE ON THE MOLECULE) INTERACTION MAY BE NEEDED**** 
+; YOU NEED TO EDIT p_thc2.spi FOR THE PURPOSE. 
+; DOCUMENTATION HAS BEEN PROVIDED IN p_thc2.spi ABOUT WHAT TO DO.
+
+
+;@p_thc2
+;cluster-seed{***x41}mu{***x42}-Protein001
+;seed{***x41}mu{***x42}-Protein002
+;seed{***x41}mu{***x42}-RNA002
+;seed{***x41}mu{***x42}-RNA003
+
+;ELSE
+; IF p_thc2.spi IS USED THEN COMMENT THE FOLLOWING UNTIL THE LINE 
+; INDICATED BELOW.
+
+CP
+output/seed{***x41}mu{***x42}-RNA002
+output/seed{***x41}mu{***x42}-RNA003
+
+CP
+output/seed{***x41}mu{***x42}-Protein002
+output/seed{***x41}mu{***x42}-Protein003
+
+; IF p_thc2.spi IS USED THEN COMMENT UPTO THIS LINE
+;---------------------------------------------
+
+
+;GROW SEEDS WITH QUIDANCE OF HISTOGRAMS
+
+; COUNTER
+X50=3    ; used with file names
+X51=4    ; used with file names 
+
+
+@p_growth1-0[x61,x62]
+output/seed{***x41}mu{***x42}-Protein{***x50}  ; input protein seed
+output/seed{***x41}mu{***x42}-Protein{***x51}  ; output protein grown
+output/seed{***x41}mu{***x42}-RNA{***x50}      ; input rna seed
+output/seed{***x41}mu{***x42}-RNA{***x51}      ; output rna grown
+_15                          ;inputvolume
+_17                          ; large spherical mask file for CC C command
+_18                          ; initially separated protein mask
+_19                          ; initially separated rna mask
+
+
+DO LB1 X50=4,24
+   x51=x50+1
+   @p_growth1-4[x33,x50,x92] 
+   output/seed{***x41}mu{***x42}-Protein{***x50} ; input protein seed at 20 % threshold
+   output/seed{***x41}mu{***x42}-Protein{***x51} ; output protein grown
+   output/seed{***x41}mu{***x42}-RNA{***x50}     ; input rna seed at 20 % threshold
+   output/seed{***x41}mu{***x42}-RNA{***x51}     ; output rna grown
+   _15                                    ; inputvolume
+   <6>    ; fraction of total mass occupied by protein above a threshold
+   <7>    ; fraction of total mass occupied by rna above a threshold
+   _17                                    ; spherical mask for cc c calculation
+
+   ;de
+   ;seed{***x41}mu{***x42}-Protein{***x50}
+   ;de
+   ;seed{***x41}mu{***x42}-RNA{***x50}
+LB1
+;---------------------------------------------
+; REMOVE SMALL CLUSTER TO ALLOW NEW ASSIGNEMENT
+@p_cluster1[x49]
+output/seed{***x41}mu{***x42}-Protein024
+output/cluster-seed{***x41}mu{***x42}-Protein024
+output/cluster-seed{***x41}mu{***x42}-Protein024-histogram
+
+@p_cluster1[x49]
+output/seed{***x41}mu{***x42}-RNA024
+output/cluster-seed{***x41}mu{***x42}-RNA024
+output/cluster-seed{***x41}mu{***x42}-RNA024-histogram
+
+;X34=100
+@p_thc1[x34]
+output/cluster-seed{***x41}mu{***x42}-Protein024
+output/cluster-seed{***x41}mu{***x42}-Protein024-histogram
+output/seed{***x41}mu{***x42}-Protein025
+
+@p_thc1[x34]
+output/cluster-seed{***x41}mu{***x42}-RNA024
+output/cluster-seed{***x41}mu{***x42}-RNA024-histogram
+output/seed{***x41}mu{***x42}-RNA025
+
+;---------------------------------------------
+;GROW SEEDS WITHOUT QUIDANCE OF HISTOGRAMS TO FILL THE VOLUME
+;THRESHOLD LEVEL FOR UNRESTRICTED GROWTH
+; X45 = X43 AND X44 RESPECTIVELY IN THE FOLLOWING DO LOOP.
+
+X45 = X43  
+   
+DO LB2 X50=25,26
+
+   X51=X50+1   
+   
+   @p_growth2-2[x45]
+   output/seed{***x41}mu{***x42}-Protein{***x50}    ; input protein seed
+   output/seed{***x41}mu{***x42}-Protein{***x51}    ; output protein grown
+   output/seed{***x41}mu{***x42}-RNA{***x50}        ; input rna seed
+   output/seed{***x41}mu{***x42}-RNA{***x51}        ; output rna grown
+   _15                                              ; input volume
+   _17                                              ; spherical mask for cc c calculation
+   
+   X45 = X44
+LB2
+;---------------------------------------------
+
+RE
+

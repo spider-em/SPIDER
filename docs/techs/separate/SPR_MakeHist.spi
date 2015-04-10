@@ -1,0 +1,163 @@
+; --- SPR_MakeHist --- : MAKES PROTEIN AND RNA HISTOGRAMS
+
+;---------------------------------------------------------------
+; BEGINING OF INPUT PARAMETERS
+FR 
+?INPUT VOLUME NAME ?<1>
+;40s
+
+
+FR 
+?INPUT FITTED RNA PDB FILE NAME ?<2>
+;rna_parts.pdb
+
+FR 
+?INPUT FITTED PROTEIN PDB FILE NAME ?<3>
+;pro_parts.pdb
+
+FR 
+?OUTPUT RNA HISTOGRAM DOCUMENT FILE NAME ?<4>
+;output/hist_rna
+
+FR 
+?OUTPUT PROTEIN HISTOGRAM DOCUMENT FILE NAME ?<5>
+;output/hist_pro
+
+FR 
+?OUTPUT LOW-PASS FILTERED VOLUME NAME ?<6>
+;output/vol_fq
+
+
+RR X25
+? RESOLUTION OF THE INPUT VOLUME (CRYO-EM MAP) IN ANGSTROMS ?
+;X25 = 17.8
+
+RR X32
+? PIXEL SIZE IN ANGSTROMS ?
+;X32 = 3.726
+
+
+; END OF INPUT PARAMETERS
+;----------------------------------------------------------------
+
+IQ FI X50
+<1>
+
+; IF INPUT FILE DOESNOT EXIST THEN EXIT THE PROGRAM
+IF (X50 .EQ. 0.0) THEN
+   VM
+   echo " \n *** ERROR *** INPUT FILE DOESN'T EXIST ! *** ERROR *** \n"
+   EN
+ENDIF
+
+; DELETE OUTPUT DIRECTORY AND MAKE IT NEW
+VM
+\rm -r output; mkdir output
+
+
+MD
+SET MP
+0
+
+X26 = X32/X25       ; x32 = pixel size, x25 = resolution of the em map
+X30 = X26 - 0.05    ; pass-band frequency for butterworth low-pass filter
+X31 = X26 + 0.05    ; stop-band frequency for butterworth low-pass filter
+
+
+; COPY THE INPUT VOLUME
+CP
+<1>
+output/vol
+
+
+; LOW-PASS FILTER THE INPUT VOLUME
+FQ
+<1>
+<6>
+7
+X30,X31
+
+; COPY THE FILTERED VOLUME TO MEMORY
+CP
+<6>
+_1
+
+
+; FIND NSAM,NROW AND NSLICE OF THE INPUT VOLUME
+FI X20,X21,X22
+_1
+12,2,1
+
+
+; CONVERT PROTEIN PDB FILE TO SPIDER VOLUME
+CP FROM PDB
+<3>            ;pro_parts.pdb
+X32
+N
+A
+X20,X21,X22
+_10
+
+; LOW-PASS FILTER THE SPIDER VOLUME
+FQ
+_10
+_11
+7
+X30,X31
+
+; THRESHOLD THE LOW-PASS FILTERED SPIDER VOLUME TO MAKE A MASK
+; NOTE: IF THE HISTOGRAM HAS A SPIKE AT '0' THEN INCREASE THE THRESHOLD VALUE
+; BECAUSE MASK IS GETTING OUTSIDE THE VOLUME DENSITY
+TH M
+_11
+output/mask_pro 
+B
+2 
+
+; CALCULATE THE PROTEIN HISTOGRAM
+HI M
+_1 
+output/mask_pro
+D
+<5> ; output/hist_pro 
+
+;CONVERT RNA PDB FILE TO SPIDER VOLUME
+CP FROM PDB
+<2>        ; rna_parts.pdb
+X32
+N
+A
+X20,X21,X22
+_20
+
+
+; LOW-PASS FILTER THE SPIDER VOLUME
+FQ
+_20
+_21
+7
+X30,X31
+
+
+; THRESHOLD THE LOW-PASS FILTERED SPIDER VOLUME TO MAKE A MASK
+; NOTE: IF THE HISTOGRAM HAS A SPIKE AT '0' THEN INCREASE THE THRESHOLD VALUE
+; BECAUSE MASK IS GETTING OUTSIDE THE VOLUME DENSITY
+TH M
+_21
+output/mask_rna 
+B
+2 
+
+; CALCULATE THE RNA HISTOGRAM
+HI M
+_1
+output/mask_rna 
+D
+<4>         ;output/hist_rna
+
+RE
+
+
+
+
+

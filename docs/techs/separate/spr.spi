@@ -1,0 +1,245 @@
+; SEPARATE PROTEIN AND RNA (spr.spi)
+;---------------------------------------------------------------
+; BEGINING OF INPUT PARAMETERS
+
+;INPUT VOLUME NAME
+FR G
+<inVol> 40s 
+
+;OUTPUT LOW-PASS FILTERED VOLUME NAME
+FR G
+<outVol> output/vol_fq   
+
+;INPUT LARGE SPHERICAL MASK FILE NAME (USED FOR 'CC C') 
+; MAY USE "MO 3" FOR CREATING THE SPHERICAL MASK
+FR G
+<maskSphr> maskball
+
+;INPUT FITTED RNA PDB FILE NAME
+FR G
+<rnaFit> rna_parts.pdb
+
+;INPUT FITTED PROTEIN PDB FILE NAME
+FR G
+<proFit> pro_parts.pdb
+
+
+;OUTPUT RNA HISTOGRAM DOCUMENT FILE NAME
+FR G
+<rnaHist> output/hist_rna
+
+
+;OUTPUT PROTEIN HISTOGRAM DOCUMENT FILE NAME
+FR G
+<proHist> output/hist_pro
+
+;OUTPUT FUNNY VOLUME NAME 
+FR G
+<funnyVol> output/funny_volume
+
+;OUTPUT DOCUMENT FILE NAME TO STORE RNA HISTOGRAM PERCENTAGE
+FR G
+<rnaHistPer> output/histoRNA_percent
+
+;OUTPUT DOCUMENT FILE NAME TO STORE PROTEIN HISTOGRAM PERCENTAGE
+FR G
+<proHistPer> output/histoPROTEIN_percent
+
+;OUTPUT SEGMENTED PROTEIN FILE NAME 
+FR G
+<outPRO> output/MaskedProtein_fq
+
+;OUTPUT SEGMENTED RNA FILE NAME 
+FR G
+<outRNA> output/MaskedRNA_fq
+
+
+X20 =  17.8   ; resolution of the map in Angstrom
+X21 =  3.72   ; pixel size in Angstrom
+
+X23 = 50      ; protein and rna voxels are increased by this percentage to
+              ; include solvent
+	      
+X24 = 550     ; molecular weight of protein (kDa) in the input volume
+X25 = 573     ; molecular weight of RNA (kDa) in the input volume
+X35 = 7       ; molecular weight of the smallest protein (kDa) in the input volume
+
+X43 = 35      ; lowest threshold for proteins at which no noise is visible. use EXPLORER
+X32 = 70      ; minimum size of protein at higher threshold, should be less than x33, see below
+X45 = 50      ; cluster size to remove small rna or protein cluster; seems arbitrary
+X46 = 25      ; threshold level 2 for unrestricted growth, x43 - 10
+
+
+; END OF INPUT PARAMETERS
+;----------------------------------------------------------------
+
+; MAKE PROTEIN AND RNA HISTOGRAMS
+@SPR_MakeHist
+<inVol>   ; input vol
+<rnaFit>  ; input fitted RNA PDB file
+<proFit>  ;  input fitted Protein PDB file
+<rnaHist> ; output RNA histogram
+<proHist> ; output Protein Histogram
+<outVol>  ; output lowpass filtered volume
+x20       ; resolution
+x21       ; pixel size 
+
+
+; LOOK AT <rnaHist> USING GNUPLOT AND FIND THE THRESHOLD AT WHICH NO PROTEIN WILL BE VISIBLE
+RR X41    ;X41 = 120
+? DENSITY THRESHOLD AT WHICH ONLY RNA (IN FRAGMENTED FORM) IS  VISIBLE ?
+
+; LOOK AT <rnaHist> USING GNUPLOT AND FIND OUT THE VALUE
+RR X42    ;X42 = 90
+? DENSITY THRESHOLD AT MAXIMUM PEAK OF RNA HISTOGRAM ?
+
+; LOOK AT <proHist> USING GNUPLOT AND FIND OUT THE VALUE
+RR X44    ;X44 = 50
+? DENSITY THAT CORRESPONDS TO MAXIMUM IN PROTEIN HISTOGRAM ?
+
+
+; FIND PROTEIN VOXELS
+x26 = INT(((x24 * 1000)/0.82)/(x21 * x21 *x21))
+
+; FIND RNA VOXELS
+x27 = INT(((x25 * 1000)/1.14)/(x21 * x21 *x21))
+
+
+; 10% PROTEIN VOLUME IN VOXEL  (WITHOUT SOLVENT)
+X50 = x26/10  
+
+;10% RNA VOLUME IN VOXEL (WITHOUT SOLVENT)
+X51 =  x27/10 
+
+x28 = x26 + x26 * (x23/100)  ; protein voxels including solvent
+x29 = x27 + x27 * (x23/100)  ; rna voxels including solvent 
+
+
+; FIND RNA FRACTION
+x30 = x29 /(x28 + x29)   
+
+; FIND PROTEIN FRACTION
+x31 = 1 - x30
+
+
+; FIND MINIMUM SIZE OF THE PROTEIN AND TAKE 50% OF IT TO BE CONSERVATIVE
+X33 = INT(((x35 * 1000)/0.82)/(x21 * x21 *x21))/2
+
+
+X60 = X21/X20       ; x21 = pixel size, x20 = resolution of the em map
+X61 = X60 - 0.05    ; pass-band frequency for butterworth low-pass filter
+X62 = X60 + 0.05    ; stop-band frequency for butterworth low-pass filter
+
+
+; FIND PROTEIN AND RNA HISTOGRAM PERCENTAGE AND MAKE SEED FOR USE IN REFINEMENT
+@SPR_FindHistPer
+<outVol>       ; input volume
+<funnyVol>     ; output seed for refinement (fuuny volume)
+<rnaHist>      ; input RNA histogram 
+<proHist>      ; input protein histogram 
+<rnaHistPer>   ; output RNA histogram percentage
+<proHistPer>   ; output protein histogram percentage
+X30            ; rna fraction
+X31            ; protein fraction
+
+
+
+; THRESHOLD FOR 20% OF THE PROTEIN AND RNA VOLUMES, RESPECTIVELY
+; NUMBERS OBTAINED FROM <proHistPer> AND <rnaHistPer> 
+; LOOKING AT THE 5TH COLUMN (= 3RD REGISTER) FOR THE VALUE ~.20 AND THE 
+; CORRESPONDING VALUE IN THE 3RD COLUMN (= 1ST REGISTER)
+;X52 = 74      ; threshold for 20% of protein     
+;X53 = 103     ; threshold for 20% of RNA
+
+RR X52
+? THRESHOLD FOR 20% OF PROTEIN ?
+
+RR X53
+? THRESHOLD FOR 20% OF RNA ?
+
+; X54 = THE HISTOGRAM (PROTEIN) BIN CORRESPONDING TO 30 % OF PROTEIN VOLUME.
+; THIS NUMBER NUMBER IS OBTAINED FROM <proHistPer> BY 
+; LOOKING AT THE 5TH COLUMN (= 3RD REGISTER) FOR THE VALUE ~.30 AND THE 
+; CORRESPONDING VALUE IN THE 1ST COLUMN (KEY)
+; X54 = 62
+
+RR X54
+? THE HISTOGRAM (PROTEIN) BIN CORRESPONDING TO 30 % OF PROTEIN VOLUME ?
+
+@SPR_InitSep
+<outVol>      ; input lowpass filtered volume
+<maskSphr>    ; maskball used for cross-correlation coefficient calculations
+X41           ; density threshold at which only rna (in fragmented form) is  visible
+X42           ; density threshold at maximum peak of rna histogram
+X43           ; lowest threshold for proteins
+X33           ; minimum size of protein
+X44           ; density that corresponds to maximum in protein histogram
+X32           ; minimum size of protein at higher threshold 
+
+VM
+echo "COMPARE THE HISTOGRAMS histo-RNAcore***mu***-g*** WITH THE RNA HISTOGRAM AND\n"
+VM
+echo "ENTER THE CORRESPONDING RNAcore***mu***-g*** FILE NAME : \n"
+; INITIALLY SEPARATED RNA MASK 
+FR 
+?output/RNAcore{***x41}mu{***x42}-g*** FILE NAME ? [RNA_mask_ini]
+;output/RNAcore120mu090-g002
+
+@SPR_InitSep
+<outVol>       ; input lowpass filtered volume
+<maskSphr>     ; maskball used for cross-correlation coefficient calculations
+X41            ; density threshold at which only rna (in fragmented form) is  visible
+X42            ; density threshold at maximum peak of rna histogram
+X43            ; lowest threshold for proteins
+X33            ; minimum size of protein
+X44            ; density that corresponds to maximum in protein histogram
+X32            ; minimum size of protein at higher threshold 
+[RNA_mask_ini] ; initially separated rna mask 
+
+
+VM
+echo "COMPARE THE HISTOGRAMS histo-mask-Protein004***mu***-g*** WITH THE PROTEIN HISTOGRAM\n"
+VM
+echo "AND ENTER THE CORRESPONDING output/mask-Protein004***mu***-g***.dat FILE NAME :\n"
+
+; INITIALLY SEPARATED PROTEIN MASK 
+FR 
+?output/mask-Protein004***mu***-g*** FILE NAME ? [pro_mask_ini]
+;output/mask-Protein004120mu090-g002
+
+
+@SPR_RefSep
+<outVol>                             ; input volume
+<maskSphr>                           ; spherical mask for CC operation
+[pro_mask_ini]                       ; protein mask determined by initial separation
+output/mask{***x41}mu{***x42}-RNA002 ; RNA mask determined by initial separation
+<funnyVol>                           ; the funny volume
+<proHistPer>                         ; fraction of total mass occupied by protein above a threshold
+<rnaHistPer>                         ; fraction of total mass occupied by rna above a threshold
+x41    ; density threshold at which only rna (in fragmented form) is  visible
+x42    ; density threshold at maximum peak of rna histogram
+x29    ; % of rna volume derived from mw and density
+x28    ; % of protein volume derived from mw and density 
+x45    ; cluster size to remove small rna or protein cluster
+X43    ; threshold level 1 for unrestricted growth
+X46    ; threshold level 2 for unrestricted growth
+X51    ; 10% rna volume in voxel (without solvent)
+X50    ; 10% protein volume in voxel  (without solvent)
+X52    ; threshold for 20% of the protein
+X53    ; threshold for 20% of the rna
+X54    ; the histogram (protein) bin corresponding to 30 % of protein volume
+
+; LAST VERSION OF THE SEED
+X69 = 27 ; you may change this to see if you like any other seed. Usually, the last one is the bset
+
+@SPR_MakeSepVol
+<outVol>    ; input volume
+<outPRO>    ; separated protein volume
+<outRNA>    ; separated RNA volume
+output/seed{***x41}mu{***x42}-RNA{***x69}       ; final rna seed file name
+output/seed{***x41}mu{***x42}-Protein{***x69}   ; final protein seed file name
+X61      ; pass-band frequency for butterworth low-pass filter
+X62      ; stop-band frequency for butterworth low-pass filter
+X21      ; pixel size in Angstrom
+
+EN

@@ -1,0 +1,403 @@
+;SPR_InitSep ---INITIAL SEPARATION---
+;---------------------------------------------
+;   BEGINING OF INPUT PARAMETERS
+
+
+; INPUT FILE THAT CONTAINS THE LOWPASS FILTERED MOLECULE 
+FR 
+?INPUT LOW-PASS FILTERED VOLUME NAME ?<1>
+;output/vol_fq
+
+; CREATE A SPHERICAL MASK THAT WILL JUST CONTAIN THE MOLECULE
+; (e.g. 30S OR 50S)THAT YOU ARE TRYING TO SEPARATE RNA AND PROTEIN FROM. 
+; THE CENTER OF THE MASK SHOULD BE AT THE CENTER OF THE MOLECULE AND 
+; THE FILE SIZE (NSAM, NROW AND NSLICE) SHOULD BE SAME AS THE FILE SIZE 
+; OF THE MOLECULE.
+
+FR 
+?LARGE SPHERICAL MASK FILE NAME (USED FOR 'CC C')?<2>
+;maskball      
+
+
+; DENSITY THRESHOLD AT WHICH ONLY RNA (IN FRAGMENTED FORM) IS  VISIBLE
+; CHANGING THIS VALUE FROM 150 - 210, NO CHANGE TO THE RESULTING
+; HISTOGRAM OF THE INITIALLY SEPARATED RNA WAS OBSERVED.
+RR X41
+? DENSITY THRESHOLD AT WHICH ONLY RNA (IN FRAGMENTED FORM) IS  VISIBLE ?
+;X41 = 120
+
+
+;    DENSITY THRESHOLD AT MAXIMUM PEAK OF RNA HISTOGRAM . HOWEVER, IN SOME CASES 
+; ONE MAY NEED TO SLIGHTLY INCREASE THIS VALUE IF THE OUTPUT RNA MASK TAKES OVER MOST OF
+; THE MOLECULE VOLUME. 
+RR X42
+? DENSITY THRESHOLD AT MAXIMUM PEAK OF RNA HISTOGRAM ?
+;X42 = 90
+
+
+
+;    SIZE LIMIT FOR CLUSTER AFTER FIRST GROWTH
+;    ONLY LARGER CLUSTER WILL BE ACCEPTED.
+X30=2
+
+;    LOWEST THRESHOLD FOR PROTEINS: THRESHOLD IN WHICH THE MOLECULE 
+;    IS SEEN AS COMPLETE i.e. WITHOUT NOISE. MAY USE EXPLORER TO FIND IT.
+RR X43
+? LOWEST THRESHOLD FOR PROTEINS ?
+;X43=35
+
+;   MINIMUM SIZE OF PROTEIN. THE SIZE WAS ESTIMATED BY USING THE MOLECULAR WEIGHT OF
+;   THE SMALLEST PROTEIN AND THE DENSITY OF PROTEINS. 50% OF THIS VALUE WAS 
+;   CHOOSEN AS A MINIMUM SIZE AND ONLY LARGER CLUSTERS WERE ACCEPTED
+;   DENSITY OF PROTEIN:        1.36 G/CM**3 = 0.82 DA/A**3
+;   IF MISSING KNOWN PROTEINS IN THE OUTPUT INITIAL MAP THEN DECREASE THIS VALUE
+
+RR X31
+? MINIMUM SIZE OF PROTEIN ?
+
+
+;   DENSITY THAT CORRESPONDS TO MAXIMUM IN PROTEIN HISTOGRAM
+;   USED FOR SEARCH OF LARGER CLUSTER IN NON-RNA AT ELEVATED 
+;   THRESHOLD
+RR X44
+? DENSITY THAT CORRESPONDS TO MAXIMUM IN PROTEIN HISTOGRAM ?
+;X44 = 50
+
+;   MINIMUM SIZE OF PROTEIN AT HIGHER THRESHOLD X44
+;   CAN BE MORE RESTRICTIVE BECAUSE SMALL CLUSTER ARE NOT ADDED TO RNA.
+;   SEEMS TO BE QUITE ARBITRARY. THIS COULD BE CERTAIN % OF X31.
+RR X32
+? MINIMUM SIZE OF PROTEIN AT HIGHER THRESHOLD ?
+;X32=70
+
+;   END OF INPUT PARAMETERS
+;---------------------------------------------
+
+
+; USE ALL PROCESSORS AVAILABLE
+MD
+SET MP
+0
+
+; COPY FILES TO MEMORY FOR QUICK ACCESS
+CP
+<1>
+_15
+
+
+CP
+<2>
+_17
+
+
+; FIND THE SIZE OF THE FILE
+FI [NSAM],[NROW],[NSLICE]
+<1>
+12,2,1
+
+IF ([NSAM] .NE. [NROW]) THEN
+   VM
+   echo "\n**ERROR** NSAM, NROW AND NSLICE ARE NOT EQUAL **ERROR**\n"
+   EN
+ENDIF
+
+IF ([NSAM] .NE. [NSLICE]) THEN
+   VM
+   echo "\n**ERROR** NSAM, NROW AND NSLICE ARE NOT EQUAL **ERROR**\n"
+   EN
+ENDIF
+
+X49 = [NSAM]
+
+; CREATE MASKS AT DIFFERENT THRESHOLDS
+TH M
+_15         ;INPUTVOLUME
+_1          ;OUTPUT VOLUME
+B
+X41         ;THRESHOLD VALUE
+
+TH M
+_15         ;INPUTVOLUME
+_8          ;OUTPUT VOLUME
+B
+X42         ;THRESHOLD VALUE
+
+
+IQ FI X66
+output/RNAMaskFileNameFromHistoSelected
+
+IF (X66 .GT. 0.5) THEN
+   GO TO LB20 
+ENDIF
+
+
+; NOTE_BEGIN : READ THE NOTE_END THAT IS JUST ABOVE THE DO LOOP
+; BELOW FOR DILATING THE VOLUME
+
+; MASK TO RESTRICT GROWTH INTO REGIONS OF LOWER DENSITY
+;------------------------------------------
+;FIRST PART GROWTH OF RNA WITH DENSITY RESTRICTION
+X11=5
+X12=5                              ; parameter for di command
+
+@p_growth1[x11,x12]
+_1                                 ; mask to be grown
+_8                                 ; growth restricting mask
+_17                                ; large spherical mask file for cc c command
+output/mask{***x41}mu{***x42}g1    ; resulting mask
+
+;---------------------------------------------
+;CLUSTER ANALYSIS OF GROWTH1
+@p_cluster1[X49]
+output/mask{***x41}mu{***x42}g1
+output/cluster-mask{***x41}mu{***x42}g1
+output/cluster-mask{***x41}mu{***x42}g1-histogram
+
+;-----------------------------------------------
+; PICKS ALL CLUSTER THAT HAVE MORE THAN X30 VOXELS OCCUPIED
+@p_thc1[x30]
+output/cluster-mask{***x41}mu{***x42}g1
+output/cluster-mask{***x41}mu{***x42}g1-histogram
+output/mask{***x41}mu{***x42}g1GT{**x30}
+
+;-----------------------------------------------
+; SECOND PART GROWTH OF RNA WITH DENSITY RESTRICTION
+x11=5
+x12=1;PARAMETER FOR DI COMMAND
+
+@p_growth1[x11,x12]
+output/mask{***x41}mu{***x42}g1GT{**x30}
+_8               
+_17                                      ; large spherical mask file for cc c command
+output/maskcore{***x41}mu{***x42}_RNA    ; resulting volume
+
+;-----------------------------------------------
+; GROWTH OF RNA WITHOUT DENSITY RESTRICTION
+CP
+output/maskcore{***x41}mu{***x42}_RNA
+_1
+
+; NOTE_END: THE WHOLE SCHEME OF OPERATIONS END UP RECREATING JUST THE GROWTH 
+; RESTRICTING MASK i.e. _8. YOU MAY VERIFY IT BY COMPARING _8 AND 
+; maskcore{***x41}mu{***x42}_RNA. IF THE THRESHOLD AT WHICH ONLY RNA IS VISIBLE,
+; IS SUCH THAT THERE IS NO SEED INSIDE AN ISOLATED  REGION OF THE MASK _8 THEN 
+; THE ABOVE SCHEME WILL CREATE A MASK WHICH WILL NOT INCLUDE THAT ISOLATED 
+; REGION. 
+
+
+DO LB1 X50=1,3
+
+   DI
+  _1
+   output/RNAcore{***x41}mu{***x42}-g{***X50}
+   B
+   (3)    ; (5) old value, may change this value if RNA histogram doesn't look good
+   (5)    ; may change this value if RNA histogram doesn't look good
+
+   CP
+   output/RNAcore{***x41}mu{***x42}-g{***X50}
+   _1
+
+   
+   HI M
+   _15 
+   _1
+   D
+   output/histo-RNAcore{***x41}mu{***x42}-g{***X50}
+      
+LB1
+
+
+; DELETE UNNECESSARY FILES
+;VM
+;\rm mask???mu* maskcore???mu* cluster-mask???mu*
+
+
+; PROGRAM WILL STOP HERE TO COMPARE THE HISTOGRAMS histo-RNAcore***mu***-g{***x50} 
+; WITH THE RNA HISTOGRAM. THE CORRESPONDING RNAcore{***x41}mu{***x42}-g{***X50} IS 
+; TAKEN AS AN INPUT FOR THE FOLLOWING CODE
+;lb10
+
+; MAKE AN INDICATOR FILE THAT PROGRAM HAS BEEN EXECUTED TILL HERE
+CP
+output/RNAcore{***x41}mu{***x42}-g001
+output/RNAMaskFileNameFromHistoSelected
+
+RE
+LB20
+
+DE 
+output/RNAMaskFileNameFromHistoSelected
+
+
+; INITIALLY SEPARATED RNA MASK 
+FR 
+?INITIALLY SEPARATED RNA MASK ? <rna_mask_ini>
+;output/RNAcore{***x41}mu{***x42}-g***
+
+
+CP
+<rna_mask_ini>
+output/mask{***x41}mu{***x42}-RNA001
+
+
+; DELETE UNNECESSARY FILES
+;VM
+;rm histo-RNAcore???mu* RNAcore???mu***
+
+
+;-------------------------------------------------------
+;CLUSTER ANALYSIS OF NON-RNA PART AT LOWEST THRESHOLD X43
+
+TH M
+_15     ; inputvolume
+_1
+B
+X43
+
+; INVERT MASK
+AR
+output/mask{***x41}mu{***x42}-RNA001
+_2
+-1*(P1-1)
+
+
+MU
+_2
+_1
+output/mask{***x41}mu{***x42}-Protein001
+*
+
+@p_cluster1[X49]
+output/mask{***x41}mu{***x42}-Protein001
+output/cluster-{***x41}mu{***x42}-P001
+output/cluster-{***x41}mu{***x42}-P001-histogram
+
+;-------------------------------------------------------
+; REJECT CLUSTER IN NON-RNA THAT ARE SMALLER THAN MINIMUM
+; SIZE OF PROTEIN
+
+@p_thc1[x31]
+output/cluster-{***x41}mu{***x42}-P001
+output/cluster-{***x41}mu{***x42}-P001-histogram
+output/mask{***x41}mu{***x42}-Protein002
+;-------------------------------------------------------
+
+; TRANSFER CLUSTER IN NON-RNA THAT ARE TOO SMALL TO BE PROTEIN TO RNA
+DE
+_1
+DE
+_2
+
+SU
+output/mask{***x41}mu{***x42}-Protein001
+output/mask{***x41}mu{***x42}-Protein002
+_1
+*
+
+AD
+_1
+output/mask{***x41}mu{***x42}-RNA001
+_2
+*
+
+;MAKE SURE THAT NO VOXEL HAS VALUE LARGER THAN 1 IN MASK FILE
+TH M
+_2
+output/mask{***x41}mu{***x42}-RNA002
+B
+(0.5)
+
+;-------------------------------------------------------
+; REPEAT SEARCH FOR LARGE CLUSTER IN NON-RNA AT ELEVATED THRESHOLD
+
+MU
+_15       ;inputvolume
+output/mask{***x41}mu{***x42}-Protein002
+_2
+*
+
+TH M
+_2
+_1
+B
+x44
+
+@p_cluster1[X49]
+_1
+output/cluster-{***x41}mu{***x42}-P003
+output/cluster-{***x41}mu{***x42}-P003-histogram
+
+;-------------------------------------------------------
+; REJECT CLUSTER IN NON-RNA AT ELEVATED THRESHOLD THAT ARE TO SMALL TO BE PROTEIN
+; GUESS WORK !!
+
+@p_thc1[x32]
+output/cluster-{***x41}mu{***x42}-P003
+output/cluster-{***x41}mu{***x42}-P003-histogram
+output/mask{***x41}mu{***x42}-Protein004
+
+
+;-------------------------------------------------------
+; GROWTH OF PROTEIN WITHOUT DENSITY RESTRICTION
+; BUT GROWTH INTO RNA IS PREVENTED
+
+CP
+output/mask{***x41}mu{***x42}-Protein004
+_3
+
+AR
+output/mask{***x41}mu{***x42}-RNA002
+_8
+-1*(P1-1)
+
+
+DO LB2 X50=1,3
+
+   DI
+   _3
+   _4
+   B
+   (3) ; old value was (5), may change this value if PROTEIN histogram doesn't look good
+   (5) ; may change this value if PROTEIN histogram doesn't look good
+
+
+   MU
+   _4
+   _8
+   _5
+   *
+
+   CP
+   _5
+   _3
+
+
+   CP
+   _3
+   output/mask-Protein004{***x41}mu{***x42}-g{***X50}
+
+   FS X21,X22,X23,X24
+   _3
+
+
+   HI M
+   _15 
+   _3
+   D
+   output/histo-mask-Protein004{***x41}mu{***x42}-g{***X50}
+
+LB2
+
+; COMPARE THE HISTOGRAMS histo-mask-Protein004{***x41}mu{***x42}-g{***X50} WITH THE 
+; PROTEIN HISTOGRAM. CHOOSE THE ONE WITH THE BEST MATCH TO THE INPUT PROTEIN HISTOGRAM. 
+
+; DELETE UNNECESSARY FILES
+;VM
+;\rm cluster-???mu???-*  mask???mu???-Protein* 
+
+
+RE
+
+
+
