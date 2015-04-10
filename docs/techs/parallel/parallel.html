@@ -1,0 +1,254 @@
+<HTML>
+
+<HEAD>
+<TITLE>Using SPIDER on Parallel Clustered Systems</TITLE>
+</HEAD>
+
+<BODY>
+<H2 ALIGN=CENTER>Using SPIDER on Parallel Clustered Systems</H2>
+This page illustrates the usage of some SPIDER operations that are helpful in 
+creating and controlling the execution of multiple SPIDER jobs running
+in parallel on a loosely coupled, clustered parallel system.
+ 
+<UL>
+<LI><A HREF="../../user_doc.html#cmd_line">Optional Command Line Parameters</A>   </LI>
+   <DD> Can specify Results file version number and 
+        initial values for registers on the command line. </DD>
+   <DD> <a href="#cmd_line">Usage example</A> </DD></P>
+
+<LI><a href="../../man/iqsync.html">IQ SYNC</A></LI>
+   <DD> Operation synchronizes different SPIDER runs by using file existance.</DD>
+   <DD> <a href="#iqsync">Usage example</A> </DD></P>
+
+<LI><a href="../../man/vm.html">VM</A></LI>
+   <DD> Operation communicates with Operating system . </DD> 
+   <DD>  <a href="#vm">Usage example</A> </DD></P>
+
+<LI><a href="../../man/myfl.html">MY FL</A></LI>
+   <DD> Operation forces accumulated buffers into SPIDER results file. </DD> 
+   <DD>  <a href="#myfl">Usage example</A> </DD></P>
+
+<LI>Can <a href="../../man/vm.html">substitute environment variables</A> into file names</LI>
+   <DD> System environment variables can be placed into file
+        names by specifying <I>${ENV_VAR} or ${DATEXT} </I>.</DD>
+   <DD> <a href="#env">Usage example</A> </DD></P>
+
+<LI><a href="../../man/frl.html">FR L</A></LI>
+   <DD>Can use<a href="../../man/frl.html">FR L</A> to make SPIDER procedures
+    more easily modified.</DD></P>
+
+
+</UL>
+
+
+<H2 ALIGN=CENTER>Example: Alignment of Single Particles</H2>
+
+<H3> <A NAME="b_master"><B>b_master.pam</B></A> </H3>
+<H4>Master task. Started on one node only. Coordinates and
+synchronizes all tasks. </H4>
+
+; ArDean Leith Nov 2000                                   <BR>
+</P>
+
+; INPUT:                                                  <BR>
+; x41                        (Starting micrograph number) <BR>
+; x42                        (Ending micrograph number)   <BR>
+</P>
+
+; OUTPUT:                                   <BR>
+; none
+</P>
+
+X41 = 16   ; starting micrograph number     <BR>
+X42 = 40   ; ending micrograph number       <BR>
+</P>
+
+MD                                          <BR>
+TR OFF   ; decrease output to results file  <BR>    
+MD                                          <BR>
+VB OFF   ; decrease output to results file  <BR>    
+MD                                          <BR>
+SET MP   ; use SMP on 2 processors per node <BR>    
+2                                           <BR>
+</P>
+
+<A NAME="vm"><B>VM</B></A> ; dir: out{..}  NEEDED  <BR>
+mkdir out                                   <BR>
+</P>
+
+x11=1                                       <BR>
+
+; create slave task for each micrograph   <BR>
+<DT>DO LB1 X77=X41,X42                      <DL>
+
+   <DD>; Create document file with register settings  </DD>
+   <DD>; The doc. file can passinfo to the slave tasks. </DD>
+
+   SD 41,x41                 <BR>
+   jnkdoc{***x77}.<A NAME="env"><B>${DATEXT}</B></A>  <BR>
+   SD 42,x42                 <BR>
+   jnkdoc{***x77}.${DATEXT}  <BR>
+   SD E                      <BR>
+   jnkdoc{***x77}.${DATEXT}  <BR></DD>
+   </P>
+
+   VM
+   spider pam/pre @b_align <A NAME="cmd_line"><B>{***X77} X77={***X77}</B></A>
+<DT>LB1                                    </DL>
+</P>
+
+VM                                         <BR>
+echo "b_master waiting for all alignments" </P>
+
+<A NAME="myfl"><B>MY FL</B></A> ; flush results </P>
+
+; wait for alignments to finish           <BR>
+@<a href="#b_wait">b_wait</A>[x12,x13 ]   <BR>
+</P>
+
+; Can carry out futher consolidation of alignments here
+
+EN                                          <BR>
+<P>
+
+
+<A NAME="b_align"><H3>b_align.pam</H3></A>  
+<H4>Runs on each node execept for the master node.   This procedure 
+calls a SPIDER procedure <I>b_doalign.pam</I> (not shown here)
+  which carries out the actual 
+alignment for this group.  When the alignment is finished, this
+procedure creates a new doc. file: jnkdocparamout{***x77}
+which signals  <a href="#b_master">b_master</A> that it
+can continue.</H4>
+
+; ArDean Leith Nov 2000                     </P>
+
+; INPUT:                                    <BR>
+; reg: 77         (group, on command line)  <BR>
+; jnkdoc{***grp}  (doc  file created by b_master)    
+</P>
+
+; OUTPUT:       <BR>
+; jnkdocparmout  (signal file contains x11 & x47)      
+</P>
+
+MD                                          <BR>
+TR OFF   ; decrease output to results file  <BR>    
+MD                                          <BR>
+VB OFF   ; decrease output to results file  <BR>    
+MD                                          <BR>
+SET MP   ; use SMP on 2 processors per node <BR>    
+2                                           <BR>
+</P>
+
+; Started by   <a href="#b_master">b_master</A>               <BR>
+
+   <DD>; retrieve registers stored in doc file: jnkdoc{***x77} </DD>
+   <DD>UD IC,41,X41         </DD>
+   <DD>jnkdoc{***x77}       </DD>
+   <DD>UD IC,42,X42         </DD>
+   <DD>jnkdoc{***x77}       </DD>
+   </P>
+
+   <DD>UD ICE               </DD>
+   <DD>jnkdoc{***x77}       </DD>
+   </P>
+   <DD>VM   ; remove this sync. doc file  </DD>
+   <DD>\rm -f jnkdoc{***x77}*             </DD>
+   </P>
+
+   <DD>VM       </DD>
+   <DD>date     </DD>
+   <DD>VM       </DD>
+   <DD>echo "starting group: {**x77}" </DD>
+   </P>
+
+   <DD>X11                                  </DD>
+   <DD>MY FL     ; flush results file       </DD>
+   <\P>
+
+   <DD>@p_doalign[X41,X42,X77]</A> ; runs alignment for this group.  </DD></DL>
+   </P>
+
+   <DD>; Signal <a href="#b_master">b_master</A> to re-awaken now      </DD>
+   <DD>;     (b_master wakes when it sees jnkdocparamout{***x77})   </DD>
+   <DD>SD 11,X11                    ; set sync file output          </DD>
+   <DD>jnkdocparamout{***x77}                                       </DD>
+   </P>
+
+   <DD>SD E                         </DD>
+   <DD>jnkdocparamout{***x77}       </DD>
+   </P>
+
+   <DD>VM                          </DD>
+   <DD>echo "ending group: {**x77}" </DL>
+LB1       </P>
+
+EN       <BR>
+</P>
+
+
+
+<A NAME="b_wait"> <H3>b_wait.pam </H3> </A>
+<H4><a href="#b_master">b_master</A> running on the master node calls this
+procedure after starting the <a href="#b_align">b_align</A> tasks to
+carry out the alignment.  When an alignment is finished, the alignment  
+creates a new doc. file: <I>jnkdocparamout{***x77}</I>)
+This procedure causes <I>b_master</I>
+to  wait for the creation of these files from each of the  
+<I>b_align</I> tasks. 
+ </H4>
+
+[x12,x13]                               <BR>
+; ArDean Leith Nov 2000                 </P>
+
+; Used in <a href="#b_master">b_master</A>. Waits for slaves to finish.  <BR>
+</P>
+
+; INPUT:                                <BR>
+; reg: 12  (starting group)             <BR>
+; reg: 13  (ending group)               <BR>
+; doc file: jnkdocparamout{***grp}*               <BR>
+</P>
+
+; OUTPUT:                               <BR>
+; none                                  <BR>
+</P>
+
+;  wait for all micrograph groups -------------                  <BR>
+
+DO LB3 x77=x12,x13                                               <BR>
+    <DL>
+    <DD>MY FL   ; flush results file                             </DD>
+
+    <DD><A NAME="iqsync"><B>IQ SYNC</B></A>                            </DD>
+    <DD>jnkdocparamout{***x77}                                   </DD>
+    <DD>(10 36000)                                               </DD>
+    </P>
+
+    <DD>VM                                                       </DD>
+    <DD>date                                                     </DD>
+    </P>
+
+    <DD>VM                                                       </DD>
+    <DD>echo "synced  group: {**x77} "                           </DD>
+    </P>
+
+    <DD>DE                                                       </DD>
+    <DD>jnkdocparamout{***x77}                                   </DD>
+    </P>
+
+    <DD>MY FL   ; flush results file                        </DD> </DL>
+LB3             ;  end wait loop over groups -------  
+</P>
+
+RE      
+</P>
+
+<HR> <P><SMALL>
+Source:       techs/parallel/parallel.html  &nbsp;&nbsp;&nbsp;  
+Last update: 20 March 2001  &nbsp;&nbsp;&nbsp;
+ArDean Leith  </SMALL><P>
+
+</BODY>
+</HTML>
