@@ -1,0 +1,142 @@
+ ([pixsiz],[iter],[ampenhance],[r2])
+ ;
+ ; <html><head><title>Merges groups at end of each refinement iteration</title></head><body><pre>
+ ;
+ ; SOURCE: spider/docs/techs/recon1/Procs/refine-merge.spi
+ ;         New                                ArDean Leith  Nov 2000
+ ;         Ampl. enhance                      ArDean Leith  Apr 2005
+ ;         CofG centering now done here       ArDean Leith  Sep 2010
+ ;         Ampl. enhance moved out            ArDean Leith  Oct 2010
+ ;         FSC, pixsiz                        ArDean Leith  Aug 2012
+ ;         Defocus group removal              ArDean Leith  Oct 2013
+ ;         For CTF corrected images           ArDean Leith  Oct 2013
+ ;         For gold standard reconstruction   ArDean Leith  May 2014
+ ;
+ ; PURPOSE: Merge group volumes (AS S) into a single set of volumes, find resolution (FSC),
+ ;          filter (FD  C) to limit resolution, and center the filtered volumes.
+ ;          (This is not done in parallel).
+ ;
+ ; CALLED FROM: pub-refine <a href="./pub-refine.spi">pub-refine.spi</a>
+ ;              refine     <a href="./refine.spi">    refine.spi</a>
+ ;
+ ; INPUT REGISTERS:
+ ;    [pixsiz]                Pixel size        
+ ;    [iter]                  Refinement step iteration counter  
+ ;    [ampenhance]            Flag to use amplitude enhancement (>0 == yes) 
+ ;    [r2]                    Radius of object 
+ ;
+ ; '##' denotes iteration,  '##+' denotes next iteration,  '***' denotes group,  '@' denotes subset
+ ; INPUT FILES:
+ ;    [sel_group]             input/sel_group        List of groups                     (one)          
+ ;    [next_group_vol]_s1     work/vol_##_***_s1     Group volumes - subset 1 (deleted) (one/group)
+ ;    [next_group_vol]_s2     work/vol_##_***_s2     Group volumes - subset 2 (deleted) (one/group)
+ ;
+ ; OUTPUT FILES:
+ ;    [next_vol]_s1_unfilt    final/vol##_s1_unfilt  Unfiltered volume - subset 1      (one)
+ ;    [next_vol]_s2_unfilt    final/vol##_s2_unfilt  Unfiltered volume - subset 2      (one)
+ ;    [next_vol]_s1           final/vol##_s1         Filtered volume   - subset 1      (one)
+ ;    [next_vol]_s2           final/vol##_s2         Filtered volume   - subset 2      (one)
+ ;    [next_vol]_all          final/vol##_all        Unfiltered volume - complete      (one)
+ ;    [next_u_fsc]            final/fscdoc_u_##      Unmasked FSC curve doc file       (one)
+ ;    [next_m_fsc]            final/fscdoc_m_##      Masked   FSC curve doc file       (one)
+ ;    [enhance_doc]           work/enhance_doc_##+   OPTIONAL Amplitude filter file    (one)
+ ;
+ ;-------------------------- END BATCH HEADER ------------------------------------------------
+
+ ; All groups must be present here to use: "AS S"!
+
+ [next-iter] = [iter] + 1         ; Next iteration
+
+ SYS
+   echo ; echo " Merging group volumes for iteration: {%I0%[iter]}"
+
+ ; Average subset 1 volumes
+ AS S                             ; Add subset 1 volumes
+   [next_group_vol_stem]_s1       ; Group volume template    (input)
+   [sel_group]                    ; Group selection file
+   A                              ; Find average
+   [next_vol]_s1_unfilt           ; Subset average volume    (output)
+
+ ; Average subset 2 volumes
+ AS S                             ; Add subset 2 volumes
+   [next_group_vol_stem]_s2       ; Group volume template    (input)
+   [sel_group]                    ; Group selection file
+   A                              ; Find average
+   [next_vol]_s2_unfilt           ; Subset average volume    (output)
+
+ ; Combine the two subset volumes
+ AD S                             ; Add two subset volumes
+   [next_vol]_s*_unfilt           ; Subset volume template   (input)
+   1-2                            ; Subset numbers
+   [next_vol]_all                 ; Overall volume           (output)
+
+ ; Determine masked reconstruction resolution
+ FSC [m-half],[m-spfr],[m-res]    ; Find masked FSC
+   [next_vol]_s1_unfilt           ; Volume - subset 1        (input)
+   [next_vol]_s2_unfilt           ; Volume - subset 2        (input)
+   0.5, [r2]                      ; Shell width, mask radius
+   [pixsiz], 0.143                ; Pixel size, gold level
+   [next_m_fsc]                   ; Masked FSC doc file      (output)
+   *                              ; No Gnuplot file wanted
+
+ ; Determine unmasked reconstruction resolution
+ FSC [u-half],[u-spfr],[u-res]    ; Find unmasked FSC
+   [next_vol]_s1_unfilt           ; Volume - subset 1        (input)
+   [next_vol]_s2_unfilt           ; Volume - subset 2        (input)
+   0.5, 0                         ; Shell width, mask radius
+   [pixsiz], 0.143                ; Pixel size, gold level
+   [next_u_fsc]                   ; Unmasked FSC doc file    (output)
+   *                              ; No Gnuplot file wanted
+
+ SYS
+   echo " Iteration: {%I0%[iter]}  Gold resolution, masked:{%f6.2%[m-res]}  unmasked:{%f6.2%[u-res]}  Spfrq:{%f7.2%[m-spfr]}"
+
+ SD [iter],[iter],[m-res],[u-res] ; Save in doc file
+   [iter_resol]                   ; Resolution doc file       (output)
+
+ DO [s] = 1,2                     ; Loop over resolution subsets ------------------
+
+   ; Find center of gravity of overall filtered volume 'CG PH' sometimes fails!
+   CG [xcg],[ycg],[zcg]  
+     [next_vol_s]_unfilt          ; Complete volume           (input)
+
+   [xsh] = -[xcg]
+   [ysh] = -[ycg]
+   [zsh] = -[zcg]
+
+   IF ( ABS([xsh]) < 0.2 ) [xsh] = 0.0
+   IF ( ABS([ysh]) < 0.2 ) [ysh] = 0.0
+   IF ( ABS([zsh]) < 0.2 ) [zsh] = 0.0
+
+   SYS
+     echo  " Volume: [next_vol_s]  Off center: ({%F4.1%[xsh]},{%F4.1%[ysh]},{%F4.1%[zsh]})"
+   
+CP
+  [next_vol_s]_unfilt          ; Complete volume           (input)
+  [next_vol_s]                 ; Reconstructed volume      (input)
+CYCLE
+
+
+   ; Shift volume to its center of gravity
+   SH                             ; Shift volume
+     [next_vol_s]_unfilt          ; Complete volume           (input)
+     [next_vol_s]_centered        ; Centered volume           (output) 
+     [xsh],[ysh],[zsh]            ; Shift distances for CofG
+   SYS
+     echo  " Volume: [next_vol_s]  Shifted: ({%F4.1%[xsh]},{%F4.1%[ysh]},{%F4.1%[zsh]})"
+
+   FD C
+     [next_vol_s]_centered        ; Reconstructed volume      (input)
+     [next_vol_s]                 ; Filtered volume           (output)
+     [next_u_fsc]                 ; Unmasked FSC doc file     (input)
+     4                            ; Register column for filtration
+
+ ENDDO                            ; End loop over resolution subsets -----------
+
+ SYS                              ; Delete un-needed files to save space
+   \rm [next_group_vol_stem]_s*    
+
+ MY FL
+ RE
+
+ ; </pre></body></html>

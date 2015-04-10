@@ -1,0 +1,198 @@
+ ([ang-step],[ang-limit],[r2],[alignsh],[prj-radius],[iter],[grp],[pixsiz],[incore-yn],[bp-type])
+
+ ; <html><head><title>Main refinement group loop</title></head><body><pre>
+ ;
+ ; SOURCE: spider/docs/techs/recon1/procs/refine-loop.spi    
+ ;         Original                                            ArDean Leith  Nov 2000
+ ;         %degredations                                       ArDean Leith  Feb 2005
+ ;         []                                                  ArDean Leith  Dec 2005
+ ;         More stacks & 'RT SQ' selection                     ArDean Leith  Dec 2006
+ ;         'AP SH' use                                         ArDean Leith  Feb 2007
+ ;         Group sel. filename                                 ArDean Leith  Dec 2009
+ ;         COG centering removed, 'AP SH' for 2 iters, Skip=2  ArDean Leith  Sep 2010
+ ;         'TF COR'                                            ArDean Leith  Nov 2010
+ ;         Dala removal                                        ArDean Leith  Jan 2012
+ ;         'AP SHC', skip=1, FSC mask                          ArDean Leith  Sep 2012
+ ;         Denoise exp images, mask before bp                  ArDean Leith  Dec 2012
+ ;         For CTF corrected images                            ArDean Leith  Oct 2013
+;          For gold standard reconstruction                    ArDean Leith  May 2014
+ ; 
+ ; PURPOSE: Main refinement loop. Runs for each group on each iteration
+ ;          Finds parameters to align images to projections from reference volume (AP SHC),
+ ;          aligns images (RT SF),  backprojects images into new volume(BP 32F), & 
+ ;          determines group resolution (FSC)    
+ ;
+ ; CALLED FROM: <a href="./pub-refine-start.spi">pub-refine-start.spi</a>  OR   
+ ;              <a href="./refine.spi">          refine.spi</a>  
+ ;
+ ; REGISTERS AND FILES ARE SET IN: <a href="refine settings.spi">refine settings.spi</a>
+ ;
+ ; INPUT REGISTERS:
+ ;    [ang-step]             Angular steps                     (Varies with iter)
+ ;    [ang-limit]            Restrict angular search           (Varies with iter)
+ ;    [r2]                   Pixel radius of object used in alignment
+ ;    [alignsh]              Pixel shift allowed is +-[alignsh]
+ ;    [prj-radius]           Pixel radius of object used in projection
+ ;    [iter]                 Alignment step iteration counter   
+ ;    [grp]                  Current group                              
+ ;    [pixsiz]               Pixel size                              
+ ;    [incore-yn]            Use incore file for images                              
+ ;    [bp-type]              Type of 'back projection'                              
+ ;
+ ; OUTPUT REGISTERS: none
+ ;
+ ;  '##' denotes iteration,  '##+' denotes next iteration,  '***' denotes group,  '@' denotes subset
+ ; INPUT FILES:
+ ;    [gmask]                final/gmask             Gaussian mask (from prepare)    (one)
+ ;    [sel_parts_s]          input/select_***        Group particle selection files  (one/group)
+ ;    [iter_refangs]         work/ang_refs_##        Ref. angles doc file            (one/iteration)       
+ ;    [unaligned_images]     input/data_***          Unaligned stacked image files   (one-stack/group)
+ ;    [ref_projs_s]          work/refproj_##_s@      Reference projections           (two/iteration)
+ ;    [group_align_s]        final/align##_***_s@    Alignment parameter doc files   (two/iteration/group)    
+ ;
+ ; OUTPUT FILES:
+ ;    [next_group_align_s]   final/align##+_***s@    Alignment parameter doc files   (two/iteration/group)
+ ;    [next_group_vol_s]     work/vol_##+_***_s@     Group subset volumes            (two/iteration/group)
+ ;    [next_group_vol]       work/vol_##+_***        Reconstructed group volumes     (one/iteration/group)
+ ;
+ ;    [temp_out_images]      work/dala_***@          (Created & deleted if [incore-yn] = 0 )
+ ; 
+ ; PROCEDURES CALLED: refine-bp
+ ;
+ ; INLINE BUFFERS USED:  If [incore-yn] > 0 it uses _8
+ ;
+ ; --------------------------- END BATCH HEADER ---------------------------------------
+
+ !SYS
+ !  echo -n " Starting: refine-loop  Iteration: {%I0%[iter]}  Group:{%I3%[grp]} --- " ; date '+ %x  %X'
+ 
+ [r1]           = 5.0             ; First radius for 'AP' (Can alter this)
+ [converge_lim] = 1.5*[ang-step]  ; Convergence criterion ang. distance limit
+ [next-iter]    = [iter]+1
+
+ DE                               ; Delete existing files  
+   [next_group_align]_s1          ; Alignment parameter doc file   (deleted)
+ DE                               ; Delete existing files  
+   [next_group_align]_s2          ; Alignment parameter doc file   (deleted)
+ DE                               ; Delete (rare)  
+   [ref_rings]                    ; Reference rings scratch file   (deleted)
+
+ MY FL                            ; Flush results file
+
+ IF ( [incore-yn] > 0 ) THEN
+   ; Load input images into incore image stack for speedup
+   ; Note: If INLN_WRTLIN ARRAY OVERFLOWS,  set: [incore-yn] to: zero    
+   GLO [temp_in_images]  = '_8@' 
+   GLO [temp_out_images] = '_8@'  ; Incore, inplace
+
+   FI H [maxim]                   ; Find total number of images (not [numparts])
+     [unaligned_images]@          ; Input file needed                 (input)
+     MAXIM                        ; Max. image number, image size
+
+   CP                             ; Copy unaligned images to inline stack
+     [unaligned_images]@          ; Input file needed                (input)
+     [temp_in_images]             ; Incore unaligned images stack    (output)
+     [maxim]                      ; Number of images in stack _8@
+ ELSE
+   ; Use existing image stack for input & a temporary stack for output
+   GLO [temp_in_images]  = [unaligned_images]@
+ ENDIF
+ 
+ !SYS                             ; Create end of copy wait time flag file (unused)
+ !  touch [wait_file][grp].$DATEXT 
+
+ UD N [num-refs]                  ; Get number of reference images used
+   [iter_refangs]                 ; Reference images angles file      (input)
+
+ ; Find reference projection matching current aligned image
+
+ DO [s] = 1,2                     ; Loop over resolution subsets ---------------
+ 
+   IF ( [iter] < 3 ) THEN
+     ; Use 'AP SHC' for comprehensive alignment search
+
+     [a]       = 'Y'
+     [grp_ali] = [group_align_s]  ; Alignment parameter doc file     (input)
+     IF ( [iter] == 1 ) THEN
+       [a]       = 'N'
+       [grp_ali] = '*'            ; Alignment parameter doc file     (input)
+     ENDIF
+
+     AP SHC                       ; (Can change alignment operation)  
+       [ref_projs_s]@******       ; Template for ref. projections    (input)
+       1-[num-refs]               ; Ref. projection file numbers
+       [alignsh],1                ; Shift search range, Step size
+       [r1],[r2],1                ; First, last radial ring, & skip
+       [iter_refangs]             ; Ref. angles file                 (input)
+       [temp_in_images]******     ; Template for unaligned images    (input)
+       [sel_parts_s]              ; Particle selection files         (input)
+       [grp_ali]                  ; Alignment parameter doc file     (input)
+       [ang-limit],[converge_lim] ; Angular search restriction
+       Y, [a], N                  ; Check mir, align first, denoise
+       [next_group_align_s]       ; Alignment parameter doc file     (output)
+
+   ELSE
+
+     ; Use 'AP REF' for limited alignment search
+
+     AP REF                       ; Poorer search than 'AP SH' but 4-5x faster
+       [ref_projs_s]@******       ; Template for ref. projections    (input)
+       1-[num-refs]               ; Ref. projection file numbers
+       [alignsh]                  ; Shift search range
+       [r1],[r2],1                ; First, last radial ring, & skip
+       [iter_refangs]             ; Ref. angles file                 (input)
+       [ref_rings]                ; No such file if rings fit in-core(rare output)
+       [temp_in_images]******     ; Template for unaligned images    (input)
+       [sel_parts_s]              ; Particle selection files         (input)
+       [group_align_s]            ; Alignment parameter doc file     (input)
+       [ang-limit],[converge_lim] ; Angular search restriction
+       Y, Y                       ; Check mir projections, align first
+       [next_group_align_s]       ; Alignment parameter doc file     (output)
+   ENDIF
+ 
+   IF ( [iter] >= 2 ) THEN
+     ; Get size of change in projection angle
+     ;     %BIG-ANGDIF,       AVG-ANGDIF,  AVG-CCROT, %WORSE,  AVG-WORSE,   AVG-BETTER      
+     UD -2,[percent-greater],[avg-angdif],[avg-ccrot],[degred],[avg-degred],[avg-impr]
+       [next_group_align_s]       ; Alignment parameter doc file     (input)
+     UD E                         ; Close doc file access
+
+     SYS
+       echo " Iteration: {%I0%[iter]} Group:{%I3%[grp]}  Subset: {*[s]}  Excessive changes: {%F5.1%[percent-greater]}% "
+     SYS
+       echo " CCROT degredation: {%I0%[degred]}%   Avg. degred.:{%F5.1%[avg-degred]}  Avg. improve.:{%F7.1%[avg-impr]}"
+   ENDIF
+
+   ; Apply new alignments to original particle images
+   RT SF                         ; Rotate & shift operation
+     [unaligned_images]@******   ; Unaligned stacked image files     (input)
+     [sel_parts_s]               ; Particle selection file           (input) 
+     6,0,7,8                     ; Reg. #s for angle, scale, & shift
+     [next_group_align_s]        ; Alignment parameter doc file      (input)
+     [temp_out_images]******     ; Current aligned images            (output)
+ 
+   ; Soft mask particles prior to back projection (removed)
+
+   SYS                           ; Echo progress
+     echo " Back projecting,  Iteration: {%I0%[iter]} Group:{%I3%[grp]}  Subset: {*[s]}"
+
+   ; Calculate new, refined subset volume using centered projections and 
+   ; angles from align doc. file.  
+
+   @refine-bp([next-iter],[grp],[s], [bp-type],[prj-radius])
+
+ ENDDO                           ; End of loop over resolution subsets ----------------------------
+
+ DE                              ; Delete stack                        
+   [temp_out_images]             ; No longer needed                    (deleted)
+
+ ; Combine the two subset volumes
+ AD S                            ; Add two subset volumes
+   [next_group_vol]_s*           ; Group subset volume template        (input)
+   1-2                           ; Subset numbers
+   [next_group_vol]              ; Group volume                        (output)
+       
+ RE
+
+ ; </pre></body></html>
+

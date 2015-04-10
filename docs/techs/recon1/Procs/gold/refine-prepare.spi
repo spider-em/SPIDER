@@ -1,0 +1,173 @@
+([pixsiz],[lambda],[iter1])
+
+ ; <html><head><title>Prepare for refinement by initializing input, etc.</title></head><body><pre>
+ ;
+ ; SOURCE:  spider/docs/techs/recon1/procs/refine-prepare.pam
+ ;          New                                           ArDean Leith  Nov 2000
+ ;          Declining group sort                          ArDean Leith  Oct 2010
+ ;          CS from params, DOC STAT                      ArDean Leith  Jan 2011
+ ;          Dala removal                                  ArDean Leith  Jan 2012
+ ;          For CTF corrected images                      ArDean Leith  Oct 2013
+ ;          For gold standard reconstruction              ArDean Leith  May 2014
+ ;
+ ; PURPOSE: Runs once at start of refinement to load and prepare various initial files.
+ ;
+ ; CALLED FROM: refine & pub-refine <a href="./refine.pam">refine.pam</a> & 
+ ;                                  <a href="./pub-refine.pam">pub-refine.pam</a>
+ ;
+ ; Register variables & files are set in: <a href="./refine-settings.pam">refine-settings.pam</a>
+ ;
+ ; INPUT REGISTERS (RECEIVED ABOVE):
+ ;   [pixsiz]                Pixel size (A)
+ ;   [lambda]                Lambda(A)
+ ;   [iter]                  Initial iteration (Usually 1)
+ ;
+ ; '***' denotes group number, '@' denotes subset 
+ ; INPUT FILES:
+ ;   [params]                ../params                                EM parameters file             (one)  
+ ;   [vol_orig]              ../Reconstruction/vol01                  Initial volume file            (one) 
+ ;   [sel_group_orig]        ../Reconstruction/input/bp_sel_group     Group selection file           (one) 
+ ;   [sel_parts_orig]        ../Reconstruction/input/bp_sel_part_***  Group particle selection files (one/group)
+ ;   [group_align_orig]      ../Reconstruction/input/bp_align_01_***  Alignment parameter files      (one/group)
+ ;   [unaligned_images_orig] ../Reconstruction/input/bp_data_ctfd_*** Unaligned image stacks         (one/group)
+ ;
+ ; OUTPUT FILES:
+ ;   [input_dir]             input                     Directory
+ ;   [temp_work_dir]         work                      Directory
+ ;   [final_dir]             final                     Directory
+ ;   [unaligned_images]      input/data***             Unaligned image stacks  (usually LINKS!)
+ ;   [gmask]                 work/gmask                Unused mask file                (one)
+ ;   [sel_group]             input/sel_group           Group selection file            (one)
+ ;   [vol_s]                 final/vol01_s@            Starting volume files           (two) 
+ ;   [sel_parts_s]           input/sel_part_***_s@     Group particle selection files  (two/group) 
+ ;   [group_align_s]         final/align_01_***_s@     Group alignment parameter files (two/group) 
+ ;
+ ; INLINE FILES USED: none
+ ;
+ ; ---- Adjust these parameters for your project --------------- EDIT -------------------------
+
+ [filt-orig-yn] = 1                          ; Low pass filter reference volume (1 == yes)
+
+ [filt-angstr]  = 60                         ; Low pass filtration level for reference volume (if used)
+
+ ; -------------------------------- END BATCH HEADER ------------------------------------------
+
+ SYS
+   echo " Starting initial file preparation" ; echo 
+
+ [iter] = [iter1]            ; Needed for naming initial files
+
+ ; Input initial parameters & file names
+ @refine-settings([pixsiz],[r2],[alignsh],[prj-radius],[iter1],[iter-end],[lambda],[smallang-yn],[winsize],[incore-yn],[prepare-yn],[bp-type])
+
+ ; Create directories for temp, scratch, and final files
+ SYS                          
+   mkdir -p [temp_work_dir] [final_dir] [input_dir]
+ 
+
+ IF ( [filt-orig-yn] > 0 ) THEN
+
+   [filt-pix]    = [filt-angstr] / [pixsiz]   ; Pass-band
+   [filt-spfr]   = [filt-pix] / [nx]          ; Pass-band        
+   [stop-band]   = [filt-spfr] + 0.15         ; Stop band frequency
+
+   ; Echo to results file for reference   
+   [pixsiz]
+   [filt-pix]
+
+   SYS
+     echo " Starting low-pass filtration at {%f5.1%[filt-angstr]} Angstroms,  (Spatial freq: {%f5.3%[filt-spfr]})"  
+
+   ; Filter reference volume to limit resolution
+   FQ                         ; Quick filter          
+     [vol_orig]               ; Original volume          (input)
+     [vol]_s1                 ; Filtered original volume (output)
+     7                        ; Butterworth low pass filter
+     [filt-spfr],[stop-band]  ; Pass-band and stop-band freq.
+
+   SYS
+     echo " Created Low-passed reference: [vol]_s1    From: [vol_orig]
+ 
+ ELSE
+   SYS
+     echo " Copying reference volume to input directory"   
+
+   ; Copy initial reference volume to final directory 
+   CP                         ; Copy volume  
+     [vol_orig]               ; Initial reference volume file  (input)
+     [vol]_s1                 ; Current subset 1 volume file   (output)
+ ENDIF
+
+ ; Create second copy of initial reference volume
+ CP                           ; Copy volume  
+   [vol]_s1                   ; Current subset 1 volume file   (input)
+   [vol]_s2                   ; Current subset 2 volume file   (output)
+
+ ; Copy group selection file to input directory 
+ SYS
+   echo " Copying group selection file to input directory"   
+ SYS                          ; Copy  
+   \cp -p [sel_group_orig].$DATEXT   [sel_group].$DATEXT 
+
+ ; Sum total number of particles in all groups
+ DOC STAT [nv],[minv],[maxv],[totp]
+   [sel_group]                ; Group selection doc file       (input)    
+   2
+
+ UD N [num-grp]               ; Get total number of groups
+   [sel_group]                ; Group selection doc file       (input)
+
+ SYS
+   echo " Creating group particle selection files in input directory"   
+
+ DO [i]=1,[num-grp]           ; Loop over groups  -----------------------
+
+   UD IC [i],[grp],[num-part] ; Get # of particles 
+     [sel_group]              ; Group selection doc file      (input)  
+
+   ; Make link to unaligned images (large files) in input directory  
+   SYS                        
+     ln -sf  ../[unaligned_images_orig].$DATEXT  [unaligned_images].$DATEXT  
+
+   ; Split group particle selection doc files into odd and even lists in input dir.
+   DOC SPLIT
+     [sel_parts_orig]         ; Particle selection doc file       (input)
+     [sel_parts]_s1           ; Odd  particle selection doc file  (output)         
+     [sel_parts]_s2           ; Even particle selection doc file  (output)         
+                      
+   SYS                                      
+     echo " Group:{%I3%[grp]}  Particles:{%I6%[num-part]}" 
+
+ ENDDO                        ; End of loop over groups  -----------------
+
+ UD ICE                       ; Finished with this doc file 
+   [sel_group]                ; Doc file                 (closed)
+ 
+ FI H [nx]                    ; Query row length value (images/volumes must be square)
+   [vol_orig]                 ; Initial reference volume        (input)
+   NX                         ; X dimension wanted (cubic)
+
+ [nxd2] = [nx] / 2
+ [wid]  = ([nxd2] -[prj-radius]) - 1
+ !SYS                           
+    !echo " Mask falloff width: {%I0%[wid]}"
+
+ ; Create Gaussian mask for backprojected images (currently UNUSED)
+ MO                             ; Mask
+   [gmask]_tmp                  ; Circle file                 (output)
+   [nx],[nx]                    ; Size 
+   C                            ; Circle
+   [prj-radius]                 ; Radius
+ 
+ MA SOFT                        ; Make soft circle mask
+   [gmask]_tmp                  ; Circle  file                (input)
+   [gmask]                      ; Mask file name              (output)      
+   Gaussian                     ; Gaussian falloff
+   0.5                          ; Mask threshold
+   [wid]                        ; Falloff width
+
+ SYS
+   echo " Finished initial file preparation" ; echo 
+
+ RE
+ ; </pre></body></html>

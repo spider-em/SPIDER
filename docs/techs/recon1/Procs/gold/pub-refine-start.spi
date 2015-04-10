@@ -1,0 +1,104 @@
+ ; <html><head><title>Runs main group loop & refine-merge loop in parallel</title></head><body><pre>
+ ;
+ ; SOURCE: spider/docs/techs/recon1/procs/pub-refine-start.spi 
+ ;         New                                   Feb 2002 ArDean Leith
+ ;         [rn]                                  Feb 2005 ArDean Leith
+ ;         []                                    Dec 2005 ArDean Leith
+ ;         Clone                                 Jan 2009 ArDean Leith
+ ;         Removed cpang, has_scratch            Jan 2010 Ardean Leith
+ ;         smangloop has_scratch                 Aug 2010 Ardean Leith
+ ;         [pixsiz],[r2]                         Aug 2012 Ardean Leith
+ ;         For CTF corrected images              Oct 2013 ArDean Leith
+ ;         For gold standard reconstruction      May 2014 ArDean Leith
+ ;
+ ; PURPOSE: Runs main loop & merge loop    
+ ;          Calls refine-loop or refine-smangloop.spi in parallel 
+ ;
+ ; INPUT REGISTERS (Set On operation line):
+ ;          [task]     Task selector
+ ;          [iter]     Current iteration 
+ ;          [grp]      Current group number 
+ ;          [rn]       Random number for unique DOC_SYNC files
+ ;
+ ; -------------------- END BATCH HEADER ----------------------------------------
+
+ MD
+   TR OFF                   ; Loop info turned off
+ MD
+   VB OFF                   ; File info turned off
+ MD                          
+   SET MP                   ; Set OMP processors to all available
+   0
+
+ [gold-yn]  = 1             ; Want to use  gold standard reconstruction
+
+ ; Input initial parameters & file names but not angular steps
+ @refine-settings([pixsiz],[r2],[alignsh],[prj-radius],[iter1],[iter-end],[lambda],[smallang-yn],[winsiz],[incore-yn],[prepare-yn],[bp-type])
+ 
+ IQ DIR [has-scratch]       ; See if there is a local scratch dir.
+   [temp_local_dir]         ; Dir name
+
+ [bp-typet] = [bp-type]     ; Switch to 'BP CG' on last iteration if not already
+ IF ( [iter] == [iter-end] ) THEN
+   [bp-typet] = 1           ; Switch to 'BP CG' on last iteration if not already
+ ENDIF
+
+
+ IF ( [task] == 0 ) THEN    ; Runs main regular angle refinement loop tasks
+
+   RR S [ang-limit]         ; Restriction on angular search (varies with iteration)
+     [ang-limits]           ; Input string
+     [iter]                 ; Current iteration
+
+   RR S [ang-step]          ; Angular step (varies with iteration)
+     [ang-steps]            ; Input string
+     [iter]                 ; Current iteration
+
+   IF ( [has-scratch] > 0 ) THEN
+      ; Copy files to local compute node disk  
+      @pub-ref-loop-clone([iter],[grp],[gold-yn])
+
+      ; Run main loop for regular angle refinement
+      @refine-loop([ang-step],[ang-limit],[r2],[alignsh],[prj-radius],[iter],[grp],[pixsiz],[incore-yn],[bp-typet])
+
+      ; Copy local disk files back to master disk  
+      @pub-ref-loop-declone([iter],[grp])
+   ELSE
+      ; Redefine [temp_local_dir] to work directory 
+      GLO [temp_local_dir] = '[temp_work_dir]'
+
+      ; Runs main loop
+      @refine-loop([ang-step],[ang-limit],[r2],[alignsh],[prj-radius],[iter],[grp],[pixsiz],[incore-yn],[bp-typet])
+   ENDIF
+
+ ELSEIF ( [task] == 1 ) THEN          ; Runs main small-angle refinement loop tasks
+
+   IF ( [has-scratch] > 0 ) THEN
+      ; Copy files to local disk  
+      @pub-ref-loop-clone([iter],[grp],[gold-yn])
+
+      ; Run main loop for small angle refinement
+      @refine-smangloop([ang-step-sm],[r2],[alignsh],[prj-radius],[iter],[grp]],[pixsiz],[bp-typet])
+
+      ; Copy local disk files to server disk  
+      @pub-ref-loop-declone([iter],[grp])
+   ELSE
+      ; Redefine [temp_local_dir] to work directory 
+      GLO [temp_local_dir] = '[temp_work_dir]'
+
+      ; Runs main loop
+      @refine-smangloop([ang-step-sm],[r2],[alignsh],[prj-radius],[iter],[grp],[pixsiz],[bp-typet])
+   ENDIF
+ ENDIF
+
+ MY FL                        ; Flush results file
+
+ ; Signal master SPIDER that this task is finished
+ SD 11, [type]                ; Set sync file output
+   [finished_file]{***[grp]}  ; Sync file          (output)
+ SD E                         ; Close sync file
+   [finished_file]            ; Sync file          (closed)
+
+ EN                           ; This SPIDER ends now
+ ; </pre></body></html>
+
