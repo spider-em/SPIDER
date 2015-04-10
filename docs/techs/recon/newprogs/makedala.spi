@@ -1,0 +1,83 @@
+; <html><head><title>Computes dala files</title></head><body><pre>
+;
+; SOURCE: spider/docs/techs/recon/newprogs/makedala.spi   
+;                       New                                Jun 2010 ArDean Leith
+;
+; PURPOSE: Create 'dala' files for a given iteration.
+;
+;<b>------------ Edit next 6 Input parameters ------------------------------ 
+
+[pubsub]  = 0   ; If >0 use PubSub
+[iter]    = 8   ; Iteration number for dala files
+
+
+; ----------------- Input files --------------------------------------------
+
+[defgrps]           = 'input/sel_group'                    ; List of groups (group selection doc file)
+
+[unaligned_images]  = 'input/data{***[grp]}@'              ; Unaligned particles stacks
+
+[align_parameters]  = 'final/align_{**[iter]}_{***[grp]}'  ; Alignment parameters doc. file 
+
+; ----------------- Output files ------------------------------------------------
+
+[aligned_images]    = 'work/dala_{**[iter]}_{***[grp]}@'   ; Rotated, shifted (aligned) particles
+
+; ----------------- END BATCH HEADER ------------------------------------------- </b>
+
+MD
+TR OFF                                ; Decrease results file output
+MD
+VB OFF                                ; Decrease results file output
+
+; DO NOT WORRY IF [grp] IS UNDEFINED HERE, IT IS TAKEN CARE OF BY PUBSUB
+IF ([grp] .GT. 0) [pubsub] = 0        ; Secondary PubSub run 
+
+UD N [numgrps]                        ; Get number of groups 
+[defgrps]                             ; Groups selection file                    (input)
+
+IF ([pubsub] .EQ. 0) THEN             ; Main loop runs 'AP SH'
+                                      ; Used for Non-PubSub and PubSub runs 
+  
+   MD                 
+   SET MP                             ; Use all processors (needed here for secondary runs)
+   0
+
+   IF ([grp] .GT. 0) [numgrps] = 1    ; Group listed on command line, overides list        
+
+   DO  [numgrp]=1,[numgrps]           ; Loop over all group(s)
+
+      IF ([grp] .LT. 1) THEN          ; Group not on command line, use list from selection file        
+         UD [numgrp],[grp]            ; Get current group number 
+         [defgrps]                    ; Group selection file                  (input)
+      ENDIF
+
+      VM
+      echo ' 'Processing "dala" files for group: {****[grp]}   
+
+      ; Apply alignment parameters to unaligned particles
+      ; Order in doc file: PHI,THETA,PSI, REF#,IMG#,  ROT,SX,SY
+
+      RT SQ                           ; Rotate & shift whole stack operation
+      [unaligned_images]              ; Unaligned particles stack             (input) 
+      [aligned_images]                ; Aligned particles stack               (output)
+      (6,0,7,8)                       ; Reg. numbers for angle, scale,& shifts
+      [align_parameters]              ; Alignment angles doc. file            (input)
+
+      MY FL                           ; Flush results file
+      [grp] = 0                       ; Reset default group for next group
+   ENDDO                              ; End loop for multiple groups
+    
+ELSE                                  ; Used only to intiate master PubSub run 
+   DO  [numgrp]=1,[numgrps]           ; Loop over all groups
+   
+       UD [numgrp],[grp]              ; Get current group number 
+       [defgrps]                      ; Group selection file                   (input)
+   
+       ; Create parallel PubSub run for each group
+       VM                             ; Use PubSub to create parallel processes   
+       publish './spider spi/$DATEXT @makedala {***[grp]} grp={***[grp]}'
+    ENDDO
+ENDIF
+
+EN                              

@@ -1,0 +1,125 @@
+; SOURCE: spider/docs/techs/recon/newprogs/diffmap.spi
+; 
+; PURPOSE: Computes difference betteen two volumes: In this case,
+;          a reconstruction minus the reference volume.
+;
+; NB :      Use the raw unfiltered volumes
+;
+; <b> ------------ Parameters ----------------------------------------
+[masking] = 1        ; Use same mask for both reference and test volume
+                     ; (better for identifying a ligand)
+
+;[masking] = 2       ; Create masks for both volumes 
+;                      (better for identifying conformational changes)
+
+;  Filter parameters for volumes
+[pass-band] = 0.15   ; Pass-band frequency
+[stop-band] = 0.25   ; Stop-band frequency
+
+[pass-band2] = 0.16  ; Pass-band frequency for second output vol
+[stop-band2] = 0.26  ; Stop-band frequency for second output vol
+
+; ------------ Input files --------------------------------------------
+
+[ref]  = 'vol001'         ; Reference vol.
+
+[vol2] = 'vol002'         ; Second test vol.
+
+; --------------- Output files  -------------------------------------
+
+[out1] = 'dif2m1'         ; Difference vol.
+
+[out2] = 'diff2m1'        ; Difference vol.
+
+; -------------- END BATCH HEADER ---------------------------------- </b>
+
+VM
+echo "[ref] is subtracted from: [vol2]"
+
+FQ                        ; Filter
+[ref]                     ; Reference vol.  (input)
+_1                        ; Filtered vol    (output)
+7                         ; Butterworth filter
+[pass-band],[stop-band]   ; Pass-band and stop-band frequencies
+
+FS [max],[min]            ; Max & min 
+_1                        ; Filtered vol    (input)
+
+[th]=([max]+[min])/2      ; The threshold is a value halfway between min & max
+
+TH M                      ; Threshold & create Mask
+_1                        ; Filtered vol    (input)
+_5                        ; Mask            (output)
+B                         ; If (pixel > threshold) Mask = 1; else Mask = 0
+[th]                      ; Threshold
+
+FS M [max],[min],[avg],[sd]  ; Statistics within  mask
+_1                        ; Filtered vol    (input)        
+_5                        ; Mask            (input)
+
+AR
+_1                        ; Filtered vol        (input)
+_7                        ; Scaled filtered vol (input)
+((p1-[avg])/[sd])
+
+
+; 2nd volume: the reference is subtracted from this volume
+FQ
+[vol2]                    ; Second vol.   (input)
+_2                        ; Filterd vol.  (output)
+7                         ; Filter type
+[pass-band],[stop-band]
+
+
+IF ([masking].EQ.2) THEN
+   ; Creates a mask for the 2nd volume
+
+   FS [max],[min]         ; max & min 
+   _2
+
+   [th]=([max]+[min])/2   ; Threshold halfway between min & max
+
+   TH M                   ; Threshold & create Mask
+   _2                     ; Filtered vol.  (input)
+   _5                     ; Mask          (output)
+   B                      ; If (pixel > threshold) Mask = 1; else Mask = 0
+   [th]                   ; Threshold
+
+ENDIF
+
+FS M [max],[min],[avg],[sd]
+_2                       ; Image
+_5                       ; Mask (From reference or created for 2nd vol)
+
+AR
+_2                      ; Filtered vol.         (input)
+_6                      ; Scaled Filterd vol.  (output)
+((p1-[avg])/[sd])
+
+SU                      ; Subtract         
+_6		        ; 2nd volume        (input)
+_7		        ; Reference         (input)
+_5		        ; Result            (output)
+*
+
+FQ                      ; Quick filter
+_5                      ; Difference volume  (input)
+_8                      ; Filtered diff volume (output)
+7                       ; Filter type
+[pass-band2],[stop-band2]
+
+FS                     ; Statistics before filtering
+_5                     ; Difference volume  (input)
+
+FS                     ; Statistics after filtering
+_8                     ; Filtered diff volume (output)
+
+CP                     ; Copy to output
+_5                     ; Difference volume  (input)
+[out1]                 ; Difference volume  (output)
+
+CP                     ; Copy to output
+_8                     ; Filtered diff volume (input)
+[out2]                 ; Filtered diff volume (output)
+
+EN
