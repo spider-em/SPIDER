@@ -1,0 +1,2589 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 3.2//EN">
+<html>
+
+<head>
+  <title>Single Particle Reconstruction Techniques</title> 
+  <link rel='stylesheet' href='mrstyle2.css' type='text/css' />
+</head>
+
+<body link="#0000ee" vlink="#0000ee" alink="#ff0000" bgcolor="#cccccc">
+
+<br />
+
+<table class="top" width = "100%" border="8" bordercolor="#99ccff">
+   <tr>
+   <td  align="left">
+   <img width="108" height="103" src="pics/new11.jpg" align="left"></td>
+
+   <td>
+   <h2 class="top">Three Dimensional Reconstruction of Single Particle 
+       Specimens using Reference Projections Without Defocus Groups</h2>
+   </td>
+
+   <td  align="right">
+   <img width="108" height="104" src="pics/new22.jpg" align="right"></td>
+   </tr>
+</table>
+<p />
+
+
+<!-- --------------------- Introduction ------------------------------------ -->
+
+<table class="heading" width="100%" >
+   <tr> <td>  
+   <p />
+   <h3 class="heading">Introduction</h3>
+   <p />
+   </td> </tr>
+</table>
+
+<p>
+ This document contains a protocal for creating a 3D reconstruction from 
+ electron micrographs without sorting the images into defocus groups. This method is an
+ alternative to the traditional SPIDER method of 
+ <a href="../../recon/mr.html"> creating a 3D reconstruction using defocus grouping</a>. 
+ In both methods, once a set of particle images has been obtained, 
+ an initial 3D reconstruction is calculated using coarse projection angles. 
+ This is followed by refinement, which iteratively adjusts the angles for finer 
+ resolution. </p>
+
+<p>In the traditional method, ensembles of particles with similar defocus values 
+ are grouped together.  A separate 3D reconstruction is computed for each 
+ "defocus group."  CTF-correction is performed when these reconstructions 
+ are merged into a final reconstruction.  
+</p>
+
+<p>
+ In this alternative method, the CTF-correction is applied at the level of 
+ windowed particle images.  This method presents certain advantages.  First, 
+ it circumvents one of the approximations when using defocus groups, namely that 
+ all particles in a defocus group follow the same CTF profile.  At high resolution,
+ where the CTF oscillates more rapidly, this assumption will not hold.  
+ Second, parallelization can be more efficient, since groups can be of identical 
+ size, independent of the number of particles at each defocus.  Third, particles 
+ from what would be sparsely populated defocus groups need not be thrown out.  
+ In principle, though not yet implemented, astigmatic images can be corrected for 
+ with this method, as can tilted-specimen images.  Lastly, interoperability with
+ other software packages, which also correct for the CTF at the level of particle
+ images, will be more straightforward.
+</p>
+
+<p>
+ However the strategy of using defocus groups has its own advantages.  
+ First is that it can readily account for the non-uniform distribution of 
+ signal-to-noise in projection data (<a href="#PP12">Penczek, 2012</a>).  
+ Second, we find that reconstructions using particle-level CTF-correction 
+ sometimes show artifacts when using iterative backprojection methods, such as 
+ <a href="../../../man/bprp.html"> <b>'BP RP'</b></a> or
+ <a href="../../../man/bpcg.html"> <b>'BP CG'</b></a>, 
+ whereas the use of defocus groups does not present such limitations.   
+</p>
+
+<p />
+
+<hr />
+<p  />
+
+<!-- --------------------- Contents ------------------------------------ -->
+
+<table class="heading" width="100%" >
+   <tr> <td>  
+   <p />
+   <h3 class="heading">Contents</h3>
+   <p />
+   </td> </tr>
+</table>
+
+
+<ul>
+<li> <a href="#Links">Links</a> -- For further information.</li>
+
+<li> <a href="#RunningSPIDER">Running  SPIDER procedure files</a> -- 
+    Getting started, and conventions used in this documentation.</li>
+
+<li> <a href="#Quick">Quick-start guide</a> -- A simplified list of steps.</li>
+
+<p />
+
+<li> <b>Protocol:</b></li>
+   <ul class="circles">
+    <li> <a href="#CreatingProject">Creating new reconstruction project</a> --  
+       Set up project directory with the proper subdirectories and procedure files.</li>
+
+    <li> <a href="#Micrographs">Selecting micrographs</a> -- 
+       Generate a list of micrographs and a preliminary screening.</li>  
+
+    <li> <a href="#CTF">Contrast Transfer Function (CTF) Estimation</a> -- 
+       Estimate the CTF for each micrograph.</li>
+
+    <li> <a href="#AUTO">Particle Windowing and Verification</a> -- 
+       Identify likely particles from the micrographs, 
+       and extract windowed images of individual particles from the micrographs.</li>
+
+    <li> <a href="#SH">Alignment</a> -- 
+       Align  the particle images to reference projections using shifts 
+       and rotations.</li>
+
+    <li> <a href="#CA">Averaging and Verification</a> -- 
+       Compute averages of each reference view to assess the distribution 
+       of projection views.</li>
+
+    <li> <a href="#3D">3D Reconstruction</a> -- 
+       Calculate a initial volume by back projection and estimate its resolution.</li>
+
+    <li> <a href="#REF">Refinement</a> -- 
+      Improvie the resolution of the reconstruction by iteratively improving the 
+      initial alignments. Each projection is given a
+      chance "to find a better home" in terms of its translation and orientation 
+      parameters.</li>
+   </ul>
+
+<li> <a href="#OTHER">Additional methods</a> -- 
+    Other useful methods, such as classification, difference maps, and 
+    frequency correction by X-ray scattering.  More details about these 
+    methods may be found on the <a href="../../../techniques.html"> techniques</a> page.</li>
+
+<li> <a href="#Refs">References</a> -- Citations to additional background information.</li>
+
+<li> <a href="#Mods">Modifications log</a> -- Recent changes to the protocol.</li>
+
+</ul>
+
+<hr />
+<p />
+
+<a name="Links"></a>
+<table class="heading" width="100%" >
+   <tr> <td> 
+   <p />
+   <h3 class="heading">Links to further information</h3> 
+   <p />
+   </td> </tr>
+</table>
+<p />
+
+
+<ul>
+  <li><a href="flowchart/flowchart.html">A flowchart of operations</a></li>
+  
+  <li><a href="docfiles.html">Format information for doc files</a> </li>
+  
+  <li>A description of the
+      <a href= "params.html">reconstruction parameters</a>.</li>
+  
+  <li>Information about images from the <a href="../../recon/zi/zidoc.html">ZI scanner</a> </li>
+
+  <li>Convert ZI scanner TIF files to SPIDER format: 
+      <a href="../../recon/zi/zi2spi.c"> zi2spi.c</a></li>
+
+  <li>Procedure files for handling circular images from 
+      <a href="../../recon/quantifoil.html">Quantifoil grids</a>.</li>
+  
+  <li><a href= "mr1verify.html">Classification-based particle verification</a>.</li>
+  
+  <li>Detailed information about <a href="refine.html">refinement</a>.</li>
+    
+  <li> <a href="../../../strategies.html"> Reconstruction strategies</a> and the 
+       <a href="../../../glossary.html"> glossary</a>.
+  </li>
+  
+  <li> <a href="#PP92">Penczek et al. (1992)</a> describe the technique 
+       of 3D reconstruction from particle images.</li>
+  
+  <li> <a href="#PP94">Penczek et al. (1994)</a> describe reconstruction using 
+       projection matching (the approach  outlined below).</li>
+
+  <li> <a href="http://www.amazon.com/gp/product/0195182189/">
+       Three-Dimensional Electron Microscopy of Macromolecular Assemblies</a>,
+       Oxford University Press,  (February 2006)</li>
+
+  <li> <a href="../../../ref.html"> More references</a>.</li>
+
+</ul>
+
+<p />
+<hr />
+
+<!-- ------------------- Running  SPIDER procedure files ------------------- -->
+
+<a name="RunningSPIDER"></a>
+<table class="heading" width="100%" >
+   <tr> <td>  
+   <p />
+   <h3 class="heading">Running SPIDER procedure files</h3>
+   <p />
+   </td> </tr>
+</table>
+
+<p />
+In the sections below, various file types are denoted by different fonts:
+
+<ul>
+<li><b>Each step in the process is bold and marked  by a bullet</b>                <br />
+   <a href="../">Procedure files</a> are links to the procedure script,            <br />
+   <font class="input">Input files  </font> for that procedure are marked in pink, <br />
+   <font class="output">Output files</font> from that procedure are marked in green.                                                                <br />
+   Sometimes more than one approach is available. 
+   Lists starting with lowercase letters indicate that you should choose:
+
+   <ol class="choice">
+      <li>one approach, or   </li>
+      <li>the other approach,</li>
+   </ol>
+   but not both (unless you want to compare the two techniques).
+   <p />
+
+   If you have <a href="../../../../tools/install.html">installed</a> them,   
+   <a href="../../../../tools/docs/tools.html"> SPIDER's Python Tools</a>   
+   <font class="guitool"> (marked in brown)</font>  
+   are usefull for analyzing some results. 
+</li>
+
+<p />
+
+<li>The processing steps are 
+     carried out by procedure files, which run many SPIDER operations automatically. 
+     To use a procedure referred to in this document, copy the procedure to your 
+     current working directory. Near the beginning 
+     of each procedure, there is a list of parameters that can be adjusted
+     according to your particular project. Some of the procedures may
+     call additional procedure(s) listed below the procedure
+     filename. You need not change anything inside these additional
+     procedures. Use the following format to run a SPIDER procedure: <br />
+   
+     <code class="snippet">spider spi/dat @proc</code>              <br />
+   
+     where 
+     <code class="snippet">spi</code> is the procedure file extension, 
+     <code class="snippet">dat</code> is the project data file extension, and 
+     <code class="snippet">proc.spi </code> is the procedure file.
+</li>
+
+</ul>
+
+
+<p />
+   The data below are sometimes shown plotted with <i>gnuplot</i>; see the
+   <a href="http://www.gnuplot.info/">Gnuplot manual</a> for details. 
+<p />
+
+<h4>After each step check the output files to make sure the results are 
+    sensible. If you are not sure what is "sensible," ask an expert. </h4> 
+</p>
+
+
+<!-- ************************ Quick-start guide ******************** -->
+
+<hr /> 
+
+<a name="Quick"></a>
+<table class="heading" width="100%" >
+   <tr> <td>    
+   <p />  
+   <h3 class="heading">Quick-start guide</h3>
+
+   <p class="explain">This is a brief listing of steps in this protocol. 
+   For simplicity, options have been limited. For further information, see below.
+   A <a href="../Procs/test_recon1.spi">procedure for testing a complete reconstruction</a>
+   using the <a href="#SH08"> Nature Protocols paper</a> data set is provided.</p>
+   
+   <p>Data extension is assumed to be: <code class="snippet">dat</code></p>
+   
+   </td> </tr>
+</table>
+</a>
+
+<p><a href="#CreatingProject"> In your working directory (<i>e.g.</i><b>user</b>):</a></p>
+
+<ol><code class="snippet">
+    <li>cp $SPIDER_DIR/docs/techs/recon1/spiproject.tar.gz <b>.</b> </li>
+    <li>tar -xvf spiproject.tar.gz                                  </li>
+    <li>cd myproject                                                </li></code></ol>
+
+<p><a href="#CreatingProject"> In your project directory (<b>myproject</b>):</a></p>
+
+<ol start=4 ><code class="snippet">
+    <li>cp &nbsp;  `which spider`  &nbsp; ./spider </li> 
+    <li> Data loading choices:
+    <ol type='A'>
+        <li>mv &nbsp; /actual-location-of-your/micrographs/raw* &nbsp;&nbsp; Micrographs/ <br />
+             spider spi/dat @make-params                                              <br />
+             spider spi/dat @resizevol                                                </li>
+        <li> tar -xvf $SPIDER_DIR/docs/techs/recon1/natproc_data_mics.tar.gz <br />   </li>
+      </ol>                                                                           </li>
+</code></ol>
+
+<p><a href="#Micrographs"> In <b>Micrographs/</b></a>: </p>
+<ol start=6><code class="snippet">
+    <li>spider spi/dat @make-mic-list                                        </li>
+    <li>spider spi/dat @shrink-mic                                           </li>
+    <li>montagefromdoc.py &nbsp; ../sel_micrograph.dat &nbsp; sm_mic_* &amp; </li>
+</code></ol>
+
+<p><a href="#Micrographs"> In <b>Power_Spectra/</b></a>: </p>
+<ol start=9><code class="snippet">
+    <li> Defocus determination choices:
+      <ol type='A'>
+        <li>spider spi/dat @powdefocus                                   </li>
+        <li>spider spi/dat @ctffind                                      </li>
+      </ol>                                                              </li>
+    <li>montagefromdoc &nbsp; ../sel_micrograph.dat &nbsp; power/pw_avg* </li>
+
+    <li>ctfmatch.py    &nbsp; power/ctf* &amp;                           </li>
+    <li>spider spi/dat @make-ctf-cor                                     </li>
+</code></ol>
+
+<p><a href="#AUTO"> In <b>Particles/</b></a>: </p>
+<ol start=13><code class="snippet">
+    <li>spider spi/dat @make-noise-img  </li>
+
+    <li> Particle picking choices
+      <ol type='A'>
+        <li>spider spi/dat @pick-at </li>
+        <li>spider spi/dat @pick-lfc </li>
+      </ol>
+    </li>
+    <li>montagefromdoc.py &nbsp; win/sel_part_0001.dat win/winser_0001.dat &amp  </li>
+    <li>[<b>Optional</b>] Initial verification
+      <ol>
+        <li>spider spi/dat @denoise-imgs                 </li>
+        <li>Use <b>Montage</b> operation in <a href="../../../../web/docs/web.html">
+          <font class="guitool">WEB</font></a>.   </li>
+      </ol>                                       </li>
+
+    <li>spider spi/dat @number-parts          </li>
+</code></ol>
+
+<p><a href="#SH"> In <b>Alignment/</b></a>: </p>
+<ol start=20><code class="snippet">
+    <li>  spider spi/dat  @restack-n-ctf      </li>
+    <li>  spider spi/dat  @make-ref-views     </li>
+    <li> Alignment choices
+      <ol type='A'>
+        <li>./spider spi/dat  @align-inseries </li>
+        <li>cp ../spider . ;  ./spider spi/dat @align-pubsub </li>
+      </ol></li>
+</code></ol>
+
+<p><a href="#CA"> In <b>Averages/</b></a>: </p>
+<ol start=23><code class="snippet">
+    <li>spider spi/dat  @select-byview     </li>
+    <li>spider spi/dat  @avg-filter-byview </li>
+    <li>spider spi/dat  @plot-cc-vs-view   </li>
+    <li>spider spi/dat  @show-ref-views    </li>
+
+    <li>[<b>Optional</b>] Classification-based verification
+    <ol>
+        <li>spider spi/dat  @verify-class-byview    </li>
+        <li>verifybyview.py views/prj001            </li> <!--  spil spi/dat @make-good-classes   -->
+        <li>spider spi/dat  @verify-combine-classes </li>
+        <li>spider spi/dat  @plot-cc-vs-view        </li>
+        <li>spider spi/dat  @show-ref-views         </li>
+        <li>spider spi/dat  @plot-ref-views         </li>
+        <li>spider spi/dat  @parts-vs-defocus       </li>
+    </ol></li>
+    <li>spider spi/dat @best-imgs</li>
+</code></ol>
+    
+<p><a href="#3D"> In <b>Reconstruction/</b></a>: </p>
+<ol start=29><code class="snippet">      
+    <li>  spider spi/dat @bp-regroup                      </li>
+
+    <li> Reconstruction choices
+      <ol type='A'>
+        <li>spider spi/dat @bp-inseries                   </li>
+        <li>cp ../spider . ;  ./spider spi/dat @bp-pubsub </li>
+      </ol>                                               </li>
+    <li>  spider spi/dat @plot-fsc                        </li>
+    <li>  spider spi/dat @make-matched-filt               </li>
+    <li>  spider spi/dat @matched-filt                    </li>
+</code></ol>
+
+
+<p><a href="#REF"> In <b>Refinement/</b></a>: </p>
+<ol start=32><code class="snippet">
+    <li> Refinement choices
+      <ol type='A'>
+        <li>./spider spi/dat @refine                      </li>
+        <li>cp ../spider . ; ./spider spi/dat @pub-refine </li>
+      </ol>                                               </li>
+    <li>  spider spi/dat @plot-fsc-curves                 </li>
+</code></ol>
+
+<hr />
+
+<!-- ************************ Creating new reconstruction project ******************** -->
+
+<a name="CreatingProject"></a>
+
+<table class="heading" width="100%" >
+   <tr> <td>      
+   <p />
+   <h3 class="heading">Creating a new reconstruction project</h3>
+
+   <p class="explain">At the start of a reconstruction project, a project 
+   directory has to be set up with the proper subdirectories and procedure files. </p>
+
+   <p>Run these procedures  in the <i>project/</i> directory.   </p>
+   </td> </tr>
+</table>
+
+<!-- SPIRE directory=_top_level_project -->
+
+ <p />
+
+ <ul>
+
+   <li><p class="action">Create a project directory containing the required 
+     subdirectories and procedure files </li> 
+
+   <ol class="choice">
+
+   <li> If using SPIDER reconstruction procedures, the procedure files below are pre-packed 
+     into a tar archive: <a href="../spiproject.tar.gz">spiproject.tar.gz</a>  
+     Unpack this tar archive inside your working directory:               <br />
+     <span class="nobreak"><code class="snippet">tar zxvf $SPIDER_DIR/docs/techs/recon1/spiproject.tar.gz </code></span> <br />
+     This will create a sub-directory called <i>myproject/</i>, containing 
+     the procedure files and subdirectories for the whole  reconstruction project. Rename 
+     <i>myproject</i> to any desired name, for example:<br />
+     <code class="snippet">mv myproject ribosome</code> 
+   </li>
+   <p />
+
+   A procedure for testing a complete reconstruction
+   <a class="project" href="../Procs/test_recon1.spi">test_recon1.spi</a> will be available in
+  your project directory.
+</li>
+</ol>
+
+<p />
+
+
+<li><p class="action">Place micrograph files in  <i>Micrographs/</i> directory</p>
+
+   <p> Place the digitized micrographs in the <i>Micrographs/</i> directory</p>
+
+   <ol class="choice">
+ 
+     <li>If you are using your own data:  <br />
+     <span class="nobreak"><code class="snippet">mv /actual-location-of-micrographs/raw* &nbsp;  Micrographs/</code></span></p>
+   
+     <p>The procedures below can accept SPIDER, Hiscan TIFF, PerkinElmer, ZI, and Nikon Coolscan data.  
+     More information about images from the ZI scanner can be found 
+     <a href="zi/zidoc.html">here</a>, and the 'C' program to convert ZI scanner TIF files to SPIDER format is called 
+     <a href="../../../..//download/zi2spi.c">zi2spi.c</a>.
+     Any of these files may have been compressed with <i>gzip</i>, so  
+     be sure to indicate the compression in: <a href= "params.html">the params file</a>.  
+     </p>
+
+     </li>
+
+     <a name="PROTOCOLS"></a>
+
+     <li><small>
+     If using the test data provided in the SPIDER distribution 
+     (originally used with the Nature Protocols paper) load the data set and unpack it:          <br />
+
+     <span class="nobreak"><code class="snippet">tar -xvf $SPIDER_DIR/docs/techs/recon1/natproc_data_mics.tar.gz </code></span> <br />
+     in your project directory. This creates:                                                    <br />
+
+     <table class="outs">
+       <tr valign="top"><td>&curren;                                                             </td>
+         <td><span class="nobreak"><font class="output">sel_micrograph</font>:</span>            </td>
+         <td>Micrograph selection doc file listing 4 micrographs 
+             used later in the protocol.                                                         </td></tr>
+
+       <tr valign="top"><td>&curren;                                                             </td>
+         <td><span class="nobreak"><font class="output">Micrographs/raw****</font>:</span>       </td>
+         <td>Four micrograph images.                                                             </td></tr>
+
+       <tr valign="top"><td>&curren;                                                             </td>
+         <td><span class="nobreak"><font class="output">orig_reference_volume.dat</font>:</span> </td>
+         <td>Reference volume.                                                                   </td></tr>
+
+       <tr valign="top"><td>&curren;                                                             </td>
+         <td><span class="nobreak"><font class="output">reference_volume.dat</font>:</span>      </td>
+         <td>Reference volume.                                                                   </td></tr>
+
+       <tr valign="top"><td>&curren;                                                             </td>
+         <td><span class="nobreak"><font class="output">params</font>:</span>                    </td>
+         <td>Reconstruction parameter file.                                                      </td></tr>
+     </table>
+
+     If you are using this data you can skip the next two steps.   
+     </small></li>
+  </li>
+  </ol>
+
+
+<li><p class="action">Create a parameter document file</p>
+
+   Some processing information is stored in a project-wide document file that is used 
+   by many procedure files. Run the interactive procedure: 
+   <a class="project" href="../Procs/make-params.spi">make-params.spi</a> 
+   in the top directory of your project. It creates a document file: <br />
+   <table class="outs">
+      <tr valign="top">  <td>&curren;                                                      </td>
+          <td><span class="nobreak"><font class="output">params</font>:</span>             </td>
+          <td>SPIDER document file containing the 
+             <a href="./params.html">reconstruction parameters                             </td></tr>
+   </table>
+</li>
+<p />
+
+
+<p>
+   <li><p class="action">[Optional] Resize reference volume</p>
+   
+   A reference volume is required. If the pixel size of your reference 
+   volume  (key 5 in the <font class="input">params</font> file) and/or the 
+   dimensions (key 17 in <font class="input">params</font>) do not match 
+   the data that you will be processing, then run: 
+   <a class="project" href="../Procs/resizevol.spi">resizevol.spi</a> which reads:
+   <font class="input">orig_reference_volume</font>,  
+
+   from the top-level project directory to resize the volume. This creates:   <br />
+
+   <table class="outs">
+      <tr valign="top"><td>&curren;                                                       </td>
+          <td> <span class="nobreak"><font class="output">reference_volume</font>:</span> </td>
+          <td>&nbsp; Resized reference volume.                                            </td></tr>
+   </table>
+   
+   The reported interpolated pixel size may not exactly match the target 
+   pixel size due to rounding errors, but the values should be close.
+   </li>
+</p>
+
+<p>
+   <li><p class="action"> Copy your current spider executable into your project</p>
+
+   <!--<a class="project" href="../Procs/clean.sh">clean.sh</a> -->
+
+   <code class="snippet">cp `which spider`  ./spider</code> <br />
+ 
+   This will ensure that the same spider exectable is available for the whole
+   project and can be used to repeat the same output at any future time.
+   </li>
+</p>
+
+</ul>
+
+
+<hr />
+<!-- ****************************** Selecting micrographs ********************* -->
+
+<a name="Micrographs"></a>
+<table class="heading" width="100%" >
+   <tr> <td>    <br />
+   <h3 class="heading">Selecting micrographs</h3>
+
+   <p class="explain">Generate a list of micrographs and screen the micrographs.</p>
+ 
+   <p>Run these procedures  in the <i>Micrographs/</i> directory.     </p>
+   </td> </tr>
+</table>
+
+<!-- SPIRE directory=Micrographs  -->
+
+   <ul>
+   
+   <li><p class="action">Create a selection file for micrograph file numbers</p>
+
+   <ol class="choice">
+   
+   <li> <a class="project" href="../Procs/make-mic-list.spi">make-mic-list.spi</a>  
+   creates a micrograph selection doc file containing non-consecutive file numbers in 
+   the top-level project directory: <br/>
+
+   <table class="outs">
+      <tr valign="top"><td>&curren;                                                   </td>
+          <td><span class="nobreak"><font class="output">sel_micrograph</font>:</span></td>
+          <td>Micrograph selection doc file listing the numbers of 
+             the micrograph files to be processed.                                    </td> </tr>
+   </table>
+   The  text part of the filenames are entered as templates in the top 
+   level procedure files - see below).  If you need to add/exclude
+   files from this list , use a text editor to edit the appropriate
+   lines, then use the 
+   <a href="../../../man/docren.html">
+   <b>'DOC REN'</b></a> operation in SPIDER to renumber lines in the selection doc file.</li>
+   <br />
+   <li>
+   The Python script <a href="../Procs/mkfilenums.py">mkfilenums.py</a> creates 
+   a file containing possibly non-consecutive file numbers. 
+   The syntax, not including the proper data extension. is: <br />
+       <code class="snippet">mkfilenums.py ../sel_micrograph.dat Micrographs/raw*</code> </li>
+   </ol>
+
+   <p>
+   <li><p class="action">[Optional] Shrink micrographs</p>
+   
+   Before screening the micrographs for quality, it may be 
+   helpful to shrink the micrographs in order to quickly scan through them.    <br />  
+   <a class="project" href="../Procs/shrink-mic.spi">shrink-mic.spi</a>, reads:
+   <font class="input">../sel_micrograph</font>, and 
+   <font class="input">raw****</font>.                                         <br />
+   
+   Set a reduction factor:  <i>[reduction]</i>  that will allow for placing a 
+   reasonable number of micrographs on your computer screen (say, 2 to 8) at a 
+   sufficient level of detail to evaluate them.
+ 
+   The procedure creates:                              <br />
+      <table class="outs">
+      <tr valign="top"><td>&curren;                                                 </td>
+          <td> <span class="nobreak"><font class="output">sm-mic****</font>:</span> </td>
+          <td>&nbsp; Reduced size micrographs.                                      </td></tr>
+   </table>
+   </li>
+   </p>
+
+   <li><p class="action">[Optional] Screen micrographs</p>
+
+   Screen the micrographs using 
+   <a href="../../../techs/recon1/Procs/montagefromdoc.py">
+   <font class="guitool">montagefromdoc.py</font></a>.  The syntax, not including the 
+   proper data extension. is:                        <br />
+   <span class="nobreak">  <code class="snippet">montagefromdoc.py ../sel_micrograph.dat sm-mic*</code> </span><br />
+   Screening creates:
+   <table class="outs">
+      <tr valign="top"><td>&curren;                                                   </td>
+        <td> <span class="nobreak"><font class="output">sel_micrograph</font>:</span> </td>
+        <td>&nbsp; An updated micrograph selection file.                              </td></tr>
+   </table>
+   </li>
+
+</li>
+<p />
+
+</ul>
+
+
+<hr />
+<!-- ******************************* CTF  estimation *********************** --> 
+<a name="CTF"></a> 
+
+<table class="heading" width="100%"><tr><td>              <br />
+   <h3 class="heading">Contrast Transfer Function Estimation</h3>
+
+   <p class="explain">Estimate defocus of each micrograph by calculating its 
+    power spectrum. </p> 
+
+   <div class="explain">For more information, see:
+   <ol >
+     <li> <a href="../../../techs/ctf/ctf.html">
+          Contrast transfer function correction</a> tutorial.               </li>
+
+     <li> <a href="../../../../tools/doc/ctfdemo.html">
+          <font class="guitool">ctfdemo</font></a>, a program that 
+          demonstrates effects of various parameters on the CTF.            </li>
+
+     <li> <a href="#PP97">Penczek et al., 1997</a> for a fuller discussion. </li>
+  </ol>
+  </div>
+
+  <p>Run these procedures  in the <i>Power_Spectra/</i> directory.  <br />
+</td></tr></table>
+
+<!-- SPIRE directory=Power_Spectra subdirectories=power -->
+ <p>
+
+ <ul>
+ <a name="DEF"></a>
+
+<li><p class="action"> Calculate the power spectrum for each micrograph and
+   determine defocus using one of the following two methods:</p> 
+   They read:
+   <font class="input">..params</font>, 
+   <font class="input">../sel_micrograph</font>, and 
+   <font class="input">../Micrographs/raw****</font>, They create:  
+
+   <table class="outs">
+      <tr valign="top"><td>&curren;                                                       </td>
+          <td><span class="nobreak"><font class="output">power/pw_avg_****</font>:</span> </td>
+          <td>2D power spectra, each is an average of many smaller
+              power spectra calculated over the surface of the micrograph.                </td> </tr>
+
+      <tr valign="top"><td>&curren;                                                       </td>
+          <td><span class="nobreak"><font class="output">power/roo_****</font>:</span>    </td>
+          <td>Doc files of 1D profiles of the rotationally averaged power spectra.  
+          These doc files can be plotted with <b>gnuplot</b> or 
+          <a href="../../../../tools/doc/pyplot.html">
+          <font class="guitool">pyplot</font></a>                                         </td>  </tr>
+
+       <tr valign="top"> <td>&curren;                                                     </td>
+          <td><span class="nobreak"><font class="output">power/ctf_****</font>:</span>    </td>
+          <td>Doc files of the background-subtracted 1D power spectra.                    </td></tr>
+
+       <tr valign="top"> <td>&curren;                                                     </td>
+          <td><span class="nobreak"><font class="output">defocus</font>:</span>           </td>
+          <td>A doc file of defocus values.</td>
+   </table>
+   </p>
+
+  
+   <p>The <font class="output">ctf****</font> files can be verified with 
+   <a href="../../../../tools/doc/ctfmatch.html">
+   <font class="guitool">ctfmatch.py</font></a></p>
+
+ Choices:
+<ol class="choice">
+ <li><a class="project" href="../Procs/powdefocus.spi">powdefocus.spi</a> 
+   (which calls SPIDER procedure <a class="project" href="../Procs/load-mic.spi">load-mic.spi</a>)
+   loads each micrograph, computes an averaged power spectrum, and estimates defocus
+   using SPIDER operation: <a href="../../../man/tfed.html"><b>'CTF ED'</b></a>.
+</li>
+</p>
+
+ 
+<p>
+<li> <a class="project" href="../Procs/ctffind.spi">ctffind.spi</a> 
+   (which calls SPIDER procedure <a class="project" href="../Procs/load-mic.spi">load-mic.spi</a>)
+   reads each micrograph, computes an averaged power spectrum, and estimates defocus, 
+   astigmatism, and cut-off frequency using SPIDER operation:  
+   <a href="../../../man/ctffind.html"><b>'CTF FIND'</b></a>.
+   This operation invokes the functionality from the MRC 
+   <a href="http://emlab.rose2.brandeis.edu/software">ctffind3</a>. 
+</li>
+<p />
+
+<p>
+<li>Run <a href="../Procs/powdefocus.spi">powdefocus.spi</a> 
+    as in <b>a.</b> to create power spectra: 
+    <font class="input">power/roo_****</font>.  Then use the 
+    <a href="../../../../web/docs/ctf.html">CTF from doc file</a> operation 
+    in <font class="guitool">WEB</font> to read <font class="input">power/roo****</font>. 
+    The user then manually fits a CTF model to the 1D profiles.
+</li></p>
+</ol>
+
+<li>
+   <p class="action">Check the rings in the power spectrum images</p>
+
+   <p>
+   Make a montage using 
+   <a href="../../../../web/docs/web.html"><font class="guitool">WEB</font></a> 
+   (size reduction: 4) to
+   look at these power spectra. They are equivalent to diffraction
+   patterns obtained in an optical diffractometer. It is absolutely
+   important that you screen the spectra before proceeding any
+   further.</p>
+   <p>
+   <table class="outs">
+      <tr valign="top">
+         <td> Things to look out for:                                                 <br />
+              Are the Thon rings round?                                                <br /> 
+              Do the rings extend to high resolution?                                  <br />
+                                                                                      <br />
+              You can discard micrographs that show one of the following artifacts:    <br />
+              &nbsp;&nbsp; Rings that are cut off unidirectionally (evidence of drift).             <br />
+              &nbsp;&nbsp; Rings that are elliptical, or even  hyperbolic (evidence of astigmatism) &nbsp;&nbsp;&nbsp; .<br />
+          </td>
+
+         <td><a href="pics/power.jpg"><img width="182" height="243" src="pics/power.jpg"></a> </td> </tr>
+   </table>
+   </p>   
+</li>
+
+<li>
+   Remove bad micrographs from the selection doc file by either:
+   
+   <ol class="choice">
+   
+   <li>Using a text editor, remove the lines corresponding to the micrographs numbers 
+       from <font class="input">sel_micrograph</font> and then use the 
+       <a href="../../../man/docren.html">
+       <b>'DOC REN'</b></a> operation in SPIDER to renumber the lines in this 
+       selection doc file.</li>
+   
+   <li>Screen the power spectra using 
+   <a href="../Procs/montagefromdoc.py"> <font class="guitool">montagefromdoc.py</font></a>.
+   The syntax, not including the proper data extension. is:         <br />
+     <code class="snippet">montagefromdoc.py ../sel_micrograph.dat power/pw_avg_*</code> 
+   </li>
+   
+   </ol>
+   
+<li><p class="action">Generate CTF profiles for each micrograph.</p>
+
+    <a class="project" href="../Procs/make-ctf-cor.spi">make-ctf-cor.spi</a>  
+       generates a set of 1D profiles, which will be applied to subsequent particle images. It reads:
+    <font class="input">..params</font>, 
+    <font class="input">defocus</font>, and 
+    <font class="input">power/roo_doc_****</font>.  It creates: 
+ 
+    <table class="outs">
+      <tr valign="top"><td>&curren;                                                          </td>
+         <td><span class="nobreak"><font class="output">power/straightctf_****</font>:</span></td>
+         <td>1D profile of the normal CTF.                                                   </td></tr>
+
+      <tr valign="top"><td>&curren;                                                          </td>
+         <td><span class="nobreak"><font class="output">power/flipctf_****</font>:</span>    </td>
+         <td>1D profile corresponding to CTF-correction by phase-flipping.                   </td></tr>
+
+      <tr valign="top"><td>&curren;                                                          </td>
+         <td><span class="nobreak"><font class="output">power/trapctf_****</font>:</span>    </td>
+         <td>1D profile of the normal CTF, except that low-resolution terms 
+             are unaffected.                                                                 </td></tr>
+
+      <tr valign="top"><td>&curren;                                                          </td>
+         <td><span class="nobreak"><font class="output">power/firstmin</font>:</span>        </td>
+         <td>Listing of the first CTF extremum and first zero for each micrograph.<br />
+             These values can be useful for filtering the images to the first 
+             phase reversal.                                                                 </td></tr>
+
+      <tr valign="top"><td>&curren;                                                          </td>
+         <td><span class="nobreak"><font class="output">viewtrap.gnu</font>:</span>          </td>
+         <td>Gnuplot script for plotting the 1D profiles of the the computed 
+             transfer functions.                                                             </td></tr>
+   </table>
+ 
+
+   <table>
+      <tr valign="top">
+        <td> <!-- ====================== left ============ -->
+          <div class="left">
+
+          <p>In the Gnuplot output script <font class="output">viewtrap.gnu</font>
+          one micrograph is chosen to plot the corresponding 1D transfer-function profiles. 
+          By default, the micrograph with the highest defocus is chosen.  
+          To plot a different micrograph's profiles, 
+          set the parameter <i>[mic2plot]</i> to a different micrograph number in 
+          <a class="project" href="../Procs/make-ctf-cor.spi">make-ctf-cor.spi</a>, 
+          or simply edit the Gnuplot script.  The  plot should be displayed 
+          automatically, if not  <a href="gnuplot.html?file=viewtrap.gnu">click here</a>.</p>
+  
+          The 1D profile outputs are interchangeable for CTF correction in the later procedures, but 
+          by default the <font class="output">power/flipctf****</font> files will be used. </p>
+        </td>
+        <td><!-- ====================== right ============ -->
+          <div class="right">
+
+          <a href="pics/viewtrap.jpg"
+             <img src="pics/small_viewtrap.jpg"></img></a>.
+        </td>
+      </tr > 
+   </table>
+
+</li>
+<p />
+
+
+</ul>
+
+<hr />
+<!-- *********************** Particles - Windowing and Verification ******************* -->
+
+<a name="AUTO"></a> 
+<table class="heading" width="100%"><tr><td>      
+   <p />
+   <h3 class="heading">Particle Windowing and Initial Verification</h3>
+
+   <p class="explain">A particle picking procedure file analyzes each micrograph, 
+      cutting out small windows of likely particle candidates. This is followed 
+      by a manual selection process that identifies the good particle images and 
+      rejects the bad ones. Particles automatically output by the procedure file are 
+      said to be <i>windowed</i>; the subset that are manually chosen are said to 
+      be <i>verified</i>.
+   </p>
+
+   <p>Run these procedures  in the <i>Particles/</i> directory.</p>
+   </td></tr>
+</table>
+
+<!-- SPIRE directory=Particles subdirectories=coords, good, win, filt    -->
+
+<ul>
+
+<li><p class="action">Select a background noise file</p>
+   A noise image is required to normalize the backgrounds of the
+   particle images. Do one of the following:
+   <p />
+   <ol class="choice">
+      <li>Use a noise image from a previous project (this is the easier
+         way). The window sizes do not need to match.
+      </li>
+      <p />
+
+      <li>
+         <a class="project" href="../Procs/make-noise-img.spi">make-noise-img.spi</a> calls 
+         <a class="project" href="../Procs/convert-p.spi">convert-p.spi</a> and reads: 
+         <font class="input">../Micrographs/raw0001</font>.  It  creates: <br />
+ 
+         <table class="outs">
+            <tr valign="top"><td>&curren;              </td>
+                <td><font class="output">noise</font>: </td>
+                <td> &nbsp; A noise image.             </td></tr>
+         </table>
+
+      <table>
+      <tr valign="top">
+        <td> <!-- ====================== left ============ -->
+          <div class="left">
+
+          <p>This noise file is randomly selected from a set of files 
+          (<font class="output">tmpnoise/noi***</font>) that are windowed from regions 
+          in the micrograph that appear not to contain any particles.   
+     
+          View the selected noise file.   
+          If it has any structure (particle, junk), then select one of the other
+          candidates and copy it to <font class="output">noise.dat</font>.</p>
+        </td>
+        <td> <!-- ====================== right ============ -->
+          <div class="right">
+
+          <a  href="pics/noise.jpg"
+          <img src="pics/noise.jpg"></img></a><br />
+          Noise image
+        </td>
+      </tr > 
+      </table>
+
+      </li>
+  </ol>
+
+  <p />
+
+  <li> <p class="action">Run automatic phase of particle selection</p>
+
+   Any of the following three approaches can be used.
+   <p />
+
+   <ol class="choice">
+    <li>
+       <a class="project" href="../Procs/pick-at.spi">pick-at.spi</a> 
+       (which calls:  
+       <a class="project" href="../Procs/convert-p.spi">convert-p.spi</a> and 
+       <a class="project" href="../Procs/pick-at-p.spi">pick-at-p.spi</a>)
+       applys correlation with a Gaussian blob to window particles.
+       The micrographs are decimated by 1/4,
+       Fourier filtered with a Gaussian low pass filter, and searched for
+       peaks over regions corresponding to particle dimensions. Particles
+       are windowed out and centered, then peak locations are corrected, and
+       particles are windowed again. This procedure uses histogram
+       equalization and reads: 
+         <font class="input">sel_micrograph        </font>,  
+         <font class="input">noise                 </font>, and  
+         <font class="input">../Micrographs/raw****</font>. 
+       It creates:                                                    <br />
+
+       <table class="outs">
+         <tr valign="top"><td>&curren;                                                          </td>
+              <td><span class="nobreak"><font class="output">win/sel_part_****</font>:</span>   </td>
+              <td>Particle selection doc file for each micrograph.                              </td></tr>
+
+          <tr valign="top"><td>&curren;                                                         </td>
+              <td><span class="nobreak"><font class="output">win/data_bymic_****</font>:</span> </td>
+              <td>Stacked particle images.                                                      </td></tr>
+
+           <tr valign="top"><td>&curren;                                                        </td>
+              <td><span class="nobreak"><font class="output">coords/pkcoor****</font>:</span>   </td>
+              <td>Peak coordinates for particles.                                               </td></tr>
+
+          <tr valign="top"><td>&curren;                                                         </td>
+              <td><span class="nobreak"><font class="output">coords/ulcoor****</font>:</span>   </td>
+              <td>Upper-left corner coordinates for particle windows.                           </td></tr>
+       </table>
+    </li>
+    <p />
+
+    <li> <a class="project" href="../Procs/pick-lfc.spi">pick-lfc.spi</a> 
+       (which calls  
+       <a class="project" href="../Procs/convert-p.spi">  convert-p.spi</a> and
+       <a class="project" href="../Procs/pick-lfc-p.spi">pick-lfc-p.spi</a>)  
+       uses 'Local Fast Correlation' to window particles.                  <br />
+       This algorithm uses 
+       <a href="../../../partpick.html#LFC">local cross-correlation</a> 
+       calculated using Fourier methods developed by
+       <a href="#AR03">Roseman (2003)</a>. The implementation is described in 
+       <a href="#BR04">Rath and Frank (2004)</a>. A reference volume is required
+       to generate projections at desired Eulerian angles for 
+       searching different orientations of the search image in the micrograph. 
+       <a  href="../Procs/pick-lfc.spi">pick-lfc.spi</a>
+       also performs a histogram-fitting normalization on the picked images.
+       It reads: 
+         <font class="input">sel_micrograph        </font>, 
+         <font class="input">noise                 </font>, 
+         <font class="input">../Micrographs/raw****</font>, and
+         <font class="input">../reference_volume   </font>.
+
+ 
+       The procedure creates:                                        <br />
+
+        <table class="outs">
+
+          <tr valign="top"><td>&curren;                                                         </td>
+              <td><span class="nobreak"><font class="output">win/sel_part_****</font>:</span>   </td>
+              <td>Particle selection doc file for each micrograph.                              </td></tr>
+
+          <tr valign="top"><td>&curren;                                                         </td>
+              <td><span class="nobreak"><font class="output">win/data_bymic_****</font>:</span> </td>
+              <td>Stacks of particle images for each micrograph.                                </td></tr>
+
+           <tr valign="top"><td>&curren;                                                        </td>
+              <td><span class="nobreak"><font class="output">coords/pkcoor****</font>:</span>   </td>
+              <td>Peak coordinates for particles.                                               </td></tr>
+
+          <tr valign="top"><td>&curren;                                                         </td>
+              <td><span class="nobreak"><font class="output">coords/ulcoor****</font>:</span>   </td>
+              <td>Upper-left corner coordinates for particle windows.                           </td></tr>
+       </table>
+    </li><p />
+    
+    <li>
+       Window particles using <a href="http://blake.bcm.edu/emanwiki/EMAN2/Programs/e2boxer">
+       <font class="guitool">e2boxer.py</font></a> from 
+       <a href="http://blake.bcm.edu/emanwiki/EMAN2">EMAN2</a>, 
+       saving the coordinates. Then run:
+       
+       <ol>
+           <li><a class="project" href="../Procs/eman2spider.spi">eman2spider.spi</a>, 
+           (which calls Python procedure 
+           <a href="../Procs/emancoords2spiderdoc.py">emancoords2spiderdoc.py</a> and 
+           requires the SPIRE libraries). It creates:                           <br />
+            <table class="outs">
+              <tr valign="top"><td>&curren;                                                        </td>
+                  <td><span class="nobreak"><font class="output">win/sel_part_****</font>:</span>  </td>
+                  <td> Particle selection doc file for each micrograph.                            </td></tr>
+
+              <tr valign="top"><td>&curren;                                                        </td>
+                  <td><span class="nobreak"><font class="output">coords/pkcoor_****</font>:</span> </td>
+                  <td>Pixel coordinates for <i>center</i> of particle images.                      </td></tr>
+            </table></li>
+            
+           <li><a class="project" href="../Procs/rewindow.spi">rewindow.spi</a>, 
+           windows out the particle images. It creates:             <br />
+            <table class="outs">
+              <tr valign="top"><td>&curren;                                                        </td>
+                  <td><span class="nobreak"><font class="output">win/data_bymic_****</font>:</span></td>
+                  <td>Stacks of particle images for each micrograph.                               </td></tr>
+            </table></li>
+       </ol>
+    </li>
+    
+  </ol>
+</li>
+<p />
+
+<a name="PFILT"></a>
+<li><p class="action">[Optional] Low-pass filter particle images before particle verification.</p>
+
+    <a class="project" href="../Procs/denoise-imgs.spi">denoise-imgs.spi</a> 
+       filters a set of images, adjusting filter settings for each micrograph, 
+       based on its defocus.  It reads:
+       <font class="input">../sel_micrograph   </font> and 
+       <font class="input">win/data_bymic_**** </font>. 
+       It creates:                   <br />
+   <table class="outs">
+
+      <tr valign="top"><td>&curren;                                                              </td>
+         <td><span class="nobreak"><font class="output">filt/data_filt_bymic_****</font>:</span> </td>
+         <td>Stacks of low-pass filtered particle images.                                        </td></tr>
+   </table>
+
+   <table>
+      <tr valign="top">
+        <td><!-- ====================== left ============ -->
+          <div class="left">
+
+          <p> Manual selection of good particles (the next step) is easier if
+          the particles have been low-pass filtered beforehand. Use the 
+          filtered particles, not the raw particles, during selection in 
+          <a href= "../../../../web/docs/web.html">
+          <font class="guitool">WEB</font></a>. 
+          </p>
+        </td>
+
+        <td><!-- ====================== right ============ -->
+          <div class="right">
+
+          <a  href="pics/data_bymic_0001_5.jpg"
+          <img src="pics/data_bymic_0001_5.jpg"></img></a> <br />
+          Unfiltered
+        </td>
+        
+        <td>
+          <div class="right">
+
+          <a  href="pics/data_filt_bymic0001_5.jpg"
+          <img src="pics/data_filt_bymic0001_5.jpg"></img></a> <br />
+          Filtered
+        </td>
+      </tr > 
+   </table>
+
+
+</li>
+<p />
+
+<li><p class="action">Verify the windowed particles</p>
+
+   <p>Sort through the output files to eliminate any non-particles.
+   This step is optional if using 
+   <a href="mr1verify.html">classification-based verification</a> 
+   later on.</p>
+   
+   <ol class="choice">
+
+   <li>This can be done in 
+   <a href="../../../../web/docs/web.html"><font class="guitool"> WEB</font></a> using the 
+   <a href="../../../../web/docs/categorize.html"> Categorize from doc file</a> operation. 
+   If, for example, you would like to view 
+   the particles for micrograph #1234, navigate to the <i>win/</i> directory and select 
+   <font class="input">sel_part_1234.dat</font>, and when asked for the image template, enter: 
+   <font class="input">winser_1234@*</font> <br />
+   When the particle image files are displayed on the screen, use the mouse
+   to click on each good particle. For each micrograph, save your 
+   selections to a file called, for the example above, 
+   <font class="output">good/good1234</font>. (More details in the 
+   <a href="../../../faq.html#pick">SPIDER FAQ</a> and 
+   <a href="../../../partpick.html">partpick.html</a>).            <br />
+
+   <table class="outs">
+      <tr valign="top"><td>&curren;                                                 </td>
+         <td><span class="nobreak"><font class="output">good/good****</font>:</span></td>
+         <td>Particle selection doc files, one for each micrograph.                 </td>
+      </tr>
+   </table>
+
+   If there are too many particles to fit on the screen comfortably, run
+   <a class="project" href="../Procs/micmontagedocs.spi">micmontagedocs.spi</a>, 
+   which will break each <font class="input">sel_part_****</font> file into smaller files 
+   of the form: 
+   <span class="nobreak"><font class="output">win/docmontage****_##</font></span>
+  (by default with 200 particles each), and select these files using 
+   <i>Categorize from doc file</i> in <font class="guitool">WEB</font> instead. 
+</li>                                                                      <br />
+   
+<li>Alternatively, you can screen the particle's micrograph using 
+   <a href="../Procs/montagefromdoc.py"> <font class="guitool">montagefromdoc.py</font></a>, 
+   with the syntax to open micrograph #1234:                                  <br />
+   <span class="nobreak"><code class="snippet">montagefromdoc.py coords/pkcoor_1234.dat</code></span>   <br />
+   You can open a new micrograph's particles with the <i>Open Selections</i> option.
+</li>
+   
+</ol>
+</li>
+
+<p />
+
+<!-- !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+<li><small>If using the Nature Protocols data set, only four micrographs are available
+    in the data set.  If you wish to switch and continue using all 14 micrographs's
+    verified particles then you will have to load the complete set of data at this step!
+
+    Rename the following files:</small>
+        <br /><code><b>mv sel_micrograph_14mics.dat sel_micrograph.dat
+        <br />mv Power_Spectra/defocus_14mics.dat Power_Spectra/defocus.dat</b>
+        </code>
+</li>
+!!!!!! -->
+
+
+<li><p class="action">Remove duplicate particles, and assign a unique global particle 
+                      number for each image</p>
+
+   <p><a class="project" href="../Procs/number-parts.spi">number-parts.spi</a> 
+   will assign a global particle number that will help track particles later as they are 
+   grouped and regrouped.  This number will optionally be placed in the particle image file's
+   header for future reference.</p>
+   
+   <p>If you verified particles from each micrograph using 
+   <font class="guitool">WEB</font>, use as input 
+   the selection file <font class="input">good/good****</font> (the default).
+   If you did not verify particles using <font class="guitool">WEB</font>, then use as input 
+   <font class="input">win/sel_part_****</font> (commented out in the procedure). <br />
+   It also reads: 
+    <font class="input">sel_micrograph</font>, and
+    <font class="input">win/data_bymic_****</font>. </p>
+
+   <p>If you know from experience that 
+   <a href="../Procs/pick-lfc.spi">pick-lfc.spi</a>, for example,
+   windows too many particles, you can set the register <i>[max-particles]</i> 
+   to the expected number. 
+   The first [max-particles] number of particles will be retained, assuming that 
+   the particles are sorted 
+   from best to worst, as is the case in <a href="../Procs/pick-lfc.spi">pick-lfc.spi</a>.</p>
+   
+   <p>If you are appending to an existing data set, set the register <i>[first-global]</i> 
+   to a  number unused prior,  for example, the last particle number used plus 1.</p>
+   
+   <p>This procedure will optionally add the global particle number to the image header, 
+   specified with the variable <i>[labelheader-yn]</i>.  
+   As particle images get copied from one place to another -- 
+   <i>e.g.</i>, micrograph stacks, parallelization stacks, etc. -- this identifier 
+   will be retained in the copies.  
+   Modification of the image stacks in this manner is somewhat slow, 
+   in my test case taking several minutes instead of less than one minute. 
+   However, if time is not an issue, or if you anticipate bookkeeping issues, 
+   keep this header-assignment step, which is active by default.</p>
+   
+   The procedure creates:  <table class="outs">
+      <tr valign="top"><td>&curren;                                                           </td>
+         <td><span class="nobreak"><font class="output">good/sel_part_****</font>:</span>     </td>
+         <td>A set of particle selection doc files, one for each micrograph,
+             listing unduplicated selected particle numbers.                                  </td></tr>
+                     
+      <tr valign="top"><td>&curren;                                                           </td>
+         <td><span class="nobreak"><font class="output">win/micwin2glonum_****</font>:</span> </td>
+         <td>A set of look-up tables for the selected particles in each micrograph, 
+             mapped to a unique global particle number.                                       </td></tr>
+
+      <tr valign="top"><td>&curren;                                                           </td>
+         <td><span class="nobreak"><font class="output">win/glonum2micwin</font>:</span>      </td>
+         <td>A reverse look-up table for the selected particles in each micrograph, 
+             mapped to a unique global particle number.                                       </td></tr>
+
+      <tr valign="top"><td>&curren;                                                           </td>
+         <td><span class="nobreak"><font class="output">percent_selected</font>:</span>       </td>
+         <td>A doc file listing percentages of automatically picked vs 
+             manually selected particles for each micrograph and overall.                     </td></tr>
+
+   </table>
+</li>
+
+</ul>
+
+<hr />
+
+<!-- ********************** Alignment ****************************************** -->
+<a name="SH"></a> 
+
+<table class="heading" width="100%">
+   <tr><td> 
+   <p />
+   <h3 class="heading">Alignment</h3>
+
+   <p class="explain">
+   Reference images are generated from the reference volume. Data particles 
+   are compared to each reference to find the best match, and the corresponding 
+   transformations (shifts and rotations) are written to a doc file. Finally, 
+   the transformations are applied to the data images, aligning them to the 
+   references.   </p>
+
+   <p>Run these procedures  in the <i>Alignment/</i> directory.</p>
+   </td></tr>
+</table>
+<!-- SPIRE directory=Alignment  subdirectories=output -->
+
+<!--   Optional procedure to check defocus distribution 
+   <a class="project" href="../Procs/good-parts-bymic.spi">good-parts-bymic.spi</a> 
+-->
+
+<ul>
+
+
+<li>
+   <p class="action">CTF correct images and assign to groups for parallelization.   </p>
+
+   Regroup images as desired.   The number of new groups is arbitrary, but 
+   a reasonable starting point would be the number of nodes available on your cluster 
+   (or half that number, etc.).  If subsequent alignment is not going to be parallelized, 
+   the number of new groups can be set to 1 (though not required). The  procedure: 
+   <a class="project" href="../Procs/restack-n-ctf.spi">restack-n-ctf.spi</a> 
+   to: <i>0</i> reads: 
+   <font class="input">../params                         </font>, 
+   <font class="input">../sel_micrograph                 </font>, 
+   <font class="input">../Particles/good/sel_part_****   </font>, 
+   <font class="input">../Particles/win/data_bymic_****  </font>, and 
+   <font class="input">../Power_Spectra/power/flipctf****</font>. 
+   and restacks particles into an arbitrary (user-defined) number of groups for parallelization. 
+   It optionally applies CTF correction to the images during restacking.  
+   A rotationally invariant 1D profile is used to correct for the CTF. 
+   In principle, a 2D CTF could be used, which could correct for astigmatism.
+   The procedure creates:        
+
+   <table class="outs">
+      <tr valign="top"><td>&curren;                                                            </td>
+          <td><span class="nobreak"><font class="output">sel_group</font>:</span>              </td> 
+          <td>New group selection doc file.                                                    </td></tr>
+
+      <tr valign="top"><td>&curren;                                                            </td>
+          <td><span class="nobreak"><font class="output">data_ctf_***</font>:</span>           </td>
+          <td>New particle image stacks.                                                       </td></tr>
+
+      <tr valign="top"><td>&curren;                                                            </td>
+          <td><span class="nobreak"><font class="output">sel_part_***</font>:</span>           </td>
+          <td>New particle selection doc files.                                                </td></tr>
+
+      <tr valign="top"><td>&curren;                                                            </td>
+          <td><span class="nobreak"><font class="output">output/part2glonum_***</font>:</span> </td>
+          <td>Lookup tables listing global number for particles.                               </td></tr>
+
+   </table>
+    
+</li>
+<p />
+
+<li><p class="action">Create reference projections for alignment from a reference volume</p>
+
+    <p> Reference projections (images) are views of the reference volume at known angles.
+    In what follows, angular sampling is set to 15 degrees, which
+    results in 83 reference projections. A reference volume
+    from the top level project directory is needed to create the projections. 
+    The row and column dimensions of the reference volume must match the 
+    dimensions of the particle windows. (see 
+    <a class="project" href="../Procs/resizevol.spi">resizevol.spi</a>)
+    </p>
+
+   <a class="project" href="../Procs/make-ref-views.spi">make-ref-views.spi</a> reads:
+   <font class="input">../reference_volume</font>. It creates two sets of files:  <br />
+
+   <table class="outs">
+
+      <tr valign="top"><td>&curren;                                     </td>
+          <td><span class="nobreak"><font class="output">../Averages/sel_proj</font>:</span>         </td>
+          <td>List of reference views.                                  </td></tr>
+
+       <tr valign="top"><td>&curren;                                    </td>
+          <td><span class="nobreak"><font class="output">refangles</font>:</span>                    </td>
+          <td>A doc file from
+             <a href="../../../man/voea.html"><b>'VO EA'</b></a>
+             listing the three Euler angles for each of the projections.</td></tr>
+
+      <tr valign="top"><td>&curren;                                     </td>
+          <td><span class="nobreak"><font class="output">projs/prj_01</font>:</span>                 </td>
+          <td>Stacked reference images from:    
+              <a href="../../../man/pj3q.html"><b>'PJ 3Q'</b></a> 
+              corresponding to the angles in the preceeding file.       </td></tr>
+   </table>
+
+   <small> Note:  The 84'th projection angle listed in: <font class="output">refangles</font>
+   is ignored as it has the same direction as a previous angle.</small>
+   <p />
+</li>
+
+<p />
+
+<li><p class="action">Align particles to the reference projections</p>
+
+    <p>Alignment is compute-intensive and benefits by parallelization. 
+    Whether you are running the alignment in parallel or in series, edit (but do not run)
+    <a class="project" href="../Procs/align-settings.spi">align-settings.spi</a>, 
+    which reads parameters and sets filenames.                             <br /> 
+    Some notable parameters in
+    <a class="project" href="../Procs/align-settings.spi">align-settings.spi</a> are :
+
+    <table class="outs">
+      <tr valign="top"><td>&curren;                                   </td>
+          <td> <b><i>[shrange]</i></b>:                               </td>
+          <td> Translation search range.</td></tr> 
+
+      <tr valign="top"><td>&curren;                                   </td>
+          <td> <b><i>[step]</i></b>:                                  </td>
+          <td>Translation step size.  The operation 
+              <a href="../../../man/apsh.html">'AP SHC'</a>
+              tries different combinations of shifts in increments of <i>[step]</i> 
+              up to <i>[shrange]</i>,  performs an orientational alignment, 
+              and chooses the best one. (See notes in the
+              <a href="../../../man/apsh.html">'AP SHC' documentation</a>.) <br /> 
+              For example, with a <i>[step]</i> and <i>[shrange]</i> both of 2, 
+              'AP SHC' will try shifts of (-2,2),(0,2),(2,2),(-2,0),(0,0),
+                                          (2,0),(-2,-2),(0,-2), and (2,-2).
+           </td></tr> 
+
+      <tr valign="top"><td>&curren;                                   </td>
+          <td> <b><i>[r2]</i></b>:                                    </td>
+          <td>Outer alignment radius (pixels). The sum of 
+              <i>[shrange]</i> and <i>[r2]</i> must be less than 
+              half the image dimension.
+           </td></tr> 
+
+      <tr valign="top"><td>&curren;                                   </td>
+          <td> <b><i>[max-wait]</i></b>:                              </td>
+          <td> Will wait up to 10 minutes by default before reading a new group's stack, 
+               in order to distribute disk I/O.                       </td></tr> 
+
+     <tr valign="top"><td>&curren;                                    </td>
+          <td> <b><i>[incore-yn]</i></b>:                             </td>
+          <td> Will load input images into incore stack. This more efficient, 
+               but if you have insufficient memory, set it to zero.   </td></tr> 
+    </table>
+
+    <p />
+    The following alignment options choices depend on whether using you are using 
+    <a href="../../../../pubsub/pubsub.html">PubSub</a> for parallelization 
+    on a compute cluster:                                            <br />
+
+   <ol class="choice">
+
+   <li>If not using PubSub, run SPIDER procedure:
+      <a class="project" href="../Procs/align-inseries.spi">align-inseries.spi</a> 
+      which calls:  
+      <a class="project" href="../Procs/align-settings.spi">align-settings.spi</a>
+      to carry out the alignment parameter determination and alignment using SPIDER operations:
+      <a href="../../../man/apshc.html"><b>'AP SHC'</b></a> and  
+      <a href="../../../man/rtsf.html"><b>'RT SF'</b></a> . 
+   </li>
+   <p />
+
+   <li>If you are using PubSub, run 
+      <a class="project" href="../Procs/align-pubsub.spi">align-pubsub.spi</a> 
+      which calls:  
+      <a class="project" href="../Procs/align-settings.spi">align-settings.spi</a>, 
+      <a class="project" href="../Procs/check-exist.spi">   check-exist.spi   </a>,    
+      <a class="project" href="../Procs/align-main.spi">    align-main.spi    </a>, and 
+      <a class="project" href="../Procs/wait-pub.spi">      wait-pub.spi      </a> 
+      according to the following steps:
+      <ul>
+        <li>Copy the SPIDER executable to the local directory and name it  
+             <i>spider</i>, <i>e.g.</i>:<br />
+        <code class="snippet">cp ../spider &nbsp; ./spider </code>
+        </li>
+
+        <li>Start alignment with the following command:                              <br />
+        <code class="snippet">./spider spi/dat @align-pubsub 1 &amp; </code>         <br />
+        where <i>1</i> will be the number given to the top-level SPIDER results file.</li>
+      </ul>
+   </li>
+   </ol>
+   </p>
+
+   <p>
+    Either option reads:
+    <font class="input">projs/prj_001</font>, 
+    <font class="input">refangles    </font>, and 
+    <font class="input">data***      </font>.  
+    They create:
+
+      <table class="outs">
+      <tr valign="top"><td>&curren;                        </td>
+          <td><span class="nobreak"><font class="output">dala_01_***</font>:</span>     </td>
+          <td>Aligned stacks of particle images.           </td></tr>
+
+      <tr valign="top"><td>&curren;                        </td>
+          <td><span class="nobreak"><font class="output">align_01_***</font>:</span>    </td>
+          <td>Shift and rotation parameters for each group.</td></tr>
+
+      <tr valign="top"><td>&curren;                        </td>
+          <td><span class="nobreak"><font class="output">align_01_all</font>:</span>    </td>
+          <td>Consolidated shift and rotation parameters for all groups.</td></tr>
+      </table>
+ 
+
+   <br />The work flow is similar to that in <a href="refine.html">Refinement</a>, 
+   with a few changes:
+
+   <table class="outs">
+      <tr valign="top">  <td>&curren;</td>
+          <td><a class="project" href="../Procs/check-exist.spi">check-exist.spi</a>:</td>
+          <td>Checks for presence of input files before publishing to the nodes.</td> 
+      </tr>
+      <tr valign="top">  <td>&curren;</td>
+          <td><a class="project" href="../Procs/align-main.spi">align-main.spi</a>:</td>
+          <td>Distribute disk I/O by waiting up to 10 minutes (as set in 
+          <a class="project" href="../Procs/align-settings.spi">align-settings.spi</a>)
+          before reading a new group's stack.</td> 
+      </tr>
+   </table>
+<p />
+
+</ul>
+
+<hr />
+<!-- **************************** Compute Averages and Verify Particles ************************** -->
+
+<a name="CA"></a> 
+<table class="heading" width="100%"><tr><td> <br />
+   <h3 class="heading">Compute Averages and Verify Particles</h3>
+
+   <p class="explain">For all projections, all aligned particles of a 
+   given reference view are averaged together. Further particle selection is 
+   made by selecting a correlation cutoff threshold to reject some particles. 
+   The distribution of particles among projections can be displayed.
+   </p>
+
+   <p>Run these procedures  in the <i>Averages/</i> directory.</p>
+
+   <p> Note:  *** denotes image group,  ### denotes view,  ??? denotes class </p>
+   </td></tr>
+</table>
+
+<!-- SPIRE directory=Averages subdirectories=views -->
+
+<ul>
+
+<li><p class="action"> Make particle selection doc files listing 
+   particles corresponding to each reference projection                </p>
+
+   <a class="project" href="../Procs/select-byview.spi">select-byview.spi</a></i> 
+   (which calls:  
+   <a class="project" href="../Procs/verify-settings.spi">verify-settings.spi)</a> reads: 
+   <font class="input">../Alignment/sel_group   </font>,  
+   <font class="input">../Alignment/sel_part_***</font>, 
+   <font class="input">../Alignment/refangles   </font>, and 
+   <font class="input">../Alignment/output/align_01_***</font>.
+  
+   It creates:                                                      <br />
+
+   <table class="outs">
+
+     <tr valign="top"><td>&curren;                                                        </td>
+          <td><span class="nobreak"><font class="output">views/prj###/sel_part_byv</font>:</span></td>
+          <td>List of particles associated with each reference view                       </td></tr>
+
+      <tr valign="top"><td>&curren;                                                        </td>
+          <td><span class="nobreak"><font class="output">parts_vsview_all</font>:</span    </td>
+          <td>Summary of number of particles associated with rach reference view.          </td></tr>
+   </table>
+</li>
+
+<p />
+
+<li> <p class="action">[Optional] Create average images for all projection views and, 
+     optionally, write out filtered, aligned images.   This step is required if using 
+        <a href="mr1verify.html"> classification-based verification.</a> </p>
+   
+   <p>To skip the output of the filtered images, set the register <i>[save-filt-yn]</i>
+   in the procedure parameters to: 0.  These filtered images are required if using
+   <a href="mr1verify.html">classification-based verification</a>.  
+   The setting for: <i>[reduction]</i> is to save processing time and disk space.</p>
+   
+    <a class="project" href="../Procs/avg-filt-byview.spi">avg-filt-byview.spi</a> reads: 
+    <font class="input">sel_proj                       </font>,
+    <font class="input">../Alignment/output/dala_01_***</font>, and
+    <font class="input">views/prj###/sel_part_byv      </font>.
+    It creates:
+
+    <table class="outs">
+      <tr valign="top"><td>&curren;                                                         </td>
+          <td><span class="nobreak"><font class="output">views/prj###/allavg</font>:</span> </td>
+          <td>Stacks of average images for each set of projections.                         </td></tr>
+
+      <tr valign="top"><td>&curren;                                                         </td>
+          <td><span class="nobreak"><font class="output">views/prj###/filtavg</font>:</span></td>
+         <td>Filtered, aligned image stack [<b>Optional, required for <a href="mr1verify.html">
+              classification-based verification</a></b>]                                    </td></tr>
+
+   </table>
+   
+   Projection views with many particles will have averages that resemble the 
+   reference projection. Projection views with few particles will be noisy. 
+   To view the sets of average images, either:
+
+   <ol class="choice">
+   
+     <li>Use the <b>Montage</b> operation in 
+     <a href="../../../../web/docs/web.html">
+     <font class="guitool">WEB</font></a>. </li>
+   
+     <li>Use <a href="../../../../tools/docs/montagefromdoc.html">
+       <font class="guitool">montagefromdoc.py</font></a>.  The syntax, not including 
+       the proper data extension. is:  <br />
+       <code class="snippet">montagefromdoc sd_vsview_all.dat prj***/allavg</code>  <br /> !!!!
+       Changing the column number for the image label will display: (1) The view number, 
+       (2) The number of particles, or (3) The S.D. for the variance map.</li>
+   </ol>
+
+</li>
+
+<p>The next two steps help to identify a threshold
+   correlation coefficient that describes true particles as opposed to any 
+   erroneously selected particles. Create a histogram 
+   that plots the number of particles vs. the cross correlation
+   value. For example, if the histograms display a bimodal
+   distribution, the higher peak may correspond to actual particles,
+   while the lower peak may show noise. The threshold should be chosen
+   between two such peaks.</p>
+
+<p />
+
+<li><p class="action">Create histograms of the number of particles 
+     vs. the cross correlation value </p>
+
+   <p>
+   <a class="project" href="../Procs/plot-cc-vs-view.spi">plot-cc-vs-view.spi</a> reads:
+   <font class="input">sel_proj</font> and
+   <font class="input">views/prj###/sel_part_byv</font>. <br />
+
+   Experiment with the parameter <i>[num-bins]</i> if
+   you want finer sampling per bin, or coarser (and thus more particles per bin).
+   </p>
+   
+   <p>The procedure creates:
+
+   <table class="outs">
+      <tr valign="top"><td>&curren;                                                             </td>
+          <td><span class="nobreak"><font class="output">prj###/sel_part_combined</font>:</span></td> 
+          <td>Combined doc file of the same format as 
+          <font class="input">views/prj###/sel_part_byv</font>.                                 </td></tr>
+
+      <tr valign="top"><td>&curren;                                                             </td>
+          <td><span class="nobreak"><font class="output">cc_vsview_all</font>:</span>           </td>
+          <td>Histogram doc file of cross correlation values.                                   </td></tr>
+
+      <tr valign="top"><td>&curren;                                                             </td>
+          <td><span class="nobreak"><font class="output">cc_vsview_all.gnu</font>:</span>       </td> 
+          <td>Gnuplot script for plotting the correlation histogram.                            </td></tr>
+   </table>
+   </p>
+
+   <table>
+      <tr valign="top">
+        <td> <!-- ====================== left ============ -->
+          <div class="left">
+
+          <p>The output Gnuplot script <font class="output">cc_vsview_all.gnu</font>
+             will overlay the correlation histogram of the particle images 
+             with a Gaussian profile. If the histograms display a bimodal
+             distribution, the higher peak may correspond to actual particles,
+             while the lower peak may show noise. A threshold can be chosen
+             between two such peaks.   The plot should be displayed automatically, if not 
+             <a href="gnuplot.html?file=cc_vsview_all.gnu">click here</a>. </p>
+        </td>
+        <td> <!-- ====================== right ============ -->
+          <div class="right">
+
+          <a href="pics/cc_vsview_all.jpg"
+             <img src="pics/small_cc_vsview_all.jpg"></img></a>.
+        </td>
+      </tr > 
+   </table>
+
+ 
+</li>
+
+<li>
+   <p class="action">[<b>Optional</b>] Check the spatial distribution of views 
+   (angular directions) for the reconstruction                            </p>
+
+   <p> <a class="project" href="../Procs/plot-ref-views.spi">plot-ref-views.spi</a> reads  
+   <font class="input">views/parts_vsview_all</font>.
+ 
+   It creates script files of gnuplot commands: <br />
+
+   <table class="outs">
+      <tr valign="top"><td>&curren;                                                          </td>
+          <td><span class="nobreak"> <font class="output">parts_vsview_all.gnu</font></span> </td>
+          <td> Gnuplot script to plot a histogram of number of particles vs projection view. </td></tr>
+   </table>
+   <p />
+
+   <table>
+      <tr valign="top">
+        <td> <!-- ====================== left ============ -->
+          <div class="left">
+
+          <p>The output Gnuplot script <font class="output">parts_vsview_all.gnu</font>
+          will plot a histogram of number of particles vs projection view. 
+          The plot should be displayed automatically, if not 
+          <a href="gnuplot.html?file=parts_vsview_all.gnu">click here</a>. </p>
+        </td>
+
+        <td> <!-- ====================== right ============ -->
+          <div class="right">
+
+          <a href="pics/parts_vsview_all.jpg"
+             <img src="pics/small_parts_vsview_all.jpg"></img></a>.
+        </td>
+      </tr > 
+   </table>
+
+
+
+   <a class="project" href="../Procs/show-ref-views.spi">show-ref-views.spi</a> reads: 
+   <font class="input">../Alignment/refangles</font>, and 
+   <font class="input">views/parts_vsview</font>. It creates: <br />
+
+   <table class="outs">
+      <tr valign="top"><td>&curren;                                                       </td>
+          <td> <span class="nobreak"><font class="output">show_ref_views</font>: </span>  </td> 
+          <td>SPIDER image showing distribution of sample images 
+             among the various reference projections for all groups.                      </td></tr>
+
+   </table> 
+
+   <table>
+      <tr valign="top">
+        <td> <!-- ====================== left ============ -->
+          <div class="left">
+
+          <p>This image shows the various angular reference groups represented by small 
+             circles. The radii of these circles are proportional to the number of 
+             particles in each group. 
+             Display the image in <a href="../../../../web/docs/web.html">
+             <font class="guitool">WEB</font></a> or
+             <a href="../../../../tools/doc/qview.html">
+             <font class="guitool">qview.py</font></a>.
+        </td>
+        <td> <!-- ====================== right ============ -->
+          <div class="right">
+
+          <a href="pics/show_ref_views_all.jpg"
+             <img src="pics/small_show_ref_views_all.jpg"></img></a>.
+        </td>
+      </tr > 
+   </table>
+
+</li>
+
+<li> 
+   <p class="action">[Optional] Classification-based verification </p>
+
+   <p>Further information is provided at the 
+      <a href="mr1verify.html"> classification-based verification</a> 
+      page. Briefly, this sub-protocol reads:
+
+      <font class="input">views/prj###/sel_part_byv</font> and 
+      <font class="input">views/prj###/filtavg     </font> and
+      classifies the particles corresponding to each reference projection. </p>
+   
+   <!-- <a class="project" href="../Procs/make-good-classes.spi"> Used for testing only!</a> -->
+
+   Summary of required steps: 
+
+   <table class="outs">
+      <tr valign="top"><td>&curren;                                                                          </td>
+          <td> <a class="project" href="../Procs/verify-class-byview.spi">verify-class-byview.spi</a>:</span></td>
+          <td> Classifies the particles corresponding to each reference projection.                          </td></tr>
+
+   <!-- <a class="project" href="../Procs/.verifybyview"></a> Necessary startup file -->
+      <tr valign="top"><td>&curren;                                                                          </td>
+          <td> <span class="nobreak"><a class="project" href="../Procs/verifybyview.py">
+               <font class="guitool">../Procs/verifybyview.py</font></a>                                     </td>
+          <td> <a href="verifybyview.html"> Select particles by orientation and classification</a>:</span>
+                after separation. </td></tr>
+
+      <tr valign="top"><td>&curren;                                                                          </td>
+          <td> <span class="nobreak"><a class="project" href="../Procs/verify-combine-classes.spi">verify-combine-classes.spi</a>:</span> 
+          <td> Collects information about selected particles.                                                </td></tr>
+
+      <tr valign="top"><td>&curren;                                                                          </td>
+          <td> <span class="nobreak"><a class="project" href="../Procs/plot-cc-vs-view.spi">plot-cc-vs-view.spi</a>:</span> </td>
+          <td> Creates histogram of cross correlation values.                                                </td></tr>
+ 
+      <tr valign="top"><td>&curren;                                                                          </td>
+          <td> <span class="nobreak"><a class="project" href="../Procs/parts-vs-defocus.spi">parts-vs-defocus.spi</a>:</span> </td>
+          <td> Creates histogram of particle numbers vs defocus values.                                      </td></tr>
+   </table> 
+   
+   <p>If performing this verification step, remember to set the input file selection in:  
+   <a class="project" href="../Procs/best-imgs.spi">best-imgs.spi</a>.
+   </p>
+   
+</p>
+
+
+<li>
+   <a name="bestim"><p class="action">Create new group and particle selection files and 
+   [optionally] limit over-represented angular projections</a> </p>
+
+   <p>Run this procedure even if you aren't limiting overrepresented views as   
+      downstream procedures will need the outputs.</p>
+
+   <p>
+   <a class="project" href="../Procs/best-imgs.spi">best-imgs.spi</a> 
+   optionally limits the numbers of images per reference view direction as 
+   specified by parameter: <i>[maxim]</i>.  This will limit over-represented 
+   angular projections which may cause a shape error in the reconstruction. 
+   If you do not wish to limit over-represented views, 
+   set the parameter: <i>[maxim]</i> to -1 (the default).</p>
+   
+   <p> Set the parameter: <i>[use-particles]</i> to  indicate whether you want to
+   use the particle selection files from images without  
+   <a href="mr1verify.html">classification-based verification</a>, 
+   "good" images from classification-based verification, or
+   "rechecked good" images from classification-based verification.</p> 
+   This paramater will choose between reading: 
+   <font class="input">views/prj???/sel_part_byv_good</font> , or  
+   <font class="input">views/prj???/sel_part_byv_goodB</font> , (from 
+   <a href="../Procs/verify-recheck.spi">verify-recheck.spi</a>) in place of: 
+   <font class="input">views/prj???/sel_part_byv_sort </font>.    </p>
+
+   <p>
+   <a class="project" href="../Procs/best-imgs.spi">best-imgs.spi</a> then reads: 
+   
+   <font class="input">sel_proj                       </font>,
+   <font class="input">../Alignment/sel_group         </font>, and
+   <font class="input">../Alignment/sel_part_sort_*** </font>.        
+   It creates:                                                        <br />
+   <table class="outs">
+      <tr valign="top"><td>&curren;                                       </td>
+          <td><span class="nobreak"><font class="output">sel_group_best</font></span>                 </td>
+          <td> Group selection file                                       </td></tr>
+
+       <tr valign="top"><td>&curren;                                      </td>
+          <td><span class="nobreak"><font class="output">sel_part_best_***</font></span>               </td>
+          <td> List of particles selected for each new group              </td></tr>
+
+      <tr valign="top"><td>&curren;                                       </td>
+          <td><span class="nobreak"><font class="output">views/prj###/sel_part_byv_best</font></span>  </td>
+          <td> List of particles retained from each reference view        </td></tr>
+
+      <tr valign="top"><td>&curren;                                       </td>
+          <td><span class="nobreak"><font class="output">part_vsview_best</font></span>                </td>
+          <td> Summary of number of images in each reference view.         </td></tr>
+
+  </table> 
+   
+
+</p>
+</li>
+
+</ul>
+
+<p />
+
+<hr />
+<!-- *************************** 3D Reconstruction ***************************** -->
+
+<a name="3D"></a> 
+<table class="heading" width="100%"><tr><td> 
+   <p />
+   <h3 class="heading">3D Reconstruction</h3>
+
+   <p class="explain">Use the selected aligned particles to create an initial 3D volume. 
+   To estimate the nominal resolution of the resulting structure, the particle images are split 
+   into two equal sets, and the two resulting reconstruction volumes are compared. 
+   </p>
+
+   <p>Run these procedures  in the <i>Reconstruction/</i> directory.</p>
+</td></tr></table>
+
+<!-- SPIRE directory=Reconstruction subdirectories= -->
+
+<p />
+
+<ul>
+
+<li>
+   <p class="action">Assign particles into groups for 3D reconstruction</p>
+   
+   <p> <a class="project" href="../Procs/bp-regroup.spi">bp-regroup.spi</a> 
+   offers the choice between grouping particles into new groups or keeping the old groups. 
+   If you have no desire to regroup the particles, set the parameter <i>[num-stacks]</i> to 0, 
+   which will simply create links to the existing files for downstream files to read.
+   Among the reasons to regroup the particles could be that
+   the number of particles may have changed since groups were first established --
+   for example following classification or limiting overrepresented views or by CC value --
+   or perhaps the number of compute nodes available has changed.  </p>
+   
+   It reads: 
+   <font class="input">../Averages/sel_group_best_***   </font>,  
+   <font class="input">../Averages/sel_part_best_***    </font>,  
+   <font class="input">../Alignment/data_ctfd_***       </font>,  
+   <font class="input">../Alignment/output/align_01_*** </font>,
+   <font class="input">../Alignment/output/dala_01_***  </font>. 
+
+   <p>To perform a dry run -- for example to see how big the groups will be -- 
+   set the parameter <i>[stacks-yn]</i> to 0.</p>
+
+   <p><b>NOTE:</b> If you aren't regrouping the images and have set <i>[num-stacks]</i> to 0, 
+   the procedure is written such that it should be in the same directory as the output files. 
+   To find how to circumvent this, look up the <code class="snippet">ln</code> 
+   command regarding relative paths, or look up the example in 
+   <a class="project" href="../Procs/refine-prepare.spi">refine-prepare.spi</a> below.
+   </p>
+
+   The procedure creates:  
+
+   <table class="outs">
+      <tr valign="top"><td>&curren;                                      </td>
+          <td><span class="nobreak"><font class="output">bp_sel_group</font>:</span>           </td> 
+          <td>Group selection document file.                             </td></tr>
+
+      <tr valign="top"><td>&curren;                                      </td>
+          <td><span class="nobreak"><font class="output">bp_sel_part_***</font>:</span>        </td>
+          <td>Doc file listing the particles in each group.              </td></tr>
+
+      <tr valign="top"><td>&curren;                                      </td>
+          <td><span class="nobreak"><font class="output">bp_data_ctfd_***</font>:</span>       </td>
+          <td>Stack files containing particle images for each group.     </td></tr>
+
+      <tr valign="top"><td>&curren;                                      </td>
+          <td><span class="nobreak"><font class="output">bp_dala_01_***</font>:</span>         </td>
+          <td>Stack files containing particle images for each group.     </td></tr>
+   </table>
+   
+</p>
+</li>
+
+<li><p class="action">Compute 3D reconstruction</p>
+
+    <p>Create paired reconstructions for each group, 
+    merge group reconstuctions into final combined reconstruction, 
+    and compute reconstruction resolution.</p>
+
+   <p>Like alignment, 3D reconstruction is CPU-intensive and benefits by parallelization. 
+    Whether you are running reconstruction in parallel or in series, edit (but do not run)
+    <a class="project" href="../Procs/bp-settings.spi">bp-settings.spi</a>, 
+    which reads parameters and input filenames (<i>e.g.</i>, 
+    <font class="input">input/bp_sel_group    </font>, 
+    <font class="input">input/bp_sel_part***  </font>,  
+    <font class="input">input/bp_dala_01_***  </font>, and 
+    <font class="input">bp_align_01_***       </font>).</p>
+    
+    Some notable parameters in
+    <a class="project" href="../Procs/bp-settings.spi">bp-settings.spi</a>:
+    <table class="outs">
+      <tr valign="top"><td>&curren;                                          </td>
+          <td> <b><i>[bp-method]</i></b>:                                    </td>
+          <td> Backprojection method. More information below.                </td></tr> 
+
+      <tr valign="top"><td>&curren;                                          </td>
+          <td> <b><i>[stk-opt]</i></b>:                                      </td>
+          <td> Stack options (<i>e.g.</i>, 0 to read from original location, 
+               1 to copy into RAM, or 2 to copy temporarily to disk).        </td></tr> 
+
+      <tr valign="top"><td>&curren;                                          </td>
+          <td> <b><i>[max-wait]</i></b>:                                     </td>
+          <td> Like in <a href="../Procs/align-settings.spi">align-settings.spi</a>
+               above, will wait up to 10 minutes by default before 
+               reading a new group's stack, in order to distribute disk I/O. </td></tr> 
+    </table>
+    
+    <p>
+    For the parameter <b><i>[bp-method]</i></b>, the Fourier-based backprojections -- 
+    <a href="../../../man/bp32f.html">'BP 32F'</a> 
+    (option 2 in <a href="../Procs/bp-settings.spi">bp-settings.spi</a>) or 
+    <a href="../../../man/bp3n.html">'BP 3N'</a> 
+    (option 4) -- are recommended.  The iterative, real-space methods --
+    <a href="../../../man/bprp.html">'BP RP'</a>  (option 3) or 
+    <a href="../../../man/bpcg.html">'BP CG'</a>  (option 1) -- 
+    sometimes cause artifacts in the reconstruction.  
+    These artifacts include a rise in the FSC at high resolution, or 
+    ripples in the reconstruction when viewed as <i>Z</i>-slices. 
+    The artifacts may be due to inaccuracy in the estimated defocus. 
+    Feel free to experiment, but be wary of the output.
+    </p>
+
+   The following options will depend on whether using you are using 
+   <a href="../../../../pubsub/pubsub.html"> Publish and Subscribe</a> on a cluster.
+
+   <ol class="choice">
+   <li>If you are not using Publish and Subscribe, run 
+      <a class="project" href="../Procs/bp-inseries.spi">bp-inseries.spi</a>.  
+   </li>
+   <p />
+
+   <li>If you are using <a href="../../../../pubsub/pubsub.html">
+      Publish and Subscribe</a>, run 
+      <a class="project" href="../Procs/bp-pubsub.spi">bp-pubsub.spi</a> 
+      according to the following steps:
+      <ul>
+        <li>Copy the SPIDER executable to the local directory and rename it 
+            <i>spider</i>, <i><i>e.g.</i></i>:                                     <br />
+          <code class="snippet">cp ../spider  ./spider</code>                      <br />
+        </li>
+        <li>Start alignment with the following command:                            <br />
+          <code class="snippet">./spider spi/dat bp-pubsub 1 &amp; </code>         <br />
+          where <i>1</i> will be the number of the top-level SPIDER results file.
+        </li>
+      </ul>
+   </li>
+   </ol>
+   <p />
+ 
+    Depending on the back-projection operaation you selected, these
+    procedures may create two particle selection doc files for each group 
+    by partitioning alternate images into two sets:
+
+    <table class="outs">
+      <tr valign="top"><td>&curren;                                                </td>
+          <td><span class="nobreak"><font class="output">vols_***/sel_odd</font>:  </td> 
+          <td> List of odd numbered images for each group.                         </td></tr> 
+ 
+      <tr valign="top"><td>&curren;                                                </td>
+          <td><span class="nobreak"><font class="output">vols_***/sel_even</font>: </td> 
+          <td> List of even numbered images for each group.                        </td></tr> 
+   </table>
+   <br />
+
+   They then create two reconstructions for each group using back projection: 
+
+   <table class="outs">
+      <tr valign="top"><td>&curren;                                                         </td>
+          <td><span class="nobreak"><font class="output">vols_***/vol01_one</font>:</span>  </td>
+          <td> Reconstructed volume from first subset of images for each group.             </td></tr> 
+
+      <tr valign="top"><td>&curren;                                                         </td>
+          <td><span class="nobreak"><font class="output">vols_***/vol01_two</font>:</span>  </td>
+          <td> Reconstructed volume from second subset of images for each group.            </td></tr> 
+
+      <tr valign="top"><td>&curren;                                                         </td>
+          <td><span class="nobreak"><font class="output">vols_***/vol01_all</font>:</span>  </td>
+          <td> Combined reconstructed volume for each group.                                </td></tr> 
+   </table>
+
+   <br />
+     Finally, they add together the subset volumes to make a complete volume for
+     the entire data set, and calculate the FSC resolution curve for the 
+     complete reconstruction (using <a href="../../../man/fsc.html">'FSC'</a>). 
+     This creates:                                        
+
+    <table class="outs">
+      <tr valign="top"><td>&curren;                                                </td>
+          <td> <span class="nobreak"><font class="output">vol01</font>:</span>     </td>
+          <td> A 3D reconstruction from entire set of particles.                   </td></tr>
+ 
+      <tr valign="top"><td>&curren;                                                </td>
+          <td> <span class="nobreak"><font class="output">fsc_doc_u</font>:</span> </td>
+          <td> Doc file containing unmasked FSC curve for final reconstruction.    </td></tr>
+ 
+      <tr valign="top"><td>&curren;                                                </td>
+          <td> <span class="nobreak"><font class="output">fsc_doc_m</font>:</span> </td>
+          <td> Doc file containing masked FSC curve for final reconstruction.      </td></tr>
+ 
+      <tr valign="top"><td>&curren;                                                </td>
+          <td> <span class="nobreak"><font class="output">resolution</font>:</span></td>
+          <td> Doc file containing masked and unmasked resolution (in Angstroms).  </td> </tr> 
+    </table>
+ 
+    <table>
+      <tr valign="top">
+        <td><!-- ====================== left ============ -->
+          <div class="left">
+
+          <p>This reconstruction <font class="output">vol01</font> is known as 
+          the <i>initial volume</i> and will be used as input for the Refinement step. 
+          </p>
+
+          <p /> View the volume as slices using the <i>Montage</i> operation in 
+          <font class="guitool">WEB</font> or in 
+          <a href="../../../../tools/doc/montage.html">
+          <font class="guitool">montage.py</font></a>. 
+          Ideally, each image should show a particle isolated from its surroundings, 
+          exhibiting some internal structure - somewhat like the reference images. 
+          If any images are blank or otherwise unusual, check the volume for specific groups.
+          </p>
+         </td>
+        <td><!-- ====================== right ============ -->
+          <div class="right">
+
+          <a href="pics/vol01.jpg" <img src="pics/vol01.jpg"></img></a> <br />
+          (Volume rendering)
+        </td>
+
+      </tr > 
+   </table>
+
+
+  
+ The following is a brief tree of procedure calls:
+ <table border="1" style="background-color:eeeeee">
+ <tr><td valign="top">
+ <pre>
+ <a class="project" href="../Procs/bp-inseries.spi"><b>bp-inseries</b></a>
+    <a class="project" href="../Procs/bp-settings.spi">bp-settings</a>
+    
+    <a class="project" href="../Procs/bp-main.spi">bp-main</a>
+    <a class="project" href="../Procs/bp-merge.spi">bp-merge</a>
+   </pre></td>
+
+   <td><pre>
+ <a class="project" href="../Procs/bp-pubsub.spi"><b>bp-pubsub</b></a>
+    <a class="project" href="../Procs/bp-settings.spi">bp-settings</a>
+    <a class="project" href="../Procs/check-exist.spi">exist-check</a>
+        <a class="project" href="../Procs/bp-main.spi">bp-main</a>
+    <a class="project" href="../Procs/bp-merge.spi">bp-merge</a>
+    <a class="project" href="../Procs/wait-pub.spi">wait-pub.spi</a>
+
+ </pre></td>
+ </tr></table>
+
+ <li><p class="action">Check the FSC curve by viewing  a plot. </p>
+
+   <a class="project" href="../Procs/plot-fsc.spi">plot-fsc</a> reads:
+   <font class="input">resolution             </font>,  
+   <font class="input">fsc_doc_m              </font>.   <br />
+   It creates a text file of gnuplot commands:  
+
+    <table class="outs">
+      <tr valign="top"><td>&curren;</td>
+          <td> <font class="output">fsc.gnu</font>: </td>
+          <td> Gnuplot script for plotting the resolution curve. </td></tr> 
+    </table>   
+
+    <table>
+      <tr valign="top">
+        <td> <!-- ====================== left ============ -->
+          <div class="left">
+
+          <p>The output Gnuplot script <font class="output">fsc.gnu</font>
+          will plot the fsc curve and should be displayed 
+          automatically, if not <a href="gnuplot.html?file=fsc.gnu">click here</a>.</p>
+
+          <p>Examine this plot and see if there is an unusual curve.</p>
+
+        </td>
+        <td> <!-- ====================== right ============ -->
+          <div class="right">
+
+          <a  href="pics/fsc.jpg"
+          <img src="pics/small_fsc.jpg"></img></a>.
+        </td>
+      </tr > 
+   </table>
+
+</li>
+
+<li><p class="action">Generate a matched-filter profile</p>
+
+   <p>Information at spatial frequencies above the cutoff value is  
+   considered to be uncorrelated noise, and should be filtered out. 
+   The resolution curve itself is used to determine the shape of the filter.
+   This concept is described in: 
+       <a href="#ZH04">Huang and Penczek (2004)</a></p>
+
+   <p>
+   <a class="project" href="../Procs/make-matched-filt.spi">make-matched-filt.spi</a> reads: 
+   <font class="input">vol01_sub_one</font> and
+   <font class="input">vol01_sub_two</font>. It creates: <br />
+
+    <table class="outs">
+      <tr valign="top"><td>&curren;</td>
+          <td> <span class="nobreak"><font class="output">matched_filt_doc_01</font>:</span> </td>
+          <td> Filter doc file.  </td></tr> 
+    </table></p>   
+</li>
+
+<p />
+
+<li><p class="action">Filter the initial volume</p>
+
+   <p>The filter generated above will be applied to the initial volume.
+   This filter can also be applied to a different volume, 
+   such that two reconstructions can be compared 
+   after having been filtered to the exact same resolution.</p>
+
+   <p><a class="project" href="../Procs/matched-filt.spi">matched-filt.spi</a> reads: 
+   <font class="input">matched_filt_doc_01</font> and   
+   <font class="input">vol01</font>. It filters the 
+   initial volume at the cutoff frequency to create: <br />
+
+    <table class="outs">
+      <tr valign="top"><td>&curren;</td>
+          <td> <span class="nobreak"><font class="output">vol01_matched</font>:</span> </td>
+          <td>Filtered volume.  </td></tr> 
+    </table></p>   
+    
+   View the filtered volume by using the <i>Surface</i> operation in 
+   <a href="../../../../web/docs/web.html"> <font class="guitool">WEB</font></a> 
+   or by loading the volume in
+   <a href="http://www.cgl.ucsf.edu/chimera/"><font class="guitool">Chimera</font></a>.
+</li>
+
+</ul>
+
+<hr />
+<!-- ****************************** Refinement ********************************* -->
+
+<a name="REF"></a> 
+<table class="heading" width="100%"><tr><td> 
+   <p />
+   <h3 class="heading">Refinement</h3>
+
+   <p class="explain">Refinement essentially performs the reconstruction steps repeatedly, 
+     decreasing the angular resolution of reference projections with each iteration, 
+     thereby giving the data particles a chance to find a better approximating 
+     reference match each time. The data particles are allowed to "settle in" 
+     and find better fitting angles, than the initial choices.  Refinement is a 
+     computationally expensive operation. Before starting a refinement, check the 
+     results of the above reconstructions, to ensure that the initial volume
+     is reasonable to start. Refinement is currently set to re-start with the unaligned          
+>    images instead of the alignments from the reconstruction step, since this does not 
+     take much additional time at coarse reference angles.
+   </p>
+
+   <p>Run these procedures  in the <i>Refinement/</i> directory.</p>
+</td></tr></table>
+
+<!-- SPIRE directory=Refinement subdirectories=input, final, work -->
+
+<ul>
+
+<li><p />Below is a summary of details presented on the 
+        <a href="refine.html">Refinement</a> page.<p /></li>
+
+<li>
+   Edit <a class="project" href="../Procs/refine-settings.spi">refine-settings.spi</a>, 
+   which reads the following input files  where '***' denotes group number, 
+   and '##' denotes iteration number:   <p />
+
+   <table>  
+   <tr><td> <span class="nobreak"><font class="input">../params</font>:</span>                                </td> 
+       <td> Parameter definition file.                                                                        </td></tr>
+
+   <tr><td> <span class="nobreak"><font class="input">../Reconstruction/input/vol01</font>:</span>            </td> 
+       <td> Initial starting volume.                                                                          </td></tr>
+
+   <tr><td> <span class="nobreak"><font class="input">../Reconstruction/input/bp_sel_group</font>:</span>     </td> 
+       <td> Group selection file.                                                                             </td></tr>
+
+   <tr><td> <span class="nobreak"><font class="input">../Reconstruction/input/bp_sel_part_***</font>:</span>  </td> 
+       <td> Particle selection files.                                                                         </td></tr> 
+
+   <tr><td> <span class="nobreak"><font class="input">../Reconstruction/bp_data_ctfd_***</font>:</span>       </td> 
+       <td> Unaligned CTF corrected, stacked image files.                                                     </td></tr>
+
+   <tr><td> <span class="nobreak"><font class="input">input/scattering</font>:</span>                         </td> 
+       <td> [<b>Optional</b>] amplitude enhancement scattering file.                                          </td></tr>
+
+   <tr><td> <span class="nobreak"><font class="input">input/mask</font>:</span>                              </td> 
+       <td> [<b>Optional</b>] amplitude enhancement mask file.                                                </td></tr>
+   </table>
+</li>
+<p />
+
+<li>First; Copy the SPIDER executable to the local directory and rename it: <br />
+         <code class="snippet">cp ../spider &nbsp; ./spider</code>          <br />
+    This ensures that the same SPIDER executable is available throughout whole refinement.
+
+    The following options will depend on whether using you are using 
+    <a href="../../../../pubsub/pubsub.html"> Publish and Subscribe</a> on a cluster:
+
+    <ol class="choice">
+
+      <li>If you are using serial refinement on a single workstation, run 
+         <a class="project" href="../Procs/refine-inseries.spi">refine-inseries.spi</a> 
+         according to the following steps:
+         <ul>
+            <li>Start alignment with the following command:    <br />
+               <code class="snippet">./spider spi/dat @refine  </code></li>
+         </ul>
+      </li>
+ 
+      <li>If you are using <a href="../../../../pubsub/pubsub.html"> Publish and Subscribe</a>, run 
+         <a class="project" href="../Procs/pub-refine.spi">pub-refine.spi</a> 
+         according to the following steps:
+         <ul>
+           <li>Start alignment with the following command: <br />
+               <code class="snippet">./spider spi/dat @pub-refine 1 </code><br />
+               where <i>1</i> will be the number of the top-level SPIDER results file.</li>
+         </ul>
+      </li>
+ 
+  </ol>
+</li>
+<p />
+<li>
+  Among the outputs of refinement are volumes, images, and document files. 
+  Some of the important outputs are listed here 
+  ('***' denotes group number and '##' denotes iteration number):
+
+    <table class="outs">
+      <tr valign="top"><td>&curren;                                                           </td>
+          <td><span class="nobreak"><font class="output">output/align_##_***</font>:</span>   </td>
+          <td>Alignment parameter doc files                                                   </td></tr>
+
+      <tr valign="top"><td>&curren;                                                           </td>
+          <td> <font class="output">output/fscdoc_m_##_***</font>                             </td>
+          <td> Group masked FSC resolution curve doc files                                    </td></tr>
+
+      <tr valign="top"><td>&curren;                                                           </td>
+          <td><span class="nobreak"><font class="output">output/vol##_all</font>:</span>      </td>
+          <td> Complete unfiltered volumes                                                    </td></tr>
+
+      <tr valign="top"><td>&curren;                                                           </td>
+          <td><span class="nobreak"><font class="output">output/vol##_centered</font>:</span> </td>
+          <td>Complete centered volumes                                                       </td></tr> 
+
+      <tr valign="top"><td>&curren;                                                           </td>
+          <td><span class="nobreak"><font class="output">output/vol##</font>:</span>          </td>
+          <td>Complete filtered, centered volumes                                             </td></tr> 
+
+      <tr valign="top"><td>&curren;                                                           </td>
+          <td><span class="nobreak"><font class="output">output/vol##_s1</font>:</span>       </td>
+          <td>Complete volume from first subset of images                                     </td></tr>
+
+      <tr valign="top"><td>&curren;                                                           </td>
+          <td><span class="nobreak"><font class="output">output/vol##_s2</font>:</span>       </td>
+          <td>Complete volume from second subset of images                                    </td></tr>
+
+       <tr valign="top"><td>&curren;                                                          </td>
+          <td><span class="nobreak"><font class="output">output/resolutions</font>:</span>    </td>
+          <td>Doc file listing resolution at each iteration.                                  </td></tr> 
+    </table>
+</li>
+
+
+<br />There are several sub-procedures used during refinement.
+      The following is a tree of procedure calls:
+
+<table border="1" style="background-color:eeeeee">
+<tr><td valign="top">
+<pre>
+<a class="project" href="../Procs/refine-inseries.spi"><b>refine-inseries</b></a>
+    <a class="project" href="../Procs/refine-settings.spi">refine-settings</a>
+    <a class="project" href="../Procs/refine-prepare.spi">refine-prepare</a>
+    
+    <a class="project" href="../Procs/refine-refangles.spi">refine-refangles</a>
+    
+    <a class="project" href="../Procs/refine-loop.spi">refine-loop</a>
+       <a class="project" href="../Procs/refine-bp.spi">refine-bp</a>
+        
+        
+    
+ 
+   
+    <a class="project" href="../Procs/refine-smangloop.spi">refine-smangloop</a>
+        <a class="project" href="../Procs/refine-bp.spi">refine-bp</a>
+   
+    
+
+    <a class="project" href="../Procs/refine-merge.spi">refine-merge</a>
+        <a class="project" href="../Procs/enhance.spi">enhance</a>
+   </pre></td>
+
+   <td><pre>
+<a class="project" href="../Procs/pub-refine.spi"><b>pub-refine</b></a>
+    <a class="project" href="../Procs/refine-settings.spi">refine-settings</a>
+    <a class="project" href="../Procs/refine-prepare.spi"> refine-prepare</a>
+    <a class="project" href="../Procs/pub-refine-start.spi">pub-refine-start</a> (<i>[task]</i>=0)
+        <a class="project" href="../Procs/pub-ref-loop-clone.spi">pub-ref-loop-clone</a>
+        <a class="project" href="../Procs/refine-loop.spi">refine-loop</a>
+           <a class="project" href="../Procs/refine-bp.spi">refine-bp</a>
+        <a class="project" href="../Procs/pub-ref-loop-declone.spi">pub-ref-loop-declone</a>
+    <a class="project" href="../Procs/pub-refine-wait.spi">pub-refine-wait</a>
+
+    <a class="project" href="../Procs/pub-refine-start.spi">pub-refine-start</a> (<i>[task]</i>=1)
+        <a class="project" href="../Procs/pub-ref-loop-clone.spi">pub-ref-loop-clone</a>
+        <a class="project" href="../Procs/refine-smangloop.spi">refine-smangloop</a>
+           <a class="project" href="../Procs/refine-bp.spi">refine-bp</a>
+        <a class="project" href="../Procs/pub-ref-loop-declone.spi">pub-ref-loop-declone</a>
+    <a class="project" href="../Procs/pub-refine-wait.spi">pub-refine-wait</a>
+
+    <a class="project" href="../Procs/refine-merge.spi">refine-merge</a>
+        <a class="project" href="../Procs/enhance.spi">enhance</a>
+      
+</pre></td>
+</tr></table>
+  
+   <p>If you are running on a cluster with <i>PubSub</i> you may also need: 
+   <a href="../../../../pubsub/publish.perl">publish.perl</a>,  &nbsp; 
+   <a class="project" href="../Procs/pub-refine-fix.spi">pub_refine-fix.spi</a>.</p>
+</li>
+
+<li><p>Further details are given in the <a href="refine.html">Refinement</a> page.</p>  </li>
+
+<p />
+
+
+
+<li><p class="action">Plot the refinement resolution curves</p>
+
+   <a class="project" href="../Procs/plot-fsc-curves.spi">plot-fsc-curves.spi</a> reads:
+   <font class="input">final/resolutions   </font>, 
+   <font class="input">final/fscdoc_m_##   </font>. 
+   It creates a gnuplot script:         <br /> 
+
+   <table class="outs">
+      <tr valign="top"><td>&curren;                                                    </td>
+          <td><span class="nobreak"><font class="output">fsc_iter.gnu</font>:</span>   </td>
+          <td>Plots FSC resolution curve for each iteration of refinement.             </td></tr> 
+   </table>   
+</li>
+</p>
+ 
+
+   <table>
+      <tr valign="top">
+        <td><!-- ====================== left ============ -->
+          <div class="left">
+
+          <p>The plot of the FSC resolution curves should be displayed 
+          automatically, if not  <a href="gnuplot.html?file=fsc_iter.gnu">click here</a>.
+ 
+        </td>
+        <td><!-- ====================== right ============ -->
+          <div class="right">
+
+          <a href="pics/fsc_groups.jpg"
+             <img src="pics/small_fsc_groups.jpg"></img></a>.
+        </td>
+
+        <td>
+          <div class="right">
+
+          <a href="pics/fsc_iter.jpg"
+             <img src="pics/small_fsc_iter.jpg"></img></a>.
+        </td>
+      </tr > 
+   </table>
+
+<p>
+<!--<li><p class="action">[Optional] View angular data output from Refinement procedure files</p>
+
+   The procedure <a class="project" href="../angdisp.spi">angdisp.spi</a> reads
+   <font class="input">final/align_##_***</font> 
+   and  creates angular distribution images: <br /> 
+
+   <table class="outs">
+      <tr valign="top"><td>&curren;</td>
+          <td> <font class="output">disp_<i>ii</i>_***</font>: </td>
+          <td>Set of images showing angular positions from the  
+             <font class="output">align_<i>ii</i>_***</font> refined alignment 
+             parameter output files. </td></tr> 
+    </table>   
+
+   The procedure <a class="project" href="../angdiff.spi">angdiff.spi</a> reads
+   <font class="input">final/align_##_***</font> 
+   and creates: 
+   <table class="outs">
+      <tr valign="top"><td>&curren;</td>
+          <td> <font class="output">diff_<i>ii</i>_***</font>: </td>
+          <td>Image showing changes in angular positions from iteration <i>n-1</i> to 
+             iteration <i>n</i>.</td></tr> 
+    </table>   
+</li>-->
+
+</p>
+
+<!-- SPIRE end -->
+
+<hr \>
+<!-- ************************* Other Useful Methods *********************************** -->
+
+<a name="OTHER"></a> 
+<table class="heading" width="100%">
+   <tr><td>  
+   <p />
+   <h3 class="heading"> Other Useful Methods </h3>  
+   <p />
+   </td></tr>
+</table>
+
+<dl>
+
+<p>
+<dt><a href="../../../techs/diffmaps/index.html">Difference Maps</a> </dt>
+<dd>Differences between volumes can be assessed by subtracting one volume 
+    from the other.</dd>
+</p>
+
+<p>
+<dt><a href="../../../techs/xray/xray.html">Frequency amplitude correction with X-ray
+      scattering data</a></dt>
+<dd>Enhance the Fourier amplitudes of a reconstructed cryo-EM volume so they more 
+   closely resemble those of experimental low-angle X-ray scattering data. </dd>
+</p>
+
+<p>
+<dt><a href="../../../techs/classification/index.html">Classification of Particles</a></dt>
+<dd>This method can be used to investigate differences between particles.</dd>
+</p>
+
+<p>
+<dt>See more methods on the <a href="../../../techniques.html">techniques page</a></dt>
+</p>
+
+<!--    Not updated ------------------------------------
+<p>
+<dt><u>Create tar files for backup</u></dt>
+<dd><a href="../Procs/backup.sh">backup.sh</a> a shell script, puts a number of vital 
+   files into tar files, which can be backed up on tape. Edit the 
+   shell script as needed, <i>e.g.</i>, to correspond to your data extension, 
+   The variable <i>$BACKUP</i> is intended to be substituted for, for example, an external drive.
+   Make sure it is executable and run it from your project directory. 
+   The contents of some directories will will copied as tarballs, and 
+   others will have their files copied individually.
+</dd>
+</p>        
+--------------------------------------- -->
+
+</dl>
+
+<hr />
+
+<a name="Refs"></a> 
+<table class="heading" width="100%">
+   <tr><td> 
+   <p />
+   <h3 class="heading"> References</h3>
+   <p />
+   </td></tr>
+</table>
+<p />
+
+<ol>
+   <a name="PP92" />
+   <li> Penczek P, Rademacher M, and Frank J. (1992) &nbsp;&nbsp;  
+   Three-dimensional reconstruction of single particles embedded in ice.&nbsp;&nbsp; 
+    <i>Ultramicroscopy</i> 40:33-53.
+   </li>
+
+   <a name="PP94" />
+   <li> Penczek P, Grassucci RA and Frank J. (1994) &nbsp;&nbsp;  
+   The ribosome at improved resolution: New techniques for merging and orientation 
+   refinement in 3D cryo-electron microscopy of biological particles. &nbsp;&nbsp; 
+   <i>Ultramicroscopy</i> 53, 251-270.
+   </li>
+
+   <a name="PP97" />
+   <li>Penczek PA, Zhu J, Schröder R, Frank J. (1997) &nbsp;&nbsp; 
+   <a href="../../ctf/pfefferkorn.pdf">
+   Three Dimensional Reconstruction with Contrast Transfer Compensation 
+   from Defocus Series.</a> &nbsp;&nbsp; 
+   Special Issue on Signal and Image Processing, <i>Scanning Microscopy</i> Volume 11, page 147.
+   </li>
+
+   <a name="PP12" />
+   <li>Penczek PA. (2012) &nbsp;&nbsp; 
+   Fundamentals of three-dimensional reconstruction from projections. &nbsp;&nbsp; 
+   <i>Methods in Enzymology</i> Volume 482, pages 1-33.
+   </li>
+
+   <a name="BR04" />
+   <li>Rath BK and Frank J. (2004) &nbsp;&nbsp; 
+   <i>Journal of Structural Biology</i>, Volume 145, Issues 1-2, January 2004, 
+   Pages 84-90.
+   </li>
+
+   <a name="AR03" />
+   <li>Roseman A. (2003) &nbsp;&nbsp;
+   <i>Ultramicroscopy</i>, Vol 94 (3-4), pp. 225-236
+   </li>
+
+   <a name="SH08" />
+   <li>Shaikh TR, Gao H, Baxter WT, Asturias FJ, Boisset N, Leith A, Frank J. (2008) &nbsp;&nbsp;
+   <a href="http://www.nature.com/nprot/journal/v3/n12/full/nprot.2008.156.html">
+   SPIDER image processing for single-particle reconstruction of 
+   biological macromolecules from electron micrographs.</a>  &nbsp;&nbsp;
+   Nature Protocols 3, 1941-1974 
+   </li>
+
+   <a name="ZH04" />
+   <li>Huang Z and Penczek PA. (2004) &nbsp; &nbsp;
+   <i>Journal of Structural Biology</i>, Volume 145, Issues 1-2, Pages 29-40.  &nbsp;&nbsp;
+   </li>
+
+</ol>
+
+
+<hr />
+
+<small>
+<!-- ************************* Modifications *********************************** -->
+
+<a name="Mods"></a>
+<table class="heading" width="100%" >
+   <tr> <td>    
+   <p />
+   <h3 class="heading">Modifications log</h3>
+   <p class="explain">Not an exhaustive list.
+      For a more complete list of changes, see individual procedures.</p>
+   <p />
+   </td> </tr>
+</table>
+
+<p />
+
+<ul>
+    <li>2013-11-22 -- Rewritten from defocus group protocol, al. </li>
+</ul>
+</small>
+
+
+<hr />
+<p />
+
+<small>
+  Source: mr1.html           &nbsp;&nbsp;&nbsp; 
+  Page updated: Oct. 7, 2014 &nbsp;&nbsp;&nbsp;
+  Tapu Shaikh & ArDean Leith
+  <br />
+  <address> Enquiries: <a href= "mailto:spider@wadsworth.org">spider@wadsworth.org</a> </address>
+</small>
+
+</body>
+</html>
