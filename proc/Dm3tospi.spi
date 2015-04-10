@@ -1,0 +1,110 @@
+; IVEMdm3.dat                           7/26/07  M. Marko
+;
+; CONVERTS TILT-SERIES FILES FROM THE JEOL 4000 TO SPIDER
+;
+; Input files (typical):
+; raw001.dm3-raw122.dm3       1024x1024 16-bit dm3 files 
+;                            
+; Output files (typical):
+; rot001.dat-rot122.dat    SPIDER images: CCD defects removed, 
+;                          ROtated to make tilt axis vertical,
+;                          Padded to avoid wrapping after rotation.
+;                          Thresholded at density: 256.
+;
+FR
+?Raw file prefix (usually raw)? [prefix]
+;------------------------------------>  Example:  raw
+FR
+?Output file prefix (usually rot)? [out]
+;------------------------------------>  Example:  rot
+RR [file_go]
+?First image file number (usually 1) ?
+;------------------------------------>  Example: 1
+RR [file_end]
+?Last image file number (often 61 or 122) ?
+;------------------------------------>  Example: 61
+RR [rotang]
+?Rotation angle for vertical tilt axis (usually -60) ?
+;------------------------------------>  example: -60
+RR [thr]
+?Threshold (usually 256) ?
+;------------------------------------>  example:  330
+
+; ------ Convert from dm3 to SPIDER
+
+
+DO [file]=[file_go],[file_end]
+
+   CP FROM RAW
+   [prefix]{***[file]}.dm3
+   (16)                 ; 16 bit data
+   (1024,1024)          ; Size
+   (152523)             ; Header bytes
+   (2)                  ; Most significant byte
+   N                    ; Do not fold negatives
+   tmp001               ; Output file
+
+   FS [max1],[min1]
+   tmp001
+
+
+   ;------- In case rotation is zero or ninety degrees
+   [absrotang] = ABS([rotang])
+
+   IF ([rotang].EQ.0) THEN
+      CP
+      tmp001
+      tmp002
+
+   ELSEIF ([absrotang].EQ.90) THEN
+      RT
+      tmp001
+      tmp002
+      [rotang]
+
+   ELSE
+      ;------- Calculate size for padding based on tilt axis angle
+      x23 = ABS([absrotang]-45)
+      x24 = 1.414 * COS(x23)
+      x25 = x24 * 1024        ; Padded image dimension
+      x26 = (x25-1024)/2      ; Top left coordinate
+
+      ;------- Pad so rotation won't cut off corners
+      PD
+      tmp001
+      tmp003
+      (x25,x25)
+      M
+      (x26,x26)
+
+      ;-------- Rotate so tilt axis is vertical
+      RT M
+      tmp003
+      tmp002
+      [rotang]
+   ENDIF
+
+   TH [altered]
+   tmp002
+   [out]{***[file]}
+   A                  ; Alter above threshold
+   [thr]              ; Threshold
+   
+   FS [max],[min]
+   [out]{***[file]}
+
+   VM
+   echo " File: {***[file]} ({***[min1]} .. {*****[max1]}) --> ({***[min]} .. {*****[max]}) Altered: {*******[altered]} "
+
+ENDDO
+
+VM
+echo "  "
+
+;------- Clean up intermediate files
+DE A
+tmp001
+
+RE
+   
+

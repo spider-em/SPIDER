@@ -1,0 +1,104 @@
+: SOURCE: spider/procs/maskft.spi
+;
+; PURPOSE: ; MASKS FOURIER TRANFORM.  Multiply a real-space mask by an
+; image's FT. 
+; Making the layerline mask should be straightforward.
+; The last two or three outputs will probably be the most useful.  
+;
+: AUTHOR: Tapu
+;
+; ASSUMPTIONS:
+;     1) INPUT IMAGE IS SQUARE AND HAS EVEN DIMENSIONS
+;     2) MASK DIMENSIONS ARE NSAM/2+1 X NROW
+
+; ------------- Inputs -------------
+[image] = 'prj0001'
+[mask]  = 'mask'
+
+; ------------- Outputs -------------
+[ft_dir]           = 'V1test'  ;  output files will be here
+[unmasked_ft]      = '[ft_dir]/1ft2real'
+[shifted_mask]     = '[ft_dir]/2shiftedft'
+[interpolated_mask]= '[ft_dir]/3interpft'
+[masked_ft]        = '[ft_dir]/4maskedft'
+[inverted_ft]      = '[ft_dir]/5ift'
+[masked_pws]       = '[ft_dir]/6maskedpw'
+
+; --------- END BATCH HEADER ---------
+
+VM
+echo "if(! -d [ft_dir]) mkdir [ft_dir]"|csh
+
+; Fourier transform image
+FT
+[image]        ; INPUT
+[unmasked_ft]  ; OUTPUT
+
+; Convert to real
+ST
+[unmasked_ft]  ; INPUT
+B              ; _B_uffer/header
+(5)            ; Header location
+(1)            ; File-type specifier for real image
+
+; Get transform dimensions
+FI x22,x12
+[unmasked_ft]  ; INPUT
+(12,2)         ; Header locations for x-dim, y-dim
+
+
+; MASK OPERATIONS
+
+; Shift origin
+x66=x12/2       ; Half-FT y-dim
+
+SH
+[mask]
+[shifted_mask]
+(0,-x66)
+
+; Double width of half-mask
+IP
+[shifted_mask]
+[interpolated_mask]
+x22,x12        ; Final dimensions
+
+
+MU             ; Multiply FT by half-mask
+MU
+[unmasked_ft]
+[interpolated_mask]
+[masked_ft]
+*              ; No more files to multiply
+
+CP
+[masked_ft]
+_4
+
+; Convert multiplied FT back to complex
+ST
+_4
+B             ; _B_uffer/header
+(5)           ; header location
+(-12)         ; File-type specifier for complex image
+
+FT            ; Inverse Fourier transform
+_4
+[inverted_ft]
+
+PW            ; CALCULATE POWER SPECTRUM & MASK
+[inverted_ft] ; INPUT
+_6            ; OUTPUT: power spectrum
+
+x11=(x22/2)   ; Image center
+x10-x11-1     ; Power-spectrum mask radius
+
+MA
+_6            ; INPUT: power spectrum
+[masked_pws]  ; OUTPUT
+(x10,2)       ; Outer, inner radii
+D             ; Sharp _D_isk cutoff
+C             ; _C_ircumferential average
+x11,x11       ; Mask center
+
+EN

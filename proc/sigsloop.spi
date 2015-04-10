@@ -1,0 +1,667 @@
+; NOTE : CHANGED 'PK 3D' to 'PK 3R' READ COMMENTS BELOW 'PK 3R' OPERATION
+;      : ADDED MASK TO RESTRICT THE PEAK SEARCH INSIDE THE MASK ONLY, LOOK ABOVE 'PK 3R'
+;
+; <html><head><title>Searches for molecular signature</title></head><body><pre>
+; sigsloop.pam                                Bimal Rath   :  JAN 2003
+;                        PARALLELIZED BY      ArDean Leith
+;
+; SEARCHES FOR MOLECULAR SIGNATURE (REFERENCE VOLUME) INSIDE A LARGE VOLUME. 
+; BE SURE BOTH VOLUMES HAVE SAME MAGNIFICATION (1 PIXEL = "N" NANOMETER) 
+;
+;;MD
+;;VB OFF
+MD
+TR OFF
+
+
+
+; get around the named variable related bug until Dean fixes it
+;x72 = [Y72]
+;x72
+
+x72   ; Needed from startup line!!!!
+
+
+; READ INPUT FILES AND REGISTERS
+@sigs_settings[x12,x65,x66,x67,x74,x75,x76,x77,x78,x79,x83,x95,x39,x61,x64]
+
+IF (x12 .GT. 1) THEN
+   MD
+   SET MP                 ; Set number of OMP processors
+   x12
+ENDIF
+
+; FIND NSAM, NROW AND NSLICE OF LARGE AND REFERENCE VOLUMES
+FI x20,x21,x22            ; Large volume size
+[LARGE_VOLUME]
+12,2,1
+
+x27 = INT(x20/2)+1        ; Center of large volume
+x28 = INT(x21/2)+1
+x29 = INT(x22/2)+1
+                        
+FI x23,x24,x25            ; Small volume size
+[PADDED_REF_VOLUME]
+12,2,1
+
+x26 = x23*x24*x25         ; Number of pixels in small volume
+
+x33 = INT(x23/2)+1        ; Center of small volume
+x34 = INT(x24/2)+1
+x35 = INT(x25/2)+1 
+
+x86 = x20-x23+1           ; big-small image size
+x87 = x21-x24+1
+x88 = x22-x25+1
+
+x36 = INT((x20-x23)/2)+1  ; Corner of small image inserted into center of big
+x37 = INT((x21-x24)/2)+1
+x38 = INT((x22-x25)/2)+1  
+ 
+WI           ; Window 
+[MASK_PKR]   ; Peak restricting mask
+_50          ; Output volume
+x86,x87,x88  ; Difference size
+x33,x34,x35  ; 1/2 size of padded reference volume
+
+x97 = 0                   ; Doc. file output line number
+
+IF (x61 .NE. 1) THEN 
+   ; NONTOMOGRAPHIC VOLUME
+
+   ; MAKE AN APPROPRIATE MASK FROM THE REFERENCE VOLUME   
+   ; THRESHOLD VALUE NEEDS TO BE CHANGED FOR EACH REFERENCE VOLUME
+   ; NOTE: DON'T REUSE _1
+
+   TH M           ; Threshold to create mask
+   [PADDED_REF_VOLUME]
+   _1             ; Output mask volume
+   B              ; Voxels below x83 set = 0
+   x83            ; Threshold level
+ENDIF
+
+; EULER ANGLE SEARCH IS DONE HERE
+
+; USED IN LOOP
+x56 = x65 + (x72-1)*x74          
+        
+DO LB5 x71 = 1, x78
+   x57 = x66+(x71-1)*x75
+      
+   DO LB6 x70 = 1, x77  
+      x58 = x67+(x70-1)*x76         
+
+      ; DO LOOP NUMBER
+      x90 = (x71-1)*x77 + x70
+
+      IF (x61 .EQ. 1) THEN
+         ; TOMO VOLUME
+	 ; ROTATE THE PADDED REFERENCE VOLUME
+         RT 3D
+         [PADDED_REF_VOLUME]
+         _55
+         x56,x57,x58
+
+         x69 = x33 - 2 ; Radius of the object minus 2 pixels
+
+         ; CREATE PROJECTIONS FROM THE ROTATED PADDED REFERENCE VOLUME
+         PJ 3Q	       ; Create projection series
+         _55	       ; Input vol
+         x69           ; Radius of the object
+         [SEL_DOC]     ; EDIT desired selection file if necessary
+         [ANG_DOC]     ; EDIT desired angles file if necessary
+         _56@***       ; Inline stack template
+         x64           ; # of images to be stored in the inline stack        
+   
+         x68 = 0.3     ; Frequency cut-off for Parzen Filter
+         x41 = 1       ; Begining of the Y-axis for reconstruction
+   
+         ; DO THE RECONSTRUCTION ON THE FLY OF THE OBJECT FROM THE PROJECTIONS
+         BP W2
+         _56@***       ; EDIT file prefix of aligned images if necessary
+         [SEL_DOC]     ; EDIT desired selection file if necessary
+         [ANG_DOC]     ; EDIT desired angles file if necessary
+         x69,x23       ; EDIT (image height/2 then minus 2), (desired recon. depth)
+         x41,x23       ; EDIT beginning and ending y-axis slices (max is image height)
+         x68           ; Frequency cut-off for Parzen Filter
+         _57           ; EDIT output filename if desired
+   
+      ENDIF
+
+      IF (x39 .EQ. 1) THEN
+         ; ASYMMETRIC MASK IS USED
+
+         IF (x61 .EQ. 1) THEN
+            ; TOMOGRAPHIC VOLUME
+	    
+	    FS x80,x81           ; Find max and min of pixel values
+	    _57                  ; Reconstructed refrence volume
+	    
+	    x82 = (x81 - x80)/2   
+	    x82 = b82 + x80      ; Thershold is halfway between max and min of pixel values
+
+            ; THRESHOLD THE RECONSTRUCTED VOLUME
+            ; NOTE: DON'T REUSE _4
+            TH M           ; Threshold to create mask
+            _57            ; Reconstructed refrence volume
+            _4             ; Thresholded rotated mask output
+            B              ; Below = 0
+            x82            ; Threshold value
+
+         ELSE
+            ; NON-TOMOGRAPHIC VOLUME
+
+            ; ROTATE THE MASK
+            RT 3D          ; Rotate mask volume
+            _1             ; Mask voume input
+            _2             ; Rotated mask output
+            x56,x57,x58    ; Rotation angle
+
+            ; THRESHOLD THE ROTATED MASK
+            ; NOTE: DON'T REUSE _4
+            TH M           ; Threshold to create mask
+            _2             ; Rotated mask input
+            _4             ; Thresholded rotated mask output
+            B              ; Below = 0
+            (.5)           ; Threshold value
+
+         ENDIF
+
+      ELSE
+         ; ROTATIONALLY INVARIANT MASK IS USED
+
+         IF (x90 .EQ. 1) THEN
+   
+            x53 = (x23/2) - 2   ; Radius of the mask sphere
+            x42 = 0
+            ; JUST DO IT ONCE. (FIRST LOOP ONLY)
+            MO 3
+            _4
+            x23,x24,x25
+            SP
+            N
+            (1.0)
+            x53,x42
+            x33,x34,x35
+            (0,0,0)
+         ENDIF
+
+      ENDIF
+
+      ; IN ASYMMETRIC CASE SET X55 =1 FOR ALL LOOPS
+      ; IN SYMMETRIC  CASE SET X55 =1 ONLY FOR THE FIRST LOOP
+      IF (x39 .EQ. 1) THEN
+         x55 = 1
+      ELSE 
+         x55 =0
+      ENDIF
+
+      IF (x90 .EQ. 1) THEN
+         x55 = 1
+      ENDIF
+
+      IF ( x55 .EQ. 1) THEN
+         ; FIND NUMBER OF NON-ZERO PIXELS INSIDE MASK
+         ; (SAME AS SUM OF ALL PIXELS IN MASK)
+         FS x11,x11,x50,x11
+         _4             ; Thresholded rotated mask
+
+         x50 = x50*x26
+         IF (x50.LE.0)THEN
+            VM
+            echo 'NO NON-ZERO PIXELS INSIDE MASK'
+            EN
+         ENDIF
+         x51 = 1.0 / x50 ; For speed
+
+         ; CREATE A BLANK VOLUME, SAME SIZE AS LARGE VOLUME
+         BL             ; Create blank volume
+         _25            ; Blank output volume
+         x20,x21,x22    ; Size
+         N              ; Not average background
+         (0)            ; Background
+
+         ; INSERT ROTATED MASK INSIDE THE BLANK VOLUME
+         IN              ; Insert
+         _4              ; Thresholded rotated mask
+         _25             ; Padded mask output volume
+         (1,1,1)         ; Position
+
+         ; FT ON PADDED MASK,  NOTE: DON'T REUSE _36
+         FT              ; Fourier transform
+         _25             ; Padded mask
+         _36             ; Fourier of padded mask
+	 
+;bimal testing begin
+cp
+_25
+_90
+	 
+CP
+_36
+_91
+;bimal testing end
+
+         ; MULTIPLY FT OF LARGE VOLUME WITH COMPLEX CONJUGATE OF PADDED MASK
+         MU M            ; Complex multiplication
+         [LARGE_FT]      ; First input
+         _36             ; Fourier of padded mask
+         _35             ; Output
+         *
+
+
+;bimal testing begin
+cp
+[LARGE_FT]
+_92
+	 
+CP
+_35
+_93
+;bimal testing end
+
+
+         ; INVERSE FT
+         FT              ; Inverse Fourier transform
+         _35             ; Input
+         _27             ; Output
+
+
+;bimal testing begin
+cp
+_27
+_94
+;bimal testing end
+
+         x52=x51*x51
+
+         ; NORMALIZE 
+         AR              ; Arithmetic operation
+         _27             ; Input
+         _27             ; Output
+         P1*P1*x52       ; P2 = (P1 / (No. OF NON-ZERO PIXELS INSIDE MASK))**2 
+
+         ; MULTIPLY FT OF SQUARE OF LARGE VOLUME WITH COMPLEX CONJUGATE 
+         ; OF FT OF BLANK VOLUME
+         MU M           ; Complex multiplication
+         [LARGE_SQ_FT]  ; Input
+         _36            ; Multiplier
+         _35            ; Output
+         *
+
+;bimal testing begin
+cp
+[LARGE_SQ_FT]
+_95
+	 
+CP
+_35
+_96
+;bimal testing end
+
+	 
+         ; DO INVERSE FT
+         FT           ; Inverse Fourier transform
+         _35          ; Input
+         _25          ; Output
+
+;bimal testing begin
+cp
+_25
+ _97
+;bimal testing end
+
+
+         ; NORMALIZE
+         AD F
+         _25          ; Input (From FT OF SQUARE OF LARGE VOLUME)
+         _27          ; Input (From FT OF LARGE VOLUME)
+         x51,-1.0     ; p_25 = p_25 * x51 - p_27
+         _25          ; Output
+          
+         ; GET RID OF SQRT OF -VE # AND DIVISION BY ZERO(WHILE DIVIDING THE 
+         ; CCF BY LOCAL STANDARD DEVIATION)
+	 ; IF YOU FIND CCC > 1.0 AND THE LOCATIONS OF THE MOTIF OUTSIDE THE OUTLINE OF THE SEARCHED
+	 ; LARGE VOLUME THEN LOOK AT THE FILE _25 AND YOU WILL FIND PIXEL VALUES
+	 ; QUITE SMALL ~ < 1E-10 BUT NOT EQUAL TO ZERO. IN THIS CASE, CHANGE THE MASK THRESHOLD
+	 ; IN THE FOLLOWING OPERATION FROM ZERO (0) TO SOMETHING LIKE 1E-10. THIS MAY SOLVE
+	 ; THE PROBLEM. HOWEVER, YOU MAY NEED TO CHANGE THIS PARAMETER TO FIND THE CORRECT ONE
+	 ; TO BE USED. THIS PROBLEM OF GETTING -VE VARIANCE OR GETTING INCORRECT VARIANCE WHEN
+	 ; PIXELS UNDER THE MASK HAVE SAME/VERY_CLOSE VALUES IS DUE TO THE WAY VARIANCE IS 
+	 ; CALCULATED USING FOURIER TRANSFORM.	 
+         TH M
+         _25
+         _80
+         B
+         (0)
+        
+         MM
+         _80
+         _25
+         (9E+20)
+
+         ; LOCAL STANDARD DEVIATION
+         WU           ; Square root
+         _25          ; Input
+         _25          ; Output
+           
+         ; NOTE: DON'T REUSE _15  
+         WI           ; Window
+         _25          ; Input
+         _15          ; Output                       
+         x86,x87,x88  ; Size of difference
+         (1,1,1)      ; Position
+
+      ENDIF
+
+      ; ROTATE THE REFERENCE , DON'T REUSE _2 ------------------ step 2
+      
+      IF (x61 .NE. 1) THEN 
+         ; NON-TOMOGRAPHIC VOLUME
+         
+         RT 3D               ; Rotate volume
+         [PADDED_REF_VOLUME] ; Input
+         _2                  ; Output
+         x56,x57,x58         ; Angle
+      ELSE
+         ; TOMOGRAPHIC VOLUME
+         CP
+         _57
+         _2
+      ENDIF
+
+        
+      ; PREPARE THE REFERENCE VOLUME SUCH THAT THE AVERAGE INSIDE 
+      ; THE MASK = 0 AND THE STANDARD DEVIATION INSIDE THE MASK = 1
+      MM           ; Mask multiplication
+      _4           ; Rotated mask input
+      _2           ; Masked rotated reference input/output volume
+      (0)          ; Background for voxels < 0.5
+
+      ; FIND AVERAGE of rotated, masked ref. volume
+      FS x11,x11,x62,x63
+      _2           ; Masked volume
+        
+      ; SUM OF ALL PIXELS IN ROTATED, masked ref. volume
+      x40 = x62*x26 ; Average * No. of pixels
+
+      SQ           ; Square the rotated, masked volume
+      _2           ; Masked volume
+      _7           ; Squared masked volume
+               
+      ; FIND AVERAGE OF SQUARED ROTATED MASK
+      FS x11,x11,x62,x11
+      _7           ; Squared rotated masked volume
+
+      ; SUM OF ALL PIXELS SQUARED IN ROTATED MASK.
+      x45 = x62*x26
+
+      ; SD INSIDE MASK        
+      x46 = SQRT( (x45 - (x40*x40*x51)) / (x50-1) )
+
+      ; AVG INSIDE MASK         
+      x47  =  x40/x50    
+      x48  = 1.0 / x46  ; For speed
+
+      ; NORMALIZE
+      AR          ; Arithmetic operation
+      _2          ; Masked volume
+      _7          ; Normalized masked file
+      (P1-x47) * x48
+
+      MM          ; Mask multiply operation
+      _4          ; Mask 
+      _7          ; Masked input/output file
+      (0)
+
+      ; CREATE AN EMPTY VOLUME OF DIMENSION = LARGE VOLUME 
+      ; PASTE THE PREPARED REFERNCE VOLUME AT THE MIDDLE OF 
+      ; THIS EMPTY VOLUME            
+      BL          ; Create blank volume
+      _25         ; Large blank volume
+      x20,x21,x22 ; Size
+      N           ; Not average background
+      (0)         ; Background
+
+      IN          ; Insert
+      _7          ; Small volume
+      _25         ; Into large blank volume
+      1,1,1       ; put small image inside big at the corner
+
+      ; FIND CROSS CORRELATION FUNCTION OF THE ABOVE VOLUME WITH
+      ; WITH THE LARGE VOLUME.                           
+
+      FT
+      _25
+      _60
+      
+;bimal testing begin
+cp
+_25
+_98
+	 
+CP
+_60
+_99
+;bimal testing end      
+      
+      
+
+      ; SET F(0,0) ELEMENT = ZERO. DONE TO DO SIMILAR NORMALIZATION
+      ; AS DONE IN REAL SPACE 
+      RP
+      _60
+      (1,1,1)
+      (0)
+
+      RP
+      _60 
+      (2,1,1)
+      (0)
+
+      FT
+      [LARGE_VOLUME]
+      _61
+
+
+;bimal testing begin
+cp
+[LARGE_VOLUME]
+_81
+	 
+CP
+_61
+_82
+;bimal testing end      
+      
+
+      ; DON'T CHANGE ORDER OF INPUT IN THE FOLLOWING OPERATION
+      MU M
+      _61
+      _60
+      _62
+      *
+
+;bimal testing begin
+cp
+_60
+_83
+	 
+CP
+_62
+_84
+;bimal testing end      
+      
+
+      ; DO INVERSE FT
+      FT
+      _62
+      _27
+
+
+;bimal testing begin
+cp
+_27
+_85
+;bimal testing end      
+      
+
+
+      WI           ; Window
+      _27          ; CC volume
+      _13          ; Output
+      x86,x87,x88  ; Difference size
+      (1,1,1)      ; left corner of small volume    
+
+      ; DIVIDE THE CC FUNCTION WITH TOTAL NUMBER OF NON-ZERO PIXELS
+      ; INSIDE THE MASK         
+      AR          ; Arithmetic operation
+      _13         ; Input
+      _17         ; Output
+      P1 * x51
+
+      ; DIVIDE THE  ABOVE RESULT WITH CORRESPONDING ELEMENT OF 
+      ; THE LOCAL STANDARD DEVIATION ARRAY 
+      MU D        ; Divide
+      _17         ; Input
+      _15         ; Input
+      _13         ; Output
+      *
+
+      DE                         ; This doc file created by each 'PK 3D'
+      [DOC_FILE_DEL]_{****x72}
+
+      ; RESTRICT THE PEAK SEARCH INSIDE A GIVEN MASK
+      MM
+      _50
+      _13
+      (0)
+
+
+      ; PEAK SEARCH                 
+      PK 3D                      ; Peak search
+      _13                        ; Input file
+      +                          ; Maxima
+      (x95,1)                    ; Number of peaks, origin override flag
+      N                          ; No center of gravity calc.
+      (1,1)                      ; xy co-ordinate
+      (1)                        ; z co-ordinate
+      (1)                        ; peak no. for ratio
+      N                          ; No box
+      [DOC_FILE_DEL]_{****x72}   ; Output doc file
+
+
+      ; WRITE EULER ANGLES, XYZ POSITIONS, & PEAK HEIGHT TO FINAL DOC FILE 
+      DO LB10 x96 = 1,x95
+         UD S,x96,x11,x12,x13,x14,x16,x17,x18
+         [DOC_FILE_DEL]_{****x72}
+         ; CORRECT FOR THE CENTER OF THE PEAK WITH RESPECT TO LARGE VOLUME.
+         ; THE PEAK HEIGHT DETERMINED IN PEAK SEARCH STEP IS WITH RESPECT TO THE
+         ; VOLUME CREATED BY SUBTRACTING THE DIMENSION OF REFERENCE VOLUME
+         ; FROM THE LARGE VOLUME. FACTOR OF NSAM/2+1, NROW/2+1 AND NSLICE/2+1
+         ; ARE ADDDED
+         x30 = x11+x33
+         x31 = x12+x34
+         x32 = x13+x35
+         x97 = x97 + 1
+
+
+         ; DO NOT WRITE CROSS-CORRELATION COEFFICIENTS (CCC) IN SCIENTIFIC FORMAT. UNIX 
+         ; "SORT" COMMAND WILL HAVE TROUBLE TO SORT THE FILE.
+         ; CCC LESS THAN 0.05 DOES NOT MEAN MUCH
+         IF (x18 .LT. (.05)) x18 = -99
+	 
+; bimal testing begin
+IF (x18 .GT. (1.0)) then
+   cp
+   _81
+   file_81
+	 
+   cp
+   _82
+   file_82
+	 
+   cp
+   _83
+   file_83
+	 
+   cp
+   _84
+   file_84
+	 
+   cp
+   _85
+   file_85
+	 
+   cp
+   _90
+   file_90
+	 
+   cp
+   _91
+   file_91
+	 
+   cp
+   _92
+   file_92
+	 
+   cp
+   _93
+   file_93
+	 
+   cp
+   _94
+   file_94
+	 
+   cp
+   _95
+   file_95
+	 
+   cp
+   _96
+   file_96
+	 
+   cp
+   _97
+   file_97
+	 
+   cp
+   _98
+   file_98
+	 	 
+	 
+   cp
+   _99
+   file_99
+	 	 	 	 	 
+	 
+   vm
+   echo "\n\n*************ERROR ***************\n\n"
+	    
+endif	 
+; bimal testing end
+	 
+        
+
+         SD x97,x56,x57,x58,x30,x31,x32,x18
+         [DOC_FILE_OUT]_{****x72}       
+      LB10
+         
+      UD E                                                               
+      DE                         ; This doc file created by each 'PK 3D'
+      [DOC_FILE_DEL]_{****x72}
+   LB6
+      
+   MY FL
+      
+LB5
+
+SD E
+[DOC_FILE_OUT]_{****x72}       
+
+@signal_pub(x72)             ; Signal finished          
+EN
+
+; </body></pre></html>
+
+

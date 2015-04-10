@@ -1,0 +1,419 @@
+; sigsearch.bat     	          		BIMAL RATH : JAN 2003
+;
+; SEARCHES FOR MOLECULAR SIGNATURE (REFERENCE VOLUME) INSIDE A LARGE VOLUME. 
+; WORKS FOR NON-GLOBULAR REFERENCE VOLUMES. USES A NON-ISOTROPIC MASK.
+; USED ALAN ROSEMAN'S FORMULATION FOR LOCAL CROSS-CORRELATION COEFFICIENTS.
+; (ULTRAMICROSCOPY 2003)
+
+MD
+VB OFF
+
+
+; MAKE SURE THAT BOTH VOLUMES ARE OF SAME MAGNIFICATION (1 PIXEL = "N" NANO
+; METER) 
+
+; READ INPUT FILES
+
+FR 
+?LARGE_VOLUME?<1>
+
+FR 
+?SMALL_REFERENCE_VOLUME?<2>
+
+; PEAK SEARCH FILES
+FR L
+?DOC_FILE #5?<7>
+DOC_DELETED_5
+
+; FILE WITH EULERIAN ANGLES AND INFO FROM PEAK SEARCH FILE
+FR L
+?DOC_FILE #6?<8>
+DOC_DELETED_6
+
+; SORT INFO FROM EULERIAN ANGLES FILE AND PEAK SEARCH FILE AS PER PEAK HEIGHT
+FR 
+?DOC_FILE ?<9>
+
+; EULERIAN ANGLES BEGINING AND ENDVALUES 
+; PHI (X65-X68), THETA(X66-X69), PSI(X67-X73)
+; NOTE: KEEP ENDVALUES ALWAYS +VE
+ 
+RR X65
+?PHI, START ANGLE ?
+RR X68
+?PHI, END ANGLE (+VE) ?
+RR X74
+?PHI, SEARCH STEP SIZE (+VE) ?
+
+; AVOID DIVISION BY ZERO
+IF (X74.EQ.0) THEN
+   X74 = 1
+ENDIF
+
+RR X66
+?THETA, START ANGLE ?
+RR X69
+?THETA, END ANGLE (+VE) ?
+RR X75
+?THETA, SEARCH STEP SIZE (+VE) ?
+
+; AVOID DIVISION BY ZERO
+IF (X75.EQ.0) THEN
+   X75 = 1
+ENDIF
+
+RR X67
+?PSI, START ANGLE ?
+RR X73
+?PSI, END ANGLE (+VE) ?
+RR X76
+?PSI, SEARCH STEP SIZE (+VE) ?
+
+; AVOID DIVISION BY ZERO
+IF (X76.EQ.0) THEN
+   X76 = 1
+ENDIF
+
+; # OF PEAKS TO BE SEARCHED, NORMALLY # OF PARTICLES EXPECTED PLUS 3 (THREE)
+RR X95 
+?NO. OF OCCURENCE OF REFERENCES  ?
+X95 = X95 + 3
+
+; PIXEL VALUE FOR MASKING 
+RR X83
+? PIXEL VALUE FOR MASKING (VALUES < ENTERED VALUE = 0, REST = 1) ?
+
+; DELETES THE DOCUMENT FILES IF THEY EXIST
+IQ FI X15
+<7>
+IF (X15.EQ.1) THEN
+   DE
+   <7>
+ENDIF
+
+IQ FI X15
+<8>
+IF (X15.EQ.1) THEN
+   DE
+   <8>
+ENDIF
+
+IQ FI X15
+<9>
+IF (X15.EQ.1) THEN
+   DE
+   <9>
+ENDIF
+
+; FIND NSAM, NROW AND NSLICE OF LARGE AND REFERENCE VOLUMES
+FI X20,X21,X22
+<1>
+12,2,1
+
+FI X23,X24,X25
+<2>
+12,2,1
+
+X86 = X20-X23+1
+X87 = X21-X24+1
+X88 = X22-X25+1
+
+X33 = INT(X23/2)+1
+X34 = INT(X24/2)+1
+X35 = INT(X25/2)+1 
+
+; EULER ANGLE SEARCH IS DONE HERE
+
+; MAKE AN APPROPRIATE MASK FROM THE REFERENCE VOLUME
+; THERESHOLD VALUE NEED TO BE CHANGED FOR EACH REFERENCE VOLUME
+; NOTE: DON'T REUSE _1
+TH M
+<2>
+_1
+B
+X83
+        
+; END VALUES FOR LOOPS         
+X77 = ((X68-X65)/X74)+1
+X78 = ((X69-X66)/X75)+1
+X79 = ((X73-X67)/X76)+1
+
+DO LB4 X72 = 1, X79
+   X58 = X67+(X72-1)*X76 
+   
+   DO LB5 X71 = 1, X78
+      X57 = X66+(X71-1)*X75
+      
+      DO LB6 X70 = 1, X77  
+         X56 = X65+(X70-1)*X74         
+
+         ; ROTATE THE REFERENCE
+         ; NOTE: DON'T REUSE _2
+         RT 3D
+         <2>
+         _2
+         X56,X57,X58
+         
+         ; ROTATE THE MASK
+         RT 3D
+         _1
+         _3
+         X56,X57,X58
+
+         ; THRESHOLD THE ROTATED MASK
+         ; NOTE: DON'T REUSE _4
+         TH M
+         _3
+         _4
+         B
+         (.5)
+
+         FS X80,X81,X50,X82
+         _4
+         
+         ; TOTAL NUMBER OF NON-ZERO PIXELS INSIDE THE MASK
+         X50 = X50*X23*X24*X25
+
+         ; CREATE A BLANK IMAGE, SAME SIZE AS LARGE IMAGE
+         MO 3
+         _5
+         X20,X21,X22
+         B
+         (0)
+
+         ; INSERT THE MASK INSIDE THE BLANK IMAGE
+         IN
+         _4
+         _5
+        (1,1,1)
+
+         ; DO FT ON BLANK IMAGE(WITH THE MASK INSERTED)
+         ; NOTE: DON'T REUSE _6
+         FT
+         _5
+         _6
+
+         ; DO FT ON LARGE IMAGE
+         FT
+         <1>
+         _7
+
+         ; MULTIPLY FT OF LARGE IMAGE WITH COMPLEX CONJUGATE OF FT OF BLANK IMAGE
+         MU M
+         _7
+         _6
+         _8
+         *
+
+         ; DO INVERSE FT
+         FT
+         _8
+         _9
+
+         ; NORMALIZE 
+         AR
+         _9
+         _10
+         (P1+0)/(X50)
+
+         SQ
+         _10
+         _11
+
+         ; REUSE MEMORY SPACE FOR STORING IMAGE (_3, _5, _7 - _10)
+         SQ
+         <1>
+         _3
+         
+         ; DO FT ON SQUARE OF THE LARGE IMAGE
+         FT
+         _3
+         _5
+
+         ; MULTIPLY FT OF SQUARE OF LARGE IMAGE WITH COMPLEX CONJUGATE 
+         ; OF FT OF BLANK IMAGE
+         MU M
+         _5
+         _6
+         _7
+
+         ; DO INVERSE FT
+         FT
+         _7
+         _8
+
+         ; NORMALIZE
+         AR
+         _8
+         _9
+         (P1+0)/(X50)
+
+         SU
+         _9
+         _11
+         _10
+
+         ; LOCAL STANDARD DEVIATION
+         WU
+         _10
+         _3
+           
+         ; NOTE: DON'T REUSE _5  
+         WI
+         _3
+         _5                        
+         X86,X87
+         X88
+         (1,1)
+         (1)
+
+         ; PREPARE THE REFERENCE VOLUME SUCH THAT THE AVERAGE INSIDE 
+         ; THE MASK = 0 AND THE STANDARD DEVIATION INSIDE THE MASK = 1
+         MM
+         _4
+         _2
+         (0)
+   
+         ; FIND AVERAGE
+         FS X60,X61,X62,X63
+         _2
+         
+         ; SUM
+         X40 = X62*(X23*X24*X25)
+         
+         SQ
+         _2
+         _7
+               
+         ; FIND AVERAGE
+         FS X60,X61,X62,X63
+         _7
+
+         ; SUM
+         X45 = X62*(X23*X24*X25)
+
+         ; SD INSIDE MASK        
+         X46 = SQRT((X45 -((X40*X40)/X50))/(X50-1))
+
+         ; AVG INSIDE MASK         
+         X47  =  X40/X50    
+         
+         ;NORMALIZE
+         AR
+         _2
+         _8
+         (P1-X47)/X46
+
+         MM
+         _4
+         _8
+         (0)
+
+         ; CREATE AN EMPTY VOLUME OF DIMENSION = LARGE VOLUME DIMENSION 
+         ; AND PASTE THE PREPARED REFERNCE VOLUME AT THE MIDDLE OF 
+         ; THIS EMPTY VOLUME            
+         MO 3
+         _9
+         X20,X21
+         X22
+         B
+         (0)
+
+         X36 = INT((X20-X23)/2)+1
+         X37 = INT((X21-X24)/2)+1
+         X38 = INT((X22-X25)/2)+1  
+                        
+         IN
+         _8
+         _9
+         X36,X37,X38
+
+         ; FIND CROSS CORRELATION FUNCTION OF THE ABOVE VOLUME WITH
+         ; WITH THE LARGE VOLUME
+                          
+         CC
+         <1>
+         _9
+         _10
+
+         WI
+         _10
+         _3
+         X86,X87
+         X88
+         X33,X34
+         X35      
+
+         ; DIVIDE THE CC FUNCTION WITH TOTAL NUMBER OF NON-ZERO PIXELS
+         ; INSIDE THE MASK         
+         AR
+         _3
+         _7
+         P1/X50
+
+         ; DIVIDE THE  ABOVE RESULT WITH CORRESPONDING ELEMENT OF 
+         ; THE LOCAL STANDARD DEVIATION ARRAY 
+         MU D
+         _7
+         _5
+         _8
+         *
+         
+         ; DO PEAK SEARCH                 
+         PK 3D
+         _8
+         +
+         (X95,0)
+         N
+         N
+         <7>
+
+         ; DO LOOP #
+         X90 = (X72-1)*X77*X78 + (X71-1)*X77 + X70
+
+
+         ; WRITE EULER ANGLES AND XYZ POSITIONS AND PEAK HEIGHT VALUE TO FILE <8>
+         DO LB10 X96 = 1,X95
+            UD S,X96,X11,X12,X13,X14,X16,X17,X18,X19
+            <7>
+            X97 = ((X90 - 1)*X95 + X96)
+            ; CORRECT FOR THE CENTER OF THE PEAK WITH RESPECT TO LARGE VOLUME.
+            ; THE PEAK HEIGHT DETERMINED IN PEAK SEARCH STEP IS WITH RESPECT TO THE
+            ; VOLUME CREATED BY SUBSTRACTING THE DIMENSION OF REFERENCE VOLUME
+            ; FROM THE LARGE VOLUME. FACTOR OF NSAM/2+1, NROW/2+1 AND NSLICE/2+1
+            ; ARE ADDDED
+            X30 = X11+INT(X20/2)+1
+            X31 = X12+INT(X21/2)+1
+            X32 = X13+INT(X22/2)+1
+            SD X97,X56,X57,X58,X30,X31,X32,X18
+            <8>         
+         LB10
+         
+         UD E
+         
+         DE
+         <7>      
+                                                               
+      LB6
+   LB5
+LB4 
+
+; SORT THE DOCUMENT AS PER PEAK HEIGHT
+DOC SORT
+<8>
+<9>
+7
+Y    
+
+; INSERT COMMENTS
+SD /     PHI         THETA       PSI         X           Y           Z =>PEAK HT
+<9>
+
+SD E
+<9>
+
+DE
+<8>
+           
+EN
+

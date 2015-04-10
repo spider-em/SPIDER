@@ -1,0 +1,223 @@
+; Batch file to cross-correllate with average image
+; Written 01/13/03 by Christian Renken
+; Cross Correlates using the shared information in all aligned images    ;
+
+x30=38          ;zero degree tilt image number
+x31=1           ;Start image number
+x32=75          ;End image number
+x42=0.30        ;image mask radius
+x43=0.25        ;reference mask radius
+x60=0.005       ;High pass filter radius
+x61=0.5         ;Low pass filter radius
+
+;**************INPUT FILES*******************************
+
+FR L
+<in>D_spi/k10a***
+
+;**************OUTPUT FILES******************************
+
+FR L
+<out>D_xca/k10a***
+FR L
+<corr>D_xca/corrections
+FR L
+<ave>D_xca/finalave
+FR L
+<pws>D_xca/finalpws
+FR L
+<ccf>D_xca/ccf***
+FR L
+<mon>D_xca/ccfmon
+;***************END OF HEADER****************************
+
+;set number of processors
+MD
+SET MP
+0
+
+;make directory for aligned images if doesn't exist
+VM
+ls | grep D_xca || mkdir D_xca
+;get image dimensions
+FI x40
+<in>x30
+(2,12)
+x41=x40/2+1     ;x midpoint
+x44=x40*x42     ;image mask radius
+x45=x40*x43     ;ref mask radius
+x50=x40*1.25    ;padding for image shifts
+x52=x50*.2+1    ;top-left corner for windowing after padding
+x46=x40/2       ;ccf window size   
+x47=x40/4+1     ;top left corner for ccf window
+x48=x40/4       ;final dimension of ccf
+
+DE
+<corr>
+
+CP
+<in>x30
+<out>x30
+
+CP                      ;Generate the reference image for +/- 2 Degrees
+<in>x30
+_1
+
+x79=x30
+
+DO LB1 x90=x31,x32      ; begin Loop for aligning images 
+DO LB2 x91=1,2          ; Swtich between -/+ tilt, negetive tilt first
+
+x92=(-1)**x91*x90
+x99=x30+x92
+IF(x99.LT.x31)GOTO LB10
+IF(x99.GT.x32)GOTO LB10
+IF(x80.EQ.1)THEN
+   CP
+   <in>x99
+   temp
+ELSE
+   CP
+   <out>x99
+   temp
+ENDIF
+
+MA                      ;Mask for cross-corr.
+temp ;<in>x99
+_2
+(x44,0)
+T
+A 
+(x41,x41)
+
+FQ
+_2
+_3
+ (2)   
+x60
+
+FQ
+_3
+_2
+(1)
+x61
+
+MA                      ;Mask ref for Cross-Corr
+_1
+_3
+(x45,0)
+T 
+A
+(x41,x41)
+
+FQ
+_3
+_4
+(2)
+x60
+
+FQ
+_4
+_3
+(1)
+x61
+
+CC N                    ;Do the cross-corr
+_3
+_2
+_7 
+ 
+AR SCA
+_7
+_6
+(0,256)
+pk m x10,x11,x12,x13
+_6
+
+  ; keep blank
+PD
+temp   
+_8
+x50,x50
+M
+x52,x52
+
+SH
+_8 ;<in>x99
+_9 ;<out>x99
+x12,x13
+wi
+_9
+<out>x99
+x40,x40
+x52,x52
+
+WI
+_6
+_9
+x46,x46
+x47,x47
+
+IP
+_9
+<ccf>x99
+x48,x48
+
+IF(x99.LT.x79)THEN      ;Calculate low aligned image
+   x79=x99
+ENDIF
+
+SD x99,x12,x13,x82              ;Keep track of corrections
+<corr>
+LB10
+LB2                     ;Go and do positive tilt
+
+AS R                    ;Create new ref image
+<out>                   ;as average of all aligned images
+x79-x99
+A   
+_1
+_3
+LB1                     ;Go to next tilt increment + and -
+
+CP
+_1
+<ave>
+
+FT
+<ave>
+_1 
+    
+PW
+_1
+_2
+fs x10,x11,x12,x13
+_2
+x15=x12+x13*0.5
+
+TH
+_2
+<pws>
+A 
+x15
+
+WI
+<pws>  
+_9
+x46,x46
+x47,x47
+
+IP
+_9
+<ccf>x30
+x48,x48
+
+MN S
+<ccf>  
+x31-x32
+10,2
+0
+<mon>
+TM
+EN
+

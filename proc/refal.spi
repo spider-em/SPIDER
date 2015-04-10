@@ -1,0 +1,338 @@
+; %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+; refal.sys - procedure implementing reference-free alignment.  05/17/93
+;             It uses two alignment commands: AP SA and AP RA.
+;             The procedure can make up to 9 iteration steps and align
+;             up to 9999 images (provided that enough computer memory is 
+;             available).
+;             The immages do not have to have power-of-two dimensions.
+;
+; Usage: see B01.ALP example.
+; 
+;
+; The theory is decribed in:
+; "Three-dimensional reconstruction of single particles embedded in ice".
+; P.Penczek, M.Radermacher, J.Frank. Ultramicroscopy, 1992, 40, 33-53.
+;
+; Implemented by P.Penczek.
+;
+; %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+; B01.ALP - alignment program, calls the reference-free alignment procedure
+;@apsa
+;3
+;6
+;5
+;25
+;0
+;fals
+;apsa001
+;apra001
+;prm001
+;shifts
+;par001
+;avs001
+;pur***
+;a1a***
+;a1v***
+;a2a***
+;a2v***
+;en
+;
+; %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+;
+;  DESCRIPTION OF THE FILE NAMES USED:
+;
+;  The input data is the series of images
+; <11> PAR****    1-1210
+;
+;  The output data is the separate series of images calculated after
+;  each step of alignment
+; <13> PUR*****
+;  first digit stands for the number of alignment step, the remaining
+;  four digits are reserved for the particle number.
+;
+;  Program uses the following document files:
+;
+; <6> FALS - dummy file to initialize first shift alignment containing
+;         particle numbers
+;
+; <7> APSA*** - ending with the number indicating the number of alignment
+;            step. This is the document file produced by the shift
+;            alignment (AP SA). Details are in the manual chapter APSA.MAN.
+;
+; <8> APRA*** - ending with the number indicating the number of alignment
+;            step. This is the document file produced by the rotational
+;            alignment (AP RA). Details are in the manual chapter APRA.MAN.
+;
+; <9> PRM***  - ending with the number indicating the number of alignment
+;            step. This is the document file containing the combined alignment
+;            parameters for each particle after all alignment steps made
+;            up to this one. When applied to the initial (input) data
+;            they will produce the aligned and centered series of particles.
+;            The angles (after reversing the snig) can be used in 3D
+;            reconstruction.
+;            This file contains four columns:
+;              1                      2        3        4
+;            particle number        angle    X shift   Y shift
+;
+; <10> SHIFTS -  contains X,Y shifts needed to center the average calculated
+;            after each shift alignment.
+;
+;
+;  The program requires specification of the following input: 
+;  <1> X61 - number of alignment steps 
+;        First is the initialization step - shift only (APSA)
+;        Next X61-1 double steps are made - (rotation + shift)
+;
+;       X62 - number of particles
+;  <2>  X63 - first particle number
+;  <3>  X41 - first ring number (required by AP RA)
+;  <4>  X42 - last ring number (required by AP RA)
+;
+;
+; %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+;
+;
+;  Beginning of the program.
+;  -------------------------
+;                                                            
+; Specify input parameters:
+;-------------------------------------------------------------------
+;  X61 - number of alignment steps 
+;        First is the initialization step - shift only (APSA)
+;        Next X61-1 double steps are made - (rotation + shift)
+RR X61
+?Number of alignment steps?
+;-------------------------------------------------------<1>
+;  X62 - number of particles
+RR X62
+?Number of particles?
+;-------------------------------------------------------<2>
+;  X63 - first particle number
+X63=1
+;
+;  X41,X42 - specification of first and last ring numbers
+RR X41
+?First ring number for rotational alignment?
+;-------------------------------------------------------<3>
+RR X42
+?Last ring number for rotational alignment?
+;-------------------------------------------------------<4>
+RR X88
+?0 - bright on dark background; 1 - dark on bright background?
+;-------------------------------------------------------<5>
+;
+; End of the input parameters block.
+;-------------------------------------------------------------------
+;
+;  Prompt doc file names
+FR
+?Name of a dummy document file?
+;-------------------------------------------------------<6>
+FR
+?Name of a doc file produced by shift alignment?
+;-------------------------------------------------------<7>
+FR
+?Name of a doc file produced by rotational alignment?
+;-------------------------------------------------------<8>
+FR
+?Name of a doc file containing the combined alignment parameters?
+;-------------------------------------------------------<9>
+FR
+?Name a doc file containing shift parameters found for the averages?
+;-------------------------------------------------------<10>
+;  Prompt input file names
+FI
+?Name of input file?
+;-------------------------------------------------------<11>
+;  Prompt output file names
+FR
+?Name of average file (produced by APSA)?
+;-------------------------------------------------------<12>
+FR
+?Name of aligned files?
+;-------------------------------------------------------<13>
+FR
+?First 1/2 average of aligned files?
+;-------------------------------------------------------<14>
+FR
+?First 1/2 variance of aligned files?
+;-------------------------------------------------------<15>
+FR
+?Second 1/2 average of aligned files?
+;-------------------------------------------------------<16>
+FR
+?Second 1/2 variance of aligned files?
+;-------------------------------------------------------<17>
+;
+;  X71 - current step number
+X71=1
+; FALS is a dummy document file containing particle numbers in the first
+;      column. In general they do not have to be in consecutive order
+;      neither begin from one.
+X31=0.0
+X32=1.0
+DO LB1 I=1,X62
+SD X0,X0,X31,X31,X32
+<6>
+LB1
+;
+; First shift alignment with 180 degs check to center all the particles.
+AP SA
+<11>001
+<6>
+1
+Y
+0,0
+<7>X71
+<12>X71
+;
+;
+;   Calculate center of gravity using CG PH to center the average.
+;
+IF(X88.EQ.1) GOTO LB41
+CG PH,X21,X22
+<12>X71
+IF(X88.EQ.X88) GOTO LB42
+LB41
+AR
+<12>X71
+TMP999
+((P1*-1)+0)
+CG PH,X21,X22
+TMP999
+DE
+TMP999
+LB42
+SD X71,X21,X22
+<10>
+;
+;  X21 and X22 contain integer shift values which will be used to
+;  center all the images.
+;
+;  
+;  Shift and rotate all the input data (using center correction
+;  shifts found by CG PH).  The resulting file series will be used
+;  in the next alignment step.
+;
+DO LB2 I=1,X62
+;               For short image series use UD IC instead on remove ";" signs
+;               from UD ICE lines in the program.
+UD S,X0,X31,X32,X33,X34,X35,X36
+<7>X71
+X34=X34-X21
+X35=X35-X22
+X91=X71*10000+X31
+RT SQ
+<11>X31       
+<13>00X91
+X32
+X34,X35
+SD X0,X31,X32,X34,X35
+<9>X71
+LB2
+;
+;UD ICE
+;<7>X71
+;
+;
+;  Main loop LB9 - make X61-1 steps of alignment.
+;  ---------------------------------------------
+;
+DO LB9 I=2,X61
+;
+X71=X0
+X70=X71-1
+X93=X70*10000+X63
+X92=X70*10000+X62
+;
+;                     Rotational alignment
+AP RA
+<13>00X93
+X93-X92
+X41,X42
+(1)
+F
+(0,0)
+<8>X71
+;
+;                     Shift alignment
+AP SA
+<13>00X93
+<8>X71
+(1)
+N
+(0,0)
+<7>X71
+<12>X71
+;
+;   Calculate center of gravity using CG PH to center the average.
+;
+IF(X88.EQ.1) GOTO LB51
+CG PH,X82,X84,X21,X22
+<12>X71
+IF(X88.EQ.X88) GOTO LB52
+LB51
+AR
+<12>X71
+TMP999
+((P1*-1)+0)
+CG PH,X82,X84,X21,X22
+TMP999
+DE
+TMP999
+LB52
+SD X71,X21,X22
+<10>
+;  
+;  At this stage it is advisable to remove the aligned image series
+;  aligned during the provious step for the sake of the disk space.
+;
+DE A
+<13>00X93
+;
+;
+;  Rewrite the whole image series combining alignment parameters
+;  and applying them to the input series PAR****.  A new, aligned
+;  and centered series <13>***** is produced.
+;
+DO LB8 I=1,X62
+;               For short image series use UD IC instead on remove ";" signs
+;               from UD ICE lines in the program.
+UD S,X0,X81,X82,X84,X85
+<9>X70
+UD S,X0,X31,X32,X33,X34,X35,X36
+<7>X71
+SA P,X82,X84,X85,X32,X34,X35,X52,X54,X55
+X54=X54-X21
+X55=X55-X22
+X91=X71*10000+X81
+RT SQ
+<11>X81     
+<13>00X91
+X52
+X54,X55
+SD X0,X81,X52,X54,X55
+<9>X71
+LB8
+;UD ICE
+;<7>X70
+;
+;
+;   The following block can be used to calculate current averages
+;   and estimate the resolution.
+X93=X71*10000+X63
+X92=X71*10000+X62
+AS R
+<13>00X93
+X93-X92
+E
+<14>X71
+<15>X71
+<16>X71
+<17>X71
+;
+;  Calculate the resolution using AASX71 and ABSX71.
+;  Use your own procedure ..... 
+;
+LB9
+RE

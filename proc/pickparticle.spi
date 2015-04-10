@@ -1,0 +1,820 @@
+; pickparticle.bat     	          		BIMAL RATH : FEB 2003
+;
+; PICKS PARICLES FROM A MICROGRAPH. INPUTS ARE A MICROGRAPH AND THE 3D VOLUME
+; OF THE PARTICLE THAT WE ARE SEARCHING FOR ITS PROJECTION INSIDE THE MICROGRAPH.
+; USES A NON-ISOTROPIC MASK. USED ALAN ROSEMAN'S FORMULATION FOR CALCULATING 
+; LOCAL CROSS-CORRELATION COEFFICIENTS(ULTRAMICROSCOPY 2003).
+
+MD
+VB OFF
+
+
+; MAKE SURE THAT BOTH THE MICROGRAPH AND THE 3D VOLUME OF THE PARTICLE 
+; ARE OF SAME MAGNIFICATION (1 PIXEL = "N" NANOMETER) 
+
+; READ INPUT FILES
+
+FR 
+?MICROGRAPH FILE (INPUT) NAME ?<1>
+
+FR 
+?PARTICLE VOLUME (INPUT) NAME ?<2>
+
+FR
+?NOISE FILE (INPUT, USED FOR NORMALIZATION) ?<3> 
+
+FR 
+?WINDOWED PARTICLE SERIES (OUTPUT) TEMPLATE ?<5>
+
+RR X93
+?STARTING PARTICLE NUMBER ?
+
+; PEAK SEARCH FILES
+FR L
+?DOC_FILE #5?<7>
+DOC_DELETED_5
+
+; PROJECTION FILES USED FOR AVERAGING IF AVERAGING IS SELECTED
+FR L
+?DOC_FILE #6?<8>
+PRJ_DELETED_
+
+
+; FILE WITH EULERIAN ANGLES AND INFO FROM PEAK SEARCH FILE
+FR 
+?DOCUMENT FILE (OUTPUT: WILL HAVE PARTICLE POSITION INFO.) NAME ?<9>
+
+; FIND IF A SELECTION DOC FILE USED.
+RR X41
+? DO YOU WANT TO USE A SELECTION FILE (NO = 0, YES = 1) ?
+
+; IF SELECTION FILE IS NOT USED
+IF (X41 .NE. 1 ) THEN
+
+   ; EULERIAN ANGLES BEGINING AND ENDVALUES 
+   ; PHI (X65-X68), THETA(X66-X69), PSI(X67-X73)
+   ; NOTE: KEEP ENDVALUES ALWAYS +VE
+ 
+   RR X65
+   ?PHI, START ANGLE ?
+   RR X68
+   ?PHI, END ANGLE (+VE) ?
+   RR X74
+   ?PHI, SEARCH STEP SIZE (+VE) ?
+
+   ; AVOID DIVISION BY ZERO
+   IF (X74.EQ.0) THEN
+      X74 = 1
+   ENDIF
+
+   RR X66
+   ?THETA, START ANGLE ?
+   RR X69
+   ?THETA, END ANGLE (+VE) ?
+   RR X75
+   ?THETA, SEARCH STEP SIZE (+VE) ?
+
+   ; AVOID DIVISION BY ZERO
+   IF (X75.EQ.0) THEN
+      X75 = 1
+   ENDIF
+
+   RR X67
+   ?PSI, START ANGLE ?
+   RR X73
+   ?PSI, END ANGLE (+VE) ?
+   RR X76
+   ?PSI, SEARCH STEP SIZE (+VE) ?
+
+   ; AVOID DIVISION BY ZERO
+   IF (X76.EQ.0) THEN
+      X76 = 1
+   ENDIF
+
+ENDIF
+
+; IF SELECTION DOC FILE IS USED THEN  AVERAGE OF THE PROJECTIONS CAN BE USED
+; AS SEARCH TEMPLATE. DIFFULT VALUE OF X22 = 0 
+X22 = 0
+IF (X41 .EQ. 1) THEN
+   ; ASK IF AN AVERAGE OF THE PROJECTIONS IS TO BE USED AS SEARCH TEMPLATE.
+   RR X22
+   ? USE AVERAGE OF THE PROJECTIONS AS SEARCH TEMPLATE (NO = 0, YES = 1) ?
+ENDIF
+
+; INTERPOLATION FACTOR 
+RR X89 
+?INTERPOLATION FACTOR (NO INTERPOLATION = 1, ELSE, ENTER DESIRED NUMBER ) ?
+
+; # OF PEAKS TO BE SEARCHED 
+RR X95 
+? No. OF PEAKS TO BE SEARCHED ?
+
+; NEIGHBOURHOOD DISTANCE FOR EXCLUSION 
+RR X35 
+?NEIGHBOURHOOD DISTANCE FOR PEAK EXCLUSION ?
+
+X35 = X35/X89
+
+; FIND IF A SYMMETRIC MASK WILL BE USED.
+RR X51
+? DO YOU WANT TO USE A SYMMETRIC MASK FOR LCCC CALCULATION (NO = 0, YES = 1) ?
+
+
+IF (X51 .EQ. 0) THEN
+   ; PIXEL VALUE FOR MASKING 
+   RR X83
+   ? PIXEL VALUE FOR MASKING (VALUES < ENTERED VALUE = 0, REST = 1) ?
+ENDIF
+
+; DELETES THE DOCUMENT FILES IF THEY EXIST
+IQ FI X15
+<7>
+IF (X15.EQ.1) THEN
+   DE
+   <7>
+ENDIF
+
+IQ FI X15
+<8>
+IF (X15.EQ.1) THEN
+   DE
+   <8>
+ENDIF
+
+
+IQ FI X15
+<9>
+IF (X15.EQ.1) THEN
+   DE
+   <9>
+ENDIF
+
+
+; FIND NSAM AND NROW OF THE MICROGRAPH
+FI X20,X21
+<1>
+12,2
+
+; FIND NSAM,NROW AND NSLICE OF THE PARTICLE VOLUME
+FI X23,X24,X25
+<2>
+12,2,1
+
+
+; COPY IMAGES INTO MEMORY SO THAT IT CAN BE ACCESSED QUICKLY A NUMBER OF TIMES
+; IN THE FOLLOWING LOOPS 
+; NOTE: DON'T REUSE _1 AND _99
+
+IF (X89 .EQ. 1) THEN
+   CP 
+   <2>
+   _1
+ 
+   CP 
+   <1>
+   _99
+   
+ELSE
+   X52 = INT(X23/X89)
+   X53 = INT(X24/X89)
+   X54 = INT(X25/X89)
+      
+   X48 = INT(X20/X89)
+   X49 = INT(X21/X89)
+
+   
+   IP
+   <2>
+   _1
+   X52,X53,X54
+   
+   IP
+   <1>
+   _99
+   X48,X49
+   
+ENDIF
+
+; FIND NSAM AND NROW OF THE INTERPOLATED MICROGRAPH
+; KEPT THE SAME VARIABLE NAME AS ABOVE
+FI X20,X21
+_99
+12,2
+
+; FIND NSAM, NROW AND NSLICE OF THE INTERPOLATED PARTICLE VOLUME
+; KEPT THE SAME VARIABLE NAME AS ABOVE
+FI X23,X24,X25
+_1
+12,2,1
+
+; FIND THE MINIMUM OF NSAM AND NROW OF SMALL VOLUME
+
+IF (X23.LT.X24) THEN 
+   X29 = X23
+ELSE 
+   X29 = X24
+ENDIF
+
+X13 = INT(X29/2)-1
+
+
+X86 = X20-X23+1
+X87 = X21-X24+1
+
+X33 = INT(X23/2)+1
+X34 = INT(X24/2)+1
+
+; EULER ANGLE SEARCH IS DONE HERE
+
+; PJ 3 DOESN'T GIVE CORRECT RESULTS IF SOME PIXEL VALUES ARE -VE
+;AR SCA
+;<2>
+;_1
+;0,100
+        
+
+
+IF (X41 .EQ. 1) THEN
+   ; ASK FOR SELECTION DOC FILE WITH EULERIAN ANGLES
+   FR 
+   ?SELECTION DOC_FILE ?<4>
+
+   UD N, X42,X43
+   <4>
+   
+   ; END VALUES FOR LOOPS   
+   X77 = X42
+   X78 = 1
+   X79 = 1
+   
+   ; IF AVERAGE OF PROJECTIONS IS USED AS TEMPLATE
+   IF (X22 .EQ. 1) THEN   
+      X77 = 1
+   ENDIF     
+   
+ELSE 
+   ; EULER ANGLES ARE PROVIDED AT THE PROMPT  
+   ; END VALUES FOR LOOPS         
+   X77 = ((X68-X65)/X74)+1
+   X78 = ((X69-X66)/X75)+1
+   X79 = ((X73-X67)/X76)+1  
+ENDIF
+
+
+
+DO LB4 X72 = 1, X79
+   X58 = X67+(X72-1)*X76 
+   
+   DO LB5 X71 = 1, X78
+      X57 = X66+(X71-1)*X75
+      
+      DO LB6 X70 = 1, X77  
+         X56 = X65+(X70-1)*X74   
+                 
+         IF  (X41. EQ. 1) THEN
+            UD IC, X70,X56,X57,x58
+            <4>
+         
+         ENDIF
+
+         ; DO LOOP #
+         X90 = (X72-1)*X77*X78 + (X71-1)*X77 + X70        
+
+         ; AVERAGE OF PROJECTIONS IS NOT USED AS TEMPLATE
+         IF (X22 .NE. 1) THEN 
+         
+            ; MAKE A PROJECTION
+            ; NOTE: DON'T REUSE _2
+            PJ 3
+            _1
+            x23,x24
+            _2
+            X56,X57
+            X58
+            
+         ; AVERAGE OF PROJECTIONS IS USED AS TEMPLATE
+         ELSE  
+             
+            PJ 3Q
+            _1
+            X13
+            1-X42
+            <4>
+            <8>***
+      
+            AS R
+            <8>***
+            1-X42 
+            A
+            _2 
+            _40                    
+            
+         ENDIF
+
+         IF (X51 .EQ. 0) THEN
+            ; ASYMMETRIC MASK
+            
+            ; IF AVERAGE OF PROJECTIONS IS USED AS TEMPLATE
+            IF (X22 .EQ. 1) THEN  
+               ; MAKE SURE THAT X83 IS THE RIGHT MASKING VALUE FOR THE AVERAGE
+               ; OF THE PROJECTIONS
+               TH M
+               _2
+               _4
+               B
+               X83          
+            ELSE             
+            
+               ; CANN'T JUST USE THRESHOLDING SINCE THE PIXEL VALUES
+               ; CHANGES FOR EACH PROJECTION.
+               ; SO I AM MAKING A MASK OF THE 3D STRUCTURE AND THEN USING PJ3
+               ; TO PROJECT AND THEN USING STANDARD DEVIATION VALUE TO 
+               ; THRESHOLD. I HAVE VERIFIED IT WORKS QUITE O.K., BUT MAY NOT BE
+               ; PERFECT. TO GET THE PERFECT RESULT ONE MAY NEED TO CHANGE 
+               ; THE THRESHOLD VALUE AND USE IT DIRECTLY ON _2 (NO NEED TO CREATE
+               ; THE BINARY MASK AND GET A PROJECTION FROM IT AND THEN DO 
+               ; THRESHOLDING USING STANDARD DEVIATION VALUE) 
+               
+              IF (X90 .EQ. 1) THEN
+                  ; DO ONLY ONCE
+                  TH M
+                  _1
+                  _30
+                  B
+                  X83
+               ENDIF   
+            
+               PJ 3
+               _30
+               X23,X24
+               _31
+               X56,X57
+               X58
+;cp
+;_31
+;prj_bin_see_me{***x90}            
+               FS X98,X99,X88,X59
+               _31
+         
+               ; THRESHOLD THE PROJECTION
+               ; NOTE: DON'T REUSE _4            
+               TH M
+               _31
+               _4
+               B
+               X59
+            ENDIF                       
+         ELSE        
+            ; SYMMETRIC MASK
+            ; MAKE A CIRCULAR MASK. PIXELS OUTSIDE THE RADIUS = 0 
+            ; PIXELS INSIDE = 1        
+
+            ; DO IT ONLY ONCE
+            IF (X90 .EQ. 1) THEN
+               ; IF _4 EXISTS THEN DELETE IT. COMMAND PT WON'T ASK FOR 
+               ; NSAM AND NROW INPUTS IF THE FILE EXISTS. WHEN PICKPARTICLE
+               ; PROCEDURE IS CALLED INSIDE ANOTHER PROCEDURE IT WILL CAUSE
+               ; ERROR
+               
+               IQ FI X16
+               _4
+               IF (X16.EQ.1) THEN
+                  DE
+                  _4
+               ENDIF
+            
+               PT
+               _4
+               X23,X24
+               C
+               X33,X34
+               X29/2
+               N
+            ENDIF  
+         ENDIF 
+
+;cp
+;_2
+;prj_see_me{***x90} 
+            
+;cp
+;_4
+;mask_see_me{***x90}
+
+
+         FS X80,X81,X50,X82
+         _4
+         
+         ; TOTAL NUMBER OF NON-ZERO PIXELS INSIDE THE MASK
+         X50 = X50*X23*X24
+
+         ; IN ASYMMETRIC CASE SET X55 =1 FOR ALL LOOPS
+         ; IN SYMMETRIC  CASE SET X55 =1 ONLY FOR THE FIRST LOOP
+         IF (X51 .EQ. 0) THEN
+            X55 = 1
+         ELSE 
+            X55 =0
+         ENDIF
+
+         IF (X90 .EQ. 1) THEN
+            X55 = 1
+         ENDIF
+
+         ; CALCULATE LOCAL STANDARD DEVIATION ONLY ONCE IN SYMMETRIC CASE
+         ; CALCULATE LOCAL STANDARD DEVIATION FOR EACH ORIENTATION IN ASYMMETRIC CASE
+
+         IF (X55 .EQ. 1) THEN
+            ; CREATE A BLANK IMAGE, SAME SIZE AS LARGE IMAGE
+            MO 
+            _5
+            X20,X21
+            B
+            (0)
+
+            ; INSERT THE MASK INSIDE THE BLANK IMAGE
+            IN
+            _4
+            _5
+           (1,1)
+
+            ; DO FT ON BLANK IMAGE(WITH THE MASK INSERTED)
+            ; NOTE: DON'T REUSE _6
+            FT
+            _5
+            _6
+
+            ; DO IT ONLY ONCE
+            IF (X90 .EQ. 1) THEN
+               ; DO FT ON LARGE IMAGE
+               FT
+               _99
+               _86
+            ENDIF   
+
+            ; MULTIPLY FT OF LARGE IMAGE WITH COMPLEX CONJUGATE 
+            ; OF FT OF BLANK IMAGE
+            MU M
+            _86
+            _6
+            _8
+            *
+
+            ; DO INVERSE FT
+            FT
+            _8
+            _9
+
+            ; NORMALIZE 
+            AR
+            _9
+            _10
+            (P1+0)/(X50)
+
+            SQ
+            _10
+            _11
+
+            ; REUSE MEMORY SPACE FOR STORING IMAGE ( _5,_8 - _10)
+
+            ; DO IT ONLY ONCE
+            IF (X90 .EQ. 1) THEN
+               SQ
+               _99
+               _87
+         
+               ; DO FT ON SQUARE OF THE LARGE IMAGE
+               FT
+               _87
+               _88
+            ENDIF   
+  
+            ; MULTIPLY FT OF SQUARE OF LARGE IMAGE WITH COMPLEX CONJUGATE 
+            ; OF FT OF BLANK IMAGE
+            MU M
+            _88
+            _6
+            _7
+
+            ; DO INVERSE FT
+            FT
+            _7
+            _8
+
+            ; NORMALIZE
+            AR
+            _8
+            _9
+            (P1+0)/(X50)
+
+            SU
+            _9
+            _11
+            _10
+
+            ; GET RID OF SQRT OF -VE # AND DIVISION BY ZERO(WHILE DIVIDING THE 
+            ; CCF BY LOCAL STANDARD DEVIATION)
+            TH M
+            _10
+            _80
+            B
+            (0)
+            
+            MM
+            _80
+            _10
+            (9E+20)
+  
+            ; LOCAL STANDARD DEVIATION
+            WU
+            _10
+            _3
+           
+            ; NOTE: DON'T REUSE _5  
+            WI
+            _3
+            _5                        
+            X86,X87         
+            (1,1)
+
+         ENDIF
+
+         ; PREPARE THE REFERENCE IMAGE SUCH THAT THE AVERAGE INSIDE 
+         ; THE MASK = 0 AND THE STANDARD DEVIATION INSIDE THE MASK = 1
+         MM
+         _4
+         _2
+         (0)
+   
+         ; FIND AVERAGE
+         FS X60,X61,X62,X63
+         _2
+         
+         ; SUM
+         X40 = X62*(X23*X24)
+         
+         SQ
+         _2
+         _7
+               
+         ; FIND AVERAGE
+         FS X60,X61,X62,X63
+         _7
+
+         ; SUM
+         X45 = X62*(X23*X24)
+
+         ; SD INSIDE MASK        
+         X46 = SQRT((X45 -((X40*X40)/X50))/(X50-1))
+
+         ; AVG INSIDE MASK         
+         X47  =  X40/X50    
+         
+         ;NORMALIZE
+         AR
+         _2
+         _8
+         (P1-X47)/X46
+
+         MM
+         _4
+         _8
+         (0)
+
+         ; CREATE AN EMPTY IMAGE OF DIMENSION = MICROGRAPH DIMENSION 
+         ; AND PASTE THE PREPARED REFERNCE IMAGE AT THE LEFT
+	 ; CORNER OF THIS EMPTY IMAGE           
+         MO 
+         _9
+         X20,X21
+         B
+         (0)
+
+         X36 = INT((X20-X23)/2)+1
+         X37 = INT((X21-X24)/2)+1 
+                        
+         IN
+         _8
+         _9
+         (1,1)
+
+         ; FIND CROSS CORRELATION FUNCTION OF THE ABOVE IMAGE WITH
+         ; WITH THE LARGE IMAGE
+                          
+         FT
+	 _9
+	 _60
+	 
+	 
+	 ; SET F(0,0) ELEMENT = ZERO. DONE TO DO SIMILAR NORMALIZATION
+         ; AS DONE IN REAL SPACE 
+	 
+         RP
+	 _60
+	 (1,1)
+	 (0)
+
+         RP
+	 _60
+	 (2,1)
+	 (0)
+
+
+         FT
+	 _99
+	 _61
+	 
+	 ; DON'T CHANGE ORDER OF INPUT IN THE FOLLOWING OPERATION
+
+	 MU M
+	 _61
+	 _60
+	 _62	 
+         *
+	 
+         ; DO INVERSE FT	 
+	 FT
+	 _62
+	 _10
+	 
+
+         WI
+         _10
+         _3
+         X86,X87
+         (1,1)              
+
+         ; DIVIDE THE CC FUNCTION WITH TOTAL NUMBER OF NON-ZERO PIXELS
+         ; INSIDE THE MASK         
+         AR
+         _3
+         _7
+         P1/X50
+
+         ; DIVIDE THE  ABOVE RESULT WITH CORRESPONDING ELEMENT OF 
+         ; THE LOCAL STANDARD DEVIATION ARRAY 
+         MU D
+         _7
+         _5
+         _8
+         *
+        
+         ; COMPARE THE CROSS-CORRELATION FILE IN EACH LOOP AND CREATE AN
+         ; OUTPUT FILE WITH THE HIGHEST PIXEL VALUE  
+         IF (X90 .EQ. 1) THEN
+            ; FOR FIRST LOOP, COPY THE FILE
+            CP
+            _8
+            _97
+         ELSE
+            ; FOR MORE THAN ONE LOOP COMPARE THE CROSS-CORRELATION FILES
+            MX
+           _8
+           _97
+           _98
+   
+           ; COPY THE OUTPUT FILE SO THAT IT BECOMES ONE OF THE INPUT FILES
+           ; FOR THE NEXT LOOP
+           CP
+           _98
+           _97
+         ENDIF
+                                                                              
+      LB6
+   LB5
+LB4 
+
+;CP
+;_97
+;save_cross_corr
+
+; DO RESTRICTED PEAK SEARCH                 
+PK DR
+_97
+(X95,1)
+(1,1)
+X35
+<7>
+
+; FIND MAX KEY NO.
+UD N, X91,X92
+<7>
+
+;INSERT COMMENTS
+SD /         X           Y       PARTICLE NO.   PEAK HT
+<9>
+
+; WRITE XY POSITIONS AND PEAK HEIGHT VALUE TO FILE <9>
+DO LB10 X96 = 1,X91
+   UD IC,X96,X11,X12,X18
+   <7>
+            
+   ; CORRECT FOR THE CENTER OF THE PEAK WITH RESPECT TO LARGE IMAGE.
+   ; THE PEAK HEIGHT DETERMINED IN PEAK SEARCH STEP IS WITH RESPECT TO THE
+   ; IMAGE CREATED BY SUBSTRACTING THE DIMENSION OF REFERENCE IMAGE
+   ; FROM THE LARGE IMAGE. FACTOR OF NSAM/2+1, NROW/2+1 AND NSLICE/2+1
+   ; ARE ADDDED
+   X30 = X11+X33
+   X31 = X12+X34
+   X30 = X30*X89 +1
+   X31 = X31*X89 +1           
+            
+   X44 = (X93-1) + X96      
+   SD X96,X30,X31,X44,X18
+   <9> 
+   ;SD X96,X30,X31
+   ;annotate                 
+     
+
+LB10
+        
+UD ICE
+<7>
+         
+DE
+<7>             
+
+;SD /         X           Y          PEAK HT
+;<9>
+
+SD E
+<9>
+ 
+; WINDOW THE PARTICLES FROM THE INPUT MICROGRAPH 
+ 
+UD N, X38,X39
+<9>
+UD E
+
+; FIND NSAM,NROW AND NSLICE OF THE PARTICLE VOLUME
+; NEED TO BE DONE AGAIN BECAUSE THE VARIABLES HAVE BEEN CHANGED AFTER
+; INTERPOLATION IS DONE
+
+FI X23,X24
+<2>
+12,2
+
+X33 = INT(X23/2)+1
+X34 = INT(X24/2)+1
+
+; COPY NOISE FILE TO MEMORY
+CP
+<3>
+_27
+
+; FIND RADIUS OF MASK FILE
+IF (X23.LT.X24) THEN 
+   X29 = X23
+ELSE 
+   X29 = X24
+ENDIF
+X13 = INT(X29/2)-1
+
+; MAKE A MASK FILE
+MO
+_26
+X23,X24
+C
+X13
+
+; PIXELS THOSE ARE PART OF THE PARTICLE ARE EXCLUDED FROM NORMALIZATION
+AR
+_26
+_28
+(P1-1)*(-1)
+
+DO LB2 X26 = 1,X38
+
+   UD IC,X26,X27,X28,X94,X97
+   <9>
+
+   X84 = X27 - X33
+   X85 = X28 - X34
+   
+   WI
+   <1>
+   _29
+   X23,X24
+   X84,X85
+
+   RA
+   _29
+   _22
+
+   ; NORMALIZE AS PER HISTOGRAM
+   CE FIT
+   _27
+   _22
+   _28
+   <5>{******X94}
+
+LB2
+
+UD ICE
+<9>
+
+DE A
+<8>001
+
+RE
+

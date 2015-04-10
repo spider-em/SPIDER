@@ -1,0 +1,133 @@
+; <html><head><title>Controls back projection</title></head><body><pre>
+; bpw2_pub.pam 
+;
+; PURPOSE: Runs 2D back projection. Creates a volume from a set of
+;          input projections and their corresponding angles.
+;
+; I/O PARAMETERS AND FILES ARE SET HERE:
+;
+; ----------------- INPUT REGISTERS -------------------------------------
+x12 = 2         ; Number of OMP threads
+x15 = 2         ; Number of partitions/nodes 
+x15 = 1        ; Number of partitions/nodes 
+
+x13 = 1         ; Starting image number
+x14 = 141       ; Ending image number
+     
+x17 = 512       ; Radius (1/2 X & Y dimensions) of the reconstruction
+
+x21 = 1         ; First row to be reconstructed
+x22 = 1024      ; Last row to be reconstructed
+x23 = 250       ; Height (Z) dimension of the reconstruction
+
+;<b> -------------- INPUT FILES -------------------------------------
+; -------------- May have to edit these names -----------------------
+; -------------- DO NOT COPY FROM WEB BROWSER -----------------------
+
+FR G
+[aligned_image_template]data/k35_rtsq_***  ; File name template for aligned input images 
+
+FR G
+[image_selection_doc]data/sel003          ; Selection doc. file for input images numbers                                                                  
+
+FR G
+[angles_doc]data/angles_both              ; Input images angle doc. file                                                                  
+
+; ----------------- OUTPUT FILES -------------------------------------------
+
+FR G
+[output_volume]jnkw2_vol                  ; Output volume filename
+
+FR G
+[sync_doc]jnkdocparamout                   ; Sync. doc file stem for PubSub
+
+; -------------------------------------------------------------------------</b>
+
+MD
+TR OFF                       ; Decreases results file output
+MD
+VB OFF                       ; Decreases results file output
+
+IF (x77.EQ.0) THEN   ; -------------------- Master 'BP W2' run 
+   x11= (x22 - x21 + 1) / x15    ; Find rows per node
+   x24= INT(x11)
+   IF (x11.GT.x24) x24=x24+1     ; Rows per node
+
+   x30 = x21                     ; Starting row        
+   DO LB1 x32=1,x15              ; Loop over all row sets
+      x31 = x30 + x24 - 1        ; Final row for this set
+      if (x31.GT.x22) x31 = x22
+
+      VM                      ; Start back-projection subset
+      publish './spider $PRJEXT/$DATEXT @bpw2_pub {**x32} x77={****x32} x30={****x30} x31={****x31}'
+ 
+      x30=x31+1               ; Next starting row
+   LB1
+
+   x29=1
+   @wait_pub(x29,x15)            ; Waiting for row subsets: 1...x15
+
+   ; Merge all projection subsets
+   x41= (x22 - x21 + 1)          ; Total rows per volume
+
+   BL                            ; Create blank output volume
+   [output_volume]               ; Output volume name 
+   x21,x41,x23
+   No                            ; Not average
+   0.0                           ; Fill value
+ 
+   IF (x15.LE.1) THEN
+      VM
+      \mv [output_volume]_001.$DATEXT  [output_volume].$DATEXT
+
+   ELSE
+      x30 = x21                     ; Starting row for this set       
+      DO LB2 x32=1,x15              ; Loop over all row sets
+         ; Find nrow of this partial volume
+
+         IN                         ; Concatenate these rows in output volume
+         [output_volume]_{***x32}   ; Input volume 
+         [output_volume]            ; Output volume 
+         (1,x30,1)                  ; Position for concatenation
+ 
+         FI x31
+         [output_volume]_{***x32}   ; Input volume 
+         (2)
+
+         x30=x30+x31                ; Next starting row
+vm
+echo 'at row: {****x30}'
+
+      LB2
+   ENDIF
+
+   FS
+   [output_volume]              ; Output volume 
+ENDIF
+
+IF (x77.GT.0) THEN ; -------------------- Partial 'BP W2' run 
+
+   IF (x12 .GT. 1) THEN
+      MD
+      SET MP                 ; Set number of OMP processors
+      x12
+   ENDIF
+
+   BP W2                     ; Back projection                                                      
+   [aligned_image_template]  ; File name template for aligned input images 
+   x13-x14                   ; Input images numbers                                                                  
+   [angles_doc]              ; Input images angle doc. file                                                                  
+   x17,x23                   ; Radius & height                
+   x30,x31                   ; Desired row range for reconstruction 
+   0.3                       ; Frequency cut-off for parzen filter                                                     
+   [output_volume]_{***x77}  ; Output volume 
+
+   FS                        ; List output volume statistics                                                                           
+   [output_volume]_{***x77}  ; Output volume 
+
+   @signal_pub(x77)          ; Create sync signal file
+
+ENDIF
+EN                           ; This SPIDER run ends now
+
+; </body></pre></html>

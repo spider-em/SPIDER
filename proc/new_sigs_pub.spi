@@ -1,0 +1,214 @@
+; <html><head><title>Searches for molecular signature</title></head><body><pre>
+; new_sigs_pub.pam       NEW                  JAN 2003  Bimal Rath 
+;                        PARALLELIZED BY                ArDean Leith
+;                        REWRITTEN            JUL 2008  ArDean Leith
+;                        IMPROVED             JAN 2011 ArDean Leith
+;
+; PURPOSE: Searches for molecular signature (motif) inside a large search volume. 
+;          Works for globular and also non-globular motif volumes. Either an isotropic 
+;          or non-isotropic mask can be used. Uses Alan Roseman's formulation
+;          for local cross-correlation coefficients. (Ultramicroscopy 94, 225-236, 2003)
+;
+; PUBSUB USAGE:  Current directory needs to contain copy of: SPIDER executable e.g.: 
+;          cp /usr8/spider/bin/spider??  spider
+;
+; SAMPLE USAGE : ./spider spi/dat @new_sigs_pub 0 &
+;
+; Be sure both volumes have same magnification (1 PIXEL = "N" NANOMETERS) 
+
+; Read input variables and file names
+@new_sigs_settings([n],[phi0],[the0],[psi0],[phid],[thed],[nphi],[nthe],[psin],[mskval],[peaks],[msktype])
+
+; Prepare directories  
+VM                             ; Dir. for output files - work, local, & output
+mkdir -p [temp_work_dir] [output_dir]
+
+; Find size for resizing motif volume
+FI H [x],[y],[z]                ; Get motif vol size
+[MOTIF_VOL]                     ; Motif vol          (input)
+NSAM,NROW,NSLICE                ; Header: 12,2,1
+
+IF ([msktype] .EQ. 1) THEN 
+   VM
+   echo " Using rotationally varying  mask: {***[x]} x {***[y]} x {***[z]}"
+
+   ; Test if the threshold value is +ve. Otherwise, the padded vol with
+   ; outside the inserted motif_vol will create a mask which will not 
+   ; represent the actual shape of motif as desired by the user.
+   IF ([mskval] .LE. 0) THEN
+      VM
+      echo " HALTING. RESCALE MOTIF SO INPUT THERESHOLD ([mskval]) WILL BE +VE !!"
+      EN 
+   ENDIF
+
+   ; Find diagonal of the motif volume
+   [diag] = INT(SQR (([x] * [x]) + ([y] * [y]) + ([z] * [z])))
+
+   [xc]=INT(([diag]-[x])/2)+1   ; X corner
+   [yc]=INT(([diag]-[y])/2)+1   ; Y corner
+   [zc]=INT(([diag]-[z])/2)+1   ; Z corner
+
+vm 
+echo ' Motif pad corner:' {***[xc]},{***[yc]},{***[zc]}
+vm 
+echo ' Motif padded size:' {***[diag]},{***[diag]},{***[diag]}
+
+   PD                           ; Pad motif vol into cube for rotation
+   [MOTIF_VOL]                  ; Motif              (input)
+   [CUBE_MOTIF_VOL]             ; Cubic motif        (output)
+   ([diag],[diag],[diag])       ; New size
+   N                            ; Not average background
+   0.0                          ; Background
+   ([xc],[yc],[zc])             ; Location for motif inside pad
+
+   ; Threshold motif vol to make a mask.   
+   ; Threshold value needs to be set for each specific motif vol
+
+   TH M                         ; Threshold to create mask
+   [CUBE_MOTIF_VOL]             ; Cubic motif          (input)
+   [MOTIF_MASK]                 ; Cubic motif mask vol (output)
+   B                            ; Voxels below [mskval] set = 0
+   [mskval]                     ; Threshold level
+
+fi h [min],[max]
+[MOTIF_MASK]             
+fmin,fmax
+vm 
+echo ' Motif mask:',{%f9.6%[min]} .... {%f9.6%[max]}
+
+
+   ; Create FFT of search vol, & search vol squared
+   LO I                         ; Padded FFT creation 
+   S                            ; For FFTs of search vol 
+   [SEARCH_VOL]                 ; Large search vol         (input)
+   [SEARCH_VOL_FFT]             ; FFT of search vol        (output)
+   [SEARCH_VOL_SQ_FFT]          ; FFT of search vol sq.    (output)
+
+ELSE
+   ; Rotationally invariant mask used. Even though for asymmetric mask
+   ; the motif vol is padded to a cube and the algorithm should work
+   ; computationally, it may give incorrect results since the padded cube 
+   ; is a bigger cube (side = diagonal of the motif vol). The rotationally
+   ; invarient mask's diameter is dependent on the padded cube's dimension. So, the
+   ; actual mask will be larger than the motif that the user supplies.
+   ; It is necessary that the motif vol be a cube if a rotationally 
+   ; invariant mask is used. The mask created for this case will have a diameter 
+   ; equal to 4 pixels less than the side of the motif.
+
+   VM
+   echo " Using rotationally invariant  mask:    {***[x]} x {***[y]} x {***[z]}"
+
+   IF ( [x] .NE.  [y]) THEN
+      VM
+      echo " HALTING...  INPUT MOTIF MUST BE A CUBE!"
+      EN
+   ELSEIF ( [x] .NE.  [z]) THEN
+      VM
+      echo " HALTING...  INPUT MOTIF MUST BE A CUBE!"
+      EN
+   ENDIF
+
+   CP                          ; Motif is already a cube
+   [MOTIF_VOL]                 ; Motif             (input)
+   [CUBE_MOTIF_VOL]            ; Cubic motif file  (output)
+
+   ; Create spherical mask for motif
+   [r] = ([x]/2) - 2           ; Radius of the mask sphere
+   [c] = ([x]/2) + 1           ; Center
+
+   MO 3                        ; Make vol
+   [MOTIF_MASK]                ; Spherical mask file     (output)
+   [x],[x],[x]                 ; Size
+   SP                          ; Sphere
+   N                           ; No
+   (1.0)                       ; Mask density
+   [r],0.0                     ; Outer & inner radii
+   [c],[c],[c]                 ; Center
+   (0,0,0)                     ; End of sphere making loop
+
+   ; Create FFT of search vol, search vol squared, & motif mask
+   LO I                        ; Padded FFT creation for motif location
+   B                           ; FFTs of search vol & mask
+   [SEARCH_VOL]                ; Large search vol         (input)
+   [SEARCH_VOL_FFT]            ; FFT of search vol        (output)
+   [SEARCH_VOL_SQ_FFT]         ; FFT of search vol sq   . (output)
+   [MOTIF_MASK]                ; Spherical mask file      (input)
+   [MOTIF_MASK_FFT]            ; FFT of mask vol          (output)
+ENDIF
+
+FI H [x],[y],[z]               ; Get search vol size
+[SEARCH_VOL]                   ; Search vol               (input)
+NSAM,NROW,NSLICE               ; 12,2,1
+
+VM
+echo " Search volume:                         {***[x]} x {***[y]} x {***[z]}"
+
+; Finished preparing input files -----------------------------  
+
+VM
+echo " Number of phi angles (parallel jobs):  {****[nphi]}"
+
+MY FL
+
+DO [num] =  1,[nphi]
+
+  ; Remove output doc files
+  DE
+  [DOC_FILE_OUT]
+
+  ; Commence Euler angle search 
+  VM
+  publish "./spider $PRJEXT/$DATEXT @new_sigsloop {***[num]} num={***[num]}" 
+  !/usr8/spider/bin/spider_linux_mp_opt64_10u $PRJEXT/$DATEXT @new_sigsloop {***[num]} num={***[num]} 
+
+ENDDO 
+
+; Wait for all jobs
+MY FL
+[phase] = 1
+@wait_pub([phase],[nphi])
+[SYNC_DOC_BASE]
+
+VM
+echo " "; echo " Finished search --- Consolidating doc files now."; echo " "
+
+; Often doc. files are too large to use the following steps ----------
+DO [num]=1,[nphi]
+   DOC REN                    ; Renumber all keys   (IMPORTANT)
+   [DOC_FILE_OUT]             ; Doc file            (input)
+   [DOC_FILE_OUT]             ; Doc file            (output)
+ENDDO
+
+DOC COMBINE                   ; Combine all doc files into one large file
+[DOC_FILE_OUT_T]              ; Doc file stem list  (input)
+1-[nphi]                      ; Doc file numbers
+[PEAK_COMBINED]               ; Combined list       (output)
+
+DOC SORT                      ; Sort the combined doc file
+[PEAK_COMBINED]               ; Unsorted list       (input)
+[PEAK_COMBINED]_SORTED        ; Sorted list         (output)
+-7                            ; Descending sort by col: 7
+Y                             ; Compress and renumber keys         
+
+VM
+echo " "; echo " Finished consolidating all doc files."; echo " "
+
+UD S 1,[v1],[v2],[v3],[v4],[v5],[v6],[cc]
+[PEAK_COMBINED]_SORTED
+VM
+echo " Top CC VALUE: {%f8.2%[cc]} "; echo " "
+
+EN
+
+
+
+; If doc. files are too large, use the following steps ----------
+; cat output/*OUT* >! jnkbig  
+; sort -nr -k 9 jnkbig >! jnksort 
+; uniq.perl < jnksort >! jnk_sort.dat
+; cat jnk_sort.dat
+; spider pam/dat @circle
+; spider pam/dat @number
+; spider pam/dat @window 2
+
+; </body></pre></html>

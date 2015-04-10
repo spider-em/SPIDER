@@ -1,0 +1,282 @@
+; <html><head><title>Searches for molecular signature</title></head><body><pre>
+; sigs_pub.pam                                Bimal Rath   :  JAN 2003
+;appended by                                         Christian Renken  : OCT 2006
+;                        PARALLELIZED BY      ArDean Leith
+;
+; SEARCHES FOR MOLECULAR SIGNATURE (REFERENCE VOLUME) INSIDE A LARGE VOLUME. 
+; WORKS FOR GLOBULAR AND ALSO NON-GLOBULAR REFERENCE VOLUMES. AN ISOTROPIC OR
+; NON-ISOTROPIC MASK CAN BE USED AS A CHOICE. USED ALAN ROSEMAN'S FORMULATION 
+; FOR LOCAL CROSS-CORRELATION COEFFICIENTS.(ULTRAMICROSCOPY 94, 225-236, 2003)
+;
+; PARALLEL USAGE:  current directory needs link to spider eg: 
+;          ln -s /usr/local/spider/bin/spider_linux_mpfftw.27  spider
+;
+; SAMPLE PARALLEL USAGE : ./spider pam/dat @sigs_pub 0 &
+;
+; BE SURE BOTH VOLUMES HAVE SAME MAGNIFICATION (1 PIXEL = "N" NANOMETER) 
+
+; READ INPUT SETTINGS
+@tomo_sigs_settings[x12,x65,x66,x67,x73,x74,x75,x78,x79,x83,x95,x39,x61,x64]
+
+
+; PREPARE DIRECTORIES  
+VM                   ; Dir. for output files - work, local, & output
+mkdir -p [temp_work_dir]  [temp_local_dir]  [output_dir]
+
+; RESIZE THE SMALL VOLUME INTO A ROTATION CUBE
+FI x23,x24,x25          ; Small volume size
+[SMALL_REF_VOLUME]
+12,2,1
+
+; FIND THE DIAGONAL OF THE SMALL VOLUME
+x28 = INT(SQR ((X23 * X23) + (X24 * X24) + (X25 * X25)))
+
+; TEST IF THE INPUT MOTIF IS A CUBE
+IF ( X23 .EQ.  X24) THEN
+      IF (X23 .EQ. X25) THEN
+         cp
+         [SMALL_REF_VOLUME]
+         _57
+         GOTO LB8
+      ENDIF
+ENDIF
+              ;FOLLOWING DONE IF [SMALL_REF_VOLUME] NOT A CUBE
+               x29=x28                 ; Y padded size
+                x30=x28                 ; Z padded size
+
+                x31=INT((x28-x23)/2)+1       ; X corner
+                x32=INT((x29-x24)/2)+1       ; Y corner
+                x33=INT((x30-x25)/2)+1       ; Z corner
+
+                 PD                     ; Pad small volume into cube for rotation
+                 [SMALL_REF_VOLUME]
+                 _57
+                (x28,x29,x30)          ; New size
+                 N                      ; Not average background
+                 0.0                    ; Background
+                 (x31,x32,x33)          ; Location for small ref volume inside pad
+
+ LB8
+;IF THE FOURIER FILTER IS SPHERICALLY SYMMETRIC THEN DO THE FILTERING NOW
+IF(X61.EQ.0)THEN
+    FT
+    _57
+    _58
+
+   MU M
+   _58
+   [FOURIER_FILTER]
+   _57
+   *
+
+   FT
+   _57
+   [PADDED_REF_VOLUME]
+ELSE
+   CP
+   _57
+   [PADDED_REF_VOLUME]
+ENDIF
+
+; CREATE TEMP. FILES FOR SPEED-UP
+SQ                    ; Square the volume
+[LARGE_VOLUME]
+_3
+
+; DO FT ON SQUARE OF THE LARGE VOLUME
+FT                    ; Fourier transform
+_3
+[LARGE_SQ_FT]
+DE
+_3
+
+; DO FT ON LARGE VOLUME
+FT                    ; Fourier transform
+[LARGE_VOLUME]
+[LARGE_FT]
+
+IF(X39.EQ.0)THEN
+
+; FIND NSAM, NROW AND NSLICE OF LARGE AND REFERENCE VOLUMES
+FI x20,x21,x22            ; Large volume size
+[LARGE_VOLUME]
+12,2,1
+
+x27 = INT(x20/2)+1        ; Center of large volume
+x28 = INT(x21/2)+1
+x29 = INT(x22/2)+1
+                        
+FI x23,x24,x25            ; Small volume size
+[PADDED_REF_VOLUME]
+12,2,1
+
+x26 = x23*x24*x25         ; Number of pixels in small volume
+
+x33 = INT(x23/2)+1        ; Center of small volume
+x34 = INT(x24/2)+1
+x35 = INT(x25/2)+1 
+
+x86 = x20-x23+1           ; big-small image size
+x87 = x21-x24+1
+x88 = x22-x25+1
+
+x36 = INT((x20-x23)/2)+1  ; Corner of small image inserted into center of big
+x37 = INT((x21-x24)/2)+1
+x38 = INT((x22-x25)/2)+1  
+
+         ; FIND NUMBER OF NON-ZERO PIXELS INSIDE MASK
+         ; (SAME AS SUM OF ALL PIXELS IN MASK)
+         CP
+         [MASK]
+         _4
+
+         FS x11,x11,x50,x11
+         _4             ; Thresholded rotated mask
+
+         x50 = x50*x26
+         IF (x50.LE.0)THEN
+            VM
+            echo 'NO NON-ZERO PIXELS INSIDE MASK'
+            EN
+         ENDIF
+         x51 = 1.0 / x50 ; For speed
+
+         ; CREATE A BLANK VOLUME, SAME SIZE AS LARGE VOLUME
+         BL             ; Create blank volume
+         _25            ; Blank output volume
+         x20,x21,x22    ; Size
+         N              ; Not average background
+         (0)            ; Background
+
+         ; INSERT ROTATED MASK INSIDE THE BLANK VOLUME
+         IN              ; Insert
+         _4              ; Thresholded rotated mask
+         _25             ; Padded mask output volume
+         (1,1,1)         ; Position
+
+         ; FT ON PADDED MASK,  NOTE: DON'T REUSE _36
+         FT              ; Fourier transform
+         _25             ; Padded mask
+         _36             ; Fourier of padded mask
+
+         ; MULTIPLY FT OF LARGE VOLUME WITH COMPLEX CONJUGATE OF PADDED MASK
+         MU M            ; Complex multiplication
+         [LARGE_FT]      ; First input
+         _36             ; Fourier of padded mask
+         _35             ; Output
+         *
+
+         ; INVERSE FT
+         FT              ; Inverse Fourier transform
+         _35             ; Input
+         _27             ; Output
+
+         x52=x51*x51
+
+         ; NORMALIZE 
+         AR              ; Arithmetic operation
+         _27             ; Input
+         _27             ; Output
+         P1*P1*x52       ; P2 = (P1 / (No. OF NON-ZERO PIXELS INSIDE MASK))**2 
+
+         ; MULTIPLY FT OF SQUARE OF LARGE VOLUME WITH COMPLEX CONJUGATE 
+         ; OF FT OF BLANK VOLUME
+         MU M           ; Complex multiplication
+         [LARGE_SQ_FT]  ; Input
+         _36            ; Multiplier
+         _35            ; Output
+         *
+	 
+         ; DO INVERSE FT
+         FT           ; Inverse Fourier transform
+         _35          ; Input
+         _25          ; Output
+
+         ; NORMALIZE
+         AD F
+         _25          ; Input (From FT OF SQUARE OF LARGE VOLUME)
+         _27          ; Input (From FT OF LARGE VOLUME)
+         x51,-1.0     ; p_25 = p_25 * x51 - p_27
+         _25          ; Output
+          
+         ; GET RID OF SQRT OF -VE # AND DIVISION BY ZERO(WHILE DIVIDING THE 
+         ; CCF BY LOCAL STANDARD DEVIATION)
+	 ; IF YOU FIND CCC > 1.0 AND THE LOCATIONS OF THE MOTIF OUTSIDE THE OUTLINE OF THE SEARCHED
+	 ; LARGE VOLUME THEN LOOK AT THE FILE _25 AND YOU WILL FIND PIXEL VALUES
+	 ; QUITE SMALL ~ < 1E-10 BUT NOT EQUAL TO ZERO. IN THIS CASE, CHANGE THE MASK THRESHOLD
+	 ; IN THE FOLLOWING OPERATION FROM ZERO (0) TO SOMETHING LIKE 1E-10. THIS MAY SOLVE
+	 ; THE PROBLEM. HOWEVER, YOU MAY NEED TO CHANGE THIS PARAMETER TO FIND THE CORRECT ONE
+	 ; TO BE USED. THIS PROBLEM OF GETTING -VE VARIANCE OR GETTING INCORRECT VARIANCE WHEN
+	 ; PIXELS UNDER THE MASK HAVE SAME/VERY_CLOSE VALUES IS DUE TO THE WAY VARIANCE IS 
+	 ; CALCULATED USING FOURIER TRANSFORM.	 
+         TH M
+         _25
+         _80
+         B
+         (0)
+        
+         MM
+         _80
+         _25
+         (9E+20)
+
+         ; LOCAL STANDARD DEVIATION
+         WU           ; Square root
+         _25          ; Input
+         _25          ; Output
+            
+         WI           ; Window
+         _25          ; Input
+         [LOCAL_VARIANCE]          ; Output                       
+         x86,x87,x88  ; Size of difference
+         (1,1,1)      ; Position
+ENDIF
+
+; FINISHED PREPARING INPUT FILES -----------------------------  
+
+VM
+echo "Number of theta angles (parallel jobs): {****x78}"
+
+DO LB4 x72 = 1,x78
+  ; REMOVE SYNC FILES
+  DE
+  [DOC_FILE_OUT]_{****x72}
+
+  ; COMMENCE EULER ANGLE SEARCH 
+  VM
+  publish "./spider $PRJEXT/$DATEXT @sigsloop {***x72} x72={***x72}" 
+LB4 
+
+; Wait for all jobs
+x11=1
+@wait_pub(x11,x78)
+
+VM
+echo "Finished search - Consolidate all doc files now."
+
+EN
+; OFTEN DOC. FILES ARE TOO LARGE TO USE THE FOLLOWING STEPS ----------
+
+DOC COMBINE   ; Combine all the Renumbered doc files into one big file
+[DOC_FILE_OUT]_****
+1-x79
+[PEAK_COMBINED]
+
+DOC SORT      ; Sort the combined doc file
+[PEAK_COMBINED]
+[PEAK_COMBINED]_SORTED
+7
+Y           
+
+EN
+
+; If doc. files are too large, use the following steps ----------
+; cat *OUT* > jnkbig  
+; sort -nr -k 9 jnkbig > jnksort 
+; uniq.perl < jnksort > ryr6_sort.dat
+; spider pam/dat @circle
+; spider pam/dat @number
+; spider pam/dat @window 2
+; scp volmark.dat leith@samar.wadsworth.org:/usr5/leith/sig
+;
+; </body></pre></html>

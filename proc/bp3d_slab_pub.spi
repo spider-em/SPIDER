@@ -1,0 +1,116 @@
+; <html><head><title>Controls back projection</title></head><body><pre>
+; bp3d_slab_pub.spi    ArDean Leith              Aug 2006
+;
+; PURPOSE: Runs 3D back projection. Creates a volume from a set of
+;          input projections and their corresponding angles.
+;
+; USAGE: spider dat @bp3d_slab_pub
+;
+; PROCEDURES CALLED:  <a href="./wait_pub.spi">wait_pub.spi</a>
+;                     <a href="./signal_pub.spi">signal_pub.spi</a>
+;
+; I/O PARAMETERS AND FILES ARE SET HERE:
+;
+; ----------------- INPUT REGISTERS -------------------------------------
+
+[nslabs] = 2           ; Number of slabs/nodes 
+
+[xsize]  = 1024        ; X dimension of the reconstruction
+[ysize]  = 1024        ; Y dimension of the reconstruction
+[zsize]  = 250         ; Z dimension of the reconstruction
+
+;<b> ----------------- INPUT FILES -------------------------------------
+; -------------- May have to edit these names --------------------------
+; -------------- DO NOT COPY FROM WEB BROWSER --------------------------
+
+FR G
+[aligned_image_template]ringjnk*** ; File name template for aligned input images 
+
+FR G
+[image_selection_doc]SEL200        ; Selection doc file for input images numbers                                                                  
+
+FR G
+[angles_doc]ANG001                 ; Input images angle doc file                                                                  
+
+; ----------------- OUTPUT FILES ---------------------------------------
+
+FR G
+[temp_volume]jnk_volout_           ; Output volume filename stem
+
+FR G
+[output_volume]jnkpub_volout       ; Output volume filename stem
+
+FR G
+[sync_doc]jnkdocparamout           ; Sync. doc file stem for PubSub                                                                   
+
+;  ------------------------------------------------------------------</b>
+
+MD
+TR OFF                             ; Decreases results file output
+MD
+VB OFF                             ; Decreases results file output
+
+IF ([s1].GT.0) THEN
+   ; -------------------- Partial 'BP 3D' run -----------------------------
+   MD
+   SET MP                    ; Set number of OMP processors
+   0
+
+   BP 3D                     ; 3D back projection 
+   [aligned_image_template]  ; File name template for aligned input images
+   [image_selection_doc]     ; Selection doc file for input images numbers
+   [angles_doc]              ; Input images angle doc file
+   [xsize],[ysize],[zsize]   ; X-Y-Z size of recon. (up to size of aligned images)
+   [s1],[s2]                 ; Z-slice range to be reconstructed
+   1.0E+4                    ; Signal-to-Noise-Ratio for the Wiener filtration weighting 
+   [temp_volume]{**[slab]}   ; Partial output volume file
+
+   @signal_pub([slab])       ; Create PubSub sync signal file
+
+   EN                        ; This partial SPIDER run ends now
+ENDIF
+
+; --------------------  'BP 3D' main run ----------------------------------
+
+; Use PubSub to create parallel process for each slab
+   
+[zslices] = [zsize] / [nslabs]                            ; Slices per slab
+[zslices] = INT([zslices])                                ; Slices per slab
+IF ([zslices]*[nslabs].LT.[zsize]) [zslices]=[zslices]+1  ; Slices per slab
+
+[s2]=0
+DO LB2 [slab]=1,[nslabs]
+
+   [s1]=[s2]+1                                  ; Starting slice
+   [s2]=[s1]+[zslices]-1                        ; Ending   slice
+   IF ([s2].GT.[zsize]) [s2]=[zsize]            ; Ending   slice
+
+   VM
+   echo " Slices: {***[s1]} ... {***[s2]}"
+
+   VM                                          ; Start back-projection slab set
+   publish './spider $PRJEXT/$DATEXT @bp3d_slab_pub {**[slab]} slab={***[slab]} s1={***[s1]} s2={***[s2]}'
+         
+LB2
+ 
+[slab1]=1
+@wait_pub([slab1],[nslabs])                    ; Waiting for all slabs
+
+; Merge all slab sets
+
+IF ([nslabs].LE.1) THEN
+   VM                                          ; Only a single slab
+   \mv [temp_volume]01.$DATEXT  [output_volume].$DATEXT
+ELSE
+   SK                                          ; Stack the slabs
+   [temp_volume]01                             ; First slab to be  stacked
+   [temp_volume]{**[nslabs]}                   ; Last slab  to be  stacked
+   [output_volume]                             ; Output volume
+ENDIF
+    
+FS                                             ; List final output volume statistics                                                                           
+[output_volume]                                ; Final file
+      
+EN                                             ; Finished with whole run
+
+; </body></pre></html>

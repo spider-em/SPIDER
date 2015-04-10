@@ -1,0 +1,144 @@
+; <html><head><title>Searches for molecular signature</title></head><body><pre>
+; new_sigsloop.pam                             JAN 2003 Bimal Rath  
+;                    Parallelized              MAY 2003 ArDean Leith
+;                    Altered for tomography    OCT 2006 Christian Renken
+;                    Rewritten                 JUL 2008 ArDean Leith
+;                    Improved                  JAN 2011 ArDean Leith
+;
+; PURPOSE: Locates molecular signature (motif) inside search volume. 
+;          Be sure both volumes have same magnification 
+;          (1 Pixel = "n" nanometer) 
+;
+; SAMPLE USAGE : ./spider spi/dat @new_sigsloop 99 num=1
+
+[num]                                ; NEEDED FROM STARTUP LINE!!!!
+
+; Read input variables and file names
+@new_sigs_settings([n],[phi0],[the0],[psi0],[phid],[thed],[nphi],[nthe],[psin],[mskval],[peaks],[msktype])
+
+MY fl
+
+MD
+VB OFF                               ; Minimize results file output
+MD
+TR OFF                               ; Minimize results file output
+MD
+SET MP                               ; Set number of OMP processors
+[n]
+
+[key] = 0                            ; Initial doc. file output line number
+
+IQ FI [have_tomo_wedge]              ; Are using tomo. wedge filter
+[WEDGE_FILTER]
+
+; Euler angle search is done here
+
+[nrots] =0
+[phi]   = [phi0] + ([num]-1)*[phid]  ; Current phi counter is sent from caller      
+       
+DO [it] = 1, [nthe]                  ; Theta loop --------------------------------- THETA
+   [theta] = [the0]+([it]-1)*[thed]
+
+   ; Modulate psid to uniformly sample unit sphere
+   [sint]  = SIN([theta])
+   [dsint] = ABS([sint])
+   IF ([dsint] .LE. 0.01) THEN	     
+       [psid] = 360               
+       [npsi] = 1
+   ELSE
+       [psid] = [thed] / [sint]    
+       [npsi] = INT((([psin]-[psi0])/[psid])+1)
+       if ([npsi] .LT. 1) [npsi] = 1
+   ENDIF
+   !vm
+   !echo ' For theta: {***[theta]} {%f5.1%[psid]} {***[npsi]}'
+   
+   DO [jt] = 1, [npsi]               ; Psi loop -------------------------------- PSI
+      [psi] = [psi0]+([jt]-1)*[psid]         
+ 
+      [nrots]=[nrots]+1   
+      VM
+      echo ' Rotation: {****[nrots]}  Phi,the,psi: {***[phi]}, {***[theta]}, {***[psi]}'
+ 
+      [loopcount] = ([it]-1)*[nphi] + [jt]  ; Do-loop counter
+
+      ; Using an asymmetric mask,  Rotate mask vol 
+      RT 3D                    ; Rotate 
+      [MOTIF_MASK]             ; Cubic motif mask vol        (input)
+      _1                       ; Rotated cubic mask vol      (output)
+      [phi],[theta],[psi]      ; Rotation angle
+
+      ; Threshold cubic rotated mask
+      TH M                     ; Threshold to create mask
+      _1                       ; Rotated mask vol            (input)
+      _2                       ; Thresholded, rotated mask   (output)
+      B                        ; Below = 0
+      (.3)                     ; Threshold value
+
+      !fi h [min],[max]
+      ![SEARCH_VOL]             
+      !fmin,fmax
+      !vm 
+      !echo ' Search vol:',{%1pg13.3%[min]} .... {%1pg13.3%[max]}
+      !fi h [min],[max]
+      !_2              
+      !fmin,fmax
+      !vm 
+      !echo ' Rotated mask vol:',{%1pg13.3%[min]} .... {%1pg13.3%[max]}
+
+      !vm 
+      !echo ' Oper: LO I'
+
+      ; Pad rotated mask and create FFT -------------------------- LO I
+      LO I                     ; Padded FFT creation for mask
+      M                        ; Make FFT of mask only
+      [SEARCH_VOL]             ; Large search vol            (input)
+      _2                       ; Rotated cubic motif mask    (input)
+      [MOTIF_MASK_FFT]         ; FFT of padded, rotated mask (output)
+
+      !vm 
+      !echo ' Oper: LO LSD'
+      ; Create local SD vol using rotated mask ------------------ LO LSD 
+      LO LSD                   ; LSD creation 
+      _2                       ; Rotated cubic motif mask    (input)
+      [MOTIF_MASK_FFT]         ; FFT of padded, rotated mask (input)
+      [SEARCH_VOL_FFT]         ; FFT of search vol           (input)
+      [SEARCH_VOL_SQ_FFT]      ; FFT of sq. search vol       (input)
+      [LSD_VOL]                ; Local SD vol                (output)
+
+      !vm 
+      !echo ' Oper: RT 3D on cubic motif vol'
+      ; Rotate the cubic motif vol  
+      RT 3D                    ; Rotate  
+      [CUBE_MOTIF_VOL]         ; Cubic motif                 (input)
+      _3                       ; Rotated cubic motif         (output)
+      [phi],[theta],[psi]      ; Rotation angle
+
+      VM
+      echo ' Rotation angle:            {****[phi]} {****[theta]} {****[psi]}'
+
+      !vm 
+      !echo ' Oper: LO'
+      ; Locate rotated motif within search vol -------------------- LO
+      LO                      ; Locate motif
+      [phi],[theta],[psi]     ; Angles for doc. file
+      _3                      ; Rotated cubic motif       (input)
+      _2                      ; Rotated mask for motif    (input)
+      [SEARCH_VOL_FFT]        ; Search vol fft            (input)
+      [LSD_VOL]               ; Local SD vol              (input)
+      [peaks]                 ; Number of peaks wanted    
+      [PEAK]                  ; Peaks image               (output)
+      [DOC_FILE_OUT]          ; Peak location doc file    (output)     
+
+      MY FL                   ; Flush results file
+
+  ENDDO                       ; End of: Psi loop   
+ENDDO                         ; End of: Theta loop
+
+@signal_pub([num])            ; Signal this parallel job is finished          
+[SYNC_DOC_BASE]
+
+EN
+
+; </body></pre></html>
+

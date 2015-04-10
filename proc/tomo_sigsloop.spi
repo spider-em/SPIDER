@@ -1,0 +1,392 @@
+; <html><head><title>Searches for molecular signature</title></head><body><pre>
+; sigsloop.pam                                Bimal Rath   :  JAN 2003
+;appended by                                         Christian Renken  : OCT 2006
+;                        PARALLELIZED BY      ArDean Leith
+;
+; SEARCHES FOR MOLECULAR SIGNATURE (REFERENCE VOLUME) INSIDE A LARGE VOLUME. 
+; BE SURE BOTH VOLUMES HAVE SAME MAGNIFICATION (1 PIXEL = "N" NANOMETER) 
+;
+;;MD
+;;VB OFF
+MD
+TR OFF
+
+x72   ; Needed from startup line!!!!
+
+; READ INPUT FILES AND REGISTERS
+@tomo_sigs_settings[x12,x65,x66,x67,x73,x74,x75,x78,x79,x83,x95,x39,x61,x64]
+
+IF (x12 .GT. 1) THEN
+   MD
+   SET MP                 ; Set number of OMP processors
+   x12
+ENDIF
+
+; FIND NSAM, NROW AND NSLICE OF LARGE AND REFERENCE VOLUMES
+FI x20,x21,x22            ; Large volume size
+[LARGE_VOLUME]
+12,2,1
+
+x27 = INT(x20/2)+1        ; Center of large volume
+x28 = INT(x21/2)+1
+x29 = INT(x22/2)+1
+                        
+FI x23,x24,x25            ; Small volume size
+[PADDED_REF_VOLUME]
+12,2,1
+
+x26 = x23*x24*x25         ; Number of pixels in small volume
+
+x33 = INT(x23/2)+1        ; Center of small volume
+x34 = INT(x24/2)+1
+x35 = INT(x25/2)+1 
+
+x86 = x20-x23+1           ; big-small image size
+x87 = x21-x24+1
+x88 = x22-x25+1
+
+x36 = INT((x20-x23)/2)+1  ; Corner of small image inserted into center of big
+x37 = INT((x21-x24)/2)+1
+x38 = INT((x22-x25)/2)+1  
+ 
+x97 = 0                   ; Doc. file output line number
+
+; EULER ANGLE SEARCH IS DONE HERE
+
+; USED IN LOOP
+x57 = x66 + (x72-1)*x75		;THETA ANGLE FOR LOOP          
+
+x77 = int(x78*sin(x57)+0.5)	;NUMBER OF PSI ITERATIONS 
+if(x77.eq.0)x77=1		;DON'T ALLOW x77 < 1
+x76=(x73-x67)/x77		;PSI INCREMENT
+
+DO LB5 x71 = 1, x77		;PSI ANGLE FOR LOOP
+   x58 = x67+(x71-1)*x76
+      
+   DO LB6 x70 = 1, x79  		;PHI ANGLE FOR LOOP
+      x56 = x65+(x70-1)*x74         
+
+      ; DO LOOP NUMBER
+      x90 = (x71-1)*x77 + x70
+
+      ; FOR AN ASYMMETRIC MASK NEED TO CALCULATE THE LOCAL VARIANCE 
+      IF ( x39 .EQ. 1) THEN
+         RT 3D
+         [MASK]
+         _4
+        x56,x57,x58
+
+         ; FIND NUMBER OF NON-ZERO PIXELS INSIDE MASK
+         ; (SAME AS SUM OF ALL PIXELS IN MASK)
+         FS x11,x11,x50,x11
+         _4             ; Thresholded rotated mask
+
+         x50 = x50*x26
+         IF (x50.LE.0)THEN
+            VM
+            echo 'NO NON-ZERO PIXELS INSIDE MASK'
+            EN
+         ENDIF
+         x51 = 1.0 / x50 ; For speed
+
+         ; CREATE A BLANK VOLUME, SAME SIZE AS LARGE VOLUME
+         BL             ; Create blank volume
+         _25            ; Blank output volume
+         x20,x21,x22    ; Size
+         N              ; Not average background
+         (0)            ; Background
+
+         ; INSERT ROTATED MASK INSIDE THE BLANK VOLUME
+         IN              ; Insert
+         _4              ; Thresholded rotated mask
+         _25             ; Padded mask output volume
+         (1,1,1)         ; Position
+
+         ; FT ON PADDED MASK,  NOTE: DON'T REUSE _36
+         FT              ; Fourier transform
+         _25             ; Padded mask
+         _36             ; Fourier of padded mask
+
+         ; MULTIPLY FT OF LARGE VOLUME WITH COMPLEX CONJUGATE OF PADDED MASK
+         MU M            ; Complex multiplication
+         [LARGE_FT]      ; First input
+         _36             ; Fourier of padded mask
+         _35             ; Output
+         *
+
+         ; INVERSE FT
+         FT              ; Inverse Fourier transform
+         _35             ; Input
+         _27             ; Output
+
+         x52=x51*x51
+
+         ; NORMALIZE 
+         AR              ; Arithmetic operation
+         _27             ; Input
+         _27             ; Output
+         P1*P1*x52       ; P2 = (P1 / (No. OF NON-ZERO PIXELS INSIDE MASK))**2 
+
+         ; MULTIPLY FT OF SQUARE OF LARGE VOLUME WITH COMPLEX CONJUGATE 
+         ; OF FT OF BLANK VOLUME
+         MU M           ; Complex multiplication
+         [LARGE_SQ_FT]  ; Input
+         _36            ; Multiplier
+         _35            ; Output
+         *
+	 
+         ; DO INVERSE FT
+         FT           ; Inverse Fourier transform
+         _35          ; Input
+         _25          ; Output
+
+         ; NORMALIZE
+         AD F
+         _25          ; Input (From FT OF SQUARE OF LARGE VOLUME)
+         _27          ; Input (From FT OF LARGE VOLUME)
+         x51,-1.0     ; p_25 = p_25 * x51 - p_27
+         _25          ; Output
+          
+         ; GET RID OF SQRT OF -VE # AND DIVISION BY ZERO(WHILE DIVIDING THE 
+         ; CCF BY LOCAL STANDARD DEVIATION)
+	 ; IF YOU FIND CCC > 1.0 AND THE LOCATIONS OF THE MOTIF OUTSIDE THE OUTLINE OF THE SEARCHED
+	 ; LARGE VOLUME THEN LOOK AT THE FILE _25 AND YOU WILL FIND PIXEL VALUES
+	 ; QUITE SMALL ~ < 1E-10 BUT NOT EQUAL TO ZERO. IN THIS CASE, CHANGE THE MASK THRESHOLD
+	 ; IN THE FOLLOWING OPERATION FROM ZERO (0) TO SOMETHING LIKE 1E-10. THIS MAY SOLVE
+	 ; THE PROBLEM. HOWEVER, YOU MAY NEED TO CHANGE THIS PARAMETER TO FIND THE CORRECT ONE
+	 ; TO BE USED. THIS PROBLEM OF GETTING -VE VARIANCE OR GETTING INCORRECT VARIANCE WHEN
+	 ; PIXELS UNDER THE MASK HAVE SAME/VERY_CLOSE VALUES IS DUE TO THE WAY VARIANCE IS 
+	 ; CALCULATED USING FOURIER TRANSFORM.	 
+         TH M
+         _25
+         _80
+         B
+         (0)
+        
+         MM
+         _80
+         _25
+         (9E+20)
+
+         ; LOCAL STANDARD DEVIATION
+         WU           ; Square root
+         _25          ; Input
+         _25          ; Output
+           
+         ; NOTE: DON'T REUSE _15  
+         WI           ; Window
+         _25          ; Input
+         _15          ; Output                       
+         x86,x87,x88  ; Size of difference
+         (1,1,1)      ; Position
+      ELSE
+
+      CP
+      [LOCAL_VARIANCE]
+      _15
+
+      ENDIF
+
+      ; ROTATE THE REFERENCE , DON'T REUSE _2 ------------------ step 2
+      
+      IF (x61 .NE. 1) THEN 
+         ; SPHERICALLY SYMMETRIC FOURIER FILTER
+         
+         RT 3D               ; Rotate volume
+         [PADDED_REF_VOLUME] ; Input
+         _2                  ; Output
+         x56,x57,x58         ; Angle
+      ELSE
+         ; SPHERICALLY ASYMMETRIC FOURIER FILTER
+         FT
+         [PADDED_REF_VOLUME]
+         _57
+	 
+         MU M
+         _57
+         [FOURIER_FILTER]
+         _58
+          *
+	  
+         FT
+         _58
+         _68
+	 
+         RT 3D               ; Rotate volume
+         _68                 ; Input
+         _2                  ; Output
+         x56,x57,x58         ; Angle	 	 
+      ENDIF
+
+        
+      ; PREPARE THE REFERENCE VOLUME SUCH THAT THE AVERAGE INSIDE 
+      ; THE MASK = 0 AND THE STANDARD DEVIATION INSIDE THE MASK = 1
+      MM           ; Mask multiplication
+      _4           ; Rotated mask input
+      _2           ; Masked rotated reference input/output volume
+      (0)          ; Background for voxels < 0.5
+
+      ; FIND AVERAGE of rotated, masked ref. volume
+      FS x11,x11,x62,x63
+      _2           ; Masked volume
+        
+      ; SUM OF ALL PIXELS IN ROTATED, masked ref. volume
+      x40 = x62*x26 ; Average * No. of pixels
+
+      SQ           ; Square the rotated, masked volume
+      _2           ; Masked volume
+      _7           ; Squared masked volume
+               
+      ; FIND AVERAGE OF SQUARED ROTATED MASK
+      FS x11,x11,x62,x11
+      _7           ; Squared rotated masked volume
+
+      ; SUM OF ALL PIXELS SQUARED IN ROTATED MASK.
+      x45 = x62*x26
+
+      ; SD INSIDE MASK        
+      x46 = SQRT( (x45 - (x40*x40*x51)) / (x50-1) )
+
+      ; AVG INSIDE MASK         
+      x47  =  x40/x50    
+      x48  = 1.0 / x46  ; For speed
+
+      ; NORMALIZE
+      AR          ; Arithmetic operation
+      _2          ; Masked volume
+      _7          ; Normalized masked file
+      (P1-x47) * x48
+
+      MM          ; Mask multiply operation
+      _4          ; Mask 
+      _7          ; Masked input/output file
+      (0)
+
+      ; CREATE AN EMPTY VOLUME OF DIMENSION = LARGE VOLUME 
+      ; PASTE THE PREPARED REFERNCE VOLUME AT THE MIDDLE OF 
+      ; THIS EMPTY VOLUME            
+      BL          ; Create blank volume
+      _25         ; Large blank volume
+      x20,x21,x22 ; Size
+      N           ; Not average background
+      (0)         ; Background
+
+      IN          ; Insert
+      _7          ; Small volume
+      _25         ; Into large blank volume
+      1,1,1       ; put small image inside big at the corner
+
+      ; FIND CROSS CORRELATION FUNCTION OF THE ABOVE VOLUME WITH
+      ; WITH THE LARGE VOLUME.                           
+
+      FT
+      _25
+      _60
+
+      ; SET F(0,0) ELEMENT = ZERO. DONE TO DO SIMILAR NORMALIZATION
+      ; AS DONE IN REAL SPACE 
+      RP
+      _60
+      (1,1,1)
+      (0)
+
+      RP
+      _60 
+      (2,1,1)
+      (0)
+
+      FT
+      [LARGE_VOLUME]
+      _61
+
+      ; DON'T CHANGE ORDER OF INPUT IN THE FOLLOWING OPERATION
+      MU M
+      _61
+      _60
+      _62
+      *
+
+      ; DO INVERSE FT
+      FT
+      _62
+      _27
+
+      WI           ; Window
+      _27          ; CC volume
+      _13          ; Output
+      x86,x87,x88  ; Difference size
+      (1,1,1)      ; left corner of small volume    
+
+      ; DIVIDE THE CC FUNCTION WITH TOTAL NUMBER OF NON-ZERO PIXELS
+      ; INSIDE THE MASK         
+      AR          ; Arithmetic operation
+      _13         ; Input
+      _17         ; Output
+      P1 * x51
+
+      ; DIVIDE THE  ABOVE RESULT WITH CORRESPONDING ELEMENT OF 
+      ; THE LOCAL STANDARD DEVIATION ARRAY 
+      MU D        ; Divide
+      _17         ; Input
+      _15         ; Input
+      _13         ; Output
+      *
+
+      DE                         ; This doc file created by each 'PK 3D'
+      [DOC_FILE_DEL]_{****x72}
+
+      ; PEAK SEARCH                 
+      PK 3D                      ; Peak search
+      _13                        ; Input file
+      +                          ; Maxima
+      (x95,1)                    ; Number of peaks, origin override flag
+      N                          ; No center of gravity calc.
+      (1,1)                      ; xy co-ordinate
+      (1)                        ; z co-ordinate
+      (1)                        ; peak no. for ratio
+      N                          ; No box
+      [DOC_FILE_DEL]_{****x72}   ; Output doc file
+
+      ; WRITE EULER ANGLES, XYZ POSITIONS, & PEAK HEIGHT TO FINAL DOC FILE 
+      DO LB10 x96 = 1,x95
+         UD S,x96,x11,x12,x13,x14,x16,x17,x18
+         [DOC_FILE_DEL]_{****x72}
+         ; CORRECT FOR THE CENTER OF THE PEAK WITH RESPECT TO LARGE VOLUME.
+         ; THE PEAK HEIGHT DETERMINED IN PEAK SEARCH STEP IS WITH RESPECT TO THE
+         ; VOLUME CREATED BY SUBTRACTING THE DIMENSION OF REFERENCE VOLUME
+         ; FROM THE LARGE VOLUME. FACTOR OF NSAM/2+1, NROW/2+1 AND NSLICE/2+1
+         ; ARE ADDDED
+         x30 = x11+x33
+         x31 = x12+x34
+         x32 = x13+x35
+         x97 = x97 + 1
+
+
+         ; DO NOT WRITE CROSS-CORRELATION COEFFICIENTS (CCC) IN SCIENTIFIC FORMAT. UNIX 
+         ; "SORT" COMMAND WILL HAVE TROUBLE TO SORT THE FILE.
+         ; CCC LESS THAN 0.05 DOES NOT MEAN MUCH
+         IF (x18 .LT. (.05)) x18 = -99
+        
+
+         SD x97,x56,x57,x58,x30,x31,x32,x18
+         [DOC_FILE_OUT]_{****x72}       
+      LB10
+         
+      UD E                                                               
+      DE                         ; This doc file created by each 'PK 3D'
+      [DOC_FILE_DEL]_{****x72}
+   LB6
+      
+   MY FL
+      
+LB5
+
+SD E
+[DOC_FILE_OUT]_{****x72}       
+
+@signal_pub(x72)             ; Signal finished          
+EN
+
+; </body></pre></html>
+
+
