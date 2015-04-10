@@ -1,0 +1,524 @@
+C **********************************************************************
+C  SSNR3DNN  (taken from src_test)
+C                  MAXNAM                         JUL  14 ARDEAN LEITH 
+C=**********************************************************************
+C=* From: SPIDER - MODULAR IMAGE PROCESSING SYSTEM                     *
+C=* Copyright (C)2005, P. A. Penczek                                   *
+C=*                                                                    *
+C=* University of Texas - Houston Medical School                       *
+C=*                                                                    *
+C=* Email:  pawel.a.penczek@uth.tmc.edu                                *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* This program is distributed in the hope that it will be useful,    *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+C=* General Public License for more details.                           *
+C=*                                                                    *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+C=*                                                                    *
+C=**********************************************************************
+C **********************************************************************
+
+        SUBROUTINE SSNR3DNN
+
+        INCLUDE 'CMBLOCK.INC'
+        INCLUDE 'CMLIMIT.INC'
+        INCLUDE 'F90ALLOC.INC'
+
+        REAL, DIMENSION(:,:), ALLOCATABLE :: DM,SM
+        COMPLEX, DIMENSION(:,:,:), ALLOCATABLE :: X
+C       DOC FILE POINTERS
+        REAL, DIMENSION(:,:), POINTER :: ANGBUF, ANGSYM
+
+        !CHARACTER*80            FINPIC,FINPAT,FILNAM,ANGDOC
+        CHARACTER(LEN=MAXNAM) :: FINPIC,FINPAT,FILNAM,ANGDOC
+        COMMON /F_SPEC/ FINPAT,NLET,FINPIC
+
+        DATA  IOPIC/98/,INPIC/99/
+
+        NILMAX = NIMAX
+
+        CALL FILELIST(.TRUE.,INPIC,FINPAT,NLET,INUMBR,NILMAX,NANG,
+     &                 'TEMPLATE FOR 2-D IMAGES',IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+        CLOSE(INPIC)
+        MAXNUM = MAXVAL(INUMBR(1:NANG))
+
+C       N    - LINEAR DIMENSION OF PROJECTIONS AND RESTORED CUBE
+C       NANG - TOTAL NUMBER OF IMAGES
+        WRITE(NOUT,2001) NANG
+2001    FORMAT(' NUMBER OF IMAGES =',I5)
+
+C       RETRIEVE ARRAY WITH ANGLES DATA IN IT
+        MAXXT = 4
+        MAXYT = MAXNUM
+        CALL GETDOCDAT('ANGLES DOC',.TRUE.,ANGDOC,77,.FALSE.,MAXXT,
+     &                       MAXYT,ANGBUF,IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 9998
+
+C       RETRIEVE ARRAY WITH SYMMETRIES DATA IN IT
+        MAXXS=0
+        MAXSYM=0
+        CALL GETDOCDAT('SYMMETRIES DOC',.TRUE.,ANGDOC,77,.TRUE.,MAXXS,
+     &                   MAXSYM,ANGSYM,IRTFLG)
+        IF(IRTFLG.NE.0)  MAXSYM=1
+
+C       OPEN FIRST IMAGE FILE TO DETERMINE NSAM, NROW, NSL
+        CALL FILGET(FINPAT,FINPIC,NLET,INUMBR(1),INTFLG)
+
+        MAXIM = 0
+        CALL OPFILEC(0,.FALSE.,FINPIC,INPIC,'O',IFORM,NSAM,NROW,NSL,
+     &             MAXIM,'DUMMY',.FALSE.,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+        CLOSE(INPIC)
+
+        N2     = NSAM-MOD(NSAM,2)
+        LSD    = N2+2-MOD(N2,2)
+        NMAT   = LSD*N2*N2
+
+        ALLOCATE(DM(9,NANG), STAT=IRTFLG)
+        IF (IRTFLG.NE.0) THEN 
+           CALL ERRT(46,'BP 3F, DM',IER)
+        ENDIF
+        CALL  BUILDM(INUMBR,DM,NANG,ANGBUF(1,1),.FALSE.,SSDUM,
+     &              .FALSE.,IRTFLG)
+        DEALLOCATE(ANGBUF)
+        IF (IRTFLG .NE. 0) GOTO 9998
+
+        IF(MAXSYM.GT.1)  THEN
+           ALLOCATE(SM(9,MAXSYM), STAT=IRTFLG)
+           IF (IRTFLG.NE.0) THEN 
+              CALL ERRT(46,'BP 3F, SM',IER)
+              DEALLOCATE (DM)
+           ENDIF
+           CALL  BUILDS(SM,MAXSYM,ANGSYM(1,1),IRTFLG)
+           DEALLOCATE(ANGSYM)
+        ELSE
+           ALLOCATE(SM(1,1), STAT=IRTFLG)
+           IF (IRTFLG.NE.0) THEN 
+              DEALLOCATE (DM)
+              CALL ERRT(46,'BP 3F, SM-2nd',IER)
+           ENDIF
+        ENDIF
+
+        ALLOCATE (X(0:N2/2,N2,N2), STAT=IRTFLG)
+        IF (IRTFLG.NE.0) THEN 
+           DEALLOCATE (DM, SM)
+           CALL ERRT(46,'BP 3F, X',IER)
+        ENDIF
+
+       CALL SSNR3DQ(NSAM,X,
+     &              LSD,N2,N2/2,INUMBR,DM,NANG,SM,MAXSYM)
+
+C !!!!!!!!!!!!!!!!!!!!!!!!
+	NSAM=N2
+
+        IFORM = 3
+        CALL OPFILEC(0,.TRUE.,FILNAM,IOPIC,'U',IFORM,NSAM,NSAM,NSAM,
+     &           MAXIM,'RECONSTRUCTED 3-D',.FALSE.,IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 9997
+
+
+C        NOTE: NSAM=NROW=NSLICE 
+
+         CALL WRITEV(IOPIC,X,NSAM,NSAM,NSAM,NSAM,NSAM)
+
+
+9997    CLOSE(IOPIC)
+        IF (ALLOCATED(DM)) DEALLOCATE(DM)
+9998    IF (ALLOCATED(SM)) DEALLOCATE(SM)
+        IF (ALLOCATED(X)) DEALLOCATE (X)
+        END
+
+
+
+C       ------------------ SSNR3DQ ----------------------------------
+
+        SUBROUTINE  SSNR3DQ(NS,X,LSD,N,N2,ILIST,DM,NANG,SM,MAXSYM)
+
+        INCLUDE 'CMLIMIT.INC'
+        
+        COMPLEX           X(0:N2,N,N)
+        DIMENSION         ILIST(NANG)
+        DIMENSION         DM(3,3,NANG),SM(3,3,MAXSYM),DMS(3,3)
+
+        REAL, DIMENSION(:,:,:), ALLOCATABLE :: X2
+        INTEGER, ALLOCATABLE, DIMENSION(:,:,:) :: NR
+        REAL, DIMENSION(:,:), ALLOCATABLE :: PROJ
+        COMPLEX, DIMENSION(:,:), ALLOCATABLE :: BI
+
+        !CHARACTER*80      FINPIC,FINPAT
+        !COMMON  /F_SPEC/  FINPAT,NLET,FINPIC
+
+        CHARACTER(LEN=MAXNAM) :: FINPIC,FINPAT,FILNAM,ANGDOC
+        COMMON /F_SPEC/ FINPAT,NLET,FINPIC
+
+        DOUBLE PRECISION  PI
+
+        DATA  INPROJ/99/
+	PARAMETER (QUADPI = 3.141592653589793238462643383279502884197)
+	PARAMETER (TWOPI = 2*QUADPI)
+
+        ALLOCATE (X2(0:N2,N,N), STAT=IRTFLG)
+        IF (IRTFLG.NE.0) THEN 
+           CALL ERRT(46,'BP 3F, X2',IER)
+        ENDIF
+
+        ALLOCATE (NR(0:N2,N,N), STAT=IRTFLG)
+        IF (IRTFLG.NE.0) THEN 
+           CALL ERRT(46,'BP 3F, NR',IER)
+           DEALLOCATE (X2)
+        ENDIF
+
+c$omp parallel do private(i,j,k)
+        DO    K=1,N
+           DO    J=1,N
+              DO    I=0,N2
+                 X(I,J,K)=CMPLX(0.0,0.0)
+                 X2(I,J,K)=0.0
+		 NR(I,J,K)=0
+              ENDDO
+           ENDDO
+        ENDDO
+
+
+        ALLOCATE (PROJ(NS,NS), STAT=IRTFLG)
+        IF (IRTFLG.NE.0) THEN 
+           CALL ERRT(46,'BP 3F, PROJ',IER)
+           DEALLOCATE (X2, NR)
+           RETURN
+        ENDIF
+
+
+
+        ALLOCATE (BI(0:N2,N), STAT=IRTFLG)
+        IF (IRTFLG.NE.0) THEN 
+           CALL ERRT(46,'BP 3F, BI',IER)
+          DEALLOCATE (X2, NR, PROJ)
+        ENDIF
+
+        DO    K=1,NANG
+C          PRINT  *,' PROJECTION #',K
+
+C          OPEN DESIRED FILE
+           CALL FILGET(FINPAT,FINPIC,NLET,ILIST(K),IRTFLG)
+           IF (IRTFLG .NE. 0) RETURN
+
+           MAXIM = 0
+           CALL OPFILEC(0,.FALSE.,FINPIC,INPROJ,'O',IFORM,NSAM,NSAM,NSL,
+     &                   MAXIM,'DUMMY',.FALSE.,IRTFLG)
+           IF (IRTFLG .NE. 0) RETURN
+
+ 
+
+           DO J=1,NS
+              CALL  REDLIN(INPROJ,PROJ(1,J),NS,J)
+           ENDDO
+           CLOSE(INPROJ)
+
+           CALL SUBAV2(PROJ,NS,BI,LSD,N)
+           INV = +1
+           CALL FMRS_2(BI,N,N,INV)
+c$omp parallel do private(i,j)
+           DO  J=1,N
+              DO  I=0,N2
+                 BI(I,J)=BI(I,J)*(-1)**(I+J+1)
+              ENDDO
+           ENDDO
+C
+           DO  ISYM=1,MAXSYM
+            IF(MAXSYM.GT.1)  THEN
+C  symmetries, multiply matrices
+             DMS=MATMUL(SM(:,:,ISYM),DM(:,:,K))
+            ELSE
+             DMS=DM(:,:,K)
+            ENDIF
+c$omp parallel do private(j)
+c$omp& shared(N,N2,X,X2,W,NR,BI,DM),schedule(static)
+            DO J=-N2+1,N2
+              CALL ONELINENN2(J,N,N2,X,X2,NR,BI,DMS)
+            ENDDO
+C   END OF SYMMETRIES LOOP
+           ENDDO
+C
+C          END OF PROJECTIONS LOOP
+        ENDDO
+
+
+        CALL  SYMPLANEIN(X,X2,NR,N2,N)
+        CALL  SSNRNN3(X,X2,NR,N2,N)
+        CALL  WINDUMNN(X,X,N,LSD,N,SIR)
+        IF (ALLOCATED(PROJ))  DEALLOCATE(PROJ)
+        IF (ALLOCATED(BI))  DEALLOCATE(BI)
+        IF (ALLOCATED(X2))  DEALLOCATE(X2)
+        IF (ALLOCATED(NR))  DEALLOCATE(NR)
+        END
+
+
+C       --------------------- ONELINENN2 ---------------------------------
+
+        SUBROUTINE  ONELINENN2(J,N,N2,X,X2,NR,BI,DM)
+
+        DIMENSION      X2(0:N2,N,N),NR(0:N2,N,N)
+        COMPLEX        BI(0:N2,N),X(0:N2,N,N),BTQ
+        DIMENSION      DM(6)
+
+        IF (J .GE. 0)  THEN
+           JP=J+1
+        ELSE
+           JP=N+J+1
+        ENDIF
+
+        DO  I=0,N2
+           IF ((I*I+J*J.LT.N*N/4).AND..NOT.(I.EQ.0.AND.J.LT.0))  THEN
+              XNEW=I*DM(1)+J*DM(4)
+              YNEW=I*DM(2)+J*DM(5)
+              ZNEW=I*DM(3)+J*DM(6)
+              IF (XNEW.LT.0.0)  THEN
+                 XNEW=-XNEW
+                 YNEW=-YNEW
+                 ZNEW=-ZNEW
+                 BTQ=CONJG(BI(I,JP))
+              ELSE
+                 BTQ=BI(I,JP)
+              ENDIF
+              IXN=IFIX(XNEW+0.5+N)-N
+              IYN=IFIX(YNEW+0.5+N)-N
+              IZN=IFIX(ZNEW+0.5+N)-N
+              IF (IXN.LE.N2 .AND.
+     &        IYN.GE.-N2.AND.IYN.LE.N2 .AND.
+     &        IZN.GE.-N2.AND.IZN.LE.N2) THEN
+               IF(IXN.GE.0) THEN
+                       IF(IZN.GE.0) THEN
+                          IZA=IZN+1
+                       ELSE
+                          IZA=N+IZN+1
+                       ENDIF
+                       IF(IYN.GE.0) THEN
+                          IYA=IYN+1
+                       ELSE
+                          IYA=N+IYN+1
+                       ENDIF
+                 X(IXN,IYA,IZA)=X(IXN,IYA,IZA)+BTQ
+       X2(IXN,IYA,IZA)=X2(IXN,IYA,IZA)+REAL(BTQ)**2+AIMAG(BTQ)**2
+	        NR(IXN,IYA,IZA)=NR(IXN,IYA,IZA)+1
+C              
+               ELSE
+                      IF (IZN.GT.0)  THEN
+                         IZT=N-IZN+1
+                      ELSE
+                         IZT=-IZN+1
+                      ENDIF
+                      IF(IYN.GT.0) THEN
+                         IYT=N-IYN+1
+                      ELSE
+                         IYT=-IYN+1
+                      ENDIF
+                      X(-IXN,IYT,IZT)=X(-IXN,IYT,IZT)+CONJG(BTQ)
+       X2(-IXN,IYT,IZT)=X2(-IXN,IYT,IZT)+REAL(BTQ)**2+AIMAG(BTQ)**2
+                      NR(-IXN,IYT,IZT)=NR(-IXN,IYT,IZT)+1
+                ENDIF
+              ENDIF
+           ENDIF
+C          END J-I LOOP
+        ENDDO
+
+        END
+
+C       ------------------- SUBAV2 -------------------------------
+
+        SUBROUTINE SUBAV2(PROJ,L,BI,LSD,N)
+
+        DIMENSION  PROJ(L,L),BI(LSD,N)
+        DOUBLE     PRECISION QS
+
+        KLP=0
+        R=L/2
+        QS=0.0D0
+
+        CALL ASTA(PROJ,L,R,QS,KLP)
+        QS = QS/REAL(KLP)
+	BI(N+1:LSD,:)=0.0
+c$omp parallel do private(i,j)
+        DO  J=1,N
+           DO  I=1,N
+              BI(I,J)=PROJ(I,J)-QS
+           ENDDO
+        ENDDO
+
+        END
+
+C       ----------------SYMPLANEIN ---------------------------------------
+ 
+        SUBROUTINE  SYMPLANEIN(X,X2,NR,N2,N)
+
+        INTEGER  NR(0:N2,N,N)
+        COMPLEX  X(0:N2,N,N)
+        REAL     X2(0:N2,N,N)
+
+C       SYMMETRIZE PLANE 0
+        DO  IZA=2,N2
+           DO  IYA=2,N2
+              X(0,IYA,IZA)=X(0,IYA,IZA)+CONJG(X(0,N-IYA+2,N-IZA+2))
+              X2(0,IYA,IZA)=X2(0,IYA,IZA)+X2(0,N-IYA+2,N-IZA+2)
+              NR(0,IYA,IZA)=NR(0,IYA,IZA)+NR(0,N-IYA+2,N-IZA+2)
+
+              X(0,N-IYA+2,N-IZA+2)=CONJG(X(0,IYA,IZA))
+              X2(0,N-IYA+2,N-IZA+2)=X2(0,IYA,IZA)
+              NR(0,N-IYA+2,N-IZA+2)=NR(0,IYA,IZA)
+
+              X(0,N-IYA+2,IZA)=X(0,N-IYA+2,IZA)+CONJG(X(0,IYA,N-IZA+2))
+              X2(0,N-IYA+2,IZA)=X2(0,N-IYA+2,IZA)+X2(0,IYA,N-IZA+2)
+              NR(0,N-IYA+2,IZA)=NR(0,N-IYA+2,IZA)+NR(0,IYA,N-IZA+2)
+
+              X(0,IYA,N-IZA+2)=CONJG(X(0,N-IYA+2,IZA))
+              X2(0,IYA,N-IZA+2)=X2(0,N-IYA+2,IZA)
+              NR(0,IYA,N-IZA+2)=NR(0,N-IYA+2,IZA)
+           ENDDO
+        ENDDO
+        DO  IYA=2,N2
+           X(0,IYA,1)=X(0,IYA,1)+CONJG(X(0,N-IYA+2,1))
+           X2(0,IYA,1)=X2(0,IYA,1)+X2(0,N-IYA+2,1)
+           NR(0,IYA,1)=NR(0,IYA,1)+NR(0,N-IYA+2,1)
+
+           X(0,N-IYA+2,1)=CONJG(X(0,IYA,1))
+           X2(0,N-IYA+2,1)=X2(0,IYA,1)
+           NR(0,N-IYA+2,1)=NR(0,IYA,1)
+        ENDDO
+        DO  IZA=2,N2
+           X(0,1,IZA)=X(0,1,IZA)+CONJG(X(0,1,N-IZA+2))
+           X2(0,1,IZA)=X2(0,1,IZA)+X2(0,1,N-IZA+2)
+           NR(0,1,IZA)=NR(0,1,IZA)+NR(0,1,N-IZA+2)
+
+           X(0,1,N-IZA+2)=CONJG(X(0,1,IZA))
+           X2(0,1,N-IZA+2)=X2(0,1,IZA)
+           NR(0,1,N-IZA+2)=NR(0,1,IZA)
+        ENDDO
+	END
+	
+C       ------------------- WINDUMNN -------------------------------
+
+        SUBROUTINE WINDUMNN(BI,R,L,LSD,N,SIR)
+
+        DIMENSION  R(L,L,L),BI(LSD,N,N)
+
+
+        R=BI(1:L,1:L,1:L)
+        L2=(L/2)**2
+        L2P=(L/2-1)**2
+        IP=L/2+1
+        TNR=0.0
+        M=0
+        DO  K=1,L
+           DO  J=1,L
+              DO  I=1,L
+                 LR=(K-IP)**2+(J-IP)**2+(I-IP)**2
+                 IF (LR.LE.L2) THEN
+                    IF(LR.GE.L2P .AND. LR.LE.L2) THEN
+                       TNR=TNR+R(I,J,K)
+                       M=M+1
+                    ENDIF
+                 ENDIF
+              ENDDO
+           ENDDO
+        ENDDO
+
+        TNR=TNR/REAL(M)
+c$omp parallel do private(i,j,k,lr)
+        DO  K=1,L
+           DO  J=1,L
+              DO  I=1,L
+                 LR=(K-IP)**2+(J-IP)**2+(I-IP)**2
+                 IF(LR.LE.L2) THEN
+                    R(I,J,K)=R(I,J,K)-TNR
+                 ELSE
+                    R(I,J,K)=0.0
+                 ENDIF
+              ENDDO
+           ENDDO
+        ENDDO
+
+        END
+
+
+C       ------------------- SSNRNN3 -------------------------------
+
+        SUBROUTINE  SSNRNN3(X,X2,NR,N2,N)
+        PARAMETER (NDLI=6)
+        DIMENSION  X2(0:N2,N,N),NR(0:N2,N,N)
+        COMPLEX    X(0:N2,N,N)
+	INCLUDE  'CMBLOCK.INC'
+	DIMENSION  DLIST(NDLI)
+	DOUBLE PRECISION  SIGNAL(0:N2),FR(0:N2),FRS(0:N2),TMP
+	DIMENSION  NRS(0:N2)
+        DATA  LUN9/87/
+C  X(i,j,k) - weighted sum of Fs.  SUM(wF)/SUM(w)
+C  X2(i,j,k) - weighted sum of F^2.  SUM(wF^2)
+C  W(i,j,k) - sum of weights.  SUM(w)
+C  SIGNAL: length - frequencies; Sum over the shell of (SUM(wF)/SUM(w))^2
+C  FR: length - frequencies; FR(i) -  
+	SIGNAL=0.0
+	FR=0.0
+	FRS=0.0
+	NRS=0
+C
+        DO  K=1,1  !N
+        KK=K-1
+        IF(KK.GE.N/2)  KK=KK-N
+           DO  J=1,N
+           JJ=J-1
+           IF(JJ.GE.N/2)  JJ=JJ-N
+              DO  I=0,0  !N2
+	        IF(NR(I,J,K).GT.0)  THEN
+ 		 X(I,J,K)=X(I,J,K)*(-1)**(I+J+K)/NR(I,J,K)
+	          IF(.NOT.(I.EQ.0.AND.JJ.LT.0)) THEN
+                   PII=SQRT((REAL(KK)/REAL(N/2))**2+
+     &            (REAL(JJ)/REAL(N/2))**2+(REAL(I)/REAL(N2))**2)
+                   IF(PII.LE.1.0)  THEN
+                    L=MIN0(MAX0(NINT(PII*N2),0),N2)
+                    SIGNAL(L)=SIGNAL(L)+ABS(X(I,J,K))**2
+	         IF(NR(I,J,K).GT.1)  THEN
+         	    TMP=
+     &		1.0/REAL(NR(I,J,K)-1)*
+     &		( X2(I,J,K)-NR(I,J,K)*
+     &		( REAL(X(I,J,K))**2+AIMAG(X(I,J,K))**2 )  )
+		 ELSE
+         	    TMP=REAL(X(I,J,K))**2+AIMAG(X(I,J,K))**2
+		 ENDIF
+         	    FR(L)=FR(L)+TMP/NR(I,J,K)
+		    FRS(L)=FRS(L)+TMP
+		    NRS(L)=NRS(L)+NR(I,J,K)
+ 		   ENDIF
+ 		  ENDIF
+	        ENDIF
+              ENDDO
+           ENDDO
+        ENDDO
+C SAVE RESULTS
+        DO   L=1,N2
+           IF(FR(L).NE.0.0)  THEN
+              DLIST(1)=L+1
+              DLIST(2)=(REAL(L)+0.5)/REAL(N2)*0.5
+C 
+              DLIST(3)=DMAX1(0.0D0,SIGNAL(L)/FR(L)-1.0D0)
+ 	      DLIST(4)=DLIST(3)/(1.0+DLIST(3))
+              DLIST(5)=SIGNAL(L)/FRS(L)
+              DLIST(6)=NRS(L)
+              CALL  SAVD(LUN9,DLIST,NDLI,IRTFLG)
+           ENDIF
+        ENDDO
+        CLOSE(LUN9)
+        CALL  SAVDC
+C
+        INV = -1
+        CALL  FMRS_3(X,N,N,N,INV)
+
+        END

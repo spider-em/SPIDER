@@ -1,0 +1,444 @@
+C++*********************************************************************
+C
+C DEFO2001.FOR
+C
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C   DEFO2001(NUM,NP,KP,NA,NSAM,SPMAX)
+C
+C   USING LEAST SQUARE METHOD TO DETERMINE DEFOCUS, AMPLITUDE CONTRAST
+C   X(K,A)=PI*(0.5*CS*LAMBDA**3*K**4-DZ*LAMBDA*K**2)-OFFSET
+C   X(K,A)=PI*(0.5*CS*LAMBDA**3*K**4-A1*LAMBDA*K**2)-A2
+C
+C	NUM: NUMBER OF IMAGES
+C       NP(I): NUMBER OF MINIMUM IN EACH IMAGES
+C	KP(I,J): ARRAY OF SP. FREQ. POINTS OF MINIMUM
+C	NA(I,J): ARRAY OF ABBERATION
+C	NSAM: IMAGE DIMENSION
+C	SPMAX: MAX OF SP. FREQ.
+C	NA: NUMBER OF ABBERATION IN UNIT OF PI
+C       
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC*/
+
+	SUBROUTINE DEFO2001(NUM,NP,KP,NA,NSAM,SPMAX)
+	
+ 
+
+C       I DO NOT KNOW IF SAVE IS NEEDED FEB 99 al
+        SAVE
+
+        INCLUDE 'CMBLOCK.INC' 
+
+	DIMENSION NP(*)
+	DIMENSION NA(20,20)
+	REAL      KP(20,20)
+
+        COMMON BETA(20),ALPHA(20,20),ARRAY(20,20),Y1(20,20),
+     &         WEIGHT(20,20),A(20),B(20),C(20),DEFO(20),X1(20),X2(20),
+     &         DERIV(20)
+
+	REAL KM,KS,KF,LAMBDA
+
+        CHARACTER *1  NULL
+	DATA PI/3.141592654/
+	
+	NULL=CHAR(0)
+	LUN2=10
+C       INPUT EM PARAMETERS*/
+	WRITE(NOUT,*)' INPUT PARAMETERS OF  IMAGES'
+	CALL RDPRM(LAMBDA,NOT_USED,' WAVELENGTH LAMBDA [A]')
+	CALL RDPRM(CS,NOT_USED,'SPHERICAL ABERRATION CS[MM]')
+           IF (CS < 0.0001)    CS = 0.0001
+	CS=CS*1.0E07
+	KM=SPMAX
+	KS=KM/FLOAT(NSAM)
+	NTERM=1+NUM
+	XMIN=99999999.9
+	
+C.......GET VALUE OF Y1  */
+	DO  I=1,NUM
+	DO  J=1,NP(I)
+	Y1(I,J)=PI*FLOAT(NA(I,J))
+	ENDDO
+	ENDDO
+
+C.......CALCULATE  DEFOCUS(ROUGH)
+	DO I=1,NUM
+	A1=0
+	A2=0
+	B1=0
+	B2=0
+	C1=0
+	C2=0
+	IF(NP(I) .EQ. 1) THEN
+C	KF=FLOAT(KP(I,1))*KS
+	KF= KP(I,1) * KS
+	C(I)=-(Y1(I,1)-0.5*CS*PI*LAMBDA**3*KF**4)
+     &           /(PI*LAMBDA*KF**2)
+	GOTO 550
+	ELSE
+	DO J=1,NP(I)
+C	KF=FLOAT(KP(I,J))*KS
+	KF=KP(I,J)*KS
+	A1=A1+(PI*LAMBDA*KF**2)**2
+	A2=A2+(PI*LAMBDA*KF**2)
+	C1=C1-(Y1(I,J)-0.5*CS*PI*LAMBDA**3*KF**4)
+     &  *PI*LAMBDA*KF**2
+	C2=C2-(Y1(I,J)-0.5*CS*PI*LAMBDA**3*KF**4)
+	B2=B2+1.
+	ENDDO
+	B1=A2
+	C(I)=(C1*B2-C2*B1)/(A1*B2-A2*B1)
+	GOTO 550
+	ENDIF
+550	CONTINUE
+C	WRITE(NOUT,*)'INITIAL DEFOCUS', C(I)
+	ENDDO
+
+C......CALCULATE THE WEIGHT OF EACH POINTS
+	DO  I=1,NUM
+	DO  J=1,NP(I)
+C	KF=FLOAT(KP(I,J))*KS
+	KF=KP(I,J)*KS
+	WEIGHT(I,J)=PI*(2.*CS*LAMBDA**3*KF**3-2.*C(I)*LAMBDA*KF)*2.*KS
+	ENDDO
+	ENDDO
+
+	DO  NAC=1,31
+	A(NTERM)=FLOAT(NAC)*0.01
+	DO I=1,NUM
+	A(I)=C(I)
+	ENDDO
+C.......SET ITERATION STEP */
+	NSTEP=0
+999	CONTINUE
+
+	DO  I=1,NTERM
+	BETA(I)=0
+	DO  J=1,I
+	ALPHA(I,J)=0
+	ENDDO
+	ENDDO
+	T=0.001
+C.......GET X**2
+	X0=0
+	DO  I=1,NUM
+	DO  J=1,NP(I)
+C	KF=KS*FLOAT(KP(I,J))
+	KF=KS* KP(I,J) 
+	VALUE=PI*(0.5*CS*LAMBDA**3*KF**4-A(I)
+     &  *LAMBDA*KF**2)-A(NTERM)
+	X0=X0+(VALUE-Y1(I,J))**2/WEIGHT(I,J)**2
+	ENDDO
+	ENDDO
+C	WRITE(NOUT,*) 'X0=',X0
+C.......CALCULATE DERIVES
+C.......NOTE FOR X**2
+C.......X11(K,L)=X^2(A(K)+DA(K),A(L)+DA(L))
+C.......X10(K)=X^2(A(K)+DA(K))
+C.......X20(K)=X^2(A(K)-DA(K))
+
+ 	DO I=1,NTERM
+	B(I)=A(I)
+	ENDDO
+	DO  K=1,NTERM
+	X1(K)=0
+	X2(K)=0
+	B(K)=A(K)+0.0001*A(K)
+	DO  I=1,NUM
+	DO  J=1,NP(I)
+C	KF=KS*FLOAT(KP(I,J))
+	KF=KS* KP(I,J)
+	VALUE=PI*(0.5*CS*LAMBDA**3*KF**4-B(I)
+     &  *LAMBDA*KF**2)-B(NTERM)
+	X1(K)=X1(K)+(VALUE-Y1(I,J))**2/WEIGHT(I,J)**2
+	ENDDO
+	ENDDO
+	B(K)=A(K)-0.0001*A(K)
+	DO  I=1,NUM
+	DO  J=1,NP(I)
+C	KF=KS*FLOAT(KP(I,J))
+	KF=KS* KP(I,J) 
+	VALUE=PI*(0.5*CS*LAMBDA**3*KF**4-B(I)
+     &  *LAMBDA*KF**2)-B(NTERM)
+	X2(K)=X2(K)+(VALUE-Y1(I,J))**2/WEIGHT(I,J)**2
+	ENDDO
+	ENDDO
+	B(K)=A(K)
+	DERIV(K)=(X1(K)-X2(K))/(0.0002*A(K))
+	ENDDO
+C	WRITE(NOUT,*) 'DERIVE=',(DERIV(I), I=1,NTERM)
+	DO  K=1,NTERM
+	BETA(K)=-0.5*DERIV(K)
+	DO  L=1,K
+	X11=0
+	B(K)=A(K)*(1.+0.0001)
+	B(L)=A(L)*(1.+0.0001)
+	DO  I=1,NUM
+	DO  J=1,NP(I)
+C	KF=KS*FLOAT(KP(I,J))
+	KF=KS*  KP(I,J) 
+	VALUE=PI*(0.5*CS*LAMBDA**3*KF**4-B(I)
+     &  *LAMBDA*KF**2)-B(NTERM)
+	X11=X11+(VALUE-Y1(I,J))**2/WEIGHT(I,J)**2
+	ENDDO
+	ENDDO
+	B(K)=A(K)
+	B(L)=A(L)
+	ALPHA(K,L)=0.5*(X11-X1(K)-X1(L)+X0)/(0.0001*A(K)*0.0001*A(L))
+	ENDDO
+ 	ALPHA(K,K)=0.5*ABS(X1(K)-2*X0+X2(K))/((0.0001*A(K))**2)
+	IF(ALPHA(K,K) .LT. 0.00001) ALPHA(K,K)=0.00001
+	ENDDO
+	
+	DO  K=1,NTERM
+	DO  L=1,K
+	ALPHA(L,K)=ALPHA(K,L)
+	ENDDO
+	ENDDO
+
+69	DO  J=1,NTERM
+	DO  K=1,NTERM
+	ARRAY(J,K)=ALPHA(J,K)/SQRT(ALPHA(J,J)*ALPHA(K,K))
+	ENDDO
+	ARRAY(J,J)=(1.+T)
+	ENDDO
+
+	CALL MATINV(ARRAY,NTERM,DET)
+
+C.......GET NEW VALUES OF PARAMETERS
+
+	DO  J=1,NTERM
+	B(J)=A(J)
+	DO  K=1,NTERM
+	B(J)=B(J)+BETA(K)*ARRAY(J,K)/SQRT(ALPHA(J,J)*ALPHA(K,K))
+	ENDDO
+	ENDDO
+C.......GET NEW X**2
+	XN=0
+	DO  I=1,NUM
+	DO  J=1,NP(I)
+C 	KF=KS*FLOAT(KP(I,J))
+ 	KF=KS* KP(I,J) 
+	VALUE=PI*(0.5*CS*LAMBDA**3*KF**4-B(I)
+     &  *LAMBDA*KF**2)-B(NTERM)
+	XN=XN+(VALUE-Y1(I,J))**2/WEIGHT(I,J)**2
+	ENDDO
+	ENDDO
+	IF((XN-X0) .GT. 0) THEN
+	T=T*10.
+	GOTO 69
+	ELSE
+	D=0
+	DO  I=1,NTERM
+	D=D+ABS((A(I)-B(I))/B(I))
+	A(I)=B(I)
+	ENDDO
+	NSTEP=NSTEP+1
+	X0=XN
+C	WRITE(NOUT,*)'X**2=',X0
+C	WRITE(NOUT,*) 'NSTEP',NSTEP, A(1),A(2),A(3),A(4)
+	IF(D .LT. 0.0001 .AND. NSTEP .GT. 20) GOTO 200
+	IF(NSTEP .GT. 200) GOTO 200
+	GOTO 999
+	ENDIF
+	
+200	IF(X0 .LT. XMIN) THEN
+	XMIN=X0
+	DO I=1,NTERM
+	DEFO(I)=A(I)
+	ENDDO
+	ENDIF
+	WRITE(NOUT,*) 'NSTEP=',NSTEP,'X**2=',X0, '  AC=',A(NTERM)
+	ENDDO
+130	WRITE(NOUT,*)'  X**2=',XMIN
+	WRITE(NOUT,*)' DEFOCUS ARE [A]'
+	WRITE(NOUT,*) (DEFO(I), I=1,NUM)
+	Q=SIN(DEFO(NTERM))/COS(DEFO(NTERM))*100.
+	WRITE(NOUT,140)Q
+140	FORMAT(' AMPLITUDE CONTRAST=',F10.6,'%')
+
+C.......CALCULATE ASTIGTISM
+	DO I=1,NTERM
+	C(I)=DEFO(I)
+	ENDDO
+C.......AVERAGE OF DEFOCUS
+	DEFOCUS=0
+	DO I=1,NUM
+	DEFOCUS=DEFOCUS+C(I)
+	ENDDO
+	DEFOCUS=DEFOCUS/FLOAT(NUM)
+C.......THE ASTIGTISM IS MAX(DEFOCUS)-MIN(DEFOCUS)
+	XMIN=9999999.
+	XMAX=-9999999.
+	DO I=1,NUM-1
+	IF(ABS(C(I)-C(I+1)) .GT. XMAX) XMAX=C(I)
+	IF(ABS(C(I)-C(I+1)) .LT. XMIN) XMIN=C(I)
+	ENDDO
+	ASTIG=XMAX-XMIN
+	WRITE(NOUT,*)'INITIAL VALUE: DEFOCUS=',DEFOCUS,'  ASTIGTISM=',ASTIG
+	NTERM=3
+
+	DO 9800 NANGLE=1,36
+	A(1)=DEFOCUS
+	A(2)=ASTIG
+	A(3)=5.*FLOAT(NANGLE)*PI/180.
+	NSTEP=1
+9999	CONTINUE
+	DO  I=1,NTERM
+	BETA(I)=0
+	DO  J=1,I
+	ALPHA(I,J)=0
+	ENDDO
+	ENDDO
+	T=0.001
+C.......GET X**2
+	X0=0
+	INTERVEL=180/NUM
+	DO  I=1,NUM
+C	PHI=FLOAT(INTEVEL*(I-1))+FLOAT(INTERVEL)/2.
+	PHI=FLOAT(INTERVEL*(I-1))+FLOAT(INTERVEL)/2.
+	PHI=PHI*PI/180.
+	VALUE=A(1)+0.5*A(2)*COS(2.*(PHI-A(3)))
+	X0=X0+(VALUE-C(I))**2
+	ENDDO
+C.......CALCULATE DERIVES
+C.......NOTE FOR X**2
+C.......X11(K,L)=X^2(A(K)+DA(K),A(L)+DA(L))
+C.......X10(K)=X^2(A(K)+DA(K))
+C.......X20(K)=X^2(A(K)-DA(K))
+
+ 	DO K=1,NTERM
+	B(K)=A(K)
+	ENDDO
+	DO  K=1,NTERM
+	X1(K)=0
+	X2(K)=0
+	B(K)=A(K)+0.0001*A(K)
+	DO  I=1,NUM
+C	PHI=FLOAT(INTEVEL*(I-1))+FLOAT(INTERVEL)/2.
+	PHI=FLOAT(INTERVEL*(I-1))+FLOAT(INTERVEL)/2.
+	PHI=PHI*PI/180.
+	VALUE=B(1)+0.5*B(2)*COS(2.*(PHI-B(3)))
+	X1(K)=X1(K)+(VALUE-C(I))**2
+	ENDDO
+	B(K)=A(K)-0.0001*A(K)
+	DO  I=1,NUM
+C	PHI=FLOAT(INTEVEL*(I-1))+FLOAT(INTERVEL)/2.
+	PHI=FLOAT(INTERVEL*(I-1))+FLOAT(INTERVEL)/2.
+	PHI=PHI*PI/180.
+	VALUE=B(1)+0.5*B(2)*COS(2.*(PHI-B(3)))
+	X2(K)=X2(K)+(VALUE-C(I))**2
+	ENDDO
+	B(K)=A(K)
+	DERIV(K)=(X1(K)-X2(K))/(0.0002*A(K))
+	ENDDO
+
+	DO  K=1,NTERM
+	BETA(K)=-0.5*DERIV(K)
+	DO  L=1,K
+	X11=0
+	B(K)=A(K)*(1.+0.0001)
+	B(L)=A(L)*(1.+0.0001)
+	DO  I=1,NUM
+C	PHI=FLOAT(INTEVEL*(I-1))+FLOAT(INTERVEL)/2.
+	PHI=FLOAT(INTERVEL*(I-1))+FLOAT(INTERVEL)/2.
+	PHI=PHI*PI/180.
+	VALUE=B(1)+0.5*B(2)*COS(2.*(PHI-B(3)))
+	X11=X11+(VALUE-C(I))**2
+	ENDDO
+	B(K)=A(K)
+	B(L)=A(L)
+	ALPHA(K,L)=0.5*(X11-X1(K)-X1(L)+X0)/(0.0001*A(K)*0.0001*A(L))
+	ENDDO
+ 	ALPHA(K,K)=0.5*ABS(X1(K)-2*X0+X2(K))/((0.0001*A(K))**2)
+	IF(ALPHA(K,K) .LT. 0.00001) ALPHA(K,K)=0.00001
+	ENDDO
+	
+	DO  K=1,NTERM
+	DO  L=1,K
+	ALPHA(L,K)=ALPHA(K,L)
+	ENDDO
+	ENDDO
+
+969	DO  J=1,NTERM
+	  DO  K=1,NTERM
+	   ARRAY(J,K)=ALPHA(J,K)/SQRT(ALPHA(J,J)*ALPHA(K,K))
+	  ENDDO
+	 ARRAY(J,J)=(1.+T)
+	ENDDO
+
+	CALL MATINV(ARRAY,NTERM,DET)
+
+C.......GET NEW VALUES OF PARAMETERS
+
+	DO  J=1,NTERM
+	B(J)=A(J)
+	DO  K=1,NTERM
+	B(J)=B(J)+BETA(K)*ARRAY(J,K)/SQRT(ALPHA(J,J)*ALPHA(K,K))
+	ENDDO
+	ENDDO
+C.......GET NEW X**2
+	XN=0
+	DO  I=1,NUM
+C	PHI=FLOAT(INTEVEL*(I-1))+FLOAT(INTERVEL)/2.
+	PHI=FLOAT(INTERVEL*(I-1))+FLOAT(INTERVEL)/2.
+	PHI=PHI*PI/180.
+	VALUE=B(1)+0.5*B(2)*COS(2.*(PHI-B(3)))
+	XN=XN+(VALUE-C(I))**2
+	ENDDO
+	IF((XN-X0) .GT. 0) THEN
+	T=T*10.
+	GOTO 969
+	ELSE
+	D=0
+	DO  I=1,NTERM
+	D=D+ABS((A(I)-B(I))/B(I))
+	A(I)=B(I)
+	ENDDO
+9100	IF(A(3) .GT. PI) THEN
+	A(3)=A(3)-PI
+	GOTO 9100
+	ELSEIF(A(3) .LT. 0) THEN
+	A(3)=A(3)+PI
+	GOTO 9100
+	ENDIF
+	NSTEP=NSTEP+1
+	X0=XN
+C	WRITE(NOUT,*)'X**2=',X0
+C	WRITE(NOUT,*) 'NSTEP',NSTEP, A(1),A(2),A(3),A(4)
+	IF(D .LT. 0.000001 .AND. NSTEP .GT. 20) GOTO 9200
+	IF(NSTEP .GT. 200) GOTO 9200
+	GOTO 9999
+	ENDIF
+
+
+
+9200	CONTINUE
+	A(3)=A(3)*180./PI
+	WRITE(NOUT,*)'A1=',A(1),'A2=',A(2),' A3=',A(3)
+	WRITE(NOUT,*)'X**2=',X0, '  NSTEP=',NSTEP
+9800 	CONTINUE
+	RETURN
+	END
