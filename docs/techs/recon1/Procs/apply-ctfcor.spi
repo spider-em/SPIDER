@@ -1,0 +1,106 @@
+; SOURCE:  apply-ctfcor.spi
+; PURPOSE: CTF corrects selected images and places in single stack
+; USAGE:   clean ; spider spi/mrf @apply-ctfcor
+
+ ; ------------------ Parameters ------------------
+ 
+ [pad-size]      = 0    ; Final dimension (0==keep original size)
+ 
+ [class]         = 6    ; Class number
+
+ [echo-interval] = 1
+
+ ; -------------------- Inputs --------------------
+
+ [sel_part]      = 'sel_part_{**[class]}'                            ; Particle selection file with group 
+
+ [stk]           = '/usr14/mxg26/MRF/Alignment_feb/data{***[grp]}'   ; Particle stacks (one / defocus group)
+ [stk]           = 'Alignment_feb/data_with_mic{***[grp]}'           ; Particle stacks (one / defocus group)
+
+ [ctf_cor_doc]   = 'Power_Spectra/power/flipctf****'                 ; CTF correction doc file template
+                                                          
+ ; -------------------- Outputs --------------------
+
+ [ctf_dir]       = 'Particles/ctfcor'                                ; Output directory
+
+ [ctfxpart]      = '[ctf_dir]/jnkdata_ctfcor_{**[class]}@******'     ; CTF-corrected images in single stack
+
+ ; --------------- END BATCH HEADER ---------------
+
+ MD
+   SET MP
+   0
+ MD
+   VB OFF
+
+ ; Temporary files
+ [temp_padded_img]  = '_1'
+ [temp_filt_img]    = '_2'
+
+ SYS
+   mkdir -p [ctf_dir]
+
+ ; Find reconstruction size
+ UD NEXT [key],[num],[grp]           ; Get Relion particle num and group: 
+   [sel_part]                        ; Particle selection file        (input)
+ IF ([key] .LE. 0) EXIT              ; If no particles in listing
+ UD NEXT END                         ; Reset particle sel. file
+   [sel_part]                        ; Group particle selection file  (input)
+
+ ; Find image size
+ FI H [size]                         ; Find image size
+   [stk]@*[num]                      ; Original particle stacks       (input)
+   NX
+
+ ; Find padded size
+ [pad-factor] = 2                    ; Padding factor (2 --> doubles size)
+ [pad-size]   = [size]*[pad-factor]  ; Pad into a larger box before filtering
+ IF ([pad-size].NE.0) THEN
+   SYS
+     echo " Resizing images {***[size]} to {***[pad-size]}" ;  echo ' '
+ ENDIF
+
+ 
+ ; Loop through selected particles 
+ DO                                  ; Loop through selected particles 
+   UD NEXT [key],[num],[grp],[class] ; Get particle class from Relion
+     [sel_part]                      ; Particle selection file    (input)
+   IF ([key] .LE. 0) EXIT            ; End of particles in listing
+ 
+
+   ; Pad Image with right & bottom border
+   PD                                ; Pad Image 2X
+     [stk]@{****[num]}               ; Image                      (input)
+     [temp_padded_img]               ; Padded image               (output)
+     [pad-size],[pad-size]           ; Padded size
+     B                               ; Use border average for background
+     1,1                             ; Top-left coords
+
+   ; Filter using CTF correction doc file
+   FD                                ; Filter  
+     [temp_padded_img]               ; Padded image               (input)
+     [temp_filt_img]                 ; CTF corrected image        (output)
+     [ctf_cor_doc][mic]              ; CTF correction doc file    (input)
+
+   ; Window back to original size
+   WI                                ; Window  
+     [temp_filt_img]                 ; CTF corrected image        (input)
+     [ctfxpart][key]                 ; CTF-corrected image        (output)
+     [size],[size]                   ; X,Y dimensions
+     1,1                             ; Top-left coords
+
+   IF (int([key]/[echo-interval]) .EQ. [key]/[echo-interval]) THEN
+      SYS 
+        echo ' 'Group: {***[grp]}  Num: {*****[num]}  Mic: {*****[mic]}'  'from WIN: {******[win]}
+   ENDIF
+
+   [totpart] = [key]
+
+ ENDDO
+
+ UD NEXT END                        ; 
+   [sel_part]                      ; Group particle selection file  (input)
+
+ SYS
+   echo " Total particles: {******[totpart]}"
+ EN

@@ -1,0 +1,145 @@
+ ; <html><head><title>CTF corrects selected images using CTF correction doc file</title></head><body><pre>
+ ;
+ ; SOURCE:  spider/docs/techs/recon1/Procs/filtctf.spi
+ ;
+ ; PURPOSE: CTF corrects selected images using CTF correction doc file
+ ;          Not necessary if using:  restack-n-ctf
+ ;
+ ; USAGE:   clean ; spider spi/dat @filtctf
+
+ ; ------------------ Parameters ------------------
+ 
+ [pad-factor]   = 2     ; Padding factor  (2 == double size)
+
+ [padded-size]  = 0     ; Final dimension (0 == keep original size)
+                          ;    (downsampling useful for ML3D)
+
+ [progress-n]   = 1     ; Print progress message every Nth micrograph
+
+ ; -------------------- Inputs --------------------
+
+ [params]       = '../params'                          ; Parameter doc file          (one)
+
+ [sel_mic]      = '../sel_micrograph'                  ; Micrograph selection file   (one)
+
+![sel_part]     = 'good/ngood****'                     ; Particle selection file     (one / micrograph)
+ [sel_part]     = 'good/sel_part_****'                 ; Particle selection file     (one / micrograph)
+
+ [unfilt_imgs]  = 'win/winser_{****[mic]}@******'      ; Windowed image stacks       (one / micrograph)
+ [unfilt_imgs]  = 'win/data_bymic_{****[mic]}@******'  ; Windowed image stacks       (one / micrograph)
+
+ [ctf_profile]  = '../Power_Spectra/power/flipctf{****[mic]}' ; CTF-profile doc file (one / micrograph)
+
+ ; -------------------- Outputs --------------------
+
+ [ctf_dir]      = 'win'                                ; Output directory
+
+ [ctfxpart]     = '[ctf_dir]/winctf_{****[mic]}@*****'          ; CTF-corrected image stacks (one / micrograph)
+ [ctfxpart]     = '[ctf_dir]/data_ctfd_bymic_{****[mic]}@*****' ; CTF-corrected image stacks (one / micrograph
+
+ ; --------------- END BATCH HEADER ---------------
+
+ ; Temporary files
+ [temp_padded_img] = '_1'
+ [temp_filt_img]   = '_2'
+ [temp_oversize]   = '_3'
+
+ MD
+   SET MP
+   0
+ MD
+   VB OFF
+
+ SYS
+   mkdir -p [ctf_dir]
+
+ ; Get image dimension
+ UD 17, [sp_winsiz]
+   [params]                                ; Parameter doc file (input)
+
+ ; Pad to larger size before filtering
+ [padded-size] = [sp_winsiz]*[pad-factor]  ; Pad to larger size before filtering
+ IF ( [padded-size] .NE. 0) THEN
+    SYS
+      echo " Resizing to: {%I3%[padded-size]}x{%I3%[padded-size]} during filtration" ; echo
+ ENDIF
+
+ ; Get number of micrographs
+ UD N [num-mics]
+   [sel_mic]
+
+ ; Loop through micrographs ----------------------------------------------------
+ DO [mic-key] =1,[num-mics]
+
+    UD IC [mic-key],[mic]
+      [sel_mic]                  ; Micrograph selection  file (input)
+
+    IF (int([mic-key]/[progress-n]).EQ.[mic-key]/[progress-n]) THEN
+      SYS
+        echo " Micrograph: {%I4%[mic]}, {%I4%[mic-key]} out of: {%I4%[num-mics]}"
+    ENDIF
+
+    ; Check if particle selection file exists
+    IQ FI [exists-yn]
+      [sel_part][mic]                   ; Micrograph selection file (input)
+    IF ([exists-yn].EQ.0) CYCLE         ; Skip empty micrographs
+
+    ; Loop through selected particles -----------------------------------------
+    DO                                  ; Loop through selected particles 
+      UD NEXT [key],[num]               ; Get particle number
+        [sel_part][mic]                 ; Particle selection file  (input)
+      IF ([key] <= 0) EXIT              ; End of particles 
+ 
+      ; Pad Image with right & bottom border
+      PD                                ; Pad Image 2X
+        [unfilt_imgs][num]              ; Image                    (input)
+        [temp_padded_img]               ; Padded image             (output)
+        [padded-size],[padded-size]     ; Padded size
+        B                               ; Use border average for background
+        1,1                             ; Top-left coords
+  
+      ; Filter using CTF correction doc file
+      FD                                ; Filter using doc file  
+        [temp_padded_img]               ; Padded image             (input)
+        [temp_filt_img]                 ; CTF corrected image      (output)
+        [ctf_profile]                   ; CTF correction doc file  (input)
+
+      IF ( [padded-size] >= 2) THEN
+        ; Window back to enlarged size
+        WI                              ; Window  
+          [temp_filt_img]               ; CTF corrected image      (input)
+          [temp_oversize]               ; CTF-corrected image      (output)
+          [sp_winsiz],[sp_winsiz]       ; X,Y dimensions
+          1,1                           ; Top-left coords
+
+        ; Interpolate further
+        IP                              ; Interpolate
+          [temp_oversize]               ; CTF corrected image      (input)
+          [ctfxpart][num]               ; Interpolated image       (output)
+          [sp_winsiz],[sp_winsiz]       ; New dimensions
+      ELSE
+        ; Window back to original size
+        WI                              ; Window  
+          [temp_filt_img]               ; CTF corrected image      (input)
+          [ctfxpart][num]               ; CTF-corrected image      (output)
+          [sp_winsiz],[sp_winsiz]       ; X,Y dimensions
+          1,1                           ; Top-left coords
+
+      ENDIF
+    ENDDO                               ; End particle loop
+
+    ; Clean up
+    UD ICE
+      [sel_part][mic]
+ ENDDO                                 ; End micrograph loop
+
+ SYS
+   echo ; echo -n " Done    "; date
+
+ EN
+
+; Modified 2013-10-16
+;    2013-10-16 (agl) -- modernized
+;    2013-10-11 (agl) -- Filenames & cosmetic
+;    2011-08-19 (trs) -- operating on (micrograph) stacks
+;    2009-09-28 (trs) -- skips empty micrographs

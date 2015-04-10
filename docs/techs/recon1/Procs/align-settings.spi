@@ -1,0 +1,83 @@
+([doalign],[shrange],[step],[r1],[r2],[apply-yn],[local-yn],[incore-yn],[max-wait])
+
+; <html><head><title>Compute alignment parameters and optionally apply them</title></head><body><pre>
+;
+; SOURCE: spider/docs/techs/recon1/Procs/apsh-settings.spi   
+;
+; PURPOSE: Multi-reference alignment of an image series. 
+;          Sample images are aligned with reference projections via
+;          shifts (translations) and rotations.  
+;          FOR PROJECTS WITH MULTIPLE GROUPS- WITH OR WITHOUT PUBSUB.
+;
+;<b>------------ Edit next 7 Input parameters ------------------------------ 
+
+ [apply-yn]     = 1   ; Apply alignment to images            (>0 == yes apply alignment)
+
+ [local-yn]     = 1   ; Copy input images onto local disk    (>0 == yes we have local disks)
+ [incore-yn]    = 1   ; Load input images into incore stack  (>0 == yes we have enough memory)
+
+ [shrange]      = 8   ; Translation search range (must be divisible by step size)
+ [step]         = 2   ; Translation step size
+
+ [diam]         = 276 ; Diameter of object (Angstroms) for alignment search. (OPTIONAL)
+                      ; Only used to find last rotational alignment ring radius.
+
+ [r1]           = 5   ; First rotation alignment ring,  radii > this used for rotational alignment
+ [r2]           = 0   ; Last rotation ring    (If == 0, compute from object diameter)
+
+ [max-wait]     = 600 ; Maximum delay (seconds) for copying stacks before next group starts
+
+ ; ----------------- Input files --------------------------------------------
+
+ GLO [outdir]           = 'output'                  ; Input/output directory (one)
+
+ GLO [params]           = '../params'               ; Parameter settings file  (one)
+
+ GLO [sel_group]        = 'sel_group'               ; Group selection doc file (one)
+
+ GLO [ref_images]       = 'prj_01@'                 ; Reference image stack    (one)
+
+ GLO [ref_image_angles] = 'refangles'               ; Reference images angles doc file (one)
+
+!GLO [unaligned_images] = 'data***'                 ; Unaligned particles image stack  (one/group)
+ GLO [unaligned_images] = 'data_ctfd_***'           ; Unaligned particles image stack  (one/group)
+
+ GLO [sel_particles]    = 'sel_part_***'            ; Particle selection doc file (one/group)
+
+ GLO [temp_local_dir]   = '/scratch'                ; Local directory on compute node ('' == none) 
+
+ ; ----------------- Output files ------------------------------------------------
+
+ GLO [align_parameters] = '[outdir]/align_01_***'   ; Alignment parameters doc file (one/group) 
+
+ GLO [align_params_all] = '[outdir]/align_01_all'   ; Combined alignment parameters (one/group)
+
+ GLO [aligned_images]   = '[outdir]/dala_01_***'    ; Rotated, shifted (aligned) particles (one/group)
+
+ GLO [wait_file]        = 'jnk_waited_***'          ; File created when finished local copy (one/group)
+
+ GLO [finished_file]    = 'jnk_finished_***'        ; File created when finished (one/group)
+
+ ; ----------------- END BATCH HEADER ------------------------------------------- </b>
+
+; Get rotational alignment radius from object size if needed 
+ IF ( [r2] <= 0 ) THEN                       
+    UD 5,[sp_pixsiz]                     ; Get pixel size (A) 
+      [params]                           ; Reconstruction parameter file   (input)
+ 
+    UD 17,[sp_winsiz]                    ; Get window size (pixels) 
+      [params]                           ; Reconstruction parameter file   (input)
+
+    [r2] = INT([diam]/(2.0*[sp_pixsiz])) ; Object radius (pixels) for last alignment ring
+    [ring-sh] = [r2] + [shrange]         ; Last ring + translation range
+    [maxrad]  = INT([sp_winsiz]/2) - 2   ; Max. radius of object in window
+
+    IF ( [ring-sh] >= [maxrad] ) THEN
+       [r2] = [maxrad] - [shrange] - 1   ; Reduce radius of outer ring to fit window
+    ENDIF
+ ENDIF
+
+ RE
+
+ ; </pre></body></html>
+

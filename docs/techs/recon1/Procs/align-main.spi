@@ -1,0 +1,118 @@
+
+; <html><head><title>Compute alignment parameters and optionally apply them</title></head><body><pre>
+;
+; SOURCE: spider/docs/techs/recon1/Procs/align-main.spi   
+;                   New                                 Nov 2004 ArDean Leith
+;                   Rewritten                           Feb 2005 ArDean Leith
+;                   Added alignment option & stack op   Nov 2006 ArDean Leith
+;                   SET MP location                     Feb 2008 ArDean Leith
+;                   VAR name                            Feb 2010 ArDean Leith
+;                   VAR names changed                   Dec 2010 ArDean Leith
+;
+; PURPOSE: Multi-reference alignment of an image series. 
+;          Sample images are aligned with reference projections via
+;          shifts (translations) and rotations.  
+;          FOR PROJECTS WITH MULTIPLE GROUPS WITH PUBSUB.
+
+ ; Set parameter and file names
+ @align-settings([apply-yn],[shrange],[step],[r1],[r2],[apply-yn],[local-yn],[incore-yn],[max-wait])
+ 
+ MD
+   TR OFF                      ; Decrease results file output
+ MD
+   VB OFF                      ; Decrease results file output
+ MD                 
+   SET MP                      ; Use all processors for computation
+   0
+
+ FI H [numpart]                ; Get number of particles 
+   [unaligned_images][grp]@    ; Unaligned particle images              (input)
+   MAXIM                       ; Max. image number in stack      
+     
+ DE                            ; Delete existing alignment doc file
+   [align_parameters][grp]     ; Alignment doc file                     (removed)
+
+ IF ([local-yn] > 0) THEN
+   ; Copy input images onto local disk image stack if 
+   SYS
+      \cp [unaligned_images][grp].$DATEXT [temp_local_dir]/[unaligned_images][grp].$DATEXT
+
+   [local_images]  = '[temp_local_dir]/[unaligned_images][grp]'
+ 
+ !SYS
+ !  echo  cp [unaligned_images][grp].$DATEXT [temp_local_dir]/[unaligned_images][grp].$DATEXT
+
+ ELSE
+    [local_images] = '[unaligned_images][grp]'
+ ENDIF
+
+ IF ([incore-yn] > 0) THEN
+   ; Load input images into incore image stack
+   [temp_images] = '_8@'
+   CP                          ; Load input images into incore stack
+     [local_images]@           ; Image stack                            (input)
+     [temp_images]             ; Incore stack                           (output)
+     [numpart]                 ; Stack size
+ ELSE
+   ; Copy input images into local disk image stack
+   [temp_images] = [local_images]
+ ENDIF
+ SYS                           ; Create end of copy wait time flag file
+    touch [wait_file][grp].$DATEXT 
+
+ SYS
+   echo ' 'Aligning group: {%I4%[grp]} with: {%I6%[numpart]} particles'   'From: [temp_images] 
+
+ FI H [numproj]                ; Get number of reference projections 
+   [ref_images]                ; Reference images                       (input)
+   MAXIM                       ; Max. image number in stack      
+
+ AP SHC                        ; Find Alignment using multiple references  
+   [ref_images]*****           ; Reference image file name template     (input)
+   1-[numproj]                 ; List of reference images       
+   [shrange],[shrange],[step]  ; Shift search range, step size  
+   [r1],[r2],1                 ; First and last ring & ring step     
+   [ref_image_angles]          ; Ref. angles doc file                   (input)
+   [temp_images]@*****         ; Unaligned particle image template      (input)
+   [sel_particles][grp]        ; List of particles  
+   *                           ; No unaligned particles align. doc file        
+   0                           ; No restriction on angular proj. search 
+   Y, N, Y                     ; Check mirrored, no shift/rotate input, denoise 
+   [align_parameters][grp]     ; Alignment angles doc file             (output)
+
+ IF ([apply-yn] > 0) THEN
+   ; Apply alignment parameters to unaligned particles
+   ; Order in doc file: PHI,THETA,PSI, REF#,IMG#,  ROT,SX,SY
+
+   RT SQ                       ; Rotate & shift whole stack operation
+     [temp_images]             ; Unaligned particles stack              (input) 
+     [aligned_images][grp]@    ; Aligned particles stack                (output)
+     6,0,7,8                   ; Reg. numbers for angle, scale,& shifts
+     [align_parameters][grp]   ; Alignment angles doc. file             (input)
+ ENDIF
+
+ MY FL                         ; Flush results file
+ 
+ IF ([local-yn] > 0) THEN
+   DE                          ; Delete incore file
+     [temp_images]             ; Unaligned particles stack          (removed)
+ ENDIF
+ IF ( [incore-yn] > 0) THEN
+   DE                          ; Delete incore file
+     _8@                       ; Incore particles stack            (deallocated)
+ ENDIF
+   
+ SYS
+   echo ' 'Finished Aligning group: {%I4%[grp]} 
+
+ [dummy] = 1
+ SD 1,[dummy] 
+   [finished_file][grp]
+ SD E
+   [finished_file][grp]
+ MY FL                         ; Flush results file
+
+ EN
+
+ ; </pre></body></html>
+

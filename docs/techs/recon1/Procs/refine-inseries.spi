@@ -1,0 +1,140 @@
+ ; <html><head><title>Controls serial reconstruction refinement</title></head><body><pre>
+ ;
+ ; SOURCE: spider/docs/techs/recon1/Procs/refine-inseries.spi    
+ ;         New                              ArDean Leith Nov 2000
+ ;         Rewritten                        ArDean Leith Mar 2004
+ ;         [] variables                     ArDean Leith Dec 2005
+ ;         Ampenhance                       ArDean Leith May 2006
+ ;         More stacks                      ArDean Leith Dec 2006
+ ;         Small angles limits              ArDean Leith Oct 2010
+ ;         pixsiz, resol headers,r2,...     ArDean Leith Aug 2012
+ ;         For CTF corrected images         ArDean Leith Oct 2013
+ ;
+ ; PURPOSE: Controls serial reconstruction refinement.  This is master procedure for
+ ;          serial refinement over many iterations. Data may be in one or more groups.
+ ;
+ ; USAGE:   clean ; ./spider spi/dat @refine-inseries
+ ;
+ ; I/O Registers and files are set in: <a href="./refine-settings.spi">refine-settings.spi</a>
+ ;
+ ; INPUT REGISTERS:
+ ;   [pixsiz]              Pixel size 
+ ;   [r2]                  Radius of object
+ ;   [alignsh]             Shift allowed is +- this value
+ ;   [prj-radius]          Radius of object for projection
+ ;   [iter1]               Starting iteration
+ ;   [iter-end]            Ending   iteration
+ ;   [lambda]              Lambda (A)            (Used in prepare)
+ ;   [smallang-yn]         Small angle refinement flag (1 == true) 
+ ;
+ ; INPUT FILES: ('***' denotes group here)
+ ;   [params]                ../params                                Params file           (one)
+ ;   [vol_orig]              ../Reconstruction/vol_01                 Initial volume file   (one)
+ ;   [sel_group_orig]        ../Reconstruction/input/bp_sel_group     Group selection file  (one)
+ ;   [sel_parts_orig]        ../Reconstruction/input/bp_sel_part_***  Group particle selection files (one/group)
+ ;   [group_align_orig]      ../Reconstruction/input/bp_align_01_***  Alignment parameter files      (one/group)
+ ;   [unaligned_images_orig] ../Reconstruction/input/bp_data_ctfd_*** Unaligned image stacks         (one/group)
+ ;
+ ; PROCEDURES CALLED:
+ ;    refine-settings       <a href="./refine-settings.spi">     refine-settings.spi</a>
+ ;    refine-prepare        <a href="./refine-prepare.spi">      refine-prepare.spi</a>
+ ;    refine-refangles      <a href="./refine-refangles.spi">    refine-refangles.spi</a>
+ ;
+ ;    refine-loop           <a href="./refine-loop.spi">         refine-loop.spi</a>    OR           
+ ;    refine-smangloop      <a href="./refine-smangloop.spi">    refine-smangloop.spi</a>            
+ ;    ... refine-bp         <a href="./refine-bp.spi">           refine-bp.spi</a>            
+ ;
+ ;    refine-merge          <a href="./refine-merge.spi">        refine-merge.spi</a>
+ ;    ...enhance (optional) <a href="./enhance.spi">             enhance.spi</a>
+ ; 
+ ; ---------------------------- -- END BATCH HEADER -- ----------------------------
+
+ MD
+   TR OFF                    ; Loop info turned off
+ MD
+   VB OFF                    ; File info turned off
+ MD
+   SET MP                    ; Use all available OMP processors
+   0
+
+ ; Input initial parameters & file names
+ @refine-settings([pixsiz],[r2],[alignsh],[prj-radius],[iter1],[iter-end],[lambda],[smallang-yn],[winsize],[incore-yn],[prepare-yn],[bp-type])
+
+ ; Redefine [temp_local_dir] location to current work directory for non-PubSub run
+ GLO [temp_local_dir] = '[temp_work_dir]'
+
+ IF ( [prepare-yn]  == 1 ) THEN
+   ; Prepare input files  (only needs to be done once) 
+   @refine-prepare([pixsiz],[lambda],[iter1])
+
+   DE
+     [iter_resol]           ; Resolution doc file           (removed)
+ ENDIF
+
+ MY FL
+
+ SD /      ITERATION       GROUP     MASKED-RES    RESOLUTION
+   [iter_resol]             ; Resolution doc file              (output)
+
+ UD N [num-grps]            ; Find number of groups
+  [sel_group]               ; Group selection file      (input)
+
+ DO [iter]=[iter1],[iter-end] ; Loop over all iterations ----------------------------------
+
+   ; Set angles used for making reference projections. Creates: [iter_refangs] doc file for angles
+   @refine-refangles([iter],[smallang-yn],[ampenhance],[ang-step],[ang-limit],[num-ang])      
+
+   SYS
+     echo  " Projecting: [current_vol]  Iteration: {%I0%[iter]}  Angles:{%I0%[num-ang]} " 
+
+   ; Create stack holding angular reference projections from current volume.
+   PJ 3F                    ; Projection operation
+     [current_vol]          ; Vol from previous reconstruction iteration (input) 
+     [prj-radius]           ; Radius of object
+     1-[num-ang]            ; Ref. angles used    
+     [iter_refangs]         ; Ref. angles doc file             (input)
+     [ref_projs]@******     ; Template for ref. projections    (output) 
+
+   ; Process all groups serially one-by-one
+
+   DO [i]=1,[num-grps]      ; Loop over all groups ---------------------
+      UD S [i],[grp]        ; Get group number from list  
+        [sel_group]         ; Group selection file            (input)
+
+      SYS
+        echo -n " Processing group: {%I4%[grp]}   " ; date  '+ TIME: %x  %X' ; echo
+
+        ; Switch to 'BP CG' on last iteration if not already
+        [bp-typet] = [bp-type]     ; 
+        IF ( [iter] == [iter-end] ) THEN
+          [bp-typet] = 1           ; Switch to 'BP CG' 
+        ENDIF
+
+      MY FL                 ; Flush results file
+ 
+      IF ( [smallang-yn] == 0 ) THEN  ; Runs main refinement loop tasks
+         @refine-loop([ang-step],[ang-limit],[r2],[alignsh],[prj-radius],[iter],[grp],[pixsiz],[incore-yn],[bp-typet])
+      ELSE
+         @refine-smangloop([ang-step],[r2],[alignsh],[prj-radius],[iter],[grp],[pixsiz],[bp-typet])
+      ENDIF
+
+      MY FL                 ; Flush results file
+   ENDDO                    ; End of: Loop over all groups -------------------
+
+   UD E                     ; Finished with incore doc file
+
+   ; Consolidate group volumes (AS S) into output volumes, find resolution (FSC),
+   ; filter to limit resolution (FQ), and center the filtered volumes 
+
+   @refine-merge([pixsiz],[iter],[ampenhance],[r2])
+
+   SYS
+     echo " Iteration: {%I0%[iter]} Finished" ; echo
+   MY FL                    ; Flush results file
+ ENDDO                      ; End of loop over all iterations ---------------------------------
+
+ SYS                        ; Echo current time 
+   echo -n " Refinement finished after iteration: {**[iter]}   " ; date '+ TIME: %x  %X' ; echo " " 
+
+ EN
+ ; </pre></body></html>

@@ -1,0 +1,187 @@
+ ([ang-step],[ang-limit],[r2],[alignsh],[prj-radius],[iter],[grp],[pixsiz],[incore-yn],[bp-type])
+
+ ; <html><head><title>Main refinement group loop</title></head><body><pre>
+ ;
+ ; SOURCE: spider/docs/techs/recon1/procs/refine-loop.spi    
+ ;         Original                                            ArDean Leith  Nov 2000
+ ;         %degredations                                       ArDean Leith  Feb 2005
+ ;         []                                                  ArDean Leith  Dec 2005
+ ;         More stacks & 'RT SQ' selection                     ArDean Leith  Dec 2006
+ ;         'AP SH' use                                         ArDean Leith  Feb 2007
+ ;         Group sel. filename                                 ArDean Leith  Dec 2009
+ ;         COG centering removed, 'AP SH' for 2 iters, Skip=2  ArDean Leith  Sep 2010
+ ;         'TF COR'                                            ArDean Leith  Nov 2010
+ ;         Dala removal                                        ArDean Leith  Jan 2012
+ ;         'AP SHC', skip=1, FSC mask                          ArDean Leith  Sep 2012
+ ;         Denoise exp images, mask before bp                  ArDean Leith  Dec 2012
+ ;         For CTF corrected images                            ArDean Leith  Oct 2013
+ ; 
+ ; PURPOSE: Main refinement loop. Runs for each group on each iteration
+ ;          Finds parameters to align images to projections from reference volume (AP SHC),
+ ;          aligns images (RT SF),  backprojects images into new volume(BP 32F), & 
+ ;          determines group resolution (FSC)    
+ ;
+ ; CALLED FROM: <a href="./pub-refine-start.spi">pub-refine-start.spi</a>  OR   
+ ;              <a href="./refine.spi">          refine.spi</a>  
+ ;
+ ; REGISTERS AND FILES ARE SET IN: <a href="refine settings.spi">refine settings.spi</a>
+ ;
+ ; INPUT REGISTERS:
+ ;    [ang-step]             Angular steps                     (Varies with iter)
+ ;    [ang-limit]            Restrict angular search           (Varies with iter)
+ ;    [r2]                   Pixel radius of object used in alignment
+ ;    [alignsh]              Pixel shift allowed is +-[alignsh]
+ ;    [prj-radius]           Pixel radius of object used in projection
+ ;    [iter]                 Alignment step iteration counter   
+ ;    [grp]                  Current group                              
+ ;    [pixsiz]               Pixel size                              
+ ;    [incore-yn]            Use incore file for images                              
+ ;    [bp-type]              Type of 'back projection'                              
+ ;
+ ; OUTPUT REGISTERS:
+ ;
+ ;  '##' denotes iteration,  '##+' denotes next iteration,  '***' denotes group
+ ; INPUT FILES:
+ ;    [sel_parts]            input/select_***        Group particle selection files  (one)
+ ;    [group_align]          final/align##_***       Alignment parameter doc files   (one/iteration/group)    
+ ;    [unaligned_images]     input/data_***          Unaligned stacked image files   (one stack/group)
+ ;    [iter_refangs]         work/ang_refs_##        Ref. angles doc file for this iteration (one/group)       
+ ;    [ref_projs]            refproj##_***           Ref. projections                (one/iteration/group)
+ ;
+ ; OUTPUT FILES:
+ ;    [next_group_align]     final/align##+_***      Alignment parameter doc file    (one/iteration/group)
+ ;    [next_group_vol]       work/vol##+_***         Reconstructed group volume      (one/iteration/group)
+ ;
+ ;    [next_group_vol]_s1    work/vol_##+_***_s1     (Created & deleted)
+ ;    [next_group_vol]_s2    work/vol_##+_***_s2     (Created & deleted)
+ ;    [temp_out_images]      work/dala_***@          (Created & deleted if [incore-yn] = 0 )
+ ; 
+ ; PROCEDURES CALLED: refine-bp
+ ;
+ ; INLINE BUFFERS USED:  If [incore-yn] > 0 it uses _8
+ ;
+ ; -- END BATCH HEADER -- ...................................................
+
+ SYS
+   echo -n " Starting: refine-loop  Iteration: {%I0%[iter]}  Group:{%I3%[grp]} --- " ; date '+ %x  %X'
+ 
+ [r1]             = 5.0             ; First radius for 'AP' (Can alter this)
+ [ang-change-thr] = 1.5*[ang-step]  ; Convergence criterion ang. distance limit
+ [next-iter]      = [iter]+1
+
+ FI H [maxim],[nx],[ny]             ; Find total number of images (not [numparts])
+   [unaligned_images]@              ; Input file needed                 (input)
+   MAXIM, NX, NY                    ; Max. image number, image size
+
+ UD N [num-refs]                    ; Get number of reference images used
+   [iter_refangs]                   ; Reference images angles file      (input)
+
+ DE                                 ; Delete existing files  
+   [next_group_align]               ; Alignment parameter doc file   (deleted)
+ DE                                 ; Delete (rare)  
+   [ref_rings]                      ; Reference rings scratch file   (deleted)
+
+ MY FL                              ; Flush results file
+
+ IF ( [incore-yn] > 0 ) THEN
+   ; Load input images into incore image stack 
+   ; Note: If INLN_WRTLIN ARRAY OVERFLOWS,  set: [incore-yn] to: zero    
+   GLO [temp_in_images]  = '_8@'
+   GLO [temp_out_images] = '_8@'
+
+   CP                               ; Copy unaligned images to inline stack
+     [unaligned_images]@            ; Input file needed                (input)
+     [temp_in_images]               ; Unaligned images stack           (output)
+     [maxim]                        ; Number of images in stack _8@
+ ELSE
+   ; Use existing image stack for input & temp stack for output
+   GLO [temp_in_images]  = [unaligned_images]@
+ ENDIF
+
+ !SYS                               ; Create end of copy wait time flag file
+ !  touch [wait_file][grp].$DATEXT 
+
+ ; Find reference projection matching current aligned image
+
+ [a] = 'Y'                          ; Align images first
+
+ IF ( [iter]  <= 3 ) THEN
+ 
+   [a]       = 'Y'                  ; Align images first
+   [grp_ali] = [group_align]        ; Alignment parameter doc file     (input)
+   IF ( [iter] == 1 ) THEN
+     [a]       = 'N'
+     [grp_ali] = '*'                ; Alignment parameter doc file     (input)
+   ENDIF
+
+   AP SHC                           ; (Can change alignment operation)  
+     [ref_projs]@******             ; Template for ref. projections    (input)
+     1-[num-refs]                   ; Ref. projection file numbers
+     [alignsh],1                    ; Shift search range, Step size
+     [r1],[r2],1                    ; First, last radial ring, & skip
+     [iter_refangs]                 ; Ref. angles file                 (input)
+     [temp_in_images]******         ; Template for unaligned images    (input)
+     [sel_parts]                    ; Particle selection files         (input)
+     [grp_ali]                      ; Alignment parameter doc file     (input)
+     [ang-limit],[ang-change-thr]   ; Angular search restriction
+     Y, [a], N                      ; Check mir, align first, denoise
+     [next_group_align]             ; Alignment parameter doc file     (output)
+
+   SYS
+     echo " Aligned, iteration: {%I0%[iter]} Group: {%I3%[grp]}"
+
+ ELSE
+   AP REF                           ; Poorer search than 'AP SH' but 4-5x faster
+     [ref_projs]@******             ; Template for ref. projections    (input)
+     1-[num-refs]                   ; Ref. projection file numbers
+     [alignsh]                      ; Shift search range
+     [r1],[r2],1                    ; First, last radial ring, & skip
+     [iter_refangs]                 ; Ref. angles file                 (input)
+     [ref_rings]                    ; No such file if rings fit in-core(rare output)
+     [temp_in_images]******         ; Template for unaligned images    (input)
+     [sel_parts]                    ; Particle selection files         (input)
+     [group_align]                  ; Alignment parameter doc file     (input)
+     [ang-limit],[ang-change-thr]   ; Angular search restriction
+     Y, Y, N                        ; Check mir, align first, denoise
+     [next_group_align]             ; Alignment parameter doc file     (output)
+
+   ; Get size of change in proj. angle
+   ;     %BIG-ANGDIF,       AVG-ANGDIF,  AVG-CCROT, %WORSE,  AVG-WORSE,   AVG-BETTER      
+   UD -2,[percent-greater],[avg-angdif],[avg-ccrot],[degred],[avg-degred],[avg-impr]
+     [next_group_align]             ; Alignment parameter doc file     (input)
+   UD E                             ; Close doc file access
+
+   IF ( [iter] >= 4 ) THEN
+     SYS
+       echo " Iteration: {%I0%[iter]} Group:{%I3%[grp]}  Excessive changes: {%F6.2%[percent-greater]}% "
+     SYS
+       echo " CCROT degred.: {%I0%[degred]}%   Avg. degred.:{%F6.2%[avg-degred]}  Avg. improve.:{%F8.2%[avg-impr]}"
+   ENDIF
+ ENDIF
+
+ ; Apply new alignments to original particle images
+ RT SF                          ; Rotate & shift operation
+   [unaligned_images]@******    ; Unaligned stacked image files     (input)
+   [sel_parts]                  ; Particle selection file           (input) 
+   6,0,7,8                      ; Reg. #s for angle, scale, & shift
+   [next_group_align]           ; Alignment parameter doc file      (input)
+   [temp_out_images]******      ; Current aligned images            (output)
+ 
+ ; Soft masking of particle prior to back projection (removed- not usefull)
+
+ SYS                            ; Echo progress
+   echo " Back projecting,  Iteration: {%I0%[iter]} Group:{%I3%[grp]}"
+
+ ; Calculate new, refined volume using centered projections and 
+ ; angles from align doc. file. 
+
+ @refine-bp([next-iter],[grp], [bp-type],[prj-radius])
+
+
+ DE                             ; Delete stack                        
+   [temp_out_images]            ; No longer needed                    (deleted)
+       
+ RE
+
+ ; </pre></body></html>
+

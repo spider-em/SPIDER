@@ -1,0 +1,161 @@
+ ; <html><head><title>Fixes refinement if a group(s) is missing</title></head><body><pre>
+ ;
+ ; SOURCE: spider/docs/techs/recon1/Procs/pub-fixrefine.spi
+ ;         New                               Sep 2004  ArDean Leith 
+ ;         [var]                             Dec 2005  ArDean Leith
+ ;
+ ; PURPOSE: Fix refinement for missing groups
+ ;
+ ; Files are set in: refine settings <a href="./refine-settings.spi">refine-settings.spi</a>)
+ ;
+ ;  '##' denotes iteration,  '##+' denotes next iteration,  '***' denotes group
+ ; INPUT FILES:
+ ;    ../params              [params]             Parameter doc file          
+ ;    input/sel_group        [sel_group]          Group listing     
+ ;    input/data***@         [unaligned_images]   Unaligned stacked image file  
+ ;    input/align_##_***     [group_align]        Original alignment parameters doc file 
+ ;    input/vol_##           [initial_vol]        Initial volume
+ ;
+ ; OUTPUT FILES 
+ ;    final/vol##+           [next_vol]           Final output volume for each iter.
+ ;    final/align##+_***     [next_group_align]   Alignment parameter doc file
+ ;    final/fscdoc_##+_***   [next_group_m_fsc]   FSC curve doc file
+ ;    jnk_sync_xxxx_***      [finished_file]      Sync doc file from PubSub tasks
+ ;
+ ; PROCEDURES CALLED:
+ ;    refine-settings          <a href="./refine-settings.spi">  refine-settings.spi</a>
+ ;    publish                  <a href="./publish.perl">         publish</a>
+ ;    ... pub-refine-start     <a href="./pub-refine-start.spi"> pub-refine-start</a>          
+ ;    ....... refine-settings  <a href="./refine-settings.spi">  refine-settings.spi</a>            
+ ;    ....... refine-loop      <a href="./refine-loop.spi">      refine-loop.spi</a>            
+ ;    ....... refine-smangloop <a href="./refine-smangloop.spi"> refine-smangloop.spi</a>            
+ ;    pub-refine-wait          <a href="./pub-refine-wait.spi">  pub-refine-wait.spi</a>
+ ;    refine-merge             <a href="./refine-merge.spi">     refine-merge.spi</a>
+ ;
+ ; -------------------------------- Edit this data --------------------------
+
+ [iter]    = 16    ; Iteration (Set this)
+
+ [rn]      = 3485  ; Random number appended to sync files (Set this)
+
+ [task]    = 0     ; Pub_starter selector flag 
+ ;                 ; (0 for regular refinement, 1 for small-angle)
+
+ ; ---------------------------------------------------------------------
+
+ MD
+   TR OFF   ; Loop info turned off
+ MD
+   VB OFF   ; File info turned off
+
+ ; Get global parameters & set filenames
+ @refine-settings([pixsiz],[r2],[alignsh],[prj-radius],[iter1],[iter-end],[lambda],[smallang-yn],[winsiz],[incore-yn],[prepare-yn],[bp-type])
+
+ [next-iter] = [iter] + 1
+
+ ; Check if reference projections exist
+ IQ FI [refprojs-exist]
+   [ref_projs]@
+
+ IF ( [refprojs-exist] == 0) THEN
+   SYS
+     echo " Projecting references"
+
+   DE                            ; Delete file
+     [iter_refangs]              ; Reference angles doc file       (removed)
+
+   ; Create reference angle doc file for this iteration 
+
+   IF ( [small-ang] == 0 ) THEN  
+
+      ; For normal angle refinement
+      RR S [ang-step]
+        [ang-steps]              ; Angular step for projection angle  (varies with iteration)
+        [iter]
+
+      VO EA [num-angles]         ; Sets [num-angles] to number of reference projections
+        [ang-step]               ; Theta angular step          (varies with iteration)
+        0,90.0                   ; Theta range, 90 is for use with 'Check Mirrored Positons:1'
+        0,359.9                  ; Phi range
+        [iter_refangs]           ; Reference angles doc file     (output)
+
+      RR S [ang-limit]           ; Restriction on angular search   (varies with iteration)
+        [ang-limits]             ; Values string 
+   [iter]                        ; Current iteration
+      
+      UD N [num-refs]            ; Get number of reference images used
+        [iter_refangs]           ; Reference images angles file      (input)
+      
+      MY FL
+      
+      ; Generate reference projections
+      PJ 3Q                      ; Projection operation
+        [current_vol]            ; Volume             (input)
+        [prj-radius]             ; Radius of object
+        1-[num-refs]             ; Ref. angles used    
+        [iter_refangs]           ; Ref. angles doc file             (input)
+        [temp_ref_projs]@******  ; Template for ref. projections    (output) 
+
+   ELSE                    
+
+      ; For Small angle refinement
+      VO EA [num-angles]         ; Sets [num-angles] to # of reference projections
+        [ang-step-sm]            ; Theta angular step     
+        0,[theta-range]          ; Theta range 
+        0, 359.9                 ; Phi range
+        [iter_refangs]           ; Reference angles doc file     (output)
+ 
+   ENDIF
+ ENDIF
+
+ RR S [ampenhance]               ; Amplitude enhancement setting (varies with iteration)
+   [amp-enhance-flags]           ; Flag string
+   [iter]                        ; Current iteration
+
+ UD N [num-grps]                 ; Find number of groups              
+   [sel_group]                   ; Group listing     (input)
+
+ ; Process all  groups in parallel
+
+ DO  [grp-key]=1,[num-grps]      ; Loop over all groups --------------------------------
+
+    UD IC [grp-key],[grp]        ; Get this group number
+      [sel_group]                ; Group listing     (input)
+
+    DE                           ; Delete file
+      [finished_file]{***[grp]}  ; Sync file          (removed)
+
+    ; Check for FSC curves
+    IQ FI [fsc-exists]           ; Inquire if file exists
+      [next_group_m_fsc]         ; FSC curve file      (input)           
+   
+    MY FL
+
+    IF ( [fsc-exists] == 0 ) THEN
+      ; If FSC curve doesn't exist, start refinement for this group
+      SYS
+        publish './spider pam/$DATEXT @pub-refine-start {***[grp]} task={*[task]} iter={**[iter]} grp={**[grp]} rn={****[rn]}' 
+
+    ELSE
+      ; Create a sync file to signal master SPIDER that task already finished
+      SD 11, [type]                ; Set sync file output
+        [finished_file]{***[grp]}  ; Sync file          (output)
+      SD E                         ; Close sync file
+        [finished_file]{***[grp]}  ; Sync file          (closed)
+
+   ENDIF
+ ENDDO                             ; End of loop over all groups -----------------------
+
+ UD ICE                            ; Close docs
+   [sel_group]                     ; Doc file    (closed)
+
+ MY FL                             ; Flush results file
+
+ ;  Wait for all subscribers to finish 
+ @pub-refine-wait([num-grps],[iter],[rn])
+   
+ SYS
+   echo " Alignment finished for iteration: {%I0%[iter]}"
+
+ EN
+ ; </pre></body></html>

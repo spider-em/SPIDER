@@ -1,0 +1,101 @@
+ ; <html><head><title>Separates particles into montages that will fit on one screen in WEB</title></head><body><pre>
+ ;
+ ; SOURCE:  spider/docs/techs/recon1/Particles/micmontagedocs.spi     Jul 2013 ArDean Leith
+ ;
+ ; PURPOSE: Separates particles into montages that will fit on one screen in WEB
+ ;
+ ; USAGE:   clean ; spider spi/dat @micmontagedocs
+
+ ; ----------------- Parameters -----------------
+
+ [progress-interval] = 1                  ; Print progress message to screen every Nth micrograph
+
+ [parts-per-montage] = 200                ; Number of images per montage 
+
+ ; -------------------- Inputs --------------------
+
+ [mic_list]     = '../sel_micrograph'     ; List of micrographs          (one)
+
+ [parts_by_mic] = 'win/sel_part_****'     ; Particle selection doc files (one/micrograph)
+
+ ; ------------------- Output -------------------
+
+ [montage_doc]  = 'win/montage_doc_{****[mic]}_**'   ; Montage doc file             (one/micrograph)
+
+ ; -------------- END BATCH HEADER ---------------
+
+ [temp_montage_doc] = 'tmpdocmontage_incore'
+
+ SYS
+   echo -n " Creating doc file for montages of {%I0%[parts-per-montage]} particles ---- " ; date ; echo
+
+ ; Get # of micrographs
+ UD N [num-mics]
+   [mic_list]
+
+ ; Loop through micrographs
+ DO  [mic-key] = 1, [num-mics]   ; Loop through micrographs ---------------
+    ; Get micrograph #
+    UD IC [mic-key], [mic]
+      [mic_list]
+
+    IF (int([mic-key]/[progress-interval]) == [mic-key]/[progress-interval]) then
+      SYS
+        echo " Micrograph: {%I4%[mic]}, {%I4%[mic-key]} out of: {%I4%[num-mics]}"
+    ENDIF
+    
+    ; Get #particles
+    UD N [num-parts]
+      [parts_by_mic][mic]
+
+    ; Calculate number of montages needed
+    [num-montages] = int(([num-parts]-1)/[parts-per-montage])+1
+
+    ; Loop through montages
+    DO [mont-key] = 1,[num-montages]    ; Loop through montages -----------
+        [first-part] = ([mont-key] - 1)*[parts-per-montage] + 1
+        [last-part]  = [mont-key]*[parts-per-montage]
+
+        ; Cap particle number at last one
+        IF ( [last-part] > [num-parts]) [last-part] = [num-parts]  
+        
+        ; Initialize in-core doc file
+        SD IC NEW
+          [temp_montage_doc]
+          1,[parts-per-montage]      ; #columns, #rows
+
+        ; Loop through particles per montage
+        DO [mic-slice] = [first-part],[last-part]
+           ; calculate particle-counter
+           [part-key] = [mic-slice] - [first-part] + 1
+            
+           SD IC [part-key], [mic-slice]
+             [temp_montage_doc]     ; 
+        ENDDO        ; End particle loop --------------------------------
+
+        ; Close in-core doc file
+        SD IC COPY
+          [temp_montage_doc]
+          [montage_doc][mont-key]
+        SD IC E
+          [temp_montage_doc]
+
+    ENDDO             ; End montage loop ---------------------------------
+ ENDDO                ; End micrograph loop ------------------------------
+
+ ; Close doc
+ UD ICE
+   [mic_list]
+
+ SYS
+   echo ; echo -n " Done  ----  " ; date ; echo 
+
+ EN D
+
+ ; Modified 2013-10-16
+ ;    2013-10-16 (agl) -- Modernized
+ ;    2012-04-04 (trs) -- Updated syntax, uses sel_particles instead of pnums, uses 'SD IC'
+ ;    2012-04-04 (trs) -- Adapted from negmontagedocs.spi
+ ;    2004-11-30 (trs) -- Micrograph# is now the 1st column in order, and #particles the 3rd
+ ;    2004-07-08 (trs) -- Micrographs are now four digits
+ ; </pre></body></html>

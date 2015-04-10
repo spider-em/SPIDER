@@ -1,0 +1,143 @@
+ ; <html><head><title>Picks particles from micrograph using 'AT **'</title></head><body><pre>
+ ;                                           
+ ; PURPOSE:  Picks particles from micrograph using 'AT **'
+ ;
+ ; SOURCE:   spider/docs/techs/recon1/Procs/pick-at.spi 
+ ;
+ ; REQUIRES: convert-p.spi   &   pick-at-p.spi
+ ;
+ ; USAGE:    clean ; spider spi/mrf @pick-at
+ 
+
+ ; <b> ----------- Input Parameters -----------------------------------
+
+ ; The following are obtained/derived from the parameter doc file:
+ ; [sp_pixsiz]  - pixel size
+ ; [sp_winsiz]  - window size of particles
+ ; [sp_partsiz] - actual size of particles 
+
+ [decimate] = 0 ; Decimation factor for 'DC S' (0 = get value from param file)
+                ;  0 = get value from param file
+                ;  1 = full sized image
+                ;  2 = 1/2 size
+                ;  4 = 1/4 size
+
+ ; ----------- Input files --------------
+
+ [params]  = '../params'                     ; Parameter file              (one)
+
+ [sel_mic] = '../sel_micrograph'             ; Micrograph selection file   (one)
+
+ [raw]     = '../Micrographs/raw****'        ; Micrograph images           (one / micrograph)
+
+ [noise]   = 'noise'                         ; Noise file                  (one)
+
+ ; ----------- Output files --------------
+ 
+![ser]     = 'win/winser_{****[mic]}@******'     ; Particle image stacks              (one / micrograph)
+ [ser]     = 'win/data_bymic_{****[mic]}@******' ; Particle image stacks              (one / micrograph)
+
+![ndc]     = 'coords/sndc_{****[mic]}'       ; Peak coordinate doc files              (one / micrograph)
+ [ndc]     = 'coords/pkcoor_{****[mic]}'     ; Peak coordinate doc files              (one / micrograph)
+
+ [ulcoor]  = 'coords/ulcoor_{****[mic]}'     ; Upper-left corner coordinate doc files (one / micrograph)
+
+ [sel_doc] = 'win/sel_part_{****[mic]}'      ; Particle selection doc files           (one / micrograph)
+
+ [out]     = 'jnktmppick{****[mic]}'         ; Temporary SPIDER files template        (deleted)
+
+ ; -------------- END BATCH HEADER --------------------------
+
+ MD 
+   SET MP
+   0                        ; Use all available processors
+ MD 
+   VB OFF
+
+ SYS                        ; Dir. for temporary files and output files
+   mkdir -p win coords 
+
+ UD 5,[sp_pixsiz]           ; Get pixelsize from parameter file
+   [params]
+
+ ; Get window size & actual size from parameter file.
+ ; If they are zero, then compute them
+
+ UD 17,[sp_winsiz]
+   [params]
+ UD 18,[sp_partsiz]
+   [params]
+
+ IF ( [sp_winsiz]  < 1 ) [sp_winsiz]  = INT(368/[sp_pixsiz])
+ IF ( [sp_partsiz] < 1 ) [sp_partsiz] = INT(250/[sp_pixsiz])
+
+ [v31] = 0.075 * ([sp_pixsiz]/4.78)  
+                                                      
+ ; Low pass filter radius                                                   
+ ; Frequency = 2*pixel size / filt.rad.=const: [v31]=0.075*([sp_pixsiz]/4.78)
+ ; approxim.(particle size/2)+1)/interpolated x dimension                         
+ ; or (([sp_winsiz]/2)+1)/[v71] - corrected for better res.                                
+
+ [v44] = 4                             ; Decimation of mic for peak search
+
+ [v79] = INT([sp_partsiz]/[v44])       ; Actual size of particle / by width of peaks
+
+ [sp_partsiz] = int([sp_partsiz]/4)+1  ; Range of CCC in center step.
+     
+ CP                                    ; Noise will be in _7 
+   [noise]         
+   _7 
+    
+ [v55] = INT([sp_winsiz]/2)-2
+
+ MO                         ; Create mask file
+   mask                     ; Mask file                  (output)
+   [sp_winsiz],[sp_winsiz]  ; Mask dimensions
+   C                        ; Circle
+   [v55]                    ; Radius
+
+ AR                         ; Scale mask 0...1 
+   mask                     ; Mask file                  (input)
+   _8                       ; Mask file                  (output)
+   (p1-1)*(-1)
+     
+ DO 
+   UD NEXT [key],[mic]      ; Get micrograph # 
+     [sel_mic]              ; Micrograph selection file  (input)
+   IF ( [key] <= 0) EXIT    ; End of groups in doc file
+
+   ; Convert images from raw format to SPIDER if necessary
+   @convert-p([decimate])
+     [params]               ; Parameter file
+     [raw][mic]             ; Raw micrograph             (input)
+     [out]                  ; SPIDER format file         (output)
+     
+   DE                       ; If output doc file exists, delete it
+     [ndc]                  ; Doc file                   (deleted)
+   DE                       ; If output doc file exists, delete it
+     [ulcoor]               ; Doc file                   (deleted)
+
+   ; Pick particles
+   @pick-at-p([v31],[v44],[sp_winsiz],[v79],[sp_partsiz])
+     [out]
+     [ndc]
+     [ser]
+     [ulcoor]
+ 
+   UD N [num-parts]         ; Count number of particles
+     [ulcoor]
+
+   DOC CREATE               ; Make selection doc file
+     [sel_doc]              ; Doc file                  (output)
+     1                      ; First register
+     1-[num-parts]          ; Image numbers
+
+   DE                       ; Delete temporary file
+     [out]                  ; Doc file                  (deleted)
+ ENDDO
+
+ UD NEXT END                ; Finished with doc file 
+   [sel_mic]                ; Doc file                  (closed)
+
+ EN
+ ; </pre></body></html>

@@ -1,0 +1,811 @@
+ ; <html><head><title>Picks particles from a micrograph </title></head><body><pre>
+ ;
+ ; SOURCE:  spider/docs/techs/recon1/Procs/pick-lfc-p.spi     BIMAL RATH : FEB 2003
+ ;
+ ; PURPOSE: Picks particles from a micrograph. Inputs are a micrograph and the 3D volume
+ ;          of the particle that we are searching for its projection inside the micrograph.
+ ;          Uses a non-isotropic mask. Used Alan Roseman's formulation for calculating 
+ ;          local cross-correlation coefficients (Ultramicroscopy 2003).
+ ;
+
+ ; Make sure that both the micrograph and the 3D volume of the particle 
+ ; are of same magnification (1 PIXEL = "N" NANOMETER) 
+
+ ; Read input files
+
+ FR 
+   ?MICROGRAPH FILE (INPUT) NAME ?[micfile]
+
+ FR 
+   ?PARTICLE VOLUME (INPUT) NAME ?[partvol]
+
+ FR
+   ?NOISE FILE (INPUT, USED FOR NORMALIZATION) ?[noisefile] 
+
+ FR 
+   ?WINDOWED PARTICLE SERIES (OUTPUT) TEMPLATE ?[winpart]
+
+ RR [v93]
+   ?STARTING PARTICLE NUMBER ?
+
+ ; Peak coordinates files
+ FR L
+   ?DOC_FILE #5?[docfile5]
+   DOC_DELETED_5
+
+ ; Projection files used for averaging if averaging is selected
+ FR L
+   ?DOC_FILE #6?[docfile6]
+   PRJ_DELETED_
+
+ ; File with eulerian angles and info from peak search file
+ FR 
+   ?DOCUMENT FILE (OUTPUT: PARTICLE POSITION INFO.) NAME ?[posdoc]
+
+ ; Find if a selection doc file is used.
+ RR [v41]
+   ? DO YOU WANT TO USE A SELECTION FILE (NO = 0, YES = 1) ?
+
+ MD
+   VB OFF
+
+
+ ; If selection file is not used
+ IF ( [v41] .NE. 1 ) THEN
+
+   ; Eulerian angles begining and endvalues 
+   ; PHI ([v65]-[v68]), THETA([v66]-[v69]), PSI([v67]-[v73])
+   ; NOTE: Keep endvalues always +ve
+ 
+   RR [v65]
+      ?PHI, START ANGLE ?
+   RR [v68]
+      ?PHI, END ANGLE (+VE) ?
+   RR [v74]
+      ?PHI, SEARCH STEP SIZE (+VE) ?
+
+   ; Avoid division by zero
+   IF ( [v74] .EQ. 0) THEN
+      [v74] = 1
+   ENDIF
+
+   RR [v66]
+      ?THETA, START ANGLE ?
+   RR [v69]
+      ?THETA, END ANGLE (+VE) ?
+   RR [v75]
+      ?THETA, SEARCH STEP SIZE (+VE) ?
+
+   ; AVOID DIVISION BY ZERO
+   IF ([v75].EQ.0) THEN
+      [v75] = 1
+   ENDIF
+
+   RR [v67]
+      ?PSI, START ANGLE ?
+   RR [v73]
+      ?PSI, END ANGLE (+VE) ?
+   RR [v76]
+      ?PSI, SEARCH STEP SIZE (+VE) ?
+
+   ; AVOID DIVISION BY ZERO
+   IF ([v76].EQ.0) THEN
+      [v76] = 1
+   ENDIF
+
+ ENDIF
+
+ ; If selection doc file is used then  average of the projections can be used
+ ; as search template. diffault value of [v22] = 0 
+ [v22] = 0
+ IF ([v41] .EQ. 1) THEN
+   ; Ask if an average of the projections is to be used as search template.
+   RR [v22]
+      ? USE AVERAGE OF THE PROJECTIONS AS SEARCH TEMPLATE (NO = 0, YES = 1) ?
+ ENDIF
+
+ ; Interpolation factor 
+ RR [v89] 
+   ?INTERPOLATION FACTOR (NO INTERPOLATION = 1, ELSE, ENTER DESIRED NUMBER ) ?
+
+ ; # of peaks to be searched 
+ RR [v95] 
+   ? No. OF PEAKS TO BE SEARCHED ?
+
+ ; Neighbourhood distance for exclusion 
+   RR [v35] 
+   ?NEIGHBOURHOOD DISTANCE FOR PEAK EXCLUSION ?
+
+ [v35] = [v35]/[v89]
+
+ ; Find if a symmetric mask will be used.
+ RR [v51]
+   ? DO YOU WANT TO USE A SYMMETRIC MASK FOR LCCC CALCULATION (NO = 0, YES = 1) ?
+
+
+ IF ([v51] .EQ. 0) THEN
+   ; Pixel value for masking 
+   RR [v83]
+     ? PIXEL VALUE FOR MASKING (VALUES < ENTERED VALUE = 0, REST = 1) ?
+ ENDIF
+
+ ; Deletes the document files if they exist
+ IQ FI [v15]
+   [docfile5]
+ IF ( [v15] .EQ. 1) THEN
+   DE
+    [docfile5]
+  ENDIF
+
+ IQ FI [v15]
+   [docfile6]
+ IF ( [v15] .EQ. 1) THEN
+   DE
+     [docfile6]
+ ENDIF
+
+ IQ FI [v15]
+   [posdoc]
+ IF ( [v15] .EQ. 1) THEN
+    DE
+      [posdoc]
+ ENDIF
+
+ ; Find nsam and nrow of the micrograph
+ FI [v20],[v21]
+   [micfile]
+   12,2
+
+ ; Find nsam,nrow and nslice of the particle volume
+ FI [v23],[v24],[v25]
+   [partvol]
+   12,2,1
+
+ ; Copy images into memory so that it can be accessed quickly a number of times
+ ; in the following loops 
+ ; NOTE: don't reuse _1 and _99
+
+IF ([v89] .EQ. 1) THEN
+   CP 
+     [partvol]
+     _1
+ 
+   CP 
+     [micfile]
+     _99
+   
+ ELSE
+   [v52] = INT([v23]/[v89])
+   [v53] = INT([v24]/[v89])
+   [v54] = INT([v25]/[v89])
+      
+   [v48] = INT([v20]/[v89])
+   [v49] = INT([v21]/[v89])
+  
+   IP
+     [partvol]
+     _1
+     [v52],[v53],[v54]
+   
+   IP
+     [micfile]
+     _99
+     [v48],[v49] 
+ ENDIF
+
+ ; Find nsam and nrow of the interpolated micrograph
+ ; kept the same variable name as above
+ FI [v20],[v21]
+  _99
+  12,2
+
+ ; Find nsam, nrow and nslice of the interpolated particle volume
+ ; Kept the same variable name as above
+ fi [v23],[v24],[v25]
+  _1
+  12,2,1
+
+ ; Find the minimum of nsam and nrow of small volume
+
+ IF ([v23].LT.[v24]) THEN 
+   [v29] = [v23]
+ ELSE 
+   [v29] = [v24]
+ ENDIF
+
+ [v13] = INT([v29]/2)-1
+
+ [v87] = [v21]-[v24]+1
+ [v86] = [v20]-[v23]+1
+ [v87] = [v21]-[v24]+1
+
+ [v33] = INT([v23]/2)+1
+ [v34] = INT([v24]/2)+1
+
+ ; Euler angle search is done here
+
+ ; PJ 3 doesn't give correct results if some pixel values are -ve
+ ;AR SCA
+ ;[partvol]
+ ;_1
+ ;0,100
+        
+ IF ([v41] .EQ. 1) THEN
+   ; Ask for selection doc file with eulerian angles
+   FR 
+     ?SELECTION DOC_FILE ?[sel_doc]
+
+   UD N, [v42],[v43]
+    [sel_doc]
+   
+    ; End values for loops   
+   [v77] = [v42]
+   [v78] = 1
+   [v79] = 1
+   
+   ; If average of projections is used as template
+   IF ([v22] .EQ. 1) THEN   
+      [v77] = 1
+   ENDIF     
+   
+ ELSE 
+   ; EULER ANGLES ARE PROVIDED AT THE PROMPT  
+   ; END VALUES FOR LOOPS         
+   [v77] = (([v68]-[v65])/[v74])+1
+   [v78] = (([v69]-[v66])/[v75])+1
+   [v79] = (([v73]-[v67])/[v76])+1  
+ ENDIF
+
+ DO [v72] = 1, [v79]
+   [v58] = [v67]+([v72]-1)*[v76] 
+   
+   DO [v71] = 1, [v78]
+      [v57] = [v66]+([v71]-1)*[v75]
+      
+      DO [v70] = 1, [v77]  
+         [v56] = [v65]+([v70]-1)*[v74]   
+                 
+         IF  ([v41]. EQ. 1) THEN
+            UD IC, [v70],[v56],[v57],[v58]
+              [sel_doc]
+         ENDIF
+
+         ; DO LOOP #
+         [v90] = ([v72]-1)*[v77]*[v78] + ([v71]-1)*[v77] + [v70]        
+
+         ; Average of projections is not used as template
+         IF ([v22] .NE. 1) THEN 
+         
+            ; MAKE A PROJECTION
+            ; NOTE: DON'T REUSE _2
+            PJ 3
+              _1
+              [v23],[v24]
+              _2
+              [v56],[v57]
+              [v58]
+            
+         ; Average of projections is used as template
+         ELSE  
+             
+            PJ 3Q
+              _1
+              [v13]
+              1-[v42]
+              [sel_doc]
+              [docfile6]***
+      
+            AS R
+              [docfile6]***
+              1-[v42] 
+              A
+              _2 
+              _40                    
+             
+         ENDIF
+
+         IF ([v51] .EQ. 0) THEN
+            ; Asymmetric mask
+            
+            ; If average of projections is used as template
+            IF ([v22] .EQ. 1) THEN  
+               ; Make sure that [v83] is the right masking value for the average
+               ; of the projections
+               TH M
+                 _2
+                 _4
+                 B
+                 [v83]          
+            ELSE             
+            
+               ; Can't just use thresholding since the pixel values
+               ; changes for each projection.
+               ; so I am making a mask of the 3D structure and then using PJ3
+               ; to project and then using standard deviation value to 
+               ; threshold. I have verified it works quite O.K., but may not be
+               ; perfect. To get the perfect result one may need to change 
+               ; the threshold value and use it directly on _2 (no need to create
+               ; the binary mask and get a projection from it and then do 
+               ; thresholding using standard deviation value) 
+               
+              IF ([v90] .EQ. 1) THEN
+                  ; Do only once
+                  TH M
+                    _1
+                     _30
+                  B
+                  [v83]
+               ENDIF   
+            
+               PJ 3
+               _30
+               [v23],[v24]
+               _31
+               [v56],[v57]
+               [v58]
+
+               ;cp
+               ;_31
+               ;prj_bin_see_me{***[v90]}  
+          
+               FS [v98],[v99],[v88],[v59]
+                 _31
+         
+               ; THRESHOLD THE PROJECTION
+               ; NOTE: DON'T REUSE _4            
+               TH M
+                 _31
+                 _4
+                  B
+                 [v59]
+            ENDIF                       
+         ELSE        
+            ; Symmetric mask
+            ; Make a circular mask. pixels outside the radius = 0 
+            ; Pixels inside = 1        
+
+            ; Do it only once
+            IF ([v90] .EQ. 1) THEN
+               ; IF _4 exists then delete it. command pt won't ask for 
+               ; nsam and nrow inputs if the file exists. when pickparticle
+               ; procedure is called inside another procedure it will cause
+               ; error
+               
+               IQ FI [v16]
+                 _4
+               IF ( [v16].EQ.1) THEN
+                  DE
+                    _4
+               ENDIF
+            
+               PT
+                 _4
+                 [v23],[v24]
+                 C
+                 [v33],[v34]
+                 [v29]/2
+                 N
+            ENDIF  
+         ENDIF 
+
+         ;cp
+         ;_2
+         ;prj_see_me{***[v90]} 
+            
+         ;cp
+         ;_4
+         ;mask_see_me{***[v90]}
+
+         FS [v80],[v81],[v50],[v82]
+           _4
+         
+         ; Total number of non-zero pixels inside the mask
+         [v50] = [v50]*[v23]*[v24]
+
+         ; In asymmetric case set [v55] =1 for all loops
+         ; In symmetric  case set [v55] =1 only for the first loop
+         IF ([v51] .EQ. 0) THEN
+            [v55] = 1
+         ELSE 
+            [v55] =0
+         ENDIF
+
+         IF ([v90] .EQ. 1) THEN
+            [v55] = 1
+         ENDIF
+
+         ; Calculate local standard deviation only once in symmetric case
+         ; Calculate local standard deviation for each orientation in asymmetric case
+
+         IF ( [v55] .EQ. 1) THEN
+            ; CREATE A BLANK IMAGE, SAME SIZE AS LARGE IMAGE
+            MO 
+              _5
+              [v20],[v21]
+              B
+              (0)
+
+            ; INSERT THE MASK INSIDE THE BLANK IMAGE
+            IN
+              _4
+              _5
+             (1,1)
+
+            ; DO FT ON BLANK IMAGE(WITH THE MASK INSERTED)
+            ; NOTE: DON'T REUSE _6
+            FT
+              _5
+              _6
+
+            ; DO IT ONLY ONCE
+            IF ([v90] .EQ. 1) THEN
+               ; DO FT ON LARGE IMAGE
+               FT
+               _99
+               _86
+            ENDIF   
+
+            ; Multiply ft of large image with complex conjugate 
+            ; of ft of blank image
+            MU M
+              _86
+              _6
+              _8
+              *
+
+            ; Do inverse ft
+            FT
+              _8
+              _9
+
+            ; Normalize 
+            AR
+              _9
+              _10
+              (P1+0)/([v50])
+
+            SQ
+              _10
+              _11
+
+            ; Reuse memory space for storing image ( _5,_8 - _10)
+
+            ; Do it only once
+            IF ( [v90] .EQ. 1) THEN
+               SQ
+                 _99
+                 _87
+         
+               ; Do ft on square of the large image
+               FT
+                 _87
+                 _88
+            ENDIF   
+  
+            ; Multiply ft of square of large image with complex conjugate 
+            ; of ft of blank image
+            MU M
+              _88
+              _6
+              _7
+
+            ; Do inverse FT
+            FT
+              _7
+              _8
+
+            ; Normalize
+            AR
+              _8
+              _9
+              (P1+0)/([v50])
+
+            SU
+              _9
+              _11
+              _10
+
+            ; Get rid of sqrt of -ve # and division by zero(while dividing the 
+            ; CCF by local standard deviation)
+            TH M
+              _10
+              _80
+              B
+              (0)
+            
+            MM
+              _80
+              _10
+              (9E+20)
+  
+            ; Local standard deviation
+            WU
+              _10
+              _3
+           
+            ; NOTE: Don't reuse _5  
+            WI
+              _3
+              _5                        
+              [v86],[v87]         
+              (1,1)
+
+         ENDIF
+
+         ; Prepare the reference image such that the average inside 
+         ; the mask = 0 and the standard deviation inside the mask = 1
+         MM
+           _4
+           _2
+           (0)
+   
+         ; Find average
+         FS [v60],[v61],[v62],[v63]
+           _2
+         
+         ; SUM
+         [v40] = [v62]*([v23]*[v24])
+         
+         SQ
+           _2
+           _7
+               
+         ; Find average
+         FS [v60],[v61],[v62],[v63]
+           _7
+
+         ; Sum
+         [v45] = [v62]*([v23]*[v24])
+
+         ; SD inside mask        
+         [v46] = SQRT(([v45] -(([v40]*[v40])/[v50]))/([v50]-1))
+
+         ; AVG inside mask         
+         [v47]  =  [v40]/[v50]    
+         
+         ;Normalize
+         AR
+           _2
+           _8
+           (P1-[v47])/[v46]
+
+         MM
+           _4
+           _8
+           (0)
+
+         ; Create an empty image of dimension = micrograph dimension 
+         ; and paste the prepared refernce image at the left
+	 ; corner of this empty image           
+         MO 
+           _9
+           [v20],[v21]
+           B
+           (0)
+
+         [v36] = INT(([v20]-[v23])/2)+1
+         [v37] = INT(([v21]-[v24])/2)+1 
+                        
+         IN
+           _8
+           _9
+           (1,1)
+
+         ; Find cross correlation function of the above image with
+         ; with the large image
+                          
+         FT
+	   _9
+	   _60
+	 
+	 
+	 ; Set F(0,0) element = zero. Done to do similar normalization
+         ; as done in real space 
+	 
+         RP
+	   _60
+	   (1,1)
+	   (0)
+
+         RP
+	   _60
+	   (2,1)
+	   (0)
+
+         FT
+	   _99
+	   _61
+	 
+	 ; Don't change order of input in the following operation
+
+	 MU M
+	   _61
+	   _60
+	   _62	 
+           *
+	 
+         ; Do inverse FFT	 
+	 FT
+	   _62
+	   _10
+	 
+         WI
+           _10
+           _3
+           [v86],[v87]
+           1,1              
+
+         ; Divide the cc function with total number of non-zero pixels
+         ; inside the mask         
+         AR
+           _3
+           _7
+           P1/[v50]
+
+         ; Divide the  above result with corresponding element of 
+         ; the local standard deviation array 
+         MU D
+           _7
+           _5
+           _8
+           *
+        
+         ; Compare the cross-correlation file in each loop and create an
+         ; output file with the highest pixel value 
+ 
+         IF ([v90] .EQ. 1) THEN
+            ; For first loop, copy the file
+            CP
+              _8
+              _97
+         ELSE
+            ; For more than one loop compare the cross-correlation files
+            MX
+             _8
+             _97
+             _98
+   
+           ; Copy the output file so that it becomes one of the input files
+           ; for the next loop
+           CP
+             _98
+             _97
+         ENDIF                                                                           
+      ENDDO
+   ENDDO
+ ENDDO 
+
+ ;CP
+ ;_97
+ ;save_cross_corr
+
+ ; Do restricted peak search                 
+ PK DR
+   _97
+   ([v95],1)
+   (1,1)
+   [v35]
+   [docfile5]
+
+ ; Find max key no.
+ UD N  [v91],[v92]
+   [docfile5]
+
+ ;Insert comments
+ SD /         X           Y       PARTICLE NO.   PEAK HT
+   [posdoc]
+
+ ; Write xy positions and peak height value to file [posdoc]
+ DO [v96] = 1,[v91]
+   UD IC,[v96],[v11],[v12],[v18]
+     [docfile5]
+            
+   ; Correct for the center of the peak with respect to large image.
+   ; The peak height determined in peak search step is with respect to the
+   ; image created by substracting the dimension of reference image
+   ; from the large image. Factor of NSAM/2+1, NROW/2+1 and NSLICE/2+1
+   ; are addded
+   [v30] = [v11]+[v33]
+   [v31] = [v12]+[v34]
+   [v30] = [v30]*[v89] +1
+   [v31] = [v31]*[v89] +1           
+            
+   [v44] = ([v93]-1) + [v96]      
+   SD [v96],[v30],[v31],[v44],[v18]
+     [posdoc] 
+   ;SD [v96],[v30],[v31]
+   ;annotate                 
+     
+ ENDDO
+        
+ UD ICE
+   [docfile5]
+         
+ DE
+   [docfile5]             
+
+ ;SD /         X           Y          PEAK HT
+ ;[posdoc]
+
+ SD E
+   [posdoc]
+ 
+ ; WINDOW PARTICLES FROM THE INPUT MICROGRAPH 
+ 
+ UD N, [v38],[v39]
+   [posdoc]
+ UD E
+
+ ; FIND NSAM,NROW AND NSLICE OF THE PARTICLE VOLUME
+ ; NEED TO BE DONE AGAIN BECAUSE THE VARIABLES HAVE BEEN CHANGED AFTER
+ ; INTERPOLATION IS DONE
+
+ FI [v23],[v24]
+   [partvol]
+   12,2
+
+ [v33] = INT([v23]/2)+1
+ [v34] = INT([v24]/2)+1
+
+ ; Copy noise file to memory
+ CP
+   [noisefile]
+   _27
+
+ ; Find radius of mask file
+ IF ([v23].LT.[v24]) THEN 
+   [v29] = [v23]
+ ELSE 
+   [v29] = [v24]
+ ENDIF
+ [v13] = INT([v29]/2)-1
+
+ ; Make a mask file
+ MO
+   _26
+   [v23],[v24]
+   C
+   [v13]
+
+ ; Pixels those are part of the particle are excluded from normalization
+ AR
+   _26
+   _28
+   (P1-1)*(-1)
+
+ DO [v26] = 1,[v38]
+
+   UD IC [v26],[v27],[v28],[v94],[v97]
+     [posdoc]
+
+   [v84] = [v27] - [v33]
+   [v85] = [v28] - [v34]
+   
+   WI
+     [micfile]
+     _29
+     [v23],[v24]
+     [v84],[v85]
+
+   RA
+     _29
+     _22
+
+   ; Normalize as per histogram
+   CE FIT
+     _27
+     _22
+     _28
+     [winpart]{******[v94]}
+
+ ENDDO
+
+ UD ICE
+   [posdoc]
+
+ DE A
+   [docfile6]001
+
+ RE
+ ; </pre></body></html>
+

@@ -1,0 +1,106 @@
+ ; <html><head><title>Computes back-projection of an image series</title></head><body><pre>
+ ;
+ ; SOURCE: spider/docs/techs/recon1/Procs/bp-pubsub.spi   
+ ;
+ ; PURPOSE: Computes back-projection and its resolution for an image series. 
+ ;          FOR PROJECTS WITH ONE OR MORE GROUPS - WITH PUBSUB
+ ;
+ ; USAGE:       clean ; ./spider spi/dat @bp-pubsub
+
+; --------------------- END BATCH HEADER ---------------------
+
+ ; Set parameter and file names
+ @bp-settings([stk-opt],[r-fsc],[bp-type],[r-bpn],[cg-err],[cg-chi], [cg-iter],[cg-mode],[cg-lam],[rp-lam],[rp-cor],[rp-iter], [sp_pixsiz],[incore-yn])
+ 
+ MD
+   TR OFF                        ; Decrease results file output
+ MD
+   VB OFF                        ; Decrease results file output
+
+ ; Put label in new resolution doc file
+ DE
+   [resol_doc]                   ; Resolution doc file    (removed)
+ SD / '      GROUP,    NORM-FREQ,    RESOL.(ANG.)  MASKED-RESOL.  (CUTOFF=50%)' 
+   [resol_doc]                   ; Resolution doc file    (output)
+
+ ; Initialize counters
+ [total-parts] = 0               ; Initialize # of particles
+ [num-grps]    = 0               ; Initialize # of groups
+
+ ; Loop through groups
+ DO                              ; Loop through groups -----------------------------
+
+   UD NEXT [key], [grp]          ; Get group number
+     [sel_group]                 ; Group selection file     (input)
+   IF ([key] <= 0) EXIT
+
+   [num-grps] = [num-grps] + 1   ; Increment # of groups
+
+   ; For first group, check whether input files exist
+   IF ( [num-grps] == 1 ) THEN
+
+      @check-exist([exists1])
+        [aligned_images][grp]      ; Image file  (input)
+      @check-exist([exists2])
+        [group_align][grp]         ; Doc file  (input)
+      @check-exist([exists3])
+        [sel_particles][grp]       ; Image file  (input)
+
+      ; If any file is missing, product of flags will be zero
+      [iqfi-product] = [exists1]*[exists2]*[exists3]
+
+      IF ( [iqfi-product] == 0 ) THEN
+         SYS
+            echo ; echo " Exiting" ; echo
+         EN 
+      ENDIF
+   ENDIF
+
+   ; Get # of particles
+   UD N [grp-parts]
+     [sel_particles][grp]         ; Doc file  (input)
+    
+   ; Increment total particle counter
+   [total-parts] = [total-parts] + [grp-parts]
+
+   SYS
+      publish './spider spi/$DATEXT @bp-main {***[grp]} grp={***[grp]}'
+
+   IF ( [max-wait] > 0 ) THEN
+     ; Wait for compute node copy to local disk to minimize competition
+     IQ SYNC DEL  [wait-time]     ; Check file existance then delete it
+       [wait_file][grp]           ; Flag file  (input)
+       10 [max-wait]              ; Wait time
+     SYS
+        echo " Group: {%I3%[grp]}  Wait time: {%I5%[wait-time]} seconds"
+   ENDIF
+
+   MY FL                          ; Flush results file
+ ENDDO                            ; End group-loop
+
+ ; Wait for PubSub compute node completion
+ [one] = 1
+ [end] = [num-grps]
+ @wait-pub([one],[end])           ; Wait for compute node completion  
+    [finished_file]               ; File created when finished (one/group)
+
+ ; If more than one group, sum and compute resolution
+ IF ( [num-grps] > 1 ) THEN
+   @bp-merge([num-grps])
+
+   SYS
+     echo -n " Back projections merged   "; date '+ TIME: %x  %X' ; echo
+ ENDIF
+
+ ; Create matched filter
+ @make-matched-filt              ; Create filter doc file
+
+ ; Apply matched filter to output volume
+ @matched-filt                   ; Filter to specified resolution
+
+ SYS
+   echo -n " Done   " ; date '+ TIME: %x  %X' ; echo
+
+ EN 
+ ; </pre></body></html>
+
