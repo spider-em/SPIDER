@@ -1,0 +1,227 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 3.2//EN">
+<html>
+<head>
+   <title>Picking Particles from Micrographs</title>
+</head>
+
+<body>
+<h2 align="CENTER">Picking Particles from Micrographs</h2>
+
+<hr>
+
+<p>Picking particles from micrographs can be done in several ways:
+"by hand"; i.e., interactively using 
+<a href="../../web/docs/web.html">Web</a>, or by an automated procedure. At
+this stage, the micrograph is normally presented on the screen in a
+decimated form: for instance, only every second pixel is displayed,
+so that the entire micrograph can be done in one round. The "hand"
+procedure results in center coordinates of the selected particles
+stored in a document file. The automated procedure (which works
+best with globular particles) starts with a low-pass filtered
+version of the micrograph or, what amounts to the same thing, the
+result of cross-correlating the micrograph with a disk that has the
+approximate size of the particle. Peak search then yields, again, a
+list of center coordinates of particle candidates stored in a
+document file.</p>
+
+<p>The document file can be subsequently used to window particle
+candidates from the large, undecimated micrograph file into many
+small files. This is done by using a small SPIDER procedure that has a
+Do-Loop over all particles and selects windows at coordinates that
+are calculated from the stored coordinates, taking into account the
+offset (since top left coos are needed by the windowing operation)
+and the decimation factor.</p>
+
+<p>Sample SPIDER procedure file (for the case of no decimation):</p>
+
+<pre>
+; ----- Parameters -----
+[image-dim] = 64          ; Image dimension
+[part]      = 1           ; First-particle number
+
+; ------ Inputs -------
+FR L
+[micrograph]mic001        ; Micrograph
+FR L
+[coords_doc]doccoords001  ; Coordinates document file
+
+;  ------- Output -------
+FR L
+-
+[win]win{***[part]}       ; Windowed-image template
+
+; -- END BATCH HEADER --
+
+[half-dim] = [image-dim]/2
+
+; Get number of keys
+UD N [num-keys]
+[coords_doc]
+
+; Do-loop running over index = key
+DO LB1 [key] = 1,[num-keys]
+    ; Unsave document, in-core, key, x-coord, y-coord
+    UD IC, [key],[xcoord],[ycoord]
+    [coords_doc]
+
+    ; Compute top left coordinates for window operation (WI)
+    [topleft-x] = [xcoord] - [half-dim]
+    [topleft-y] = [ycoord] - [half-dim]
+
+    ; Window
+    WI
+    [micrograph]             ; INPUT: micrograph
+    [win]                    ; OUTPUT: windowed-image template
+    [image-dim],[image-dim]  ; image dimensions, in x,y
+    [topleft-x],[topleft-y]  ; top-left coordinates
+
+    ; increment particle number
+    [part] = [part] + 1
+LB1
+; End loop
+
+; Close in-core document file
+UD ICE
+[coords_doc]
+
+EN                       ; end of SPIDER procedure file
+</pre>
+
+<br>
+<br>
+ 
+
+<p>Examples for more sophisticated procedures, taking into account
+decimation, checking margins, and applying a density ramp
+corrections, can be found in Techniques - 3d Reconstruction Using
+Projection Matching <a href="./techs/recon/mr.html">Techniques - 3D
+Reconstruction Using Projection Matching</a></p>
+
+<p>The next step is to apply a screening procedure, which again can
+be done interactively or in an automated way. Screening is
+necessary since the decimated raw file does not allow a final
+assessment of the quality. It is definitely needed if the particles
+were picked automatically, since they were only selected by the
+computer on account of their overall features (diameter).</p>
+
+<p>Screening by hand is done by using the "categorize" option of <a
+href="../../web/docs/web.html">Web</a>. This allows a gallery of
+the selected particles to be displayed, and each particle to be
+marked or categorized according to its quality. Most of the time,
+"accept" and "reject" are the only categories used. According to
+this classification, a flag is set in the output document file.</p>
+
+<p>Another way of screening follows the method introduced by Lata
+and coworkers (Ultramicroscopy 58 (1995) 381-391): particles are <a
+href="./autopartpick.html">automatically classified</a> according
+to texture descriptors. This is however not straightforward since
+the parameters of the texture descriptors vary with the data. A
+training procedure has to be followed first, in which, with the
+help of a small particle subset and the "categorize option" in <a
+href="../../web/docs/web.html">Web</a>, the user "trains" the
+program in the use of the categories "noise", "good particle", and
+"junk". On this basis, the texture descriptors are computed, which
+are then used by the program to screen the data. This obviously
+only makes sense if the data set to be screened is large.</p>
+
+<p><a name="LFC"></a></p>
+
+<h3>Local Fast Correlation</h3>
+
+<p>Bimal Rath has developed a SPIDER procedure <a href=
+"./techs/recon/newprogs/pickparticle.spi">pickparticle.bat</a> to
+automatically pick particles from a micrograph (B.K. Rath and J.
+Frank, Journal of Structural Biology, Volume 145, Issues 1-2,
+January 2004, Pages 84-90). The procedure uses local
+cross-correlation function calculated using Fourier methods
+outlined by Alan Roseman (Ultramicroscopy, Vol 94, Issues 3-4,
+(2003), 225-236). The local normalization optimizes the numerical
+scaling of the search image and hence search results are very
+accurate. Since most of the computations are done in Fourier space
+the computation time is of the order of few minutes. Currently, the
+procedure needs a 3D volume of the search image(as input) to
+generate projections at desired Eulerian angles for searching
+different orientations of the search image in the micrograph.
+Different input parameters can be used, to apply desired
+interpolation, to choose types of mask (symmetric or asymmetric),
+to use SPIDER selection doc files (as Eulerian angles input) and to
+use average of a number of projections as template image. The
+procedure can be accessed by typing @pickparticle at the SPIDER
+prompt or inside any SPIDER procedure file. Two sets of input
+parameters follow as examples. Note: For picking ribosomes from
+micrographs one may use a zero degree projection, a symmetric mask
+and an interpolation factor of 2. It works quite well.</p>
+
+<p>SET 1 : Takes a set of projections as template, interpolates
+down to half and uses a symmetric mask.</p>
+
+<pre>
+micro001           ; Micrograph 
+refvol001          ; 3d volume of the particle
+noise              ; A noise image used to normalize the images as per histogram
+particle           ; Windowed particle template
+101                ; Starting particle number for windowed particles
+annotate           ; Document file with particle co-ordinate
+0                  ; Selection file is NOT used
+0                  ; PHI start value
+10                 ; PHI end value
+2                  ; PHI step size
+20                 ; THETA start value
+50                 ; THETA end value
+4                  ; THETA step size
+30                 ; PSI start value
+40                 ; PSI end value
+5                  ; PSI step size
+2                  ; Interpolation factor
+20000              ; No of peaks to be searched (arbitrary; see Notes (I))
+130                ; Peak separation distance (size of the paticle; see Notes (II))
+1                  ; Symmetric mask is used
+
+</pre>
+
+<br>
+<br>
+ 
+
+<p>SET 2 : Takes a selection doc file to create projections as
+template, interpolates down to half and uses an asymmetric
+mask.</p>
+
+<pre>
+micro001           ; Micrograph 
+refvol001          ; 3d volume of the particle
+noise              ; A noise image used to normalize the images as per histogram
+particle           ; Windowed particle template
+101                ; Starting particle number for windowed particles
+annotate           ; Document file with particle co-ordinate
+1                  ; Selection file is used
+0                  ; Each projection is used, average image is NOT used
+2                  ; Interpolation factor
+20000              ; No of peaks to be searched (arbitrary; see Notes (I))
+130                ; Peak separation distance (size of the particle; see Notes (II))
+0                  ; Asymmetric mask is used
+50                 ; Masking threshold pixel value
+seldoc             ; Selection file name
+</pre>
+
+<br>
+<br>
+ 
+
+<pre>
+NOTES: (I)  Decrease this # if too many picked-particles correspond to noise; 
+            Increase this number if the last dozen of picked-particles correspond
+            to correct particles)
+
+       (II) Only one particle will be picked from an area of a square with sides
+            equal to these many pixels (130, in this case) around a 
+            cross-correlation coefficient peak.
+</pre>
+
+<hr>
+<p><small>Source: partpick.html &nbsp;&nbsp;&nbsp; Updated:
+02/08/08 &nbsp;&nbsp;&nbsp; </small></p>
+
+</body>
+</html>
+

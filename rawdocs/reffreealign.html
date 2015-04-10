@@ -1,0 +1,296 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 3.2//EN">
+<html>
+<head>
+   <title>Reference-Free Alignment Operations</title>
+</head>
+
+<body>
+
+<h2 align="center">Reference-Free Alignment Operations</h2> </center>
+
+<center>Introduction</center>
+
+<p>The problem of aligning a set of single-particle projections has
+  a number of possible solutions. Usually it is assumed that a
+  reference image is available, to which each particle is matched
+  using the maximum of the cross-correlation function to determine
+  the translation and rotation parameters. The disadvantage of this
+  approach is that the resulting parameters are biased by the choice
+  of the reference image. As a remedy, the alignment is normally
+  repeated once or twice, using the average obtained in the previous
+  step as new reference. However, this measure fails when the images
+  are extremely noisy or when the input images show particles in more
+  than one view : features of the original reference still tend to
+  dominate the final average. In addition, certain steps in the
+  preparation of a reference image, such as masking and filtration,
+  require choices of parameters that are more or less intuitive. From
+  this brief outline of the problem is is clear that, to obtain a
+  result that does not depend on subjective decisions, the use of a
+  reference image must be entirely eliminated. This is particularly
+  important for images of ice-embedded particles.</p>
+
+<p>In devising a reference-free alignment scheme, it is
+  advantageous to use a concept of alignment as a feature of the
+  entire image set. We say that the set of images is aligned if
+  certain function calculated for the entire set reaches maximum. The
+  value of this function is calculated in the following way: we sum
+  up all the images (taking into account their current position
+  parameters), we square each pixel and finally we add all the values
+  of these squared pixels. In this way we arrive at one number which
+  describes the 'quality' of alignment. It can be shown that such
+  'measure of alignment' is well defined: it agrees with our
+  intuitive notion about the 'best' relative orientation of the
+  series of images. It can be also shown that this definition is
+  equivalent to the following definition: the set of images is
+  aligned if all the possible pairs of images from this set are in
+  the 'best' relative orientation as determined by the maximum of
+  cross-correlation function (CCF). This second definition suggests
+  calculation of CCFs between pairs of 'raw' images, which is not
+  recommended because the usually low signal- to-noise ratio (SNR).
+  The algorithm implemented in the Alignment Operations (AP **)
+  therefore uses the first definition.</p>
+
+<p>More details and test results are given in: "Three- dimensional
+  reconstruction of single particles embedded in ice", P.Penczek et
+  al., Ultramicroscopy 40 (1992) 33-53.</p>
+
+<center><b>The Reference-free Alignment Algorithm</b></center>
+
+<p>The reference-free alignment algorithm consists of two parts: in
+  the first, a "random approximation" of the global average is found
+  and in the second, this average is iteratively refined until
+  convergence is achieved.</p>
+
+<p>The purpose of the first part is to find a good approximation of
+  the global average without using a reference image. At the
+  beginning two images are randomly picked from the whole set and
+  brought into mutual register. These two images are added according
+  to the orientation parameters found, thereby providing the first
+  approximation of the average with improved SNR compared with a
+  single image. Then this average can be used to find the position of
+  the third image (again picked randomly), which again is added to
+  the sum of the two initial images. This procedure continues using
+  in each step an 'improved' average, until all images from the whole
+  set are included.</p>
+
+<p>From this description one can easily see that the result of this
+  procedure is not the 'optimal' one as it depends on the particular
+  random sequence used. To mitigate this bias the whole first part is
+  repeated using another random order of image inclusions, resulting
+  in a new initial average. Then the two averages are brought into
+  register and added, resulting in the initial "randomly" estimated
+  average.</p>
+
+<p>The second part of the algorithm is the iterative refinement of
+  the initial average. In each step one image is removed from the set
+  and the subaverage is created from the remaining images. (It should
+  be noted that the exclusion of images is now done in sequential
+  order.) The removed image is brought into register with the
+  subaverage and a new average is created. This step is repeated for
+  each image in the set. The whole procedure is repeated until a
+  'stable' position of each image is reached. This means that the
+  algorithm is terminated if no single image changes its
+  position.</p>
+
+<p>In summary, the main features of the algorithm described are as
+  follows:</p>
+
+<p>a) a reference image is not used; thus, the problem of its
+  selection and preparation is eliminated, and the result of the
+  alignment no longer depends on the choice of any particular
+  reference image;</p>
+
+<p>b) the assumption of similarity among the input images is not
+  used; thus the algorithm is able to align even images that share
+  only a small number of common features;</p>
+
+<p>c) the algorithm is suboptimal, which means that the scheme
+  proposed does not lead to such positions of images for which the
+  'measure of alignment' used reaches maximum. It also means that by
+  using some more elaborated (and much more time-consuming) scheme,
+  further improvement of alignment can be achieved. In particular,
+  the result depends on the initial estimate of the average. Since
+  the calculation of this estimate is based on the random order of
+  image inclusion, the overall result will differ for different runs
+  of the procedure on the same data set.</p>
+
+<p></p>
+
+<center><b>Implementation and Alignment Strategies</b></center>
+
+<p>There are two implementations of the alignment-free algorithm in
+  SPIDER: the first (operation 
+  <a href="man/apsr.html">'AP SR'</a>) performs both shift and
+  rotational alignment with additional placement of the center of
+  gravity of the particles at the image center and a second one,
+  which separates the shift from the rotational alignment (operations
+  <a href="man/apra.html">'AP SA'</a> and 
+  <a href="man/apra.html">'AP RA'</a>, respectively), giving the user more freedom in the
+  choice of the procedure parameters and allowing either of the
+  alignment procedures to be performed separately.</p>
+
+<p>Combined Alignment (<a href="man/apsr.html">'AP SR'</a>)</p>
+
+<p>Operation <a href="man/apsr.html">'AP SR'</a> 
+  is recommended in most cases - it works faster and
+  doesn't require writing or modifying lengthy procedures. Nor
+  does it have any memory requirements, as it is able to switch
+  automatically between "in-core" and "on-disk" versions. The
+  strategy implemented closely follows the description given in the
+  latter part of this text. The main part of the procedure brings two
+  objects into register. This is achieved by alternating shift and
+  rotational alignment until the relative change of position is
+  smaller than 0.5 pixels (tests show that smaller numbers result in
+  numerical instabilities due to interpolation errors). After
+  alignment of all the objects (which constitutes one iteration step
+  of the procedure) the global average is centered using the
+  approximated location of its center of gravity (see the
+  <a href="man/cgph.html">'CG PH'</a> manual page) and alignment
+  parameters for all the images are modified accordingly. Iterations
+  are repeated until stable alignment is reached (see above). For
+  each iteration the resulting alignment parameters are stored in a
+  document file and the corresponding average is produced.</p>
+
+<p>Strategy for <a href="man/apsr.html">'AP SR'</a></p>
+
+<p>a) All the input images should have positive contrast, i.e.
+  objects should be bright on the dark background.</p>
+
+<p>b) Decide the limits of integration for the rotational search
+  (in terms of inside and outside rings). The outer radius has to
+  correspond to the particle size. To avoid oversampling (and thus
+  the relatively large error of interpolation) an inner radius of 5
+  was found to be sufficient for all practical purposes.</p>
+
+<p>c) Specify expected size of the objects to be aligned. The
+  number given restricts the shift allowed, thus a fragmentation of
+  the objects (due to shift beyond image frame) is avoided.</p>
+
+<p>d) Perform <a href="man/apsr.html">'AP SR'</a> 
+  on the input image series.</p>
+
+<p>e) Use alignment parameters stored in the document file and
+  operation <a href="man/rtsf.html">'RT SF'</a> to create the aligned image series and, optionally,
+  verify resolution achieved using operation RF M. Should the results
+  be unsatisfactorily: (i) modify parameters specified in (b) and (c)
+  and repeat alignment; (ii) increase number of input images to
+  improve SNR and repeat alignment; (iii) use separate alignment
+  operations described in next part and control each step
+  carefully.</p>
+
+<p>Further reading is suggested only for users wishing to apply
+operations implementing separate shift and/or rotational
+alignments.</p>
+
+<p>Separate Alignment Operations 
+  (<a href="man/apra.html">'AP SA'</a> and 
+   <a href="man/apra.html">'AP RA'</a>)</p>
+
+<p>Two operations implement the idea of reference-free alignment
+  separately: first to find the shift alignment 
+  (<a href="man/apra.html">'AP SA'</a>) and a second
+  to find the rotational alignment 
+  (<a href="man/apra.html">'AP RA'</a>).</p>
+
+<p>Both operations were implemented in a way that minimizes the time
+  of calculations. The shift alignment operation reads each image into
+  the memory and calculates its Fourier transform using the
+  mixed-radix FFT (Fast Fourier Transform) algorithm. This makes
+  possible the use of images with almost any size (except for
+  dimensions involving large prime numbers), in particular with the
+  size very close to the actual size of the particles. The limitation
+  of the surrounding background noise achieved in this way improves
+  the SNR of the cross-correlation functions calculated. All
+  following operations (shifts, averaging, calculation of CCF) are
+  performed in Fourier space on the transformed images stored in
+  memory. No padding is done, which means that images are treated as
+  circularly continuous (i.e., the left side of the image borders the
+  right and the top borders the bottom). An additional option allows
+  checking for the 180-degree rotation of images (also readily
+  implemented in Fourier space), which further speeds up the whole
+  alignment process. The output of the operation contains the shift
+  parameters found for each image. An important feature in the design
+  of this opeeration is that it does not enforce any particular position
+  of the final average.</p>
+
+<p>The next step, the rotational alignment, requires all particles
+  to be placed in such a way that their centers coincide with the
+  origin of the coordinate system used for rotation. Since such
+  centers are, for obvious reasons, difficult to define or find for
+  raw data, it is recommended that the average obtained from the
+  shift alignment step be used for the estimation of necessary
+  centering parameters. This average has usually high SNR and can be
+  easily centered using, for example, a low-pass filtered disc as
+  reference or using 
+  <a href="man/cgph.html">'CG PH'</a> to find its approximate center of
+  gravity. The parameters found by the shift alignment operation must
+  be subsequently corrected by this additional shift so that all
+  particles will be moved to the central position.</p>
+
+<p>The rotational alignment operation is used as follows: First, the
+  limits of integration (in terms of inside and outside rings) must
+  be decided. The outer radius must correspond to the particle size.
+  To avoid oversampling (and thus the relatively large error of
+  interpolation) an inner radius of 5 was found to be sufficient for
+  all practical purposes. With these limits set each image is read
+  into the memory and its quadratic interpolation is calculated. This
+  interpolation is used to re-sample the image in polar coordinates,
+  with the number of points in each ring equal to the power-of-two
+  number which is closest to 2*pi*l, where l is the ring radius. Then
+  the Fourier transform of each ring is calculated, and this
+  initialization procedure is repeated for each image. The
+  "reference-free" algorithm described in the previous section is
+  implemented entirely in the Fourier domain using the CCF for the
+  search of the optimum rotation parameter.</p>
+
+<p>Strategy for <a href="man/apra.html">'AP SA'</a> and 
+                <a href="man/apra.html">'AP RA'</a></p>
+
+<p>The recommended strategy of alignment using two separate
+  operations is as follows:</p>
+
+<p>a) Use shift alignment operation 
+(<a href="man/apra.html">'AP SA'</a>) for the whole data set
+  with option "180-degree check" turned on (to speed up the alignment
+  process). In this way the entire input data set will be 'centered',
+  which means that the majority of particles will have the same
+  position with respect to the image center.</p>
+
+<p>b) Center the average obtained from step a) using some kind of
+  neutral rotationally symmetric shape (for example, a disk) as the
+  reference, or using the operation 
+  <a href="man/cgph.html">'CG PH'</a> to find its center of
+  gravity.</p>
+
+<p>c) Calculate the resulting position parameters for each image
+  and create the new, 'centered' data set.</p>
+
+<p>d) Apply rotational alignment 
+  (<a href="man/apra.html">'AP RA'</a>) to the image series
+   calculated in step c).</p>
+
+<p>e) Apply shift alignment 
+  (<a href="man/apra.html">'AP SA'</a>) to the image series calculated
+  in step c) using angles found during step d) and stored in the
+  document file.</p>
+
+<p>f) Calculate the resulting position parameters for each image,
+taking into account shifts and rotations found during steps d) and
+e) using the operation <a href="man/sap.html">'SA P'</a>, and create the new data set. Store the
+alignment parameters found in the document file.</p>
+
+<p>g) Repeat steps d-e-f as many times as needed (usually 3-5),
+each time calculating resulting alignment parameters and storing
+them in the document file. After each step the resolution of the
+data set obtained can be checked, and if there is no substantial
+improvement the procedure can be terminated.</p>
+
+<p>The strategy described is implemented in the Spider procedure
+  included as an example in the 
+  <a href="man/apra.html">'AP SA'</a> and 
+  <a href="man/apra.html">'AP RA'</a> manual
+  chapters.</p>
+
+</body>
+</html>
+
