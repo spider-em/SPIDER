@@ -1,0 +1,176 @@
+; SOURCE: makesel.dat
+;
+; PURPOSE: Makes selection and angle parameter files for single or
+;          double-tilt reconstruction.  
+;
+; NOTES:  Assumes that the input images are consecutively numbered
+;         in a single series starting with image: 1.  I.e. the 
+;         second tilt direction set starts right after the last 
+;         image for the first tilt direction.
+;
+
+
+x20 = 61               ; First series - # of tilt images   
+x22 = -60              ; First series - starting tilt angle   
+x24 = 2                ; First series - tilt angle increment   
+
+x21 = 61               ; Second series - # of tilt images (=0  for single tilt) 
+x23 = -60              ; Second series - starting tilt angle 
+x25 = 2                ; Second series - tilt angle increment
+
+;---- Special selection file -----
+FR G
+[unwanted]0            ; Comma separated list of reject image numbers (or zero)
+
+; ---------------------- Input files ---------------------------------
+
+; ---------------------- Output files ---------------------------------
+
+FR G
+[ang001]ang001         ; First series angle doc file 
+FR G
+[sel001]sel001         ; First series selection  doc file 
+
+FR G
+[ang002]ang002         ; Second series angle doc file 
+FR G
+[sel002]sel002         ; Second series selection  doc file 
+
+FR G
+[ang003]ang003         ; Combined series angle doc file 
+FR G
+[sel003]sel003         ; Combined series selection  doc file 
+
+FR G
+[unwanted_doc]jnk_unwanted  ; Doc file list of reject image numbers 
+
+; ----------------- END BATCH HEADER ------------------------------
+
+FR G
+[tmpdoc]jnk_SEL004        ; Temp  doc file name
+
+DE                        ; Remove existing output file
+[sel001]                  ; Output file
+DE                        ; Remove existing output file
+[ang001]                  ; Output file
+
+x13=0                     ; Zero
+
+; Make list of angles, first series
+DO LB1  x11=1,x20	  ; Loop over all tilt images in first series
+   x12=x22+(x11-1)*x24 	  ; Current tilt angle 
+ 
+   SD x11,x13,x12,x13     ; Save in doc. file
+   [ang001]               ; Doc file              (output)
+LB1
+
+; Make initial select file for single tilt, first series
+DOC CREATE                ; Create doc file
+[sel001]                  ; File name              (output)
+1                         ; Register
+(1-x20)                   ; File numbers in first series
+
+; Reject any unwanted images
+DE                        ; Remove existing reject output file
+[unwanted]                ; Existing reject output file
+
+DOC CREATE                ; Create reject doc file
+[unwanted_doc]            ; Reject image doc file   (output)
+1                         ; Register
+[unwanted]                ; List of reject images 
+
+UD N x11
+[unwanted_doc]            ; Reject image doc file   (input)
+
+IF (x11.GT.0) THEN
+
+   DOC SUB                ; Remove images listed in 'unwanted' doc file 
+   [sel001]               ; Input file
+   [unwanted_doc]         ; Subtracted input file
+   [tmpdoc]               ; Output file
+   1                      ; Subtract by column one
+
+   DE                     ; Remove existing output file
+   [sel001]               ; Output file
+
+   DOC REN                ; renumber keys to be consecutive
+   [tmpdoc]               ; Input file
+   [sel001]               ; Output file
+ENDIF
+
+IF (x21 .LE. 0) THEN
+   EN  ; --------------------- STOP if single tilt --------------
+ENDIF
+
+DE                        ; Remove existing output file
+[sel002]                  ; Output file
+DE                        ; Remove existing output file
+[ang002]                  ; Output file
+DE                        ; Remove existing output file
+[sel003]                  ; Output file
+DE                        ; Remove existing output file
+[ang003]                  ; Output file
+
+
+; Make first part of list of combined angles
+DO LB2 x11=1,x20	  ; Loop over all tilt images in first series
+   x12=x22+(x11-1)*x24 	  ; Current tilt angle 
+ 
+   SD x11,x13,x12,x13     ; Save in combined tilt angles doc. file
+   [ang003]               ; Doc file               (output)
+LB2
+
+; Make list of angles for second series for single & combined tilt
+DO LB3  x11=1,x21	  ; Loop over all tilt images in second series
+   x12=x23+(x11-1)*x25 	  ; Current tilt angle 
+ 
+   x19=x20+x11            ; Key is image number
+
+   ; Make list of angles for second series single tilt 
+   SD x19,x13,x12,x13     ; Save in doc. file
+   [ang002]               ; Doc file               (output)
+
+   ; Make list of angles for combined double tilt
+   SD x19,x13,x12,x13     ; Save in doc. file
+   [ang003]               ; Doc file               (output)
+LB3
+
+; Make select file for single tilt, second series
+x50=x20+1                 ; First image in second series
+x51=x50+x21-1             ; Last image in second series
+
+DOC CREATE                ; Create doc file
+[sel002]                  ; File name              (output)
+1                         ; Register
+(x50-x51)                 ; File numbers in second series
+
+IF (x11.GT.0) THEN
+   DOC SUB                ; Remove images listed in 'unwanted' doc file 
+   [sel002]               ; Input file
+   [unwanted_doc]         ; Subtracted input file
+   [tmpdoc]               ; Merged file
+   1                      ; Subtract by column one
+
+   DE                     ; Remove existing output file
+   [sel002]               ; File
+
+   DOC REN                ; Renumber keys to be consecutive
+   [tmpdoc]               ; Input file
+   [sel002]               ; Renumbered  file         (output)
+ENDIF
+
+DE                        ; Remove existing output file
+[tmpdoc]                  ; Output file
+
+; Make select file for double tilt, combined series
+DOC MERGE                 ; Create doc file
+[sel001]                  ; File name               (input)
+[sel002]                  ; File name               (input)
+[sel003]                  ; Merged combined file    (output)
+-1                        ; Register
+
+;DE                        ; Remove temp output file
+;[unwanted_doc]            ; Output file
+
+EN
+

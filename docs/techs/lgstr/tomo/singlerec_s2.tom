@@ -1,0 +1,96 @@
+; SOURCE: singlerec_s2.tom
+;
+; PURPOSE: Single-tilt 3D reconstruction
+
+[sgo]  =   0   ; Test reconstruction, 1st  Y-axis slice.   0 for Full Recon.
+[send] =   0   ; Test reconstruction, last Y-axis slice.   0 for Full Recon.
+[ht]   = 400   ; Height of total reconstruction, in voxels
+
+[lambda] = 1e-5 ; 1e-4; 1e-3   ; Lambda  (Increase to terminate quicker)
+[lim]    = 0.0    ; Correction Limit
+[iters]  = 1; 20  ; Iteration limit
+[steps]  = 1; 50     ; Internal steps
+[mode]   = 1      ; Use no smoothing & no max or min mode
+[minc]   = 1      ; Minimum  (data dependent)
+[maxc]   = 4000   ; Maximum  (data dependent)
+[smooth] = 0.; .7 ; Smoothing constant
+
+; --------------------- Input files -----------------------------------
+
+FR G
+[aligned]output/rdb_***     ; Aligned image file template   
+
+FR G
+[select]output/sel001       ; Image selection doc file 
+
+FR G
+[angles]output/ang001       ; Tilt angle doc file 
+
+; ---------------------- Output files ---------------------------------
+
+FR G
+[vol]jnk_s2_vol            ; Reconstructed single-tilt output volume 
+           
+; ----------------- END BATCH HEADER ------------------------------ </b>
+
+MD
+SET MP
+0              ; Use all processors
+
+UD 1, [n1]     ; Get first image number
+[select]       ; Selection doc file 
+
+FI [size]      ; Query image size (Must be square!)
+[aligned][n1]  ; Aligned image
+2              ; NROW 
+
+[rad] = INT([size]/2) - 2    ; Reconstruction radius
+
+IF ([sgo] .NE. 0) THEN
+   ; Partial test reconstruction
+   IF ([send] .EQ. 0)  [send] = [size]
+   VM
+   echo " Partial reconstruction, slices: {****[sgo]} ... {****[send]}"
+
+ELSE
+   ; Full single reconstruction
+   [sgo]  = 1
+   [send] = [size]
+   VM
+   echo " Complete reconstruction, slices: {****[sgo]} ... {****[send]}"
+ENDIF
+
+BP S2           ; Iterative back projection
+[aligned]       ; File prefix of aligned images           (input)
+[select]        ; Selection file                          (input)
+[angles]        ; Angles file                             (input)
+[rad],[ht]      ; Image height/2  minus 2), recon. depth
+[sgo],[send]    ; Beginning and ending y-axis slices 
+_1              ; Reconstructed single-tilt volume        (output)
+[lambda],[lim]  ; Lambda, Correction limit
+[iters],[steps] ; Iteration limit, Number of internal steps
+[mode]          ; Smoothing mode
+[minc],[maxc]   ; Minimum, maximum
+[smooth]        ; Smoothing constant 
+
+CP              ; Send out vol
+_1              ; Inline volume                (input)
+[vol]           ; File                         (output)
+
+FS [max],[min]  ; Get volume statistics
+[vol]           ; Inline volume                (input)
+
+VM              ; Echo volume statistics
+echo ' BP S2    Range: {%g13.5%[min]}...{%g13.5%[max]}'
+VM
+echo ' Correct   Range:  -0.71431...   1.1130'
+
+IQ REG
+[min],-0.71431
+IQ REG
+[max],1.1130
+
+VM            
+echo '  '
+
+EN

@@ -1,0 +1,84 @@
+; SOURCE: singlerec.tom
+;
+; PURPOSE: Single-tilt 3D reconstruction
+
+[ht]   = 400   ; Height of total reconstruction, in voxels
+
+[sgo]  = 200   ; Test reconstruction, 1st  Y-axis slice.   0 for Full Recon.
+[sgo]  =   0   ; Test reconstruction, 1st  Y-axis slice.   0 for Full Recon.
+[send] = 210   ; Test reconstruction, last Y-axis slice.   0 for Full Recon.
+
+[freq] = .3 ; 0     ; Cutoff Freq. for 'BP W2' (0.0 is advised = No filtering)
+
+; --------------------- Input files -----------------------------------
+
+FR G
+[aligned]output/rdb_***     ; Aligned image file template   
+
+FR G
+[select]output/sel001       ; Image selection doc file 
+
+FR G
+[angles]output/ang001       ; Tilt angle doc file 
+
+; ---------------------- Output files ---------------------------------
+
+FR G
+[vol]jnk_w2_vol;     ; Reconstructed single-tilt output volume 
+           
+; ----------------- END BATCH HEADER ------------------------------ </b>
+
+MD
+SET MP
+0              ; Use all processors
+MD
+VB OFF
+
+UD 1, [n1]     ; Get first image number
+[select]       ; Selection doc file 
+
+FI [size]      ; Query image size (Must be square!)
+[aligned][n1]  ; Aligned image
+2              ; NROW 
+
+[rad] = INT([size]/2) - 2    ; Reconstruction radius
+
+IF ([sgo] .NE. 0) THEN
+   ; Partial test reconstruction
+   IF ([send] .EQ. 0)  [send] = [size]
+   VM
+   echo " Partial reconstruction, slices: {****[sgo]} ... {****[send]}"
+
+ELSE
+   ; Full single reconstruction
+   [sgo]  = 1
+   [send] = [size]
+   VM
+   echo " Complete reconstruction, slices: {****[sgo]} ... {****[send]}"
+ENDIF
+
+BP W2          ; Weighted back projection
+[aligned]      ; File prefix of aligned images           (input)
+[select]       ; Selection file                          (input)
+[angles]       ; Angles file                             (input)
+[rad],[ht]     ; Image height/2  minus 2), recon. depth
+[sgo],[send]   ; Beginning and ending y-axis slices 
+[freq]         ; Frequency cut-off for Parzen filter
+_1             ; Reconstructed single-tilt volume        (output)
+
+; Send out vol
+CP
+_1             ; Inline volume                (input)
+[vol]          ; File                         (output)
+
+FS [max],[min] ; Get volume statistics
+[vol]          ; Inline volume                (input)
+
+VM             ; Echo volume statistics
+echo ' BP W2    Range: {%g13.5%[min]}...{%g13.5%[max]}'
+VM
+echo ' Usual    Range:   -71.741...   74.041'
+VM            
+echo '  '
+
+EN
