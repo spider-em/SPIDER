@@ -1,0 +1,181 @@
+; Creates list of all particles for each micrograph
+;
+; Adapted from listallparticles.spi
+
+; ------------------- Parameters -------------------
+[first-global]   = 1      ; first global particle number
+[max-particles]  = 0      ; maximum number of particles per micrograph (0 == keep all)
+[labelheader-yn] = 0      ; label image header? (0==no)
+
+; --------------------- Inputs ---------------------
+fr l
+[micrograph_list]../sel_micrograph                  ; micrograph list
+fr l
+[old_mic_part_doc]win/sel_particle_{****[mic-num]}  ; automatically picked selection doc
+;[old_mic_part_doc]good/good{****[mic-num]}          ; hand-picked selection doc
+fr l
+[micrograph_stacks]win/winser_{****[mic-num]}       ; micrograph stacks (used if labelling the image header)
+
+; --------------------- Output ---------------------
+fr l
+[mic2global]coords/mic2global{****[mic-num]}   ; micrograph-slice to global-particle lookup table
+;[mic2global]win/globalmic{****[mic-num]}       ; micrograph-slice to global-particle lookup table
+; KEY:MIC_SLICE /  GLOBAL_PARTICLE_NUM
+fr l
+[good_dir]good                                 ; output directory for selection docs
+fr l
+[new_mic_part_doc]good/ngood{****[mic-num]}    ; filename template for list of particles, for each micrograph
+;       MIC_SLICE    GLOBALPART
+fr l
+[summary_doc]percent_selected                  ; summary doc
+;        MIC_NUM      KEPTPARTS    TOTAL_PARTS   PERCENTKEPT
+
+; ---------------- END BATCH HEADER ----------------
+
+; Temporary files
+fr l
+[temp_old_doc_nodupes]tmpgood_nodupes
+
+de  ; clean up pre-existing file
+[summary_doc]
+SD /       MIC_NUM      KEPTPARTS    TOTAL_PARTS   PERCENTKEPT
+[summary_doc]
+
+; initialize global-particle counter
+[global-number] = [first-global] - 1
+
+; write global# to image header
+if([labelheader-yn].ge.1) then
+    vm
+    echo "Adding global particle number to header" ; echo
+else
+    vm
+    echo "Not adding global particle number to header" ; echo
+endif
+
+vm
+echo "if(! -d [good_dir]) mkdir -p [good_dir]"|csh
+
+; get #micrographs
+ud n,[num-mics]
+[micrograph_list]  ; _sort
+
+; loop through micrographs
+do lb1 [mic-key]=1,[num-mics]
+    ; get micrograph#
+    ud ic [mic-key], [mic-num]
+    [micrograph_list]  ; _sort
+    
+    ; delete pre-existing files
+    de
+    [mic2global]
+    de
+    [new_mic_part_doc]
+
+    ; get #particles including duplicates
+    ud n [tot-parts]
+    [old_mic_part_doc]
+
+    ; remove duplicates
+    at it
+    [old_mic_part_doc]
+    [temp_old_doc_nodupes]
+
+    ; get #particles-kept
+    ud n [num-particles]
+    [temp_old_doc_nodupes]  ; WAS [old_mic_part_doc]
+
+    ; limit #particles/micrograph
+    if([max-particles].gt.0) then
+        if ([num-particles].gt.[max-particles]) then 
+            [num-particles] = [max-particles]
+        endif
+    endif
+
+    ; loop through particles
+    do lb2 [particle-key] = 1,[num-particles]
+        ; read micrograph-rank
+        ud ic [particle-key], [micrograph-rank]
+        [temp_old_doc_nodupes]  ; WAS [old_mic_part_doc]
+
+        ; increment global#
+        [global-number] = [global-number] + 1
+
+        ; write to MIC2GLOBAL
+        sd [micrograph-rank], [global-number]
+        [mic2global]
+        
+        ; write global# to image header
+        if([labelheader-yn].ge.1) then
+            st     ; SeT
+            [micrograph_stacks]@{****[micrograph-rank]}
+            B      ; _B_uffer
+            (42)   ; header location
+            [global-number]
+        endif
+    lb2
+    ; end particle-loop
+
+    ; close docs
+    ud ice
+    [temp_old_doc_nodupes]  ; WAS [old_mic_part_doc]
+    de
+    [temp_old_doc_nodupes]
+    SD /     GLOBAL_PART
+    [mic2global]
+    sd e
+    [mic2global]
+
+    ; re-key MIC2GLOBAL
+    doc key
+    [mic2global]
+    [new_mic_part_doc]
+    SD /      MIC_SLICE    GLOBAL_PART
+    [new_mic_part_doc]
+    sd e
+    [new_mic_part_doc]
+
+    ; count #particles
+    ud n [included-counter]
+    [new_mic_part_doc]
+
+    vm
+    echo "Kept {****[included-counter]} particles from [old_mic_part_doc]"
+
+    [percent-kept] = 100*[included-counter]/[tot-parts]
+    ; maybe should trap for zero someday
+
+    ; write to summary doc
+    sd [mic-key], [mic-num],[included-counter],[tot-parts],[percent-kept]
+    [summary_doc]
+lb1
+; end micrograph loop
+
+; close document
+ud ice
+[micrograph_list]  ; _sort
+
+[dummy] = -1
+SD /          MICROGRAPHS   TOTAL_PARTS
+[summary_doc]
+sd [dummy], [num-mics],[global-number]
+[summary_doc]
+sd e
+[summary_doc]
+
+vm
+echo ; echo "Done -- Kept {******[global-number]} particles from {*****[num-mics]} micrographs"
+
+en d
+
+; Modified 2012-07-19
+;    2012-07-19 (trs) -- creates output directory if needed
+;    2012-05-01 (trs) -- optionally writes global particle number to header position 42
+;    2012-04-05 (trs) -- doesn't use output from pnums.spi anymore
+;    2012-04-05 (trs) -- adapted from listallparticles.spi
+;    2010-09-02 (trs & ay) --  trap for >999 micrographs for 'SD [dummy]' line
+;    2009-10-16 (trs) -- removed option for unstacked images
+;    2008-10-03 (trs) -- added output file mic2global
+;    2008-10-03 (trs) -- assigns global particle number
+;    2007-12-17 (trs) -- optional parameter for maximum number of particles per micrograph
+;    2007-10-10 (trs) -- gets number of micrographs from SEL_MICROGRAPH 

@@ -1,0 +1,107 @@
+; SEPARATES GOOD PARTICLES BY MICROGRAPH
+
+; PARAMETER:
+x56 = 4  ; prints progress message to screen every (x56)th micrograph
+
+; --------------------- Inputs --------------------- 
+fr l
+[good_list_by_view]../Particles/good/sel***    ; good-particle list file pattern, for each reference view
+fr l
+[ref_view_list]projlist                        ; list of reference projections
+fr l
+[neg_list]../filenums                          ; list of micrograph numbers
+fr l
+[tot_particle_list]../Particles/coords/docall  ; file pattern for list of all particles, for each micrograph
+
+; --------------------- Outputs ---------------------- 
+fr l
+[good_dir]../Particles/good       ; directory where output files will go
+fr l
+[combined_good_list]combinedgood  ; combined good-particle list, in GOOD_DIR
+fr l
+[good_ccc_hist]histcccgood        ; CCC histogram of good particles, in GOOD_DIR
+fr l
+[neg_good_list]ngood              ; good-particle list, for each micrograph, in GOOD_DIR
+
+; ----------------- END BATCH HEADER ----------------- 
+
+vm
+echo "Making combined, good-particle list"; date
+
+vm
+echo "if(! -d [good_dir]) mkdir [good_dir]"|csh
+
+; combine "good" selection lists for all reference views
+doc combine
+[good_list_by_view]
+[ref_view_list]
+tmp_combined_good_list
+
+doc sort
+tmp_combined_good_list
+[good_dir]/[combined_good_list]  ; OUTPUT
+1                                ; column to sort (CCC)
+Y                                ; renumber?
+
+; generate histogram of good-particle CCCs
+hd d
+tmp_combined_good_list
+2                           ; column to bin (CCC)
+[good_dir]/[good_ccc_hist]  ; OUTPUT
+
+de
+tmp_combined_good_list
+
+; get number of good particles (x83)
+ud n,x83
+[good_dir]/[combined_good_list]
+
+vm
+echo "Making good-particle list for each micrograph"; date
+
+x63=0  ; initialize particle-counter
+
+; get number of micrographs (x76)
+ud n,x76
+[neg_list]
+
+; loop through micrographs
+do lb7 x70=1,x76
+    ud ic,x70,x71
+    [neg_list]
+    ; x71==current micrograph number
+
+    if (int(x70/x56).eq.x70/x56) then
+        vm
+        echo "Working on micrograph {***x71}, {***x70} out of {***x76}"
+    endif
+
+    ; find union of micrograph-particle list and combined-good list
+    doc and
+    [good_dir]/[combined_good_list]
+    [tot_particle_list]{***x71}
+    [good_dir]/[neg_good_list]{***x71}  ; OUTPUT
+    (1)                                  ; register# to check
+
+    ; get number of good particles (x62)
+    ud n,x62
+    [good_dir]/[neg_good_list]{***x71}
+
+    x63=x63+x62  ; increment good-particle counter
+lb7
+; end micrograph loop
+
+vm
+echo "Total particles in selection docs: {******x83}; total particles sorted by micrograph: {******x63}"
+
+ud ice  ; close document
+[neg_list]
+
+vm
+echo "Done"; date
+
+en d
+
+; Modified 2004-10-20
+;    2004-10-20 (trs) -- Added CCC histogram
+;    2004-07-08 (trs) -- Micrographs are now four digits

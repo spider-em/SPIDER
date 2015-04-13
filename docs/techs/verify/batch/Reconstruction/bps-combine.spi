@@ -1,0 +1,246 @@
+@bps-settings([stk-opt],[rad-fsc],[bp-method],[rad-recon],[cg-error],[cg-chisqr],[cg-iter],[cg-mode],[cg-lambda],[rp-lambda],[rp-cor],[rp-iter],[max-wait],[snr])
+
+;fr l
+;[temp_var]_3  ; variance map (not saved)
+;fr l
+;[temp_merged_odd]_31
+;fr l
+;[temp_merged_even]_32
+fr l
+[mask_unscaled]_11
+fr l
+[gaussian_mask]_12
+
+
+; get CTF parameters
+
+UD IC 5,[pxsz]  ; WAS x41                 ; Pixel size
+[params]
+UD IC 6,[kv]                ; KV
+[params]
+UD IC 7,[cs]                ; Cs
+[params]
+UD IC 8,[ss]                ; Source size
+[params]
+UD IC 9,[defspr]            ; Defocus spread
+[params]
+UD IC 12,[acr]              ; Amplitude contrast ratio
+[params]
+UD IC 13,[genv]             ; Gaussian envelope
+[params]
+UD IC 17,[idim]             ; Window size
+[params]
+
+[lambda] = 12.398 / SQR([kv] * (1022.0 + [kv]))  ; Lambda
+[maxspf] = 1.0 / (2.0 * [pxsz])                  ; Max. spatial. freq.
+
+
+; GET TOTAL NUMBER OF PARTICLES
+
+[particle-counter] = 0
+
+; get #defocus-groups
+UD N,[num-grps]
+[group_list]  ; WAS [defgrps]
+
+; loop through defocus-groups
+DO LB1 [grp-key1] = 1,[num-grps]
+    ; Get current group number
+    UD IC [grp-key1], [grp]
+    [group_list]  ; WAS [defgrps]             ; Group selection file            (input)
+    
+    ; get #particles
+    UD N [numparts]
+    [seltotal]
+
+    [particle-counter] = [particle-counter] + [numparts]
+LB1
+; end group-loop
+
+UD ICE
+[group_list]  ; WAS [defgrps]
+
+
+; CREATE WEIGHTED AND UNWEIGHTED CTFs
+
+vm
+echo "Creating CTF files"; date; echo
+
+vm
+echo "if(! -d [ctf_dir]) mkdir [ctf_dir]"|csh
+
+; loop through defocus-groups
+DO LB5 [grp-key5] = 1,[num-grps]
+    ; Get current group number, defocus
+    UD IC [grp-key5], [grp],[numparts-defgrps],[def]
+    [group_list]  ; WAS [defgrps]             ; Group selection file            (input)
+
+    ; get #particles
+    UD N [numparts]
+    [seltotal]
+    ; (Don't trust #particles from [group_list])
+    
+    ; calculate CTF
+    TF C3                 ; Create a model CTF (3D, complex)
+    [ctf]{***[grp]}       ; Output file                     (output)
+    [cs]                  ; Cs
+    [def],[lambda]        ; Defocus, lambda
+    [idim]                ; Dimension of volume
+    [maxspf]              ; Max. spatial freq.
+    [ss],[defspr]         ; Source size, defocus spread
+    (0,0)                 ; Astigmatism, azimuth
+    [acr],[genv]          ; Amplitude contrast ratio, Gaussian halfwidth
+    (-1)                  ; Sign
+
+    [wt] = [numparts]*[num-grps]/[particle-counter]
+
+    ; weight CTFs
+    ar
+    [ctf]{***[grp]}
+    [weighted_ctf]{***[grp]}
+    p1*[wt]
+lb5
+; end group-loop
+
+UD ICE
+[group_list]  ; WAS [defgrps]
+
+
+; MERGE DEFOCUS GROUPS
+
+; The 'TF CTS' command works on all defocus groups at once
+TF CTS              ; CTF correction
+[group_dir_template]/[vol_odd]
+[group_list]        ; Group selection file          (input)
+[weighted_ctf]***   ; Template for ctf file         (input)
+[snr]               ; SNR
+[vol_odd]           ; Combined odd volume           (output)
+
+TF CTS
+[group_dir_template]/[vol_even]
+[group_list]        ; Group selection file          (input)
+[weighted_ctf]***   ; Template for ctf file         (input)
+[snr]               ; SNR
+[vol_even]          ; Combined even volume          (output)
+
+TF CTS
+[group_dir_template]/[unfiltered_volume]
+[group_list]          ; Group selection file          (input)
+[weighted_ctf]***     ; Template for ctf file         (input)
+[snr]                 ; SNR
+[unfiltered_volume]   ; Combined volume               (output)
+
+
+;vm
+;echo "Summing volumes"
+;
+;; get #groups
+;UD N,[num-grps]
+;[group_list]
+;
+;; add odd volumes
+;as r
+;[group_dir_template]/[vol_odd]
+;[group_list]
+;A  ; _A_ll
+;[vol_odd]
+;[temp_var]  ; variance (not saved)
+;
+;; add combined volumes
+;as r
+;[group_dir_template]/[vol_even]
+;[group_list]
+;A  ; _A_ll
+;[vol_even]
+;[temp_var]  ; variance (not saved)
+;
+;; add combined volumes
+;as r
+;[group_dir_template]/[unfiltered_volume]
+;[group_list]
+;A  ; _A_ll
+;[unfiltered_volume]
+;[temp_var]  ; variance (not saved)
+;
+;
+; MAKE GAUSSIAN MASK FOR FSC
+
+[center] = [idim]/2 + 1                          ; Center coordinate
+
+; calculate reconstruction radius if necessary
+IF ([rad-recon].eq.-1) THEN
+    [rad-recon] = INT( (0.95*[idim])/2.0 )
+ENDIF
+
+; calculate mask radius, if necessary
+if([rad-fsc].le.0) then
+    ; get diameter from PARAMS
+    ud ic 18,[part-diam]
+    [params]
+
+    [radius] = [part-diam]/2
+endif
+
+; create Gaussian
+mo 3
+[mask_unscaled]             ; OUTPUT
+[idim],[idim],[idim]        ; dimensions
+G                           ; _G_aussian
+[center],[center],[center]  ; center coordinates
+[radius],[radius],[radius]  ; Gaussian falloff
+
+; get statistics
+fs [max]
+[mask_unscaled]
+
+; lift maximum to 1
+ar
+[mask_unscaled]
+[gaussian_mask]
+p1/[max]
+
+; clean up
+de
+[mask_unscaled]
+ud ice
+[params]
+
+
+; CALCULATE UNMASKED AND MASKED RESOLUTION CURVES
+
+; unmasked
+@bps-calcres([unmasked-freq])  ; output parameter: unmasked-freq
+[vol_odd]   ; INPUT: first volume
+[vol_even]  ; INPUT: second volume
+*           ; INPUT: (optional) mask
+[doc_cmp]   ; OUTPUT: unmasked FSC doc
+
+[unmasked-res] = [pxsz]/[unmasked-freq]
+
+; masked
+@bps-calcres([masked-freq])  ; output parameter: masked-freq
+[vol_odd]         ; INPUT: first volume
+[vol_even]        ; INPUT: second volume
+[gaussian_mask]   ; INPUT: (optional) mask
+[masked_fsc_doc]  ; OUTPUT: unmasked FSC doc
+
+[masked-res]   = [pxsz]/[masked-freq]
+[dummy]        = [num-grps] + 1
+[grp]          = 0
+
+vm
+echo "Summed reconstruction, Masked resolution: {%f6.2%[masked-res]} Angstroms"
+
+sd [dummy], [grp],[unmasked-res],[masked-res]  ; ,[numparts]
+[summary_doc]
+;SD /           MASKEDRES    UNMASKEDRES
+SD /      GROUP_NUM    UNMASKEDRES    MASKEDRES
+[summary_doc]
+sd e
+[summary_doc]
+
+RE
+
+; Modified 2012-05-17
+;    2012-05-15 (trs) -- combined with mergectf.spi
+;    2012-05-14 (trs) -- reformatted summary doc to comply with plotres.spi

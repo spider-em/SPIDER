@@ -1,0 +1,587 @@
+; CLASSIFY PARTICLES ASSIGNED TO EACH REFERENCE VIEW
+
+; ----------------- Parameters -----------------
+[reduce-factor]   = 2    ; reduction factor applied to input particles
+[first-view]      = 1    ; first reference-view
+[last-view]       = -1   ; last reference-view (<1==all)
+[ca-pca]          = 1    ; correspondence analysis (1), PCA (2), IPCA (3)
+[parts-per-class] = 75   ; particle-to-class ratio
+[min-2classes]    = 40   ; minimum number of particles for 2 classes
+[num-factors]     = 9    ; number of eigenvalues to use
+[save-eigenimg]   = 0    ; flag to save eigenimages (1==save) (reconstituted images commented out) 
+[label-dim]       = 115  ; window size (temporary) for labeling
+;                        ; (Class number and size unlikely to fit in label after size-reduction.)
+;                        ; Suggestions: 115 for 3-digit class# + 3-digit class-size, 128 for 3+4 or 4+3
+[user-constant]   = 0    ; additive constant for correspondence analysis (0==automatic)
+;                        ; (CorAn only works on non-negative pixel values.)
+;                        ; if unsure, check the range of a few particles or the noise-reference for positivity
+[save-variance]   = 0    ; flag to save variance (1==save)
+
+; ------------------- Inputs -------------------
+fr l
+[parameter_doc]../params                           ; parameter document
+fr l
+[ref_view_list]../Alignment/projlist               ; list of projection views
+fr l
+[df_group_list]../Power_Spectra/order_defgrps      ; (if using defocus groups) defocus-group list
+fr g
+[ref_proj]../Alignment/projs/prj_{***[last-grp]}@  ; reference-projection prefix
+fr g
+[view_dir]select/prj{***[view-num]}                ; I/O subdirectory pattern, for each reference-view
+fr g
+[view_select_doc]select/sel{***[view-num]}         ; selection doc filename prefix 
+;      VIEW_SLICE   GLOBPARTICLE    GRP_SLICE       CCROT      MIRROR_FLAG    GROUP_NUM      VIEWNUM
+fr g
+[particle_imgs][view_dir]/stkfilt@******           ; particle template
+
+; ------------------- Outputs -------------------
+fr g
+[class_doc][view_dir]/docclass                  ; prefix for list of particles for each class
+;       VIEWSLICE    GLOBAL_PART    CC_COEFF        CCROT      MIRROR_FLAG     GRP_NUM      GRP_SLICE
+fr g
+[class_stats_doc][view_dir]/listclasses         ; contains CCC for each class-average
+fr g
+[class_avg][view_dir]/classavg{***[class-num]}  ; class-average file pattern
+;[class_avg]select/classavg{***[view-num]}       ; class-average (one class per view)
+fr g
+[class_var][view_dir]/classvar***               ; variance for each class (optional, see X76)
+fr g
+[cas_prefix][view_dir]/verify                   ; CA S output prefix
+fr l
+[eigenvalue_doc][view_dir]/listeigenvalues      ; list of eigenvalues
+fr l
+[eigen_img][view_dir]/eigenimg***               ; eigenimage template
+;fr l
+;[reconstituted_img][view_dir]/reconstituted***  ; reconstituted image template
+;; lines for reconstituted images commented out
+fr l
+[summary_doc]summary-classify                   ; summary doc file
+
+; -------------- END BATCH HEADER --------------
+
+; Temporary filenames
+fr g
+[temp_class_map][view_dir]/tmpclassmap  ; temporary list of each particle with assigned class
+fr l
+[temp_mask]_6                           ; mask
+fr l
+[temp_ref_proj]_5                       ; reduced reference-projection
+fr l
+[temp_rec_pos]_91                       ; positive reconstituted image
+fr l
+[temp_rec_neg]_93                       ; negative reconstituted image
+fr l
+[temp_class_avg]_4                      ; class average
+fr l
+[temp_class_var]_7                      ; class variance
+fr l
+[temp_exp_avg]_2                        ; expanded average (to dimension LABEL-DIM)
+fr l
+[temp_labeled_avg]_3                    ; expanded, labeled average
+
+; check if defocus-group list exists
+iq fi [dfgrps-exist]
+[df_group_list]
+
+; if using defocus groups, then
+if([dfgrps-exist].eq.1) then
+    ; get #defocus-groups
+    ud n, [num-grps]
+    [df_group_list]
+
+    ; get last defocus-group#
+    ud [num-grps], [last-grp]
+    [df_group_list]
+else
+    [last-grp] = 1
+endif
+
+vm
+echo "Using projections from [ref_proj] for CCC" ; echo
+
+; get image dimension
+ud 17, [img-dim]
+[parameter_doc]
+ud e  ; close doc
+
+[img-dim]=[img-dim]/[reduce-factor]  ; reduced image dimension
+
+; calculate mask radius
+[mask-radius] = int([img-dim]/2)
+
+; make circular mask
+mo  
+[temp_mask]
+[img-dim],[img-dim]
+C                    ; _C_ircle
+[mask-radius]
+
+if([last-view].lt.1) then
+    ; get number of views
+    ud n,[last-view]
+    [ref_view_list]
+endif
+
+; initialize particle-counter
+[total-particles] = 0
+
+; label summary file
+SD /       VIEWNUM      NUM_PARTS   MAX_CLASSSIZE  NUM_CLASSES  DAVIESBOULDIN
+[summary_doc]
+
+vm
+echo "Beginning classification"; date
+
+md
+set mp
+0
+
+md
+vb off
+
+if([save-eigenimg].eq.1) then
+    vm
+    echo ; echo "Will generate eigenimages" ; echo
+endif
+
+; loop through reference views
+do lb1 [view-key] = [first-view],[last-view]
+    ; get reference-view#
+    ud ic [view-key], [view-num]
+    [ref_view_list]
+
+    ; get number of particles in current reference view
+    ud n [view-parts]
+    [view_select_doc]
+
+    ; initialize registers
+    [max-class-size] = 0  ; maximum class size
+    [min-img]        = 0  ; image with minimum pixel value
+
+    ; skip unpopulated views
+    if([view-parts].eq.0) then
+        [num-classes]    = 0
+        [max-class-size] = 0
+        goto lb19
+    endif
+
+    ; clean up
+    de a
+    [class_doc]001
+    [class-num] = 1
+    de a
+    [class_avg]
+    de a
+    [class_var][class-num]
+    de
+    [eigenvalue_doc]
+
+    ; shrink reference-projection
+    dc s
+    [ref_proj]{****[view-num]}  ; INPUT: normalized reference-projection
+    [temp_ref_proj]             ; OUTPUT: reduced reference-projection
+    [reduce-factor],[reduce-factor]
+
+    ; determine number of classes to use
+    [num-classes] = int(([view-parts]/[parts-per-class]) + 0.5)
+
+    ; trap for tiny classes
+    if([num-classes].lt.2) then
+        if([view-parts].ge.[min-2classes]) then 
+            ; force two classes if greater than specified threshold
+            [num-classes] = 2
+        else
+            [num-classes] = 1  ; minimum number of classes will be 1
+            [class-num]   = 1  ; dummy variable: class#
+
+            ; sort particles by cross-correlation coefficient
+            doc ren  ; WAS doc key
+            [view_select_doc]          ; INPUT: selection doc (unsorted)
+            [class_doc]{***[class-num]}_unsort  ; OUTPUT: class doc, sorted by CCC
+
+            vm
+            echo "Reference view: #{***[view-num]}, number of classes: {***[num-classes]}"
+
+            [class-parts] = [view-parts]
+
+            goto lb3  ; skip past correspondence analysis + classification
+        endif
+    endif
+
+    ; if CA selected:
+    if([ca-pca].eq.1) then
+        ; CHECK FOR SMALL PIXEL INTENSITIES
+
+        ; initialize minimum
+        [overall-min] = 999999
+
+        ; loop through particles
+        do lb5 [part-key5] = 1,[view-parts]
+        ; get particle number
+            ud ic [part-key5],[view-slice]
+            [view_select_doc]
+
+            ; get image min
+            fs
+            [particle_imgs][view-slice]
+            fi [img-min]
+            [particle_imgs][view-slice]
+            (8)  ; header location for minimum intensity
+
+            ; update if necessary
+            if([img-min].lt.[overall-min]) then
+                [overall-min] = [img-min]
+                [min-img]     = [view-slice]
+            endif
+        lb5
+        ; end particle-loop
+
+        ud ice  ; close document
+        [view_select_doc]
+
+        ; if additive constant set to automatic, set it
+        if ([overall-min].lt.0.05) then
+            if([user-constant].eq.0) [add-constant] = 0.05-[overall-min]
+        else
+            [add-constant] = [user-constant]
+        endif
+
+        vm m
+        echo "Reference view: #{***[view-num]}, minimum intensity: {%f11.4%[overall-min]} (image key #{******[min-img]}), 
+ additive constant: {%f11.4%[add-constant]}"
+.
+    endif
+
+
+    ; RUN MULTIVARIATE STATISICAL ANALYSIS
+
+    vm
+    echo "Reference view: #{***[view-num]}, number of classes: {***[num-classes]}"
+
+    if([ca-pca].eq.1) then
+        ; run correspondence analysis
+        ca s
+        [particle_imgs]
+        [view_select_doc] 
+        [temp_mask]    ; mask
+        [num-factors]  ; number of eigenvalues
+        C              ; _C_orrespondence analysis
+        [add-constant]
+        [cas_prefix]   ; output file prefix
+    endif
+
+    if([ca-pca].eq.2) then
+        ; run iterative principle component analysis
+        ca s
+        [particle_imgs]
+        [view_select_doc] 
+        [temp_mask]    ; mask
+        [num-factors]  ; number of eigenvalues
+        P              ; _Principle component analysis
+        [cas_prefix]   ; output file prefix
+    endif
+
+    if([ca-pca].eq.3) then
+        ; run principle component analysis
+        ca s
+        [particle_imgs]
+        [view_select_doc] 
+        [temp_mask]    ; mask
+        [num-factors]  ; number of eigenvalues
+        I              ; _I_terative PCA
+        [cas_prefix]   ; output file prefix
+    endif
+
+    ; run k-means classification
+    cl km [km-bet],[km-win],[km-coleman],[km-harabasz],[km-db]
+    [cas_prefix]_IMC
+    [num-classes]         ; number of classes
+    (1-[num-factors])     ; factors to use
+    (0)                   ; no factor weighting
+    (0)                   ; no random seed
+    [class_doc]***_noccc  ; OUTPUT (temp): class-list doc
+    [temp_class_map]
+
+    ; if eigenimage-flag is 1, then save
+    if([save-eigenimg].ge.1) then
+        ; GENERATE EIGENIMAGES (OPTIONALLY)
+
+;        ; calculate dimensions for reconstituted images
+;        [double-idim] = [img-dim]*2  ; double image-dimension
+;        [idim-plus1]  = [img-dim]+1  ; image-dimension + 1
+
+        ; loop through eigenvalues
+        do [factor-num] = 1,[num-factors]
+            ; if (I)PCA, extra question asked when generating eigenimages
+            if([ca-pca].ne.1) then
+                ca sre
+                [cas_prefix]
+                N                        ; subtract average?
+                [factor-num]
+                [eigen_img][factor-num]  ; OUTPUT
+            else  ; correspondence analysis
+                ca sre
+                [cas_prefix]
+                [factor-num]
+                [eigen_img][factor-num]  ; OUTPUT
+            endif
+
+;            ; generate positive reconstituted image
+;            ca sra
+;            [cas_prefix]
+;            [factor-num]
+;            (0.2)  ; eigenvalue
+;            [temp_rec_pos]    ; OUTPUT
+;
+;            ; pad image to twice the height
+;            pd
+;            [temp_rec_pos]     ; INPUT: positive reconstituted image
+;            [reconstituted_img][factor-num]
+;            [img-dim],[double-idim]
+;            B                  ; set background to _B_order
+;            (1,1)              ; top-left coordinates
+;
+;            ; generate negative reconstituted image
+;            ca sra
+;            [cas_prefix]
+;            [factor-num]
+;            (-0.2)          ; eigenvalue
+;            [temp_rec_neg]  ; OUTPUT
+;
+;            ; insert negative reconstituted image into larger image
+;            in
+;            [temp_rec_neg]                   ; INPUT: negative reconstituted image
+;            [reconstituted_img][factor-num]  ; INPUT (overwritten)
+;            (1,[idim-plus1])                 ; x-,y-coords
+
+            sd [factor-num], [factor-num],[factor-num]
+            [eigenvalue_doc]
+        enddo
+        ; end eigenvalue-loop
+
+        sd e
+        [eigenvalue_doc]
+    endif
+
+
+    ; GENERATE CLASS AVERAGES
+
+    ; loop through classes
+    do lb2 [class-num] = 1,[num-classes]
+        ; ADD PARTICLE#, CCC, ETC. TO CLASS DOC
+
+        ; add info from selection doc
+        doc and
+        [view_select_doc]
+        [class_doc]{***[class-num]}_noccc
+        [class_doc]{***[class-num]}_unsort
+        (1)  ; column# to intersect: view-slice#
+
+        lb3  ; skip to here if only one class
+
+        ; sort individual particles by CCC
+        doc sort
+        [class_doc]{***[class-num]}_unsort  ; INPUT (temp): w/CCC, unsorted
+        [class_doc]{***[class-num]}_noccc   ; OUTPUT: class doc, sorted by CCROT
+        (4)                                 ; column# to sort: CCROT
+        Y                                   ; renumber?
+
+        ; get #particles in class
+        ud n [class-parts]
+        [class_doc]{***[class-num]}_noccc
+
+        ; if size greater than maximum, then update
+        if([class-parts].gt.[max-class-size]) [max-class-size] = [class-parts]
+
+        [ccc-sum] = 0  ; initialize cumulative CCC-sum
+
+        ; loop through particles
+        do lb6 [part-key6] = 1,[class-parts]
+            ; read view-slice#, other parameters, from selection file
+            ud ic [part-key6], [view-slice],[global-part],[grp-slice],[ccrot],[mirror],[group-num],[view-num]
+            [class_doc]{***[class-num]}_noccc
+
+            ; calculate CCC
+            cc c [ccc]
+            [temp_ref_proj]              ; INPUT: reduced reference-projection
+            [particle_imgs][view-slice]  ; INPUT: particle
+            [temp_mask]                  ; INPUT: reduced mask
+
+            [ccc-sum] = [ccc-sum] + [ccc]
+
+            ; write to doc
+            sd [part-key6], [view-slice],[global-part],[ccc],[ccrot],[mirror],[group-num],[grp-slice]
+            [class_doc]{***[class-num]}
+        lb6
+
+        ; clean up
+        ud ice
+        [class_doc]{***[class-num]}_noccc
+        sd e
+        [class_doc]{***[class-num]}
+
+        SD /     VIEWSLICE    GLOBAL_PART    CC_COEFF        CCROT      MIRROR_FLAG     GRP_NUM      GRP_SLICE
+        [class_doc]{***[class-num]}
+        sd e
+        [class_doc]{***[class-num]}
+
+        ; calculate unlabeled average
+        as r
+        [particle_imgs]
+        [class_doc]{***[class-num]}  ; INPUT: class-list doc
+        A                            ; _A_ll images
+        [temp_class_avg]             ; OUTPUT: class average
+        [temp_class_var]             ; OUTPUT: class variance
+
+
+        ; LABEL AVERAGES
+
+        ; expand to fit text label, if necessary
+        ip
+        [temp_class_avg]  ; INPUT: class-average
+        [temp_exp_avg]    ; OUTPUT: expanded class-average
+        [label-dim],[label-dim]
+
+        ; get class size
+        ud n [class-size]
+        [class_doc]{***[class-num]}
+
+        [total-particles] = [total-particles] + [class-size]
+
+        ; label with class number & size
+        la b
+        [temp_exp_avg]      ; INPUT: expanded class-average
+        [temp_labeled_avg]  ; OUTPUT: expanded, labeled class-average
+        {***[class-num]},n={***[class-size]}
+
+        [label-ydim]=([label-dim]+36)*[img-dim]/[label-dim]
+        ; (label is 36 pixels tall)
+
+        ; shrink back down
+        ip
+        [temp_labeled_avg]  ; INPUT: expanded, labeled class-average
+        [class_avg]
+        [img-dim],[label-ydim]
+
+        ; delete variance if not needed
+        if([save-variance].eq.1) then
+            cp
+            [temp_class_var]
+            [class_var][class-num]
+        endif
+
+        ; calculate avg CCC
+        [ccc-avg] = [ccc-sum]/[class-parts]
+
+        ; get standard deviation of the variance
+        fs m [var-max],[var-min],[var-avg],[var-sd]
+        [temp_class_var]
+        [temp_mask]  ; INPUT: reduced mask
+
+        ; trap for variance of a single image
+        if([class-size].eq.1)[var-sd]=999
+        ; otherwise, the variance of a single image would be NaN
+
+        ; write CCC and variance-SD to doc file
+        sd [class-num], [class-num],[ccc-avg],[var-sd]
+        [class_stats_doc]unsort
+
+        ; clean up intermediate doc files
+        de
+        [class_doc]{***[class-num]}_noccc
+        de
+        [class_doc]{***[class-num]}_unsort
+    lb2
+    ; end class-loop
+
+    vm
+    echo "Reference view: #{***[view-num]}, maximum class size: {***[max-class-size]}" ; echo
+
+    ; close document
+    sd e
+    [class_stats_doc]unsort
+
+    ; sort by CCC
+    doc sort
+    [class_stats_doc]unsort
+    [class_stats_doc]
+    (2)  ; column for CCC
+    Y    ; renumber?
+
+    SD /      CLASSNUM       CCC        VARIANCE_SD
+    [class_stats_doc]
+    sd e
+    [class_stats_doc]
+    de
+    [class_stats_doc]unsort
+
+    ; remove class-map
+    vm
+    rm -f [temp_class_map].$DATEXT
+    ; class-map doc contains each particle with its assigned class
+
+    vm m
+    rm -f [cas_prefix]_SEQ.$DATEXT ;
+    rm -f [cas_prefix]_SET.$DATEXT ;
+    rm -f [cas_prefix]_PIX.$DATEXT ;
+    rm -f [cas_prefix]_MAS.$DATEXT ;
+.
+    lb19  ; skip to here if view unpopulated
+
+    sd [view-key], [view-num],[view-parts],[max-class-size],[num-classes],[km-db]
+    [summary_doc]
+lb1
+; end reference-view loop
+
+SD / TOTAL_PARTS
+[summary_doc]
+[dummy] = -[last-view]
+sd [dummy], [total-particles]
+[summary_doc]
+
+; close docs
+ud ice
+[ref_view_list]
+sd e
+[summary_doc]
+
+vm
+echo "Done -- classified {******[total-particles]} particles"; date; echo 
+
+en d
+
+; Modified 2012-03-09
+;   TO DO: write unsorted class doc in core
+;   2012-03-01 (trs) -- added #classes and Davies-Bouldin# to summary doc
+;   2012-02-29 (trs) -- K-means uses same factors as CA/PCA (had been hard-wired to 9)
+;   2009-07-13 (trs) -- added summary-file output
+;   2009-07-03 (trs) -- prints maximum class size to screen
+;   2009-06-22 (trs) -- extra question added by CA SRE when using (I)PCA
+;   2009-06-09 (trs) -- can operate on non-consecutive views from list
+;   2009-05-27 (trs) -- keeping _EIG file from CA S
+;   2009-05-26 (trs) -- option to save eigenimages and reconstituted images, adapted from ca-pca.spi
+;   2009-05-26 (trs) -- number of eigenvalues now user-defined
+;   2009-05-22 (trs) -- uses selection doc in CA S instead of first N particles
+;   2008-11-12 (trs) -- now a parameter to specify CA, PCA, or IPCA
+;   2007-11-27 (trs) -- calculates averaged CCC instead of CCC of class-average
+;   2007-11-27 (trs) -- can force poorly-populated views into two classes
+;   2007-10-11 (trs) -- last reference-view now an input parameter
+;   2007-10-01 (trs) -- defocus-group list now optional
+;   2007-09-06 (trs) -- input particles are now in stacks
+;   2007-09-06 (trs) -- uses iterative PCA instead of CorAn
+;   2006-08-29 (trs) -- gets last defocus-group number automatically
+;   2006-07-27 (trs) -- bug fix in reference-projection file-pattern
+;   2006-04-05 (trs) -- uses last defocus group projections for CCC
+;   2006-02-06 (trs & pp) -- updated for changes in projection-matching
+;   2005-03-27 (trs) -- no longer needs how_many file
+;   2005-01-27 (trs & gra) -- deals with variances of single-image classes
+;   2005-01-24 (trs & js) -- bug fix in loop that checks for low intensities
+;   2004-12-22 (trs) -- checks for images with low intensities
+;   2004-12-22 (trs & jl) -- prints standard deviation of the class-variance to stats document
+;   2004-12-22 (trs) -- first reference-view is a parameter, in case you need to resume
+;   2004-05-11 (trs) -- handles poorly-populated classes differently
+;   2004-05-04 (trs) -- adds option to save/delete variance
+;   2004-04-22 (trs) -- sorts individual images by CCC (worst to best)
+;   2004-04-16 (trs) -- uses CorAn instead of PCA
+;   2004-04-14 (trs) -- deletes unused 'CA S' output (all except _IMC)
+

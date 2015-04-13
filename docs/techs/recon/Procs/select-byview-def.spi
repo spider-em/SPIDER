@@ -1,0 +1,139 @@
+ ; <html><head><title>Create selection files with number of particles for each projection</head></title><body><pre>
+ ;
+ ; PURPOSE: Create selection files with number of particles for each reference projection
+ ;
+ ; SOURCE: /spider/docs/techs/recon/newprogs/select-byview-def.spi 
+ ;                         Merged with combine.spi       Nov 2006 ArDean Leith
+ ;                         Reformatted output            Jan 2010 ArDean Leith
+ ; <html><head><title>Make selection doc files reference views</title></head><body><pre>
+ ;
+ ; USAGE:    clean ; ./spider spi/dat @select-byview-def
+ ;
+ ; ---------------- Parameters ----------------
+ 
+ [docombine] = 1             ; If >0 combine alignment parameters also 
+
+ [ccthresh]  = 0.0           ; CCC threshold. Use 0 to include all particles.
+                             ;   Describes relative similiarity of
+                             ;   the particle to the reference projection. 
+
+ ; --------------------- Input files ----------------------------------
+
+ [sel_grp]     = '../Alignment/sel_group'           ; Defocus group selection doc file          (one)
+
+ [align_doc]   = '../Alignment/output/align_01_***' ; Alignment parameter doc files             (one/group) 
+                            
+ [ref_angles]  = '../Alignment/refangles'           ; Reference view angles                     (one)
+ 
+ ; --------------------- Output files -------------------------------
+
+
+ [dfdir]       = 'df{***[grp]}'                     ; New group directories.                    (one/group)
+
+ [num_byv]     = '[dfdir]/num_part_byv'             ; Doc file listing # particles in each view (one/group/view)
+
+ [select]      = '[dfdir]/sel_part_byv_***'         ; Particle selection doc file for each view (one/group/view)
+
+ [num_byv_all] = 'num_part_byv_all'                 ; Doc file listing total # particles / view (one)
+
+ [align_comb]  = 'align_01_all'                     ; Combined (merged) alignment file          (one, large)
+
+ ; -------------- END BATCH HEADER ---------------------------------</b>
+
+ UD N [numgrps]            ; Get number of defocus groups 
+   [sel_grp]               ; Groups selection file                  (input)
+
+ UD N [num-views]
+   [ref_angles]            ; Reference view angles (input)
+ SYS
+   echo " Separating particles for: {%I0%[num-views]} reference views" ; echo
+
+
+ DO [numgrp]=1,[numgrps]   ; Loop over all group(s) ----------------
+
+   UD [numgrp],[grp]       ; Get current group number 
+     [sel_grp]             ; Group selection file                   (input)
+
+   !SYS
+   !  echo  ' Creating : [num_byv] and corresponding particle selection file'
+
+   SYS                     ; Make sure output dir. present
+     mkdir -p [dfdir]
+
+   SYS                     ; Remove any existing group output files.
+     \rm -f [select]
+
+   DE                      ; Remove any existing group output files.
+     [num_byv]
+
+   VO MQ                   ; Create doc. files from 'AP SH' doc. file
+     [ccthresh]            ; CCC threshold
+     [align_doc][grp]      ; Alignment parameters (has current CC value) (input)
+     [num-views]           ; Number of reference images                  (input)
+     [select]              ; Template for particle selection doc files   (output)
+     [num_byv]             ; Group number document file                  (output)
+ ENDDO
+ SYS
+   echo ; echo  " -------- Overall Particles/Reference View ----------" ; echo     
+
+ ; Create summed top-level doc file
+
+ DE                        ; Remove any existing top-level number file.
+   [num_byv_all]
+
+ SD /    # PARTICLES
+   [num_byv_all]           ; Initialize top-level number file with comment line
+
+ ; Loop over all references -------------
+ DO  [numref] = 1,[num-views] 
+   [sum] = 0               ; Initialize sum
+
+   ; Loop over all group(s) -------------
+   DO [numgrp]=1,[numgrps]    
+
+      UD [numgrp],[grp]    ; Get current group number 
+        [sel_grp]          ; Group selection file                    (input)
+
+      UD [numref], [n]     ; Get number for this reference
+        [num_byv]                                                    (input)
+
+      [sum] = [sum] + [n]  ; Sum the numbers for all the references
+   ENDDO
+
+   SD [numref],[sum]
+     [num_byv_all]         ; Top-level particle listing file         (output)
+
+   SYS
+     echo  " View: {%I3%[numref]}    Particles: {%I5%[sum]}"   
+ ENDDO
+
+
+ SD E
+   [num_byv_all]           ; Top-level number file                   (output)
+
+ IF ( [docombine] > 0 ) THEN
+   SYS
+     echo ; echo ' Creating combined alignment parameters file: [align_comb].$DATEXT'   
+
+   DE                      ; Remove existing output doc. file        
+     [align_comb]          ; Combined alinment parameter doc file     (removed)
+
+   ; Put header comment in new output doc file
+   SD / PHI,THE,PSI, MIR-REF#,IMG#,INPLANE , SX,SY,NPROJ, DIFF,CCROT,INPLANE ,SX,SY
+     [align_comb]
+
+   SD E                    ; Flush header comment to doc file
+     [align_comb]
+
+   DOC COMBINE             ; Combine contents of a series of document files
+     [align_doc]           ; Template for doc. file series            (input)
+     [sel_grp]             ; Selection doc. file with file numbers    (input)
+     [align_comb]          ; Combined alinment parameter doc file     (output)
+ ENDIF
+
+ SYS
+   echo  ' '   
+
+ EN 
+ ; </body></pre></html>
+

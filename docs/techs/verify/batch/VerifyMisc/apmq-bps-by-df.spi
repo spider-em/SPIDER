@@ -1,0 +1,148 @@
+; CALCULATE TWO HALF-SET RECONSTRUCTIONS 
+; FOR EACH DEFOCUS GROUP
+
+; Adapted from bpodd.bat (formerly b24.bpo)
+
+; NOTES:
+; 1) Requires bpcg.bat
+; 2) AP SH alignments will use 'align_01' instead of 'angles'
+; 3) SPIDER code for total volume (odd+even) can be uncommented out
+; 4) Results file saved to check for number of iterations
+
+; ------------ Parameters --------------
+
+; For BP CG
+x41 = -1      ; radius of restored object (use -1 for 95% winsize / 2)
+x52 = 1.0E-5  ; error limit
+x53 = 0.0     ; chi^2 limit
+x54 = 25      ; iteration limit
+x55 = 1       ; mode (see BP CG documentation)
+x56 = 2000    ; lambda (see BP CG documentation)
+
+; ----------- Input files --------------
+FR L
+[params]../params
+FR L
+[order]order_defocus                    ; list of defocus groups
+FR L
+[df]df                                  ; directory template (for both input and output)
+FR L
+[ali]../Alignment/ali/sar******         ; aligned particles
+FR L
+[angles]../Alignment/align_01_{***x15}  ; angles doc file (for AP SH)
+;[angles]../Alignment/angles             ; angles doc file (for AP MQ)
+FR L
+[selodd]selodd                          ; selection file for odd particles 
+FR L
+[seleven]seleven                        ; selection file for even particles 
+;FR L
+;[seltotal]seltotal                      ; selection file for all particles (for optional combined volume)
+
+; ----------- Output files --------------
+FR L
+[vol_odd]vol001_odd    ; half-set volume (one for each defocus group)
+FR L
+[vol_even]vol001_even  ; half-set volume (one for each defocus group)
+FR L
+[fsc_doc]doccmp001     ; resolution curve (one for each defocus group)
+;FR L
+;[vol_total]vol001       ; combined volume (one for each defocus group)
+
+; -------------- END BATCH HEADER --------------------------
+
+FR L
+[tmp]tmpdocrf3
+
+md 
+set mp 
+0       ; 0 = use all processors available
+
+UD N,x10
+[order]
+
+; calculate radius if necessary
+IF (x41.eq.-1) THEN
+   UD 17,x17     ; key 17 = windowsize
+   [params]
+   x41 = INT( (0.95*x17)/2.0 )
+ENDIF
+
+DO LB1 x15=1,x10
+    vm
+    echo "Working on defocus group #{***x15}"
+
+    ; reconstruct even volume
+    @bpcg[x15,x41,x52,x53,x54,x55,x56]
+    [ali]
+    [df]{***x15}/[selodd]
+    [angles]
+    [df]{***x15}/[vol_odd]
+
+    ; reconstruct odd volume
+    @bpcg[x15,x41,x52,x53,x54,x55,x56]
+    [ali]
+    [df]{***x15}/[seleven]
+    [angles]
+    [df]{***x15}/[vol_even]
+
+;    ; reconstruct total volume
+;    @bpcg[x15,x41,x52,x53,x54,x55,x56]
+;    [ali]
+;    [df]{***x15}/[seltotal]
+;    [angles]
+;    [df]{***x15}/[vol_total]
+
+    ; CALCULATE RESOLUTION CURVE
+
+    ; turn off results-file output
+    md
+    tr off
+
+    ; clean up pre-existing files
+    DE
+    [df]{***x15}/[fsc_doc]
+    DE
+    [tmp]
+
+    RF 3
+    [df]{***x15}/[vol_even]  ; first input volume
+    [df]{***x15}/[vol_odd]   ; second input volume
+    (0.5)                    ; ring width
+    (0.2,2)                  ; lower, upper scale factors
+    c                        ; c = missing cone
+    (90)                     ; max. tilt angle
+    (3)                      ; factor for noise comparison
+    [tmp]                    ; output doc file
+
+    DOC REN
+    [tmp]
+    [tmp]
+
+    UD N,x60
+    [tmp]
+
+    SD /    NORM'D FREQ    DPR        FSC        FSCCRIT     VOXELS
+    [df]{***x15}/[fsc_doc]
+
+    DO LB2 x61 = 1,x60
+        UD x61,x62,x63,x64,x65,x66
+        [tmp]
+        SD x61,x62,x63,x64,x65,x66
+        [df]{***x15}/[fsc_doc]
+    LB2
+
+    UD E
+    ;close [TMP]
+
+    ; turn on results-file output
+    md
+    tr on
+LB1
+
+EN
+
+; Modified 2006-08-17
+;    2006-05-12 (trs) -- calculates radius from PARAMS
+;    2006-05-12 (trs) -- computes resolution curves, from old FSC.SPI
+;    2006-04-05 (trs) -- updated for changes in variable-passing
+;    2004-07-09 (trs) -- left option for AP SH files

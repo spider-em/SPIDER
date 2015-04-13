@@ -1,0 +1,649 @@
+; USING REASSIGNED DEFOCUS GROUPINGS, REGENERATES FILES
+
+; ----------------------- Parameters -----------------------
+[mic-interval]   = 20  ; progress message printed every Nth micrograph
+[group-interval] = 2   ; progress message printed every Nth defocus group
+[stacks-yn]      = 1   ; flag to write stacks (0==no, useful for testing group sizes)
+
+; -------------------------- Inputs -------------------------
+fr l
+[parameter_doc]../params                                    ; parameter doc file
+fr l
+[defavg_old]../Power_Spectra/def_avg-old                    ; old micrograph-to-group doc file
+fr l
+[defavg_new]../Power_Spectra/def_avg-new                    ; new micrograph-to-group doc file
+;       MICROGRAPH    DEFOCUS      DF_GROUP    AVGDEFOCUS
+;          used        used          used
+fr l
+[df_list_new]../Power_Spectra/order_defgrps-new             ; list of new defocus groups
+fr l
+[mic_particles]../Reconstruction-old/Bymic/ngood****        ; good particles by micrograph
+;        MICSLICE     DF_GROUP     DF_SLICE    GLOBAL_PART    CC_ROT
+;          used
+fr l
+[mic2global_lut]../Particles/coords/mic2global****          ; micrograph-slice to global-particle lookup table
+; KEY:MIC_SLICE /  GLOBAL_PARTICLE_NUM
+fr l
+[combined_good_old]../Reconstruction-old/combinedgood       ; combined list of good particles
+;          VIEW_SLICE   GLOBAL_PART   DF_SLICE      CC_ROT       MIRROR      DF_GROUP       VIEW
+;            copied       copied       _used_       copied       copied       _used_       copied
+fr l
+[old_align_dir]../Alignment-old                             ; old alignment directory
+fr l
+[old_align_doc][old_align_dir]/align_01_***                 ; old alignment-parameter doc (KEY=OLD_DF_SLICE)
+fr l
+[old_unaligned_imgs][old_align_dir]/data***                 ; old unaligned stacks
+fr l
+[old_aligned_imgs][old_align_dir]/dala01_***                ; old aligned stacks
+
+; ------------------------- Outputs -------------------------
+fr l
+[new_align_dir]../Alignment-new                             ; new alignment directory
+fr l
+[new_recon_dir]../Reconstruction-new                        ; new reconstruction directory
+fr l
+[newgrp2old_lut][new_recon_dir]/newgrp2old***               ; list of micrographs and old group number, for each new group
+fr l
+[new_sel_particles][new_align_dir]/sel_particles_***        ; new alignment selection docs
+;        DF_SLICE     MICSLICE     DF_GROUP    MICROGRAPH  GLOBAL_PART  OLD_DF_GROUP  OLDDFSLICE
+fr l
+[oldsel2new_lut][new_align_dir]/oldgroup2new***             ; old-group-to-new particle lookup table, numbered by old group
+; KEY:OLDDFSLICE /  NEWGRP     NEWDFSLICE
+fr l
+[new_group_select][new_recon_dir]/sel_group                 ; new defocus-group selection file
+fr l
+[new_stack2particle_lut][new_recon_dir]/stack2particle***   ; new stack-to-particle lookup tables
+;      GLOBAL_PART   MICROGRAPH    MICSLICE   NEW_DF_SLICE OLDGROUP   OLDDFSLICE
+fr l
+[combined_good_new][new_recon_dir]/combinedgood             ; combined list of good particles
+;       VIEW_SLICE  GLOBAL_PART    DF_SLICE      CC_ROT       MIRROR      DF_GROUP       VIEW 
+fr l
+[new_align_doc][new_align_dir]/align_01_***                 ; new alignment-parameter docs
+; PSI         THETA         PHI        REF_PROJ     DF_SLICE     IN_PLANE    CUM_XSHIFT   CUM_YSHIFT    NUM_PROJ      ANGDIF       CC_ROT    CURR_INPLANE CURR_XSHIFT  CURR_YSHIFT     MIRROR
+fr l
+[new_unaligned_imgs][new_align_dir]/data***                 ; new unaligned stacks
+fr l
+[new_aligned_imgs][new_align_dir]/dala01_***                ; new aligned stacks
+
+; -------------------- END BATCH HEADER --------------------
+
+; set temporary filenames
+fr l
+[temp_old_defavg_unrenum]tmp_def_avg_unrenum
+fr l
+[temp_old_defavg]tmp_def_avg_intersect
+fr l
+[temp_old_defavg_rekey]tmp_def_avg_sort_rekeyed
+fr l
+[temp_old_defavg_sort]tmp_def_avg_sort
+fr l
+[temp_stack2particle_incore]tmp_stack2particles
+fr l
+[temp_combinedgood_incore]tmp_combinedgood
+fr l
+[temp_align_incore]tmp_align
+fr l
+[temp_unaligned_stack]_31
+fr l
+[temp_aligned_stack]_32
+
+vm
+echo "if(! -d [new_align_dir]) mkdir -p [new_align_dir]"|csh
+vm
+echo "if(! -d [new_recon_dir]) mkdir -p [new_recon_dir]"|csh
+
+
+; DELETE PRE-EXISTING FILES
+
+[one] = 1  ; dummy variable
+de a
+[new_sel_particles][one]
+de a
+[newgrp2old_lut][one]
+de a
+[oldsel2new_lut][one]
+de a
+[oldsel2new_lut][one]
+
+; get #new-groups
+ud n [num-new-grps]
+[df_list_new]
+
+do [grp-key]=1,[num-new-grps]
+    ud ic [grp-key], [grp-num]
+    [df_list_new]
+
+    ; prepare files
+    SD /       OLDGRP       MICNEW       MICOLD       OLDKEY       DEFNEW       DEFOLD
+    [newgrp2old_lut][grp-num]
+enddo
+
+ud ice
+[df_list_new]
+
+
+vm
+echo "Reassigning micrographs into new defocus groups"
+
+; intersect old & new DEF_AVG files (in case micrographs removed)
+doc and
+[defavg_old]
+[defavg_new]
+[temp_old_defavg_unrenum]  ; OUTPUT
+(1)                        ; column# to intersect: micrograph#
+doc ren
+[temp_old_defavg_unrenum]
+[temp_old_defavg]
+; (DOC AND preserves old key)
+
+; re-key DEFAVG file
+doc key
+[temp_old_defavg]
+[temp_old_defavg_rekey]
+
+; sort new DEFAVG file
+doc sort
+[temp_old_defavg_rekey]
+[temp_old_defavg_sort]
+(4)  ; column# to sort: new group#
+Y    ; renumber keys?
+
+[group-mic-counter]  = 0  ; initialize micrograph-counter
+[prev-defgrp]        = 0  ; initialize previous-group#
+[global-mic-counter] = 0  ; initialize micrograph-counter
+
+; get #micrographs
+ud n [num-mics]
+[temp_old_defavg_rekey]  ; WAS [defavg_new]
+
+; loop through micrographs
+do lb16 [mic-key] = 1,[num-mics]
+    ; read micrograph#, old-group#
+    ud ic [mic-key], [orig-key],[mic-old],[defocus-old],[old-dfgroup]
+    [temp_old_defavg_sort]
+
+    ; read micrograph#, new-group#
+    ud ic [orig-key],[mic-new],[defocus-new],[defgrp-new]
+    [defavg_new]  ; WAS [temp_old_defavg]
+
+    if (int([mic-key]/[mic-interval]).eq.[mic-key]/[mic-interval]) then
+        vm
+        echo "Micrograph #{****[mic-new]}, {****[mic-key]} out of {****[num-mics]}, old group {**[old-dfgroup]}, new group {**[defgrp-new]}"
+    endif
+
+    ; if current micrograph belongs to different new group from old micrograph, close docs
+    if([defgrp-new].ne.[prev-defgrp]) then
+        ; close docs
+        sd e
+        [newgrp2old_lut][defgrp-new]
+
+        ; reset counters
+        [prev-defgrp] = [defgrp-new]
+
+        ud n [group-mic-counter]
+        [newgrp2old_lut][defgrp-new]
+    endif
+
+    ; update counters
+    [group-mic-counter]  = [group-mic-counter]  + 1
+    [global-mic-counter] = [global-mic-counter] + 1
+
+    ; add to GROUP2MIC list
+    sd [group-mic-counter], [old-dfgroup],[mic-new],[mic-old],[mic-key],[defocus-new],[defocus-old]
+    [newgrp2old_lut][defgrp-new]
+
+    ; diagnostic
+    if([defocus-new].ne.[defocus-old]) then
+        vm
+        echo "Warning: micrograph# {****[mic-new]}/{****[mic-old]}, defocus {%f8.1%[defocus-new]} != {%f8.1%[defocus-old]}"
+    endif
+lb16
+; end micrograph-loop
+
+; clean up
+ud ice
+[defavg_new]
+;ud ice
+;[temp_old_defavg]
+de
+[temp_old_defavg_unrenum]
+de
+[temp_old_defavg]
+de
+[temp_old_defavg_rekey]
+de
+[temp_old_defavg_sort]
+sd e
+[newgrp2old_lut][defgrp-new]  ; last file would otherwise still be open
+
+vm
+echo ; echo "Reassigned {****[global-mic-counter]} micrographs into {***[num-new-grps]} new defocus groups"
+
+;; en
+
+
+vm
+echo "Generating new group selection files" ; echo
+
+; (NOTE: may be faster to combine MIC_PARTICLES files and use SD IC)
+
+; prepare SEL_GROUP
+de
+[new_group_select]
+SD /      DF_GROUP    #PARTICLES   AVGDEFOCUS
+[new_group_select]
+
+; initialize counters
+[global-group-counter] = 0
+[prev-oldgrp]          = 0
+
+; loop through new groups
+do lb17 [grp-key] = 1,[num-new-grps]
+    ; get group#
+    ud ic [grp-key], [new-grpnum],[avg-defocus]
+    [df_list_new]
+
+    de
+    [new_sel_particles][new-grpnum]
+    SD /      DF_SLICE     MICSLICE     DF_GROUP    MICROGRAPH  GLOBAL_PART  OLD_DF_GROUP  OLDDFSLICE
+    [new_sel_particles][new-grpnum]
+
+    [newgrp-part-counter] = 0
+
+    ; get #micrographs in group
+    ud n [num-mics]
+    [newgrp2old_lut][new-grpnum]
+
+    ; loop through micrographs
+    do lb18 [mic-key] = 1,[num-mics]
+        ; get micrograph#
+        ud ic [mic-key], x99,[mic-num]
+        [newgrp2old_lut][new-grpnum]
+
+        ; check if MIC_PARTICLES file exists, and in correct format
+        iq fi [ngood-exists]
+        [mic_particles][mic-num]
+
+        ; if empty, skip to next micrograph
+        if([ngood-exists].eq.0) goto lb18
+        ; (Hopefully, it isn't because the input files are missing.)
+
+        ; get #particles in micrograph
+        ud n [num-parts]
+        [mic_particles][mic-num]
+
+        ; if empty, skip to next micrograph
+        if([num-parts].eq.0) goto lb18
+        ; (File may exist, but containing only header.)
+
+        ; loop through particles
+        do lb19 [part-key] = 1, [num-parts]
+            ; read particle info
+;            ud ic [part-key], [mic-slice],[old-dfgroup],[old-dfslice],[view-num],[view-slice],[ccrot],[mirror]
+            ud ic [part-key], [mic-slice],[old-dfgroup],[old-dfslice],[old-particle],[ccrot]
+            [mic_particles][mic-num]
+            ; (OLD-DFGROUP *should* agree with X99 above)
+
+            ; get global particle#
+            ud ic [mic-slice],[global-part]
+            [mic2global_lut][mic-num]
+            ; (GLOBAL-PART *should* agree with OLD-PARTICLE above)
+
+            ; increment counters
+            [newgrp-part-counter]  = [newgrp-part-counter]  + 1
+            [global-group-counter] = [global-group-counter] + 1
+
+            ; write new particle info
+            sd [newgrp-part-counter], [newgrp-part-counter],[mic-slice],[new-grpnum],[mic-num],[global-part],[old-dfgroup],[old-dfslice]
+            [new_sel_particles][new-grpnum]
+
+            ; if previous group# different from current, close docs
+            if([prev-oldgrp].ne.[old-dfgroup]) then
+                sd e
+                [oldsel2new_lut][prev-oldgrp]
+
+                ; check if current group's lookup table exists yet
+                iq fi [old2new-exists]
+                [oldsel2new_lut][old-dfgroup]
+
+                ; if empty, label header
+                if([old2new-exists].eq.0) then
+                    SD /       NEWGRP     NEWDFSLICE
+                    [oldsel2new_lut][old-dfgroup]
+                endif
+
+                ; reset previous group
+                [prev-oldgrp] = [old-dfgroup]
+            endif
+
+            ; write to OLDSEL2NEW lookup table
+            sd [old-dfslice], [new-grpnum],[newgrp-part-counter]
+            [oldsel2new_lut][old-dfgroup]
+        lb19
+        ; end particle-loop
+
+        ; close docs
+        ud ice
+        [mic_particles][mic-num]
+        ud ice
+        [mic2global_lut][mic-num]
+    lb18
+    ; end micrograph-loop
+
+    vm
+    echo "New group #{***[new-grpnum]}: {*****[newgrp-part-counter]} particles"
+
+    ; write to doc
+    sd [grp-key], [new-grpnum],[newgrp-part-counter],[avg-defocus]
+    [new_group_select]
+
+    ; close docs
+    ud ice
+    [newgrp2old_lut][new-grpnum]
+    sd e
+    [new_sel_particles][new-grpnum]
+lb17
+; end group-loop
+
+; close docs
+ud ice
+[df_list_new]
+sd e
+[new_group_select]
+sd e
+[oldsel2new_lut][old-dfgroup]
+
+vm
+echo ; echo "Found {******[global-group-counter]} total particles"
+
+;;en
+;;;lb4
+
+
+vm
+echo "Generating new stack-to-particle lookup tables" ; echo
+; (SEL_PARTICLES files are finished, so I can use SD IC now.)
+
+[global-counter] = 0  ; initialize global counter
+
+; loop through groups
+do lb27 [group-key] = 1,[num-new-grps]
+    ; get defocus-group#
+    ud ic [group-key], [group-num]
+    [df_list_new]
+
+    if (int([group-key]/[group-interval]).eq.[group-key]/[group-interval]) then
+        vm
+        echo "Working on defocus group #{***[group-num]}, {***[group-key]} out of {***[num-new-grps]}"
+    endif
+
+    ; get #particles
+    ud n [num-parts]
+    [new_sel_particles][group-num]
+
+    ; allocate in-core file
+    sd ic new
+    [temp_stack2particle_incore]
+    (6,[num-parts])  ; #columns, #particles
+
+    ; loop through particles
+    do lb25 [particle-key]=1,[num-parts]
+        ; get defocus-group slice#, micrograph-slice#, micrograph#, old-group#, old defocus-group slice#
+        ud ic [particle-key], [df-slice],[mic_slice],x99,[mic-num],[global-part],[old-grp],[old-dfslice]
+        [new_sel_particles][group-num]
+
+        ; write to stack-to-particle lookup-table
+        sd ic [df-slice], [global-part],[mic-num],[mic-slice],[df-slice],[old-grp],[old-dfslice]
+        [temp_stack2particle_incore]
+
+        [global-counter] = [global-counter] + 1
+    lb25
+    ; end particle-loop
+
+    ; copy in-core file to disk
+    sd ic copy
+    [temp_stack2particle_incore]
+    [new_stack2particle_lut][group-num]
+
+    ; label columns
+    SD /    GLOBAL_PART   MICROGRAPH    MICSLICE     DF_SLICE   OLDGROUP   OLDDFSLICE
+    [new_stack2particle_lut][group-num]
+    sd e
+    [new_stack2particle_lut][group-num]
+
+    ; clean up
+    ud ice
+    [new_sel_particles][group-num]
+;    ud ice
+;    [mic2global_lut][mic-num]
+    sd ic e
+    [temp_stack2particle_incore]
+lb27
+; end group-loop
+
+ud ice
+[df_list_new]
+
+vm m
+echo ; echo "Done creating new stack-to-particle lookup tables" ;
+echo "Found {******[global-counter]} total particles" ; echo
+.
+
+;;en
+
+
+vm
+echo "Generating combined good list"
+
+; initialize previous group
+[prev-group] = 0
+
+; get #good-particles
+ud n [num-good]
+[combined_good_old]
+
+; allocate in-core doc
+sd ic new
+[temp_combinedgood_incore]
+(7,[num-good])  ; #columns, #particles
+
+; loop through particles
+do lb45 x50 = 1,[num-good]
+    ; read old combined-good
+    ud ic x50, x51,x52,[old-grp-slice],x54,x55,[old-group],x57
+    [combined_good_old]
+
+    ; if different from previous old-group...
+    if([prev-group].ne.[old-group]) then
+        ; close previous doc
+        ud ice
+        [oldsel2new_lut][prev-group]
+
+;        ; diagnostic
+;        vm
+;        echo "Closing group {***[prev-group]}, opening group {***[old-group]}"
+
+        ; update previous group#
+        [prev-group] = [old-group]
+    endif
+    ; (COMBINEDGOOD should be sorted by particle#, so disk I/O shouldn't be too frequent.)
+
+    ; look up new group and slice
+    ud ic [old-grp-slice], [new-group],[new-slice]
+    [oldsel2new_lut][old-group]
+
+    ; write to in-core doc
+    sd ic x50, x51,x52,[new-slice],x54,x55,[new-group],x57
+    [temp_combinedgood_incore]
+lb45
+; end particle-loop
+
+; copy in-core file to disk
+sd ic copy
+[temp_combinedgood_incore]
+[combined_good_new]
+
+; label columns
+SD /     VIEW_SLICE  GLOBAL_PART    DF_SLICE      CC_ROT       MIRROR      DF_GROUP       VIEW 
+[combined_good_new]
+sd e
+[combined_good_new]
+
+; clean up
+sd ic e
+[temp_combinedgood_incore]
+ud ice
+[combined_good_old]
+ud ice
+[oldsel2new_lut][old-group]
+
+ud n [global-counter]
+[combined_good_new]
+
+vm m
+echo "Done generating combined good list" ;
+echo "Found {******[global-counter]} total particles" ; echo
+.
+
+;;en d
+
+if([stacks-yn].eq.0) then
+    vm
+    echo "Done" ; echo "Not writing stacks nor alignment docs" ; date
+
+    en d
+endif
+
+vm
+echo "Creating alignment docs and unaligned and aligned stacks" ; date
+
+; get image dimension
+ud 17, [img-dim]
+[parameter_doc]
+ud e
+
+; initialize previous old-group#
+[prev-old] = 0
+
+; loop through (new) groups
+do lb37 [group-key] = 1,[num-new-grps]
+    ; get defocus-group#
+    ud ic [group-key], [group-num]
+    [df_list_new]
+
+    ; print progress message
+    if (int([group-key]/[group-interval]).eq.[group-key]/[group-interval]) then
+        vm
+        echo "Working on defocus group #{***[group-num]}, {***[group-key]} out of {***[num-new-grps]}"
+    endif
+
+    ; read number of particles
+    ud n [num-particles]
+    [new_sel_particles][group-num]
+
+    ; allocate in-core doc
+    sd ic new
+    [temp_align_incore]
+    (15,[num-particles])  ; #columns, #particles
+
+    ; allocate in-core stacks
+    ms
+    [temp_unaligned_stack]@
+    [img-dim],[img-dim]
+    [num-particles]
+    ms
+    [temp_aligned_stack]@
+    [img-dim],[img-dim]
+    [num-particles]
+
+    ; loop through particles
+    do lb36 [new-slice] = 1,[num-particles]
+        ; read old group and slice
+        ud ic [new-slice], x31,x32,x33,x34,x35,[old-group],[old-slice]
+        [new_sel_particles][group-num]
+
+        ; check if different from previous old-group#
+        if([prev-old].ne.[old-group]) then
+            ; close previous doc
+            ud ice
+            [old_align_doc][prev-old]
+
+;            ; diagnostic
+;            vm
+;            echo "Closing old group #{***[prev-old]}, opening new group {***[old-group]}"
+
+            ; update previous group
+            [prev-old] = [old-group]
+        endif
+
+        ; look up parameters from old align doc
+        ud ic [old-slice], x71,x72,x73,x74,[old-slice2],x76,x77,x78,x79,x80,x81,x82,x83,x84,x85
+        [old_align_doc][old-group]
+
+        ; write to new align doc
+        sd ic [new-slice], x71,x72,x73,x74,[new-slice],x76,x77,x78,x79,x80,x81,x82,x83,x84,x85
+        [temp_align_incore]
+
+        ; copy images from old to new stacks
+        cp
+        [old_unaligned_imgs][old-group]@{*****[old-slice]}
+        [temp_unaligned_stack]@{*****[new-slice]}
+        cp
+        [old_aligned_imgs][old-group]@{*****[old-slice]}
+        [temp_aligned_stack]@{*****[new-slice]}
+    lb36
+    ; end particle-loop
+
+    ; copy in-core doc to disk
+    sd ic copy
+    [temp_align_incore]
+    [new_align_doc][group-num]
+
+    ; label alignment doc
+    SD /                PSI         THETA         PHI        REF_PROJ     DF_SLICE     IN_PLANE    CUM_XSHIFT   CUM_YSHIFT    NUM_PROJ      ANGDIF       CC_ROT    CURR_INPLANE CURR_XSHIFT  CURR_YSHIFT     MIRROR
+    [new_align_doc][group-num]
+    sd e
+    [new_align_doc][group-num]
+
+    ; copy in-core stacks to disk
+    cp
+    [temp_unaligned_stack]@
+    [new_unaligned_imgs][group-num]@
+    cp
+    [temp_aligned_stack]@
+    [new_aligned_imgs][group-num]@
+
+    ; delete in-core files
+    sd ic e
+    [temp_align_incore]
+    de
+    [temp_unaligned_stack]@
+    de
+    [temp_aligned_stack]@
+
+    ; clean up
+    ud ice
+    [old_align_doc][old-group]
+    ud ice
+    [new_sel_particles][group-num]
+lb37
+; end group-loop
+
+ud ice
+[df_list_new]
+
+vm
+echo "Done creating alignment docs and unaligned and aligned stacks" ; date ; echo
+
+en d
+
+; Modified 2011-01-24
+;    TO DO: add random number to temp files, so that multiple runs can coexist
+;    TO DO: combine MIC_PARTICLES files and use SD IC
+;    2011-01-11 (trs) -- uses output of GOODPARTICLESBYMIC.SPI, can quickly test sizes of new groups
+;    2011-01-07 (trs) -- changed to four-digit micrograph numbers
+;    2010-11-03 (trs) -- group numbers need not be consecutive
+;    2010-11-03 (trs & il) -- bug fix: forgot to close in-core new SEL_PARTICLES files
+;    2009-07-03 (trs) -- added particle number to output selection file
+;    2009-06-15 (trs) -- checks for empty defocus groups
+

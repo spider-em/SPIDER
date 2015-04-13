@@ -1,0 +1,275 @@
+; CUTS SHELL OUT OF REFERENCE FOURIER TRANSFORM FOR CROSS-VALIDATION TEST
+;
+; Adapted from refproj.bat
+
+; ------------- Parameters -------------
+
+x15 = 15        ; delta theta : 15 gives 83 projections
+x39 = -1        ; projection radius : use -1 for default value
+x20 = 19.       ; Fourier mask radius, Angstroms
+x40 = 280.      ; Fourier filter temperature factor, Angstroms
+x30 = 2.5       ; mask half-width, in units of 1/diameter
+
+; ----------- Input files --------------
+FR G
+[params]../params                        ; the parameter file
+FR G
+[refvol]../reference                     ;  input reference volume
+FR G
+[defocus]../Power_Spectra/order_defgrps  ; average defocus group values
+;       DEFOCUS_GRP  AVERAGE
+
+; ----------- Output files --------------
+FR G
+[refangles]refangles-free     ; output doc file of angles
+FR G
+[projlist]projlist            ; output list of projections
+FR G
+[prj_dir]projs                ; directory template for defocus groups
+FR G
+[prj]prj                      ; prefix for output 2D projections, in PRJ_DIR
+FR G
+[mask_profile]docmaskfreefsc  ; mask profile
+
+; -------------- END BATCH HEADER --------------
+
+; Temporary files
+fr l
+[cv_dir]tmpcv
+fr l
+[full_profile][cv_dir]/pwfull
+fr l
+[excised_profile][cv_dir]/pwcv
+
+vm
+echo "Generating reference projections"; date
+
+; delete output document files
+DE
+[refangles]
+DE
+[projlist]
+
+; get parameters
+UD 5,x73    ; pixel size
+[params]
+x74=0.5/x73 ; max. spatial frequency
+
+UD 6,x71    ; electron energy
+[params]
+x72 = 12.398 / SQR(x71 * (1022.0 + x71))    ; lambda
+
+UD 7,x79    ; spherical aberration
+[params]
+UD 8,x61    ; source size
+[params]
+UD 9,x62    ; defocus spread
+[params]
+UD 12,x63   ; amplitude contrast ratio
+[params]
+UD 13,x64   ; Gaussian envelope halfwidth
+[params]
+UD 17,x75   ; window size
+[params]
+UD 18,x18   ; particle diameter
+[params]
+
+IF (x39.LT.0) THEN    ; get particle size and compute radius
+    UD 18,x41
+    [params] 
+    x39 = 0.69 * x41
+ENDIF
+
+UD E  ; close doc
+
+UD N,x12    ; number of defocus groups
+[defocus]
+
+; create the document files
+VO EA,x83
+x15          ; delta theta
+0,0          ; range of theta
+0,0          ; range of phi
+[refangles]  ; output doc file of angles
+
+x83=x83-1
+
+DOC CREATE
+[projlist]   ; output doc file
+1            ; column to be filled
+1-x83        ; numbers to put in column
+
+;------------------------------------------
+; For each defocus group, multiply the reference volume by the
+; appropriate defocus, then use this ctf-reference to generate
+; 83 projection images
+
+x20 = x73/x20      ; Fourier radius for excised shell, reciprocal pixels
+x40 = x73/x40      ; Fourier filter temperature factor, reciprocal pixels
+; x73==pixel-size
+
+x23 = x20 - x30/x18  ; inner edge of mask
+x24 = x20 + x30/x18  ; outer edge of mask
+; x30==half-width, x18==particle-diameter
+
+x66 = (x75+1)/2    ; window center
+
+VM
+echo "if(! -d [prj_dir]) mkdir [prj_dir]"|csh
+
+; loop through defocus-groups
+DO LB1 x21=1,x12 
+    ; get defocus group # (x22) and defocus value (x71)
+    ud x21,x22,x71
+    [defocus]
+
+    vm
+    echo "Working on defocus group {***x22}"
+
+    TF C3
+    _7       ; output file (complex model CTF)
+    x79      ; spherical aberration
+    x71,x72  ; defocus, wavelength
+    x75      ; array dimension
+    x74      ; maximum spatial frequency
+    x61,x62  ; source size, defocus spread
+    (0,0)    ; astigmatism, azimuth
+    x63,x64  ; amplitude contrast ratio, envelope 1/2-width
+    (-1)     ; sign
+
+    FT
+    [refvol]
+    _2
+
+    MU
+    _2
+    _7
+    _4
+    *
+
+    FT
+    _4
+    _7    ; output = ctf_multiplied volume
+
+    ; generate projections of a volume
+    PJ 3Q
+    _7             ; input volume
+    x39            ; radius
+    [projlist]     ; file numbers
+    [refangles]    ; angles doc file
+    [prj_dir]/tmp[prj]@****  ; WAS <df>{***x22}/tmp<prj>****    ; template for output projection images
+
+    ; loop through reference-projections
+    do lb8 x80=1,x83
+        ; Fourier transform projection
+        ft
+        [prj_dir]/tmp[prj]@{****x80}  ; WAS <df>{***x22}/tmp<prj>{****x80}
+        _1  ; OUTPUT: FT of projection
+
+        ; apply inner filter
+        ff
+        _1   ; INPUT: FT of projection
+        _3   ; OUTPUT: FT, filtered 1X
+        (6)  ; high-pass filter
+        x23  ; inner edge of mask
+        x40  ; temperature factor
+
+        ; apply outer filter
+        ff
+        _3   ; INPUT: FT, filtered 1X
+        _5   ; OUTPUT: FT, filtered 2X
+        (5)  ; low-pass filter
+        x24  ; outer edge of mask
+        x40  ; temperature factor
+
+        ; backtransform projection
+        ft
+        _5  ; INPUT: FT(shell excised)
+        _6
+
+        ; subtract shell
+        su
+        _1  ; INPUT: FT of projection
+        _5  ; INPUT: FT, filtered 2X
+        _6  ; OUTPUT: FT(shell excised)
+        *   ; no more files to subtract
+
+        ; backtransform projection
+        ft
+        _6  ; INPUT: FT(shell excised)
+        [prj_dir]/[prj]_{***x22}@{****x80}  ; WAS <df>{***x22}/<prj>{****x80}
+
+        ; prepare profile, part 1
+        if(x21.eq.1) then
+            vm
+            echo "if(! -d [cv_dir]) mkdir [cv_dir]"|csh
+
+            pw
+            _6  ; INPUT: FT(shell excised)
+            [excised_profile]{****x80}  ; WAS <df>{***x22}/pwcv{****x80}
+
+            pw
+            _1  ; INPUT: FT of projection
+            [full_profile]{****x80}  ; WAS <df>{***x22}/pwno{****x80}
+        endif
+    lb8
+    ; end projection-loop
+
+    ; prepare profile, part 2
+    if(x21.eq.1) then
+        ; sum power spectra
+        as r
+        [excised_profile]****  ; WAS <df>{***x22}/pwcv****
+        (1-x83)  ; projection# range
+        A        ; _A_ll in sum
+        _8       ; OUTPUT: power-spectrum sum, shell excised
+        _9       ; variance
+
+        as r
+        [full_profile]****  ; WAS <df>{***x22}/pwno****
+        (1-x83)  ; projection# range
+        A        ; _A_ll in sum
+        _10      ; OUTPUT: power-spectrum sum, full
+        _11      ; variance
+
+        ; normalize masked profile by normal profile
+        div
+        _8   ; INPUT: power-spectrum sum, shell excised
+        _10  ; INPUT: power-spectrum sum, full
+        _12  ; OUTPUT: mask-profile map
+        *    ; no more files to divide
+
+        ; rotationally average output
+        ro
+        _12  ; INPUT: mask-profile 2D map
+        _13  ; OUTPUT: single-line rotational average
+
+        ; write mask-profile to document
+        li d
+        _13  ; INPUT: power-spectrum sum
+        [mask_profile]
+        R    ; by _R_ow
+        (1)  ; line number
+
+       ; clean up
+       de a
+       [full_profile]0001  ; WAS <df>{***x22}/pwno0001
+       de a
+       [excised_profile]0001  ; WAS <df>{***x22}/pwcv0001
+       de
+       [prj_dir]/tmp[prj]@  ; WAS <df>{***x22}/tmp<prj>0001
+       vm
+       rmdir [cv_dir]
+    else
+        de
+        [prj_dir]/tmp[prj]@  ; WAS <df>{***x22}/tmp<prj>0001
+    endif
+LB1
+; end group-loop
+
+vm
+echo "Done"; date
+
+EN D
+
+; Modified 2010-07-19

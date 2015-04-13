@@ -1,0 +1,175 @@
+; SEPARATES PARTICLE-SELECTION FILE BY DEFOCUS GROUP
+;
+; NOTE: Output doc files will have the format of the first input file(s), STACK2PARTICLE
+
+; --------------------------- Parameter ---------------------------
+[progress-interval] = 3  ; progress message written to screen every Nth defocus group
+
+; ----------------------------- Inputs -----------------------------
+fr l
+[df_group_list]../Reconstruction/sel_group                          ; defocus-group doc file
+;        DF_GROUP     NUMPARTS    AVGDEFOCUS
+;          used                     copied
+fr l
+[stack2particle_lut]../Reconstruction/stack2particle{***[grp-num]}  ; total-particle list
+; KEY=GRP_SLICE / COLUMN1=GLOBAL_PART
+fr l
+[part_subset_list]../Reconstruction/xmipp-class001                  ; subset list
+;       GLOBAL_PART
+
+; ---------------------------- Outputs ----------------------------
+fr l
+[select_dir]../Reconstruction/class001                             ; input/output directory
+fr l
+[df_intersection][select_dir]/xmipp2sel_particles_{***[grp-num]}   ; intersection list, for each defocus group
+fr l
+[df_difference][select_dir]/deselect_{***[grp-num]}                ; difference list, for each defocus group
+fr l
+[defgrps][select_dir]/sel_group                                    ; defocus-group doc
+;  DF_GROUP    #PARTICLES   AVGDEFOCUS
+fr l
+[defgrps_sorted][select_dir]/sel_group_sorted                      ; sorted defocus-group doc
+;  DF_GROUP    #PARTICLES   AVGDEFOCUS
+
+; ----------------------- END BATCH HEADER -----------------------
+
+fr l
+[temp_intersect_unrenum]tmpdocand_unrenum
+fr l
+[temp_difference_unrenum]tmpdocsubtract
+fr l
+[temp_defgrps_unreversed]tmpsort_unreversed
+
+vm
+echo "if(! -d [select_dir]) mkdir -p [select_dir]"|csh
+
+de
+[defgrps]
+SD /     DF_GROUP    #PARTICLES   AVGDEFOCUS
+[defgrps]
+de
+[defgrps_sorted]
+SD /     DF_GROUP    #PARTICLES   AVGDEFOCUS
+[defgrps_sorted]
+
+vm
+echo "Intersecting doc files" ; date ; echo
+
+; initialize particle-counter
+[good-counter] = 0
+
+; get #groups
+ud n [num-grps]
+[df_group_list]
+
+; loop through groups
+do [grp-key] = 1,[num-grps]
+    ; get current defocus-group number, defocus
+    ud ic [grp-key], [grp-num],x72,[avg-defocus]
+    [df_group_list]
+
+    if (int([grp-num]/[progress-interval]).eq.[grp-num]/[progress-interval]) then
+        vm
+        echo "Working on group #{***[grp-num]}, {***[grp-key]}th group out of {***[num-grps]}"
+    endif
+
+    ; intersect particle lists
+    doc and
+    [stack2particle_lut]
+    [part_subset_list]
+    [temp_intersect_unrenum]
+    (1)  ; column# to intersect: particle#
+
+    doc key  ; WAS doc ren
+    [temp_intersect_unrenum]
+    [df_intersection]
+    ; (in STACK2PARTICLE, GRP_SLICE is in the key column)
+
+    ; get #particles
+    ud n [num-parts]
+    [df_intersection]
+
+    [good-counter] = [good-counter] + [num-parts]
+
+    SD /      GRP_SLICE    GLOBAL_PART     MIC_NUM      MIC_SLICE
+    [df_intersection]
+    sd e
+    [df_intersection]
+
+    ; subtract particle lists
+    doc subtract
+    [stack2particle_lut]
+    [part_subset_list]
+    [temp_difference_unrenum]
+    (1)  ; column# to subtract: df-slice#
+
+    ; renumber difference doc
+    doc key  ; WAS doc ren
+    [temp_difference_unrenum]
+    [df_difference]
+
+    SD /      GRP_SLICE    GLOBAL_PART     MIC_NUM      MIC_SLICE
+    [df_difference]
+    sd e
+    [df_difference]
+
+    sd [grp-key], [grp-num],[num-parts],[avg-defocus]
+    [defgrps]
+enddo
+; end group-loop
+
+; clean up
+[dummy] = -[num-grps]
+SD /     TOTALPARTS
+[defgrps]
+sd [dummy], [good-counter]
+[defgrps]
+ud ice
+[df_group_list]
+sd e
+[defgrps]
+de
+[temp_intersect_unrenum]
+de
+[temp_difference_unrenum]
+
+
+; SORT SEL_GROUP BY #PARTICLES
+
+; sort by #particles
+doc sort
+[defgrps]
+[temp_defgrps_unreversed]
+(2)  ; column# to sort: #particles
+Y    ; renumber?
+
+; loop though defocus-groups (max: x76)
+do lb6 [grp-key]=1,[num-grps]
+    ; count from end
+    [grp-num] = [num-grps] - [grp-key] + 1
+
+    ; read group#, #particles (x52), defocus (x53)
+    ud ic,[grp-key],[grp-num],x52,x53
+    [temp_defgrps_unreversed]
+
+    ; write to sorted doc
+    sd [grp-key],[grp-num],x52,x53
+    [defgrps_sorted]
+lb6
+; end group-loop
+
+; clean up
+ud ice
+[temp_defgrps_unreversed]
+de
+[temp_defgrps_unreversed]
+sd e
+[defgrps_sorted]
+
+vm
+echo ; echo "Done -- Found {******[good-counter]} particles" ; date
+
+en d
+
+; Modified 2012-03-20
+;    2011-01-13 (trs) -- adapted from intersect-by-group.spi

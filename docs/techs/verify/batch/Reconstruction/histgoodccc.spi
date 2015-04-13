@@ -1,0 +1,182 @@
+; COMPUTE HISTOGRAM OF GOOD & BAD PARTICLES' CCC
+
+; ------------- Parameter -------------
+[num-bins] = 128  ; number of bins in histogram
+
+; -------------- Inputs --------------
+fr l
+[ref_view_list]../Alignment/projlist  ; list of reference projections
+fr l
+[view_dir]select/prj***               ; directory template for selection files
+fr l
+[good_list_by_view]goodsel            ; good-particle list, in VIEW_DIR
+; VIEWSLICE    PARTICLE     DFSLICE       CC_ROT       MIRROR      GROUPNUM       VIEW
+fr l
+[bad_list_by_view]badsel              ; bad-particle list, in VIEW_DIR
+
+; -------------- Outputs --------------
+fr l
+[combined_good_list]combinedgood      ; combined list of good particles
+; VIEW_SLICE    PARTICLE    GROUP_SLICE    CC_ROT       MIRROR      GROUPNUM       VIEW
+fr l
+[good_ccc_hist]histcccgood            ; CCC histogram of good particles
+fr l
+[bad_ccc_hist]histcccbad              ; CCC histogram of good particles
+
+; ---------- END BATCH HEADER ---------
+
+fr l
+[temp_good_views]tmpviewsgood
+fr l
+[temp_bad_views]tmpviewsbad
+fr l
+[temp_good_combined_unsorted]tmp_combined_good
+fr l
+[temp_bad_combined]tmp_combined_bad
+
+
+; GENERATE SELECTION LISTS FOR GOOD & BAD FILELISTS
+
+; clean up
+de
+[temp_good_views]
+de
+[temp_bad_views]
+
+; initialize counters
+[good-counter] = 0
+[bad-counter]  = 0
+[dummy] = 1
+
+; get #views (x83)
+ud n,x83
+[ref_view_list]
+
+; loop through views
+do lb8 x81=1,x83
+    ; get reference-view# (x80)
+    ud ic,x81,x80
+    [ref_view_list]
+
+    ; check if good-view list exists
+    iq fi [good-exists]
+    [view_dir]x80/[good_list_by_view]
+
+    if([good-exists].eq.1) then
+        [good-counter] = [good-counter] + 1
+
+        sd [good-counter],x80,[dummy]
+        [temp_good_views]
+    endif
+
+    ; check if bad-view list exists
+    iq fi [bad-exists]
+    [view_dir]x80/[bad_list_by_view]
+
+    if([bad-exists].eq.1) then
+        [bad-counter] = [bad-counter] + 1
+
+        sd [bad-counter],x80,[dummy]
+        [temp_bad_views]
+    endif
+lb8
+; end view-loop
+
+sd e
+[temp_good_views]
+sd e
+[temp_bad_views]
+
+vm
+echo "Making combined, good-particle list"; date
+
+; combine "good" selection lists for all reference views
+doc combine
+[view_dir]/[good_list_by_view]
+[temp_good_views]
+[temp_good_combined_unsorted]
+
+doc sort
+[temp_good_combined_unsorted]
+[combined_good_list]  ; OUTPUT
+(2)                   ; register to sort by: global-particle#
+Y                     ; renumber?
+
+SD /     VIEW_SLICE    PARTICLE    GROUP_SLICE    CC_ROT       MIRROR      GROUPNUM       VIEW
+[combined_good_list]
+sd e
+[combined_good_list]
+
+ud n [num-good]
+[combined_good_list]
+
+; delete pre-existing histogram
+de
+[good_ccc_hist]
+
+; generate histogram of good-particle CCCs
+hd d
+[temp_good_combined_unsorted]
+(4)              ; column to bin (CCROT)
+[num-bins]
+[good_ccc_hist]  ; OUTPUT
+
+; clean up
+de
+[temp_good_views]
+de
+[temp_good_combined_unsorted]
+
+vm m
+echo "Combined good particles: {******[num-good]}" ;
+echo ;
+echo "Making combined, bad-particle list"; date
+.
+
+
+; combine "bad" selection lists for all reference views
+doc combine
+[view_dir]/[bad_list_by_view]
+[temp_bad_views]
+[temp_bad_combined]
+
+ud n [num-bad]
+[temp_bad_combined]
+
+[num-tot] = [num-good] + [num-bad]
+
+vm m
+echo "Combined bad particles: {******[num-bad]}" ;
+echo ; 
+echo "Total particles: {******[num-tot]}"
+.
+
+; delete pre-existing histogram
+de
+[bad_ccc_hist]
+
+; generate histogram of bad-particle CCCs
+hd d
+[temp_bad_combined]
+(4)             ; column to bin (CCROT)
+[num-bins]
+[bad_ccc_hist]  ; OUTPUT
+
+; clean up
+de
+[temp_bad_views]
+de
+[temp_bad_combined]
+
+vm m
+echo "Done"; date ; echo ;
+echo "gnuplot usage: load 'fit.gnu'" ; echo
+.
+en d
+
+; Modified 2011-11-02
+;    2009-05-14 (trs) -- added parameter for number of bins
+;    2009-05-13 (trs) -- added bad-particle histogram
+;    2009-02-23 (trs) -- added view# to combinedgood output
+;    2008-12-22 (trs & djt) -- labelled COMBINEDGOOD columns
+;    2007-01-19 (trs) -- HD D now allows arbitrary #bins

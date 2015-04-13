@@ -1,0 +1,254 @@
+; SEPARATES GOOD PARTICLES BY DEFOCUS-GROUP
+
+; ----------------- Parameters -----------------
+[fraction-omit]     = 0.00   ; fraction of particles to omit from each defocus-group
+[progress-interval] = 2      ; prints progress message to screen every Nth defocus-group
+
+; ------------------- Inputs -------------------
+fr l
+[combined_good_list]combinedgood                ; combined list of good particles
+;       VIEW_SLICE  GLOBAL_PART    DF_SLICE      CC_ROT       MIRROR      DF_GROUP       VIEW
+;         copied       used         copied       copied       copied       copied       copied
+fr l
+[df_group_list]sel_group                        ; list of defocus-group numbers
+fr l
+[df_unpicked_list]stack2particle{***[grp-num]}   ; total-particle list prefix, for each defocus-group
+; KEY:DF_SLICE / PARTICLE
+;                  used
+
+; ------------------- Outputs -------------------
+fr l
+[good_dir]df{***[grp-num]}                  ; directory template where defocus-group lists will go
+fr l
+[df_good_list][good_dir]/goodparticles      ; good-particle list, for each defocus-group, in GOOD_DIR
+;        DF_SLICE   GLOBAL_PART     CC_ROT 
+fr l
+[defgrps_lim]sel_group_cclim                ; defocus groups selection file
+fr l
+[defgrps_lim_sorted]sel_group_cclim_sorted  ; defocus groups selection file
+fr l
+[df_stats_doc]summary-goodparticles         ; summary doc showing number of particles per group
+
+; -------------- END BATCH HEADER --------------
+
+vm
+echo "Making good-particle list for each defocus-group"; date
+
+; clean up
+de  
+[defgrps_lim]
+SD /      DF_GROUP     NUMPARTS   AVG_DEFOCUS
+[defgrps_lim]
+de
+[defgrps_lim_sorted]
+SD /      DF_GROUP     NUMPARTS   AVG_DEFOCUS
+[defgrps_lim_sorted]
+de
+[df_stats_doc]
+SD /        KEPT        TOTAL       FRACTION
+[df_stats_doc]
+
+; get number of good particles
+ud n [tot-parts]
+[combined_good_list]
+
+md
+vb off
+
+; initialize particle-counter
+[part-counter] = 0
+
+; get number of defocus-groups
+ud n [num-grps]
+[df_group_list]
+
+; loop through defocus-groups
+do lb7 [grp-key7]=1,[num-grps]
+    ; get current defocus-group number, defocus
+    ud ic [grp-key7], [grp-num],[grp-parts7],[grp-defocus7]
+    [df_group_list]
+
+    vm
+    echo "if(! -d [good_dir]) mkdir -p [good_dir]"|csh
+
+    if (int([grp-key7]/[progress-interval]).eq.[grp-key7]/[progress-interval]) then
+        vm
+        echo "Working on defocus-group #{***[grp-num]} out of {***[num-grps]}"
+    endif
+
+    ; for DF_UNPICKED_LIST, move particle# to second column from first
+    doc key
+    [df_unpicked_list]
+    [df_unpicked_list]_rekey
+
+    ; find union of negative-particle list and combined-good list
+    doc and
+    [combined_good_list]
+    [df_unpicked_list]_rekey
+    [df_good_list]_unsort
+    (2)  ; column to check: particle#
+
+    ; trap for empty defocus groups
+    ud n [good-parts-yn]
+    [df_good_list]_unsort
+
+    if([good-parts-yn].ge.1) then
+        ; sort by CCC
+        doc sort
+        [df_good_list]_unsort
+        [df_good_list]_byccc
+        (4)  ; column# to sort: CCC
+        Y    ; renumber?
+
+        ; get number of particles from defocus-group
+        ud n [parts-before]
+        [df_good_list]_byccc
+
+        ; calculate #particles to omit
+        [parts-omit] = [parts-before]*[fraction-omit]
+
+
+        ; SAVE PARTICLES WITH HIGHEST CCC
+
+        ; loop through particles
+        do lb5 [part-key] = 1,[parts-before]
+            ; get particle#, group-slice#, CCROT
+            ud ic [part-key], [view-slice],[global-num],[grp-slice5],[ccrot]
+            [df_good_list]_byccc
+
+            if([part-key].gt.[parts-omit]) then
+                sd [part-key], [grp-slice5],[global-num],[ccrot]
+                [df_good_list]_truncated
+            endif
+        lb5
+        ; end particle-loop
+
+        ; close documents
+        ud ice
+        [df_good_list]_byccc
+        sd e
+        [df_good_list]_truncated
+
+        ; sort by particle#
+        doc sort
+        [df_good_list]_truncated
+        [df_good_list]
+        (1)  ; column# to sort: particle#
+        Y    ; renumber?
+
+        SD /      DF_SLICE   GLOBAL_PART     CC_ROT 
+        [df_good_list]
+        sd e
+        [df_good_list]
+
+        ud n [parts-after]
+        [df_good_list]
+
+        ; calculate fraction kept
+        [fraction-kept] = [parts-after]/[parts-before]
+    else
+        vm
+        echo "No particles kept in group #"
+
+        [parts-before] = 0    ; total #particles
+        [parts-after]  = 0    ; #kept
+        [fraction-kept] = 0   ; fraction kept
+    endif
+
+    ; write to stats doc
+    sd [grp-num], [parts-after],[parts-before],[fraction-kept]
+    [df_stats_doc]
+
+    ; update sel_groups
+    sd [grp-num], [grp-num],[parts-after],[grp-defocus7]
+    [defgrps_lim]
+
+    ; clean up temporary files
+    de
+    [df_unpicked_list]_rekey
+    de
+    [df_good_list]_unsort
+    de
+    [df_good_list]_byccc
+    de
+    [df_good_list]_truncated
+
+    ; increment good-particle counter
+    [part-counter] = [part-counter] + [parts-after]
+lb7
+; end group-loop
+
+; close documents
+sd e
+[defgrps_lim]
+ud ice
+[df_group_list]
+SD /    BEFORECUTOFF AFTER_CUTOFF
+[df_stats_doc]
+[dummy] = -[num-grps]
+sd [dummy], [tot-parts],[part-counter]
+[df_stats_doc]
+sd e
+[df_stats_doc]
+
+vm m
+echo ;
+echo "Total particles in selection docs (before removing fraction): {******[tot-parts]}" ; 
+echo "Total particles sorted by defocus-group (after removal):      {******[part-counter]}"
+.
+
+; SORT SEL_GROUP_CCLIM BY #PARTICLES
+
+de
+[defgrps_lim_sorted]_rev
+
+; sort by #particles
+doc sort
+[defgrps_lim]
+[defgrps_lim_sorted]_rev
+(2)  ; column# to sort: #particles
+Y    ; renumber?
+
+; loop though defocus-groups
+do lb6 [grp-key6] = 1,[num-grps]
+    ; count from end
+    [grp-rank] = [num-grps]- [grp-key6] + 1
+
+    ; read group#, #particles, defocus
+    ud ic [grp-rank], [grp-rank],[grp-parts6],[grp-defocus6]
+    [defgrps_lim_sorted]_rev
+
+    ; write to sorted doc
+    sd [grp-key6], [grp-rank],[grp-parts6],[grp-defocus6]
+    [defgrps_lim_sorted]
+lb6
+; end group-loop
+
+; clean up
+sd e
+[defgrps_lim_sorted]
+ud ice
+[defgrps_lim_sorted]_rev
+de
+[defgrps_lim_sorted]_rev
+
+vm
+echo "Done"; date
+
+en d
+
+; Modified 2012-04-27
+;    2012-04-27 (trs) -- changed to named registers
+;    2009-06-15 (trs) -- checks for empty defocus groups
+;    2008-01-31 (trs) -- using stack2particle as input instead of sel_particles
+;    2007-08-21 (trs,tsb) -- reflects changes to input doc file sel_particles
+;    2007-03-27 (trs) -- reflects changes to input doc file sel_particles
+;    2007-01-30 (trs,djt) -- bug fix: used label LB5 twice
+;    2007-01-30 (trs) -- updated for changes to default batch files
+;    2007-01-30 (trs) -- added outputs sel_group_cclim & sel_group_cclim_sorted
+;    2007-01-30 (trs) -- creation of odd & even files moved to bps-by-df
+;    2006-05-12 (trs,rag) -- bug fix: VM M command lacked ending period
+;    2006-03-02 (trs,pp) -- bug fix: got length of particle list from unrenumbered file
+;    2005-05-19 (trs) -- removes worst particles from each defocus-group
+;    2005-05-19 (trs) -- moved combined good-particle list and histogram elsewhere
+;    2004-12-30 (trs) -- creates order_defocus

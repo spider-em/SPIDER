@@ -1,0 +1,212 @@
+; INTERSECTS DOC FILES BY VIEW
+;
+; REQUIRES ../Reconstruction/reversedoc_7col.spi
+;
+; Adapted from intersect-by-group.spi
+
+; -------------------------- Parameter --------------------------
+[column-number]     = 2  ; column number to intersect
+[progress-interval] = 4  ; progress message written to screen every Nth view
+
+; ---------------------------- Inputs ----------------------------
+fr l
+[io_dir]../Reconstruction                                        ; input/output directory
+fr l
+[view_list]../Alignment/projlist                                 ; list of defocus-group numbers
+fr l
+[total_view_list][io_dir]/select/prj{***[view-num]}/sortsel      ; subset list, for each view
+;      VIEW_SLICE  GLOBPARTICLE
+;                      used
+fr l
+[view_subset_list]comparedparticles        ; total-particle list, for each view
+;      VIEW_SLICE  GLOBPARTICLE
+;                      used
+
+; --------------------------- Outputs ---------------------------
+fr l
+[view_intersection][io_dir]/select/prj{***[view-num]}/goodsel  ; intersection list, for each view
+fr l
+[view_difference][io_dir]/select/prj{***[view-num]}/badsel     ; difference list, for each view
+fr l
+[summary_doc][io_dir]/summary-viewintersect                    ; summary doc
+
+; ----------------------- END BATCH HEADER -----------------------
+
+fr l
+[temp_intersect_unrenum]tmpgood1_unrenum
+fr l
+[temp_intersect_unsort]tmpgood2_unsort
+fr l
+[temp_intersect_unreversed]tmpgood3_unreversed
+fr l
+[temp_difference_unrenum]tmpbad1_unrenum
+fr l
+[temp_difference_unsort]tmpbad2_unsort
+fr l
+[temp_difference_unreversed]tmpbad3_unreversed
+
+de
+[summary_doc]
+SD /      VIEW_NUM    GOOD_PARTS    BADPARTS
+[summary_doc]
+
+vm
+echo "Intersecting doc files" ; date ; echo
+
+; initialize particle-counter
+[good-counter] = 0
+[bad-counter]  = 0
+
+; get #views
+ud n [num-views]
+[view_list]
+
+; loop through views
+do [view-key] = 1,[num-views]
+    ; get view#
+    ud ic [view-key], [view-num]
+    [view_list]
+
+    if (int([view-num]/[progress-interval]).eq.[view-num]/[progress-interval]) then
+        vm
+        echo "Working on view #{***[view-num]}, {***[view-key]} out of {***[num-views]}"
+    endif
+
+    ; look for empty views
+    ud n [view-parts]
+    [total_view_list]
+
+    if([view-parts].ne.0) then
+        ; intersect particle lists
+        doc and
+        [total_view_list]
+        [view_subset_list]
+        [temp_intersect_unrenum]
+        [column-number]  ; column# to intersect: global#
+
+        ; renumber
+        doc ren
+        [temp_intersect_unrenum]
+        [temp_intersect_unsort]
+
+        ; get #particles
+        ud n [good-parts]
+        [temp_intersect_unsort]
+    else
+        [good-parts] = 0
+    endif
+
+    ; check for empty views
+    if([good-parts].ge.1) then
+        [good-counter] = [good-counter] + [good-parts]
+
+        ; sort by CC
+        doc sort
+        [temp_intersect_unsort]
+        [temp_intersect_unreversed]
+        (4)  ; column# to sort: CCROT
+        Y    ; renumber keys?
+
+        ; reverse order
+        @../Reconstruction/reversedoc_7col
+        [temp_intersect_unreversed]
+        [view_intersection]
+    else
+        de  ; delete possible pre-existing file
+        [view_intersection]
+    endif
+
+    ; label columns
+    SD /     VIEW_SLICE    PARTICLE     DF_SLICE      CC_ROT       MIRROR      GROUPNUM       VIEW
+    [view_intersection]
+    sd e
+    [view_intersection]
+
+
+    if([view-parts].ne.0) then
+        ; subtract particle lists
+        doc subtract
+        [total_view_list]
+        [view_subset_list]
+        [temp_difference_unrenum]
+        [column-number]  ; column# to subtract: global#
+
+        ; renumber
+        doc ren
+        [temp_difference_unrenum]
+        [temp_difference_unsort]
+
+        ; get #particles
+        ud n [bad-parts]
+        [temp_difference_unsort]
+    else
+        [bad-parts] = 0
+    endif
+
+    ; check for empty views
+    if([bad-parts].ge.1) then
+        [bad-counter] = [bad-counter] + [bad-parts]
+
+        ; sort by CC
+        doc sort
+        [temp_difference_unsort]
+        [temp_difference_unreversed]
+        (4)  ; column# to sort: CCROT
+        Y    ; renumber keys?
+
+        ; reverse order
+        @../Reconstruction/reversedoc_7col
+        [temp_difference_unreversed]
+        [view_difference]
+    else
+        de  ; delete possible pre-existing file
+        [view_difference]
+    endif
+
+    ; label columns
+    SD /     VIEW_SLICE    PARTICLE     DF_SLICE      CC_ROT       MIRROR      GROUPNUM       VIEW
+    [view_difference]
+    sd e
+    [view_difference]
+
+    ; write info to summary doc
+    sd [view-key], [view-num],[good-parts],[bad-parts]
+    [summary_doc]
+enddo
+; end view-loop
+
+; finish summary
+[dummy] = -[num-views]
+[total-parts] = [good-counter] + [bad-counter]
+SD /     TOTAL_GOOD    TOTALBAD    TOTALPARTS
+[summary_doc]
+sd [dummy], [good-counter],[bad-counter],[total-parts]
+[summary_doc]
+sd e
+[summary_doc]
+
+; clean up
+ud ice
+[view_list]
+de
+[temp_intersect_unrenum]
+de
+[temp_intersect_unsort]
+de
+[temp_intersect_unreversed]
+de
+[temp_difference_unrenum]
+de
+[temp_difference_unsort]
+de
+[temp_difference_unreversed]
+
+vm
+echo ; echo "Done -- Found {******[good-counter]} particles" ; date
+
+en d
+
+; Modified 2011-01-14
+;    2011-01-14 (trs) -- checks for empty views
+;    2009-12-31 (trs) -- column# to intersect now user-defined
+;    2009-08-26 (trs) -- posted

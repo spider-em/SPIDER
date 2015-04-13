@@ -1,0 +1,231 @@
+;refimage.tom
+;this batch file used to determine the padding needed 
+;for tomography images, and prints out 0degree tilt image
+;to figure out windowing. 
+;Also checks that all images are same size
+;[output]should NEVER be altered, it's size stores translations
+;ASSUMES rotation is negligeable to translation
+;ASSUMES input images are even, all output images forced even
+
+x19=2  ;single-tilt = 1, double-tilt = 2
+
+
+;--- input files -----
+FR L
+[images]rotated/rot_   ;prefix for image files, will add reg.
+FR L
+[sela]sel001    ;first series selection file
+FR L
+[aligna]cca002  ;first series alignment file
+FR L
+[selb]sel002    ;second series selection file
+FR L
+[alignb]ccb002  ;second series alignment file
+
+;--- output files ----
+FR L
+[output]centertest  ;0 tilt test image, to determine windowing
+
+;--- END BATCH HEADER ----
+x41=1  ;Allow various output to terminal? 1=yes
+;---quiet
+MD
+VB Off
+
+;---length of first selection file = x11
+UD N x11
+[sela]
+
+;---first image # =x40
+UD IC 1,x40
+[sela]
+
+;---first image size x=x20 y=x21
+FI x20,x21
+[images]{***x40}
+12,2
+
+;---default xtreme values, clean x40
+x30=0  ;xmax
+x31=0  ;xmin
+x32=0  ;ymax 
+x33=0  ;ymin
+x40=0
+
+;---stop or warning if image not square and single/double
+IF(x20.NE.x21)THEN
+  IF(x19.EQ.1)THEN
+    VM
+    echo "Single-tilt should be square"
+    EN
+  ELSE
+    VM
+    echo "Double-tilt MUST be square"
+    EN
+  ENDIF
+ENDIF
+
+;===start first series loop
+DO LB1 x12=1,x11
+  
+  ;---image # = x13
+  UD IC x12,x13
+  [sela]
+  
+  ;---image size x=x22,y=x23
+  FI x22,x23
+  [images]{***x13}
+  (12,2)
+  
+  ;---test that all images are same size as first
+  IF(x22.NE.x20)THEN
+    VM
+    echo "Image {***x13} different in X"
+    EN
+  ENDIF
+  IF(x23.NE.x21)THEN
+    VM
+    echo "Image {***x13} different in Y"
+    EN
+  ENDIF
+  
+  ;---alignment values scale,theta,psi,x,y
+  UD IC x13,x14,x15,x16,x17,x18
+  [aligna]
+  
+  ;---compare current to best translation
+  IF(x17.LT.x31)x31=x17  ;xmin
+  IF(x17.GT.x30)x30=x17  ;xmax
+  IF(x18.LT.x33)x33=x18  ;ymin
+  IF(x18.GT.x32)x32=x18  ;ymax
+  
+  ;---print 0 degree shift
+  IF(x15.EQ.0)THEN
+    IF(x41.EQ.1)THEN
+      VM
+      echo "Center slice #{***x13}, xshift= {***x17}, yshift= {***x18}"
+    ENDIF
+    ;---save center slice data
+    x36=x13
+  ENDIF
+  
+  
+LB1
+
+;---close files
+UD ICE
+[aligna]
+UD ICE
+[sela]
+
+;===start double tilt if and do loop
+IF(x19.EQ.2)THEN
+ 
+ ;---get selection file size
+ UD N x11
+ [selb]
+ 
+ DO LB2 x12=1,x11
+ 
+  ;---image # = x13
+  UD IC x12,x13
+  [selb]
+  
+  ;---image size x=x34,y=x35
+  FI x34,x35
+  [images]{***x13}
+  (12,2)
+  
+  ;---test that all images are same size as first
+  IF(x34.NE.x20)THEN
+    VM
+    echo "Image {***x13} different in X"
+    EN
+  ENDIF
+  IF(x35.NE.x21)THEN
+    VM
+    echo "Image {***x13} different in Y"
+    EN
+  ENDIF
+  
+  ;---alignment values scale,theta,psi,x,y
+  UD IC x13,x14,x15,x16,x17,x18
+  [alignb]
+  
+  ;---compare current to best translation
+  IF(x17.LT.x31)x31=x17  ;xmin
+  IF(x17.GT.x30)x30=x17  ;xmax
+  IF(x18.LT.x33)x33=x18  ;ymin
+  IF(x18.GT.x32)x32=x18  ;ymax
+  
+ LB2
+ENDIF
+
+;---close file
+UD ICE 
+[alignb]
+UD ICE
+[selb]
+
+;---find x and y travel
+x37=x30 -x31  ;X
+x38=x32 -x33  ;Y
+
+;---must be square, so use largest of travel
+IF(x37.GT.x38)THEN
+  x39=x37
+ELSE
+  x39=x38
+ENDIF
+
+
+;---forcing padded image even for centering
+x39=INT(x39+0.5)  ;force integer, round up
+x40=INT(x39/2)
+IF((x40*2).NE.x39)x39=x39+1
+x40=0
+
+x39=x39+x20 ;total image is orig + worst shift
+
+IF(x41.EQ.1)THEN
+  ;---Print out travels
+  VM
+  echo "X translation from {****x31} to {****x30}"
+  VM
+  echo "Y translation from {****x33} to {****x32}"
+  VM
+  echo "Using padded image of {*****x39} square"
+ENDIF
+
+;---calc one value to center image, assumes square
+x40=(x39-x20)/2+1
+
+;---pad
+PD
+[images]{***x36}  ;in
+_1            ;out
+(x39,x39,1)   ;out dim
+M             ;use min as bkgrd
+(x40,x40,1)   ;upper left corner
+
+
+;---open center slice data scale,theta,psi,x,y
+UD x36,x14,x15,x16,x17,x18
+[aligna]
+
+;---apply to padded centerslice
+RT SQ
+_1       ;input
+[output]
+x16,x14  ;angle scale
+x17,x18  ;shift x
+
+IF(x41.EQ.1)THEN
+  ;---user warning
+  VM
+  echo "View [output].$DATEXT to determine windowing of aligned images, if any."
+  VM
+  echo "DO NOT change [output].$DATEXT itself."
+ENDIF
+
+EN

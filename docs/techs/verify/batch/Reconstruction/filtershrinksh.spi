@@ -1,0 +1,155 @@
+; Adapted from PFILT.BAT 
+; apply low pass filter to and shrinks a set of particle images
+
+; ------------------ Parameters ------------------
+x11 = 7     ; filter type (7==Butterworth)
+x21 = 37.6  ; filter parameter 1, Angstroms (pass-band if Butterworth, else filter radius)
+x22 = 28.2  ; filter parameter 2, Angstroms (stop-band if Butterworth
+            ; stop band for Butterworth, temperature for Fermi, else not required
+x26 = 2     ; reduction/decimation factor (integer)
+
+; -------------------- Inputs --------------------
+fr l
+[params]../params                                        ; parameter document
+fr l
+[df_group_list]sel_group                                 ; list of defocus groups
+fr l
+[slice2particle_lut]stack2particle{***x77}               ; slice-to-particle lookup-table, for each group
+;[slice2particle_lut]df{***x77}/select/particle_lut_083   ; slice-to-particle lookup-table, for one view
+;      GLOBAL_PART
+fr l
+[alignment_doc]../Alignment/align_01_***                 ; AP SH doc template
+fr l
+[aligned_images]../Alignment/dala01_{***x77}@*****       ; aligned-image stack file-template
+
+; -------------------- Output --------------------
+fr l
+[filtered]../Particles/flt/flt******             ; filtered-image prefix (unstacked)
+
+; --------------- END BATCH HEADER --------------- 
+
+vm
+echo "Filtering images"; date
+
+; get pixel size (x15)
+ud 5,x15
+[params]
+ud e
+
+; change filter radii to reciprocal pixels
+x21 = x15/x21  ; pass-band
+x22 = x15/x22  ; stop-band
+; x15==pixel-size
+
+; get #defocus-groups (x75)
+ud n,x75
+[df_group_list]
+
+md
+set mp
+0
+
+; loop through defocus-groups
+DO LB7 x71=1,x75
+    ; get defocus-group# (x77)
+    ud ic,x71,x77
+    [df_group_list]
+
+    vm
+    echo "On defocus-group #{***x77}, {***x71} out of {***x75}"
+
+    ; get #particles (x50)
+    ud n,x50
+    [slice2particle_lut]
+
+    ; loop through particles
+    do lb1 x44=1,x50
+        ; get particle# (x55)
+        ud ic,x44,x55
+        [slice2particle_lut]
+
+        cp
+        [aligned_images]x44
+        _5
+        ; x44==slice# in stack
+
+        ; if Butterworth filter
+        IF (x11.eq.7) THEN
+            FQ np
+            _5       ; input file
+            _4       ; output file
+            x11      ; filter type
+            x21,x22  ; passband, stopband
+        endif
+
+        ; if Fermi filter
+        IF (x11.eq.5) THEN
+            FQ np
+            _5       ; input file
+            _4       ; output file
+            x11      ; filter type = Fermi
+            x21      ; filter radius
+            x22      ; temperature cutoff
+        endif
+
+        ; if Gaussian or top-hat filter
+        IF (x11.le.3) THEN
+            FQ np
+            _5       ; input file
+            _4       ; output file
+            x11      ; filter type = top hat, Gaussian
+            x21      ; filter radius
+        ENDIF
+
+        ; check Euler-angle theta (x32) for mirroring
+        ud ic,x44,x31,x32
+        [alignment_doc]x77
+
+        ; shrink and, if necessary, mirror
+        if(x32.ge.180) then
+            dc s
+            _4
+            _1
+            x26,x26  ; reduction factor in x,y
+
+            mr
+            _1
+            [filtered]x55
+            y  ; mirror around y-axis
+            ; x55==particle# (vs. slice# x44)
+        else
+            dc s
+            _4
+            [filtered]x55
+            x26,x26  ; reduction factor in x,y
+        endif
+    lb1
+
+    ; end particle-loop
+
+    ; close in-core files
+    ud ice
+    [alignment_doc]x77
+    ud ice
+    [slice2particle_lut]
+LB7  
+; end group-loop
+
+ud ice
+[df_group_list]
+
+vm
+echo "Done"; date
+
+EN D
+
+; Modified 2011-03-04
+;    2011-03-04 (trs) -- using stack2particle instead of sel_particles
+;    2007-05-30 (trs & gsa) -- reflects change to input file sel_particles
+;    2007-03-27 (trs & xa) -- reflects changes to input file sel_particles
+;    2007-02-22 (trs & djt) -- bug fix for filenames
+;    2007-01-24 (trs) -- input aligned images are now stacked
+;    2006-08-17 (trs) -- bug fix for mirroring in prj001 
+;    2006-04-05 (trs) -- changed units for filter radii
+;    2004-12-28 (trs) -- mirrors aligned image, if necessary
+;    2004-06-16 (trs) -- dusts images

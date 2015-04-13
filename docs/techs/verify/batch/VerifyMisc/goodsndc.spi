@@ -1,0 +1,134 @@
+; GENERATE COORDINATES FILES FOR SELECTED PARTICLES
+
+; ------------------- Parameter -------------------
+
+x56 = 4  ; prints progress message to screen every (x56)th micrograph
+
+; --------------------- Inputs ---------------------
+fr l
+[mic_list]../sel_micrograph                        ; micrograph-selection doc
+fr l
+[combined_coord_doc]../Particles/coords/sndc****   ; total coordinates doc
+;fr l
+;[mic2global]../Particles/coords/mic2global****    ; micrograph-slice to global-particle lookup table (optional)
+fr l
+[mic_good_list]../Particles/good/ngood****         ; good-particle-by-micrograph doc
+
+; -------------------- Outputs --------------------
+fr l
+[good_coord_doc]../Particles/coords/good_sndc****  ; good-particle coordinates doc
+
+; ---------------- END BATCH HEADER ----------------
+
+fr l
+[ngood_reorder]tmpngood
+fr l
+[unrenum_good_coords]tmpsndc
+
+vm
+echo "Generating coordinate files for good particles"; date
+
+; initialize particle-counters
+[ngood-counter] = 0
+[sndc-counter]  = 0
+
+; get #micrographs
+ud n [num-mics]
+[mic_list]
+
+; loop through micrographs
+do lb1 x10 = 1,[num-mics]
+    ; get micrograph# (x11)
+    ud ic,x10,x11
+    [mic_list]
+    
+    if (int(x10/x56).eq.x10/x56) then
+        vm
+        echo "Working on micrograph {****x11}, {****x10} out of {****[num-mics]}"
+    endif
+    
+    
+    ; RE-ORDER COLUMNS IN NGOOD FILE
+    
+    ; delete pre-existing file
+    de
+    [ngood_reorder]
+    
+    ; get #particles
+    ud n [num-parts]
+    [mic_good_list]x11
+
+    [ngood-counter] = [ngood-counter] + [num-parts]
+
+    ; trap for no particles
+    if([num-parts].eq.0) then
+        vm
+        touch [ngood_reorder].$DATEXT
+        goto lb5
+    endif
+
+    ; loop though particles
+    do lb5 x50 = 1,[num-parts]
+        ; read NGOOD file
+        ud ic x50,[mic-slice],x52,x53,x54
+        [mic_good_list]x11
+        
+        ; write to temp NGOOD doc
+        sd x50,x52,x53,[mic-slice],x54
+        [ngood_reorder]
+    lb5
+    ; end particle-loop
+    
+    ; close docs
+    ud ice
+    [mic_good_list]x11
+    sd e
+    [ngood_reorder]
+    
+    ; intersect coords doc and temp NGOOD doc
+    doc and
+    [combined_coord_doc]x11
+    [ngood_reorder]
+    [unrenum_good_coords]  ; OUTPUT
+    (3)                    ; column# to intersect: mic-slice
+    
+    ; renumber keys
+    doc ren
+    [unrenum_good_coords]
+    [good_coord_doc]x11
+    
+    ; label output doc
+    SD /       XCOORD       YCOORD      MICSLICE     CCCOEFF
+    [good_coord_doc]x11
+    sd e
+    [good_coord_doc]x11
+
+    ; count #new-particles
+    ud n [num-newparts]
+    [good_coord_doc]x11
+
+    [sndc-counter] = [sndc-counter] + [num-newparts]
+
+    ; clean up
+    de
+    [ngood_reorder]
+    de
+    [unrenum_good_coords]
+lb1
+; end micrograph-loop
+
+; clean up
+ud ice
+[mic_list]
+
+vm m
+echo; 
+echo "Done"; 
+echo "Accounted for {******[sndc-counter]} out of {******[ngood-counter]} particles"; 
+date
+.
+
+en d
+
+; Modified 2009-02-24
+;    TO DO: add global# if MIC2GLOBAL exists

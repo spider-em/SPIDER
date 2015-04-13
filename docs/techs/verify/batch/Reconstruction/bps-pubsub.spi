@@ -1,0 +1,163 @@
+; CALCULATE TWO HALF-SET RECONSTRUCTIONS FOR EACH GROUP
+;
+; Adapted from bpodd.bat (formerly b24.bpo)
+
+@bps-settings([stk-opt],[rad-fsc],[bp-method],[rad-recon],[cg-error],[cg-chisqr],[cg-iter],[cg-mode],[cg-lambda],[rp-lambda],[rp-cor],[rp-iter],[max-wait],[snr])
+
+fr l
+[temp_var]_3  ; variance map (not saved)
+fr l
+[temp_sorted_groups]tmpsel_grps_sorted
+
+;; initialize particle-counter
+;[total-parts] = 0
+
+de
+[summary_doc]
+;;SD /     MASKED_RES  UNMASKED_RES   NUMPARTS
+;;[summary_doc]
+de
+[sorted_group_list]
+
+; sort by #particles
+doc sort
+[group_list]
+[sorted_group_list]  ; WAS [temp_sorted_groups]
+(-2)   ; column# to sort: #particles
+Y      ; renumber keys?
+
+; get #groups
+UD N [num-grps]
+[sorted_group_list]  ; WAS [temp_sorted_groups]   ; WAS [group_list]
+
+; loop through groups
+;;DO LB1 [grp-key] = 1,[num-grps]
+DO LB1 [grp-rank] = 1,[num-grps]
+;    ; read from end
+;    [grp-rank] = [num-grps] - [grp-key] + 1
+    
+    ; Get current group number
+    UD IC [grp-rank],[grp]  ; ,[numparts]
+    [sorted_group_list]  ; WAS [temp_sorted_groups]   ; WAS [group_list]             ; Group selection file            (input)
+    
+;    ; write to sorted doc file
+;    sd [grp-key],[grp]
+;    [sorted_group_list]
+;    sd e
+;    [sorted_group_list]
+
+    ; for first group, check whether files exist
+    if([grp-key].eq.1) then
+        @bps-check([exists1])
+        [params]
+    
+        @bps-check([exists2])
+        [group_list]
+    
+        @bps-check([exists3])
+        [ali_stack]
+    
+        @bps-check([exists4])
+        [angles]
+    
+        @bps-check([exists5])
+        [seltotal]
+    
+        ; if any file is missing, product of flags will be zero
+        [iqfi-product] = [exists1]*[exists2]*[exists3]*[exists4]*[exists5]
+
+        if([iqfi-product].eq.0) then
+            vm
+            echo ; echo "Exiting" ; echo
+
+            en
+        else
+            vm
+            echo "Input files OK"; echo
+        endif
+    endif
+
+;    ; increment counter
+;    [total-parts] = [total-parts] + [grp-parts]
+
+    vm
+    publish './spider spi/$DATEXT @bps-distribute {***[grp]} grp={***[grp]}'
+LB1
+; end group-loop
+
+; close docs
+UD ICE
+[sorted_group_list]  ; WAS [temp_sorted_groups]
+de
+[sorted_group_list]  ; WAS [temp_sorted_groups]
+;doc ren
+;[sorted_group_list]
+;[sorted_group_list]
+
+
+; WAIT FOR ALL DEFOCUS GROUPS TO FINISH
+
+my fl  ; flush results file
+
+; loop through defocus-groups
+DO LB2 [grp-key] = 1,[num-grps]
+    ; get defocus-group#
+;    ud ic [grp-key], [grp]
+;    [sorted_group_list]   ; WAS [group_list]
+    
+    my fl  ; flush results file
+
+    IQ SYNC
+    [finished_flag]
+    (10 3600000)
+
+    MY FL
+
+    VM
+    echo "Group #{***[grp]} ({***[grp-key]}th out of {***[num-grps]}) synced"
+
+    DE
+    [finished_flag]
+    de
+    [dummy_wait_file][grp]
+LB2
+; end group-loop
+
+;ud ice  ; close
+;[sorted_group_list]   ; WAS [group_list]
+
+vm
+echo "All groups synced" ; date ; echo
+
+; remove the header lines
+doc sort
+[summary_doc]_temp
+[summary_doc]
+0  ; column# to sort: 0==key (group#)
+N  ; renumber keys?
+
+; clean up doc files
+de
+[summary_doc]_temp
+;SD /      MASKEDRES    UNMASKEDRES    NUM_PARTS
+SD /      GROUP_NUM    UNMASKEDRES    MASKEDRES
+[summary_doc]
+sd e
+[summary_doc]
+
+; if more than one group, sum and compute resolution
+if([num-grps].ge.2) then
+    @bps-combine
+endif
+
+vm
+echo "Done"; date
+
+EN
+
+; Modified 2014-07-31
+;    2014-07-31 (trs) -- bug fix in BPS-WAIT
+;    2012-05-16 (trs) -- start largest groups first
+;    2012-05-15 (trs) -- receives SNR from bps-settings
+;    2012-05-14 (trs) -- reformatted summary doc to comply with plotres.spi
+;    2011-11-04 (trs) -- adapted from realign-pubsub.spi

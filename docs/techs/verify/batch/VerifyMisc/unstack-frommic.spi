@@ -1,0 +1,173 @@
+; UNSTACK PARTCICLES BY MICROGRAPH
+
+; --------------------- Parameter ---------------------
+[write-imgs] = 1  ; write out unstacked images? (0==N)
+
+; ----------------------- Inputs -----------------------
+fr l
+[micrograph_list]../sel_micrograph                    ; micrograph list
+fr l
+[mic_slice_list]../Particles/good/ngood****           ; micrograph-to-group doc
+;        MICSLICE
+;          used
+fr l
+[global_part_lut]../Particles/coords/mic2global****   ; micrograph-to-global doc
+; KEY=MIC_SLICE /  COLUMN1=GLOBAL_PART
+fr l
+[mic_stack]../Particles/win/winser_****               ; micrograph stack template
+
+; ---------------------- Outputs ----------------------
+fr l
+[unstacked_dir]win                                    ; unstacked-particle directory
+fr l
+[unaligned_images][unstacked_dir]/ser******           ; unstacked-particle template
+fr l
+[mic_global_list]../Particles/good/globalpartmic****  ; micrograph-to-particle doc
+;       GLOBALPART    DF_GROUP     DF_SLICE
+fr l
+[global2mic_lut]combinedglobal                        ; combined-particle list
+fr l
+[summary_doc]summary-unstack                          ; summary doc
+
+; ------------------ END BATCH HEADER ------------------
+
+if([write-imgs].ne.0) then
+    vm
+    echo "if(! -d [unstacked_dir]) mkdir -p [unstacked_dir]"|csh
+else
+    vm
+    echo "Not writing out unstacked images"; echo
+endif
+
+; delete pre-existing files
+de
+[mic_align_doc]
+de
+[summary_doc]
+SD /       MICNUM      NUMPARTS
+[summary_doc]
+de
+[global2mic_lut]_unsort
+
+; initialize counter
+[global-counter] = 0
+
+; get #micrographs
+ud n [num-mics]
+[micrograph_list]
+
+; loop through micrographs
+do lb6 [mic-key] = 1,[num-mics]
+    ; get micrograph#
+    ud ic [mic-key], [mic-num]
+    [micrograph_list]
+
+    ; prepare selection doc
+    de
+    [mic_global_list][mic-num]
+
+    ; get #particles
+    ud n [num-parts]
+    [mic_slice_list][mic-num]
+
+    ; if no particles, loop to next micrograph
+    if([num-parts].eq.0) then
+        vm
+        echo "Skipping micrograph #{*****[mic-num]}, no selected particles"
+
+        ; write to summary
+        sd [mic-key], [mic-num],[num-parts]
+        [summary_doc]
+
+        goto lb6
+    else
+        vm
+        echo "Working on micrograph #{*****[mic-num]}, {*****[mic-key]} out of {*****[num-mics]}"
+
+        ; write to summary
+        sd [mic-key], [mic-num],[num-parts]
+        [summary_doc]
+    endif
+
+    ; loop through particles
+    do lb5 x50 = 1,[num-parts]
+        ; get micrograph-slice#, defocus-group#, group-slice#
+        ud ic x50, [mic-slice]
+        [mic_slice_list][mic-num]
+
+        ; look up global particle#
+        ud ic [mic-slice], [global-num]
+        [global_part_lut][mic-num]
+
+        ; copy from defocus-group stack
+        if([write-imgs].ne.0) then
+            cp
+            [mic_stack][mic-num]@{****[mic-slice]}
+            [unaligned_images][global-num]
+        endif
+
+        ; write to selection file
+        sd x50, [global-num],[mic-slice]
+        [mic_global_list][mic-num]
+
+        [global-counter] = [global-counter] + 1
+
+        ; write to selection doc
+        sd [global-counter], [global-num],[mic-num],[mic-slice]
+        [global2mic_lut]_unsort
+    lb5
+    ; end particle-loop
+
+    ; close micrograph slice-selection list
+    ud ice
+    [mic_slice_list][mic-num]
+
+    ; close micrograph global-particle lookup-table
+    ud ice
+    [global_part_lut][mic-num]
+
+    ; close other docs
+    SD /     GLOBALPART    DF_GROUP     DF_SLICE
+    [mic_global_list][mic-num]
+    sd e
+    [mic_global_list][mic-num]
+lb6
+; end micrograph-loop
+
+; sort selection doc
+doc sort
+[global2mic_lut]_unsort
+[global2mic_lut]
+(1)  ; column# to sort: particle#
+Y    ; renumber keys?
+
+SD /     GLOBALPART     MICNUM      MICSLICE
+[global2mic_lut]
+sd e
+[global2mic_lut]
+
+; close summary file
+[dummy] = -[num-mics]
+SD /      NUM_MICS    TOTALPARTS
+[summary_doc]
+sd [dummy], [num-mics],[global-counter]
+[summary_doc]
+sd e
+[summary_doc]
+
+; close other docs
+ud ice
+[micrograph_list]
+sd e
+[mic_align_doc]
+de
+[global2mic_lut]_unsort
+
+vm
+echo ; echo "Done -- Unstacked {******[global-counter]} particles"
+
+en d
+
+; Modified 2012-04-13
+;    2011-07-15 (trs) -- Adapted from unstack-bymic (using defocus-group stacks as input)
+;    2010-11-22 (trs) -- Added option to not write out unstacked images (only doc files)

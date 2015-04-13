@@ -1,0 +1,266 @@
+; For each defocus group and writes a new seltotal file
+; based on the values of the deltaCCROT histogram from sc-compare.spi
+
+; ------------------------- Parameters ----------------------------
+[min-delta]         = 0      ; minimum value of the deltaCCROT
+[max-delta]         = 9999   ; maximum value of the deltaCCROT
+[ccrot-cutoff]      = 0.00   ; fractional cutoff for low-CCROT images for each group
+[progress-interval] = 3      ; prints progress message every Nth defocus group
+
+; ---------------------------- Inputs -----------------------------
+fr l
+[df_group_list]../Reconstruction/sel_group_cclim                   ; list of defocus groups
+fr l 
+[delta_ccrot_doc]doc_delta_ccrot_{***[grp-num]}                    ; deltaCCROT for each defocus group
+;       SLICE_NUM   DELTACCROT     CCROT1       CCROT2      REFPROJ1     REFPROJ2
+
+; --------------------------- Outputs ------------------------------
+fr l
+[rec_dir]../Reconstruction                                         ; output directory
+fr l
+[df_supervised_list][rec_dir]/class2-sel_particles_{***[grp-num]}  ; particle selection doc
+;       DF_SLICE    DELTACCROT     CC_ROT
+fr l
+[supervised_defgrps][rec_dir]/class2-sel_group_cclim               ; defocus-group doc
+fr l
+[supervised_defgrps_sorted][supervised_defgrps]_sorted             ; sorted defocus-group doc
+fr l
+[summary_doc][rec_dir]/summary-splitbydf-class2                    ; summary file
+
+; ------------------------ END BATCH HEADER ------------------------
+
+fr l
+[temp_df_supervised_notcutoff]tmp_df_supervised_nocutoff_incore
+fr l
+[temp_df_supervised_cutoff]tmp_df_supervised_cutoff_incore
+
+vm
+echo "Splitting selection files"; date; echo
+
+[global-count]=0  ; counter
+
+; get number of defocus groups ([grp-num])
+ud n [num-grps]
+[df_group_list]
+
+; prepare output directory & clean up pre-existing files
+vm
+echo "if(! -d [rec_dir]) mkdir [rec_dir]"|csh
+de
+[summary_doc]
+SD /      DF_GROUP   CCROT_CUTOFF  DELTACUTOFF   DF_TOTAL
+[summary_doc]
+de
+[supervised_defgrps]
+
+; loop through defocus groups 
+do lb7 [group-order]=1,[num-grps]
+    ; get group#, defocus
+    ud ic [group-order],[grp-num],x99,[defocus]
+    [df_group_list]
+
+    if (int([grp-num]/[progress-interval]).eq.[grp-num]/[progress-interval]) then
+        vm
+        echo "Working on defocus group #{***[grp-num]}, {***[group-order]} out of {***[num-grps]}"
+    endif
+
+    ; get number of particles in current defocus group
+    UD N [num-parts-total]
+    [delta_ccrot_doc]
+
+
+    ; CHECK DELTA CCROT
+
+    [df-count]=0  ; counter
+
+    ; initialize in-core doc file
+    sd ic new
+    [temp_df_supervised_notcutoff]
+    (3,[num-parts-total])  ; #registers, #keys
+
+    ; loop through particles for current defocus group
+    do lb1 x10=1,[num-parts-total]
+        ; get deltaCCROT
+        ud ic, x10, [slice],[delta-ccrot],[ccrot1],[ccrot2]
+        [delta_ccrot_doc]
+
+        ; skip if deltaCCROT out of range
+        if ([delta-ccrot].gt.[max-delta])goto lb1
+        if ([delta-ccrot].lt.[min-delta])goto lb1
+
+        ; if deltaCCROT in range then......
+
+        ; get higher ccrot
+        if([ccrot1].gt.[ccrot2]) then
+            [higher-ccrot] = [ccrot1]
+        else
+            [higher-ccrot] = [ccrot2]
+        endif
+
+        ; increment counters
+        [df-count]=[df-count]+1
+
+        ; save to document
+        sd ic [df-count], [slice],[delta-ccrot],[higher-ccrot]
+        [temp_df_supervised_notcutoff]
+    lb1
+
+    ; close docs
+    sd ic copy
+    [temp_df_supervised_notcutoff]   ; in-core doc file
+    [df_supervised_list]_temp  ; on-disk doc file
+    sd ic end
+    [temp_df_supervised_notcutoff]
+
+    ; sort selection by CCROT
+    DOC SORT
+    [df_supervised_list]_temp
+    [df_supervised_list]_sort
+    (3)  ; column# to sort: CCROT
+    Y    ; renumber?
+
+    ; clean up
+    ud ice
+    [delta_ccrot_doc]
+    DE
+    [df_supervised_list]_temp
+
+
+    ; REMOVE FRACTION
+
+    ; clean up pre-existing files
+    DE
+    [df_supervised_list]
+
+    ; initialize counter
+    [part-counter] = 0
+
+    ; get #particles
+    ud n [num-parts-split]
+    [df_supervised_list]_sort
+
+    ; calculate fraction to keep
+    [particles2keep] = (1-[ccrot-cutoff])*[num-parts-split]
+
+    sd ic new
+    [temp_df_supervised_cutoff]
+    (3,[num-parts-split])  ; #registers, #keys
+
+    ; loop through particles
+    do lb2 [part-counter] = 1,[particles2keep]
+        ; count from end
+        [part-key] = [num-parts-split] - [part-counter] + 1
+
+        ; read from no-cutoff selection
+        ud ic [part-key], [df-slice],[delta-ccrot],[ccrot]
+        [df_supervised_list]_sort
+
+        ; write to cutoff-selection
+        [global-count]=[global-count]+1
+        sd ic [part-counter], [df-slice],[delta-ccrot],[ccrot]
+        [temp_df_supervised_cutoff]  ; WAS [df_supervised_list]
+    lb2
+    ; end particle-loop
+
+    ud ice
+    [df_supervised_list]_sort
+    de
+    [df_supervised_list]_sort
+    sd ic copy
+    [temp_df_supervised_cutoff]
+    [df_supervised_list]
+    sd ic end
+    [temp_df_supervised_cutoff]
+    SD /      DF_SLICE    DELTACCROT     CC_ROT
+    [df_supervised_list]
+    sd e
+    [df_supervised_list]
+
+    ; get #particles after cutoff
+    ud n [num-parts-cutoff]
+    [df_supervised_list]
+
+    ;[fraction-kept] = [num-parts-cutoff]/[num-parts-split]
+
+    ; write to summary files
+    sd [group-order],[grp-num],[num-parts-cutoff],[defocus]
+    [supervised_defgrps]
+    sd [group-order], [grp-num],[num-parts-cutoff],[num-parts-split],[num-parts-total]  ; ,[fraction-kept]
+    [summary_doc]
+lb7
+; end group-loop
+
+; clean up
+ud ice 
+[df_group_list]
+SD /      DF_GROUP    PARTICLES     DEFOCUS
+[supervised_defgrps]
+sd e
+[supervised_defgrps]
+SD /      DF_GROUP   CCROT_CUTOFF  DELTACUTOFF   DF_TOTAL
+[summary_doc]
+[dummy] = -[num-grps]
+sd [dummy], [global-count]
+[summary_doc]
+SD /   NUM_PARTICLES
+[summary_doc]
+sd e
+[summary_doc]
+
+
+; SORT SELGRPS
+
+FR L
+[tmp1]order_select_jnk1                  ; Temp output file (deleted)
+
+; DOC file sorting
+DOC SORT
+[supervised_defgrps]                     ; Defocus selection doc file   (input)
+[tmp1]                                   ; Sorted Temp file             (output)
+2                                        ; Sort column
+Yes                                      ; Renumber keys
+
+DE                                       ; Remove any existing output file
+[supervised_defgrps_sorted]
+
+UD N, [nkey]                             ; Get number of keys in sorted
+[tmp1]                                   ; Temp file                  (input)
+
+; Reverse sorting order of output doc file
+DO LB5 [i]=1,[nkey]                      ; Loop over defocus groups
+   [grp]=[nkey]-[i]+1                    ; Reverse order
+
+   ;            GROUP, PARTICLES, DEFOCUS
+   UD IC [grp], [grp],  [part],   [def]
+   [tmp1]                                ; Doc file                  (input)
+
+   SD    [i],   [grp],  [part],   [def]
+   [supervised_defgrps_sorted]                  ; Reverse sorted doc file  (output)
+LB5
+
+SD /      DF_GROUP    PARTICLES     DEFOCUS
+[supervised_defgrps_sorted]
+SD /   NUM_PARTICLES
+[supervised_defgrps_sorted]
+SD E
+[supervised_defgrps_sorted]
+UD ICE                                   ; Close doc files
+[tmp1]
+DE                                       ; Destroy temp. doc files
+[tmp1]
+
+vm
+echo; echo "Done... Kept {******[global-count]} particles"; date
+
+en d
+
+; Modified 2009-12-07
+;    2009-08-20 (trs & il) -- added option to cut off fraction for each defocus group
+;    2009-05-21 (trs) -- writing higher CCROT to output selection file
+;    2009-05-21 (trs) -- writes outputs to subdirectory (by default) to reduce clutter in Reconstruction/
+;    2009-04-16 (trs) -- bug fixes: CCROT not written to DF_SUPERVISED_LIST, sorted by wrong column
+;    2009-01-15 (trs & ty) -- uses delta_ccrot doc as input instead of selection file
+;    2007-12-03 (trs & pd) -- writes the defocus-group selection file in-core, is much faster now
+;    2007-12-03 (trs) -- added sel_group to output
+;    2007-11-28 (trs) -- input filename now sel_particles_
+;    2007-04-04 (DT)  -- modified and merged supclassify3 and supclassifydfseltotal

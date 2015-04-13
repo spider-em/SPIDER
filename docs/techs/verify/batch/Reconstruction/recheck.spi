@@ -1,0 +1,419 @@
+; ADD/SUBTRACT ADDITIONAL PARTICLES BY VIEW
+;
+; REQUIRES reversedoc_7col.spi
+;
+; NOTE1: SPIDER versions 18.19 through 19.01.1 sometimes crash when handling empty doc files
+; NOTE2: SPIDER version 20.11.0 loses some particles in the DOC SORT steps
+
+; ----------------------- Parameters  -----------------------
+[archive-yn] = 0   ; copy files to Particles/good? (for archival purposes)
+
+; -------------------------- Inputs --------------------------
+fr l
+[ref_view_list]../Alignment/projlist                           ; list of projection views
+fr l
+[view_dir]select/prj{***[view-num]}                            ; directory for each view
+fr l
+[total_particle_doc][view_dir]/sortsel                         ; total-particle list-prefix, for each reference-view
+; VIEWSLICE    PARTICLE     DFSLICE       CC_ROT       MIRROR      GROUPNUM       VIEW
+fr l
+[good_particle_doc][view_dir]/goodsel                          ; old good-particle doc template, for each reference-view
+fr l
+[bad_particle_doc][view_dir]/badsel                            ; old bad-particle doc template
+fr l
+[not_bad_particle_list][view_dir]/notbad                       ; (optional) new good-particle doc template
+fr l
+[not_good_particle_list][view_dir]/notgood                     ; (optional) new good-particle doc template
+
+; -------------------------- Outputs --------------------------
+fr l
+[new_good_particles][view_dir]/goodselB                        ; new good-particle doc template, for each reference-view
+fr l
+[new_bad_particles][view_dir]/badselB                          ; new bad-particle doc template
+fr l
+[new_good_part_copy]../Particles/good/goodselB{***[view-num]}  ; copy of good particle list (for archiving)
+fr l
+[summary_doc]how_many-recheckB                                 ; summary doc
+
+; --------------------- END BATCH HEADER ----------------------
+
+fr l
+[temp_rechecked_bad]tmpbadrechecked
+fr l
+[temp_new_good]tmpgoodnew
+fr l
+[temp_rechecked_good]tmpgoodrechecked
+fr l
+[temp_new_bad]tmpbadnew
+fr l
+[temp_merged_good_unsort]tmpgoodmerged_unsort
+fr l
+[temp_merged_bad_unsort]tmpbadmerged_unsort
+fr l
+[temp_merged_good_unreversed]tmpgoodmerged_unreversed
+fr l
+[temp_merged_bad_unreversed]tmpbadmerged_unreversed
+
+; clean up
+de
+[temp_rechecked_bad]
+de
+[temp_new_good]
+de
+[temp_rechecked_good]
+de
+[temp_new_bad]
+de
+[temp_merged_good_unsort]
+de
+[temp_merged_bad_unsort]
+de
+[temp_merged_good_unreversed]
+de
+[temp_merged_bad_unreversed]
+de
+[summary_doc]
+;SD /      VIEWNUM       NEWGOOD       OLDGOOD       NEW_BAD       OLD_BAD    FRACTION_KEPT
+SD /       NEWGOOD       OLDGOOD       NEW_BAD       OLD_BAD    FRACTION_KEPT
+[summary_doc]
+
+; initialize counters
+[old-good] = 0
+[old-bad]  = 0
+[old-tot]  = 0
+[new-good] = 0
+[new-bad]  = 0
+[new-tot]  = 0
+
+if([archive-yn].eq.0) then
+    vm
+    echo ; echo "Not archiving a copy of output selection files" ; echo
+else
+    vm
+    echo ; echo "Archiving a copy of selection files" ; echo
+endif
+
+; get number of reference-views
+ud n [num-views]
+[ref_view_list]
+
+; loop through reference-views
+do lb8 [view-key] = 1,[num-views]  ; WAS 38,39  ; WAS 3,3  ; WAS 
+    ; get reference-view#
+    ud ic,[view-key],[view-num]
+    [ref_view_list]
+
+
+    ; CHECK IF FILES EXIST AND INCREMENT COUNTERS
+
+    iq fi [good-exists]
+    [good_particle_doc]
+
+    if([good-exists].eq.1) then
+        ud n [view-good-old]
+        [good_particle_doc]
+
+        [old-good] = [old-good] + [view-good-old]
+    else
+        sd -1,[view-num]
+        [good_particle_doc]
+
+        [view-good-old] = 0
+    endif
+
+    iq fi [bad-exists]
+    [bad_particle_doc]
+
+    if([bad-exists].eq.1) then
+        ud n [view-bad-old]
+        [bad_particle_doc]
+
+        [old-bad] = [old-bad] + [view-bad-old]
+    else
+        sd -1,[view-num]
+        [bad_particle_doc]
+
+        [view-bad-old] = 0
+    endif
+
+    [view-good-old]  ; diagnostic
+;    [view-tot-old] = [view-good-old] + [view-bad-old]
+
+    ; get total particles before
+    ud n [view-tot-old]
+    [total_particle_doc]
+
+    [old-tot] = [old-tot] + [view-tot-old]
+
+    ; check if NOTBAD file exists
+    iq fi [notbad-exists]
+    [not_bad_particle_list]
+
+    if ([notbad-exists].eq.1) then
+        vm
+        echo "View {***[view-num]}: Not-bad particle list found"
+
+        ; subtract NOTBAD from BAD
+        doc subtract
+        [bad_particle_doc]
+        [not_bad_particle_list]
+        [temp_rechecked_bad]  ; OUTPUT
+        (1)                   ; column# to subtract: view-slice#
+
+        ; add NOTBAD to GOOD
+        doc and
+        [total_particle_doc]
+        [not_bad_particle_list]
+        [temp_new_good]  ; OUTPUT
+        (1)              ; column# to intersect: view-slice#
+    ; if NOTBAD doesn't exist
+    else
+        ; check for empty BAD_PARTICLE_DOC
+        ud n [num-bad]
+        [bad_particle_doc]
+
+        if([num-bad].eq.0) then
+            de
+            [temp_rechecked_bad]
+            vm
+            touch [temp_rechecked_bad].$DATEXT
+        else
+            doc ren
+            [bad_particle_doc]
+            [temp_rechecked_bad]
+        endif
+
+        de
+        [temp_new_good]
+        sd -1,[view-num]  ; dummy file
+        [temp_new_good]
+        sd e
+        [temp_new_good]
+    endif
+
+
+    ; check if NOTGOOD file exists
+    iq fi [notgood-exists]
+    [not_good_particle_list]
+
+    if ([notgood-exists].eq.1) then
+        vm
+        echo "View {***[view-num]}: Not-good particle list found"
+
+        ; subtract NOTGOOD from GOOD
+        doc subtract
+        [good_particle_doc]
+        [not_good_particle_list]
+        [temp_rechecked_good]  ; OUTPUT
+        (1)                    ; column# to subtract: view-slice#
+
+        ; get rest of parameters from total-selection file
+        doc and
+        [total_particle_doc]
+        [not_good_particle_list]
+        [temp_new_bad]  ; OUTPUT
+        (1)              ; column# to intersect: view-slice#
+    else
+        ; check for empty GOOD_PARTICLE_DOC
+        ud n [num-good]
+        [good_particle_doc]
+
+        if([num-good].eq.0) then
+            de
+            [temp_rechecked_good]
+            vm
+            touch [temp_rechecked_good].$DATEXT
+        else
+            doc ren
+            [good_particle_doc]
+            [temp_rechecked_good]
+        endif
+
+        de
+        [temp_new_bad]
+        sd -1,[view-num]  ; dummy file
+        [temp_new_bad]
+        sd e
+        [temp_new_bad]
+    endif
+
+    ; check that there are at least some good particles
+    ud n [length-good-minus-newbad]
+    [temp_rechecked_good]
+    ud n [length-good-new]
+    [temp_new_good]
+
+;    vm
+;    echo "DIAGNOSTIC: View {***[view-num]}: {***[length-good-minus-newbad]} {***[length-good-new]}"
+
+    if([length-good-minus-newbad]+[length-good-new].ge.1) then
+        ; merge RECHECKED_GOOD with NEW_GOOD
+        doc merge
+        [temp_rechecked_good]
+        [temp_new_good]
+        [temp_merged_good_unsort]  ; OUTPUT
+        (-1)                       ; merge everything
+    else
+;        vm
+;        echo "DIAGNOSTIC: View {***[view-num]}: {***[length-good-minus-newbad]} {***[length-good-new]}"
+        de
+        [temp_merged_good_unsort]
+        vm
+        touch [temp_merged_good_unsort].$DATEXT
+    endif
+
+    ; check that there are at least some bad particles
+    ud n [length-bad-minus-newgood]
+    [temp_rechecked_bad]
+    ud n [length-bad-new]
+    [temp_new_bad]
+
+    if([length-bad-minus-newgood]+[length-bad-new].ge.1) then
+        ; merge RECHECKED_BAD with NEW_BAD
+        doc merge
+        [temp_rechecked_bad]
+        [temp_new_bad]
+        [temp_merged_bad_unsort]  ; OUTPUT
+        (-1)                      ; merge everything
+    else
+;        vm
+;        echo "DIAGNOSTIC: View {***[view-num]}: {***[length-bad-minus-newgood]} {***[length-bad-new]}"
+        de
+        [temp_merged_bad_unsort]
+        vm
+        touch [temp_merged_bad_unsort].$DATEXT
+    endif
+
+    ; check if merged file has entries
+    ud n [length-merged-good]
+    [temp_merged_good_unsort]
+
+    if([length-merged-good].ge.1) then
+        ; sort MERGED_GOOD
+;        doc ren
+;        [temp_merged_good_unsort]
+;        [temp_merged_good_unsort]
+        doc sort
+        [temp_merged_good_unsort]
+        [temp_merged_good_unreversed]  ; WAS [new_good_particles]  ; WAS 
+        (4)   ; column# to sort: CCROT
+        Y     ; renumber?
+
+        ; reverse order, from highest to lowest
+        @reversedoc_7col
+        [temp_merged_good_unreversed]  ; INPUT
+        [new_good_particles]           ; OUPUT
+
+        SD /      VIEWSLICE     GLOBALNUM      DFSLICE        CCROT      MIRROR_FLAG    GROUP_NUM      VIEWNUM
+        [new_good_particles]
+        sd e
+        [new_good_particles]
+        de
+        [temp_merged_good_unreversed]
+
+        ; copy
+        if([archive-yn].ne.0) then
+            vm
+            cp -f [new_good_particles].$DATEXT [new_good_part_copy].$DATEXT
+        endif
+
+        ; increment counters
+        ud n [view-good-new]
+        [new_good_particles]
+        
+        [view-good-new]  ; diagnostic
+        
+        [new-good] = [new-good] + [view-good-new]
+    else
+        [view-good-new] = 0
+    endif
+
+
+    ; check if merged file has entries
+    ud n [length-merged-bad]
+    [temp_merged_bad_unsort]
+
+    if([length-merged-bad].ge.1) then
+        ; sort MERGED_GOOD
+;        doc ren
+;        [temp_merged_bad_unsort]
+;        [temp_merged_bad_unsort]
+        doc sort
+        [temp_merged_bad_unsort]
+        [temp_merged_bad_unreversed]  ; WAS [new_bad_particles]   ; WAS 
+        (4)    ; column# to sort: CCROT
+        Y      ; renumber?
+
+        ; reverse order, from highest to lowest
+        @reversedoc_7col
+        [temp_merged_bad_unreversed]  ; INPUT
+        [new_bad_particles]           ; OUPUT
+
+        SD /      VIEWSLICE     GLOBALNUM      DFSLICE        CCROT      MIRROR_FLAG    GROUP_NUM      VIEWNUM
+        [new_bad_particles]
+        sd e
+        [new_bad_particles]
+        de
+        [temp_merged_bad_unreversed]
+
+        ; increment counters
+        ud n [view-bad-new]
+        [new_bad_particles]
+        [new-bad] = [new-bad] + [view-bad-new]
+    else
+        [view-bad-new] = 0
+    endif
+
+    [view-tot-new] = [view-good-new] + [view-bad-new]
+    [new-tot] = [new-tot] + [view-tot-new]
+
+    ; trap for zero old good particles
+    if([view-good-old].ge.1) then
+        [fraction-kept] = [view-good-new]/[view-good-old]
+    else
+        [fraction-kept] = 0
+    endif
+
+    ; write to summary
+    sd [view-num], [view-good-new],[view-good-old],[view-bad-new],[view-bad-old],[fraction-kept],[view-tot-old],[view-tot-new]
+    [summary_doc]
+
+    ; clean up
+    de
+    [temp_rechecked_bad]
+    de
+    [temp_new_good]
+    de
+    [temp_rechecked_good]
+    de
+    [temp_new_bad]
+    de
+    [temp_merged_good_unsort]
+    de
+    [temp_merged_bad_unsort]
+lb8
+; end view-loop
+
+[dummy] = -[num-views]
+SD /            NEWGOOD       OLDGOOD       NEW_BAD       OLD_BAD      NEWTOTAL      OLDTOTAL
+[summary_doc]
+sd [dummy], [new-good],[old-good],[new-bad],[old-bad],[new-tot],[old-tot]
+[summary_doc]
+sd e
+[summary_doc]
+
+vm m
+echo ; echo "Done"; date; 
+echo "Good particles before: {******[old-good]}"; 
+echo "Good particles after:  {******[new-good]}"; 
+echo "Bad particles before: {******[old-bad]}"; 
+echo "Bad particles after:  {******[new-bad]}"; 
+echo "Total particles before: {******[old-tot]}"; 
+echo "Total particles after:  {******[new-tot]}"; 
+.
+en d
+
+; Modified 2012-05-03
+;    TO DO: replace REVERSEDOC_7COL with updated DOC SORT (will require SPIDER 19.03.1+)
+;    2011-01-14 (trs) -- checks for other empty doc files
+;    2010-12-16 (trs) -- checks for empty GOOD_PARTICLE_DOCs

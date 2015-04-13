@@ -1,0 +1,185 @@
+; COMBINES GOOD-PARTICLE LISTS FOR EACH MICROGRAPH 
+; INTO SELECTION LISTS FOR EACH DEFOCUS-GROUP
+
+; PARAMETERS:
+x58 = 0.10  ; fraction of particles to omit from each defocus-group
+x56 = 4     ; prints progress message to screen every (x56)th micrograph/group
+
+; -------------------------------- Inputs --------------------------------
+fr l
+[defocus_group_list]../Power_Spectra/order_defgrps  ; defocus-group list
+fr l
+[defgroup_neg_table]../Power_Spectra/def_sort       ; micrograph-to-defocus-group look-up table
+fr l
+[good_list]../Particles/good/ngood                  ; good-particle list, for each micrograph
+
+; -------------------------------- Outputs --------------------------------
+fr l
+[dfgroup_dir]df                  ; subdirectory pattern, for each defocus-group
+fr l
+[dfgroup_good_list]seltotal      ; for each defocus-group, in DFGROUP_DIR
+fr l
+[dfgroup_even_list]seleven       ; for each defocus-group, in DFGROUP_DIR
+fr l
+[dfgroup_odd_list]selodd         ; for each defocus-group, in DFGROUP_DIR
+fr l
+[df_stats_doc]docseltotalstats   ; stats document showing number of particles
+
+; --------------------------- END BATCH HEADER ---------------------------
+
+; get number of defocus-groups (x15)
+ud n,x15
+[defocus_group_list]
+
+; CLEAN UP PRE-EXISTING FILES
+
+de
+[df_stats_doc]
+
+; get number of defocus-groups (x15)
+do lb1 x10=1,x15
+    de
+    [dfgroup_dir]{***x10}/[dfgroup_good_list]_unsort
+lb1
+; end group-loop
+
+vm
+echo "Merging micrographs into defocus-groups"; date
+
+; get number of micrographs (x48)
+ud n,x48
+[defgroup_neg_table]
+
+; loop through micrographs
+do lb4 x40=1,x48
+    ; get micrograph# (x41), defocus-group# (x43)
+    ud ic,x40,x41,x42,x43
+    [defgroup_neg_table]
+
+    if (int(x40/x56).eq.x40/x56) then
+        vm
+        echo "Working on {***x40}th micrograph out of {***x48}"
+    endif
+
+    ; make defocus-group directory, if needed
+    vm
+    echo "if(! -d [dfgroup_dir]{***x43}) mkdir [dfgroup_dir]{***x43}"|csh
+
+    ; get number of good particles (x39) from current micrograph
+    ud n,x39
+    [good_list]{****x41}
+
+    if(x43.ne.x44) x34=0  ; total-particle counter
+
+    ; loop through particles
+    do lb3 x30=1,x39
+        ; get particle# (x31), CCC (x33)
+        ud ic,x30,x31,x33
+        [good_list]{****x41}
+
+        x34=x34+1  ; increment total-particle counter
+
+        ; write particle# (x31), CCC (x33) to defocus-group selection file
+        sd x34,x31,x33
+        [dfgroup_dir]{***x43}/[dfgroup_good_list]_unsort
+    lb3
+    ; end particle-loop
+
+    x44=x43  ; remember current defocus-group#
+
+    ; close documents
+    ud ice
+    [good_list]{****x41}
+    sd e  ; close document
+    [dfgroup_dir]{***x43}/[dfgroup_good_list]_unsort
+lb4
+; end micrograph-loop
+
+vm
+echo "Removing bad particles (optionally), splitting into halves"; date
+
+; loop through defocus-groups
+do lb2 x20=1,x15
+    if (int(x20/x56).eq.x20/x56) then
+        vm
+        echo "Working on {***x20}th defocus-group out of {***x15}"
+    endif
+
+    ; get number of particles (x59) from defocus-group
+    ud n,x59
+    [dfgroup_dir]{***x20}/[dfgroup_good_list]_unsort
+
+    ; calculate #particles to omit
+    x57=x59*x58  ; x59==total particles, x58==fraction
+
+    ; sort by CCC
+    doc sort
+    [dfgroup_dir]{***x20}/[dfgroup_good_list]_unsort
+    [dfgroup_dir]{***x20}/[dfgroup_good_list]_byccc
+    (2)  ; column# to sort: CCC
+    Y    ; renumber?
+
+    ; loop through particles
+    do lb5 x50=1,x59
+        ; get particle# (x51), CCC (x52)
+        ud ic,x50,x51,x52
+        [dfgroup_dir]{***x20}/[dfgroup_good_list]_byccc
+
+        if(x50.gt.x57) then
+            sd x50,x51,x52
+            [dfgroup_dir]{***x20}/[dfgroup_good_list]_truncated
+        endif
+    lb5
+    ; end particle-loop
+
+    ; close documents
+    ud ice
+    [dfgroup_dir]{***x20}/[dfgroup_good_list]_byccc
+    sd e
+    [dfgroup_dir]{***x20}/[dfgroup_good_list]_truncated
+
+    ; sort by particle#
+    doc sort
+    [dfgroup_dir]{***x20}/[dfgroup_good_list]_truncated
+    [dfgroup_dir]{***x20}/[dfgroup_good_list]
+    (1)  ; column# to sort: particle#
+    Y    ; renumber?
+
+    ud n,x54
+    [dfgroup_dir]{***x20}/[dfgroup_good_list]
+
+    ; write to stats doc
+    x55=x54/x59  ; fraction kept
+    sd x20,x54,x59,x55
+    [df_stats_doc]
+    ; x20==defocus-group#, x54==#kept, x59==total, x55==fraction
+
+    doc split
+    [dfgroup_dir]{***x20}/[dfgroup_good_list]  ; INPUT: total selection file
+    [dfgroup_dir]{***x20}/[dfgroup_odd_list]   ; OUTPUT: odd selection file
+    [dfgroup_dir]{***x20}/[dfgroup_even_list]  ; OUTPUT: even selection file
+
+    ; clean up temporary files
+    de
+    [dfgroup_dir]{***x20}/[dfgroup_good_list]_unsort
+    de
+    [dfgroup_dir]{***x20}/[dfgroup_good_list]_byccc
+    de
+    [dfgroup_dir]{***x20}/[dfgroup_good_list]_truncated
+lb2
+; end group-loop
+
+; close documents
+ud ice
+[defgroup_neg_table]
+sd e  ; close document
+[df_stats_doc]
+
+vm
+echo "Done"; date
+
+en d
+
+; Modified 2004-10-21
+;    2004-10-21 (trs) -- removes worst particles from each defocus-group
+;    2004-09-10 (trs) -- sorts dfgroup_good_list by particle-number

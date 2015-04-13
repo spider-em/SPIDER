@@ -1,0 +1,583 @@
+; SIMULATE EFFECT OF CTF AND DEFOCUS GROUPS
+;
+; Adapted from trapctf.bat and wienerfilter.bat
+
+; ---------------------------- Parameters ----------------------------
+[n-s-ratio] = 10   ; noise-to-signal ratio (not signal-to-noise ratio)
+[use-grps]  = 1    ; assumes use of defocus groups if >0
+
+; ------------------------------ Inputs ------------------------------
+fr l
+[parameter_doc]../params                                              ; parameter doc file
+fr l
+[defocus_bymic]../Power_Spectra/def_sort                              ; doc file with defocus values per micrograph (will check for ngood files)
+;      MICROGRAPH    DEFOCUS      DF_GROUP
+;         used        used          used
+fr l
+[good_particles_bymic]../Particles/good/ngood{****[mic-num]}          ; good-particle list for each micrograph
+fr l
+[defocus_bygroup]../Power_Spectra/order_defgrps                       ;  group defocus list (required if using defocus groups) doc file with defocus values per group
+;        DF_GROUP     DEFOCUS
+;          used        used
+fr l
+[good_particles_bygrp]../Reconstruction/sel_particles_{***[grp-num]}  ;  group-particle list (required if using defocus groups)
+
+; ------------------------------ Outputs ------------------------------
+fr l
+[ctf_dir]../Power_Spectra/ctfsim                                      ; output directory
+fr l
+[ctf_bymic][ctf_dir]/tflmic{****[mic-num]}                            ; CTF profile doc file, for each micrograph
+fr l
+[ctf_bygrp][ctf_dir]/tflgrp{***[grp-num]}                             ; CTF profile doc file, for each defocus group
+
+;        WF_DENOM    RADIUS_A^1
+fr l
+[wfdenom_bymic][ctf_dir]/wfdenom_bymic                                ; intermediate file: Wiener filter denominator by micrograph
+fr l
+[wfdenom_bygroup][ctf_dir]/wfdenom_bygroup                            ; intermediate file: Wiener filter denominator by groups
+
+;       TRANSFER     RADIUS_A^1
+fr l
+[transfer_wo_ctf][ctf_dir]/doctransfer-noctf                          ; transfer-function doc, for no CTF-correction
+fr l
+[transfer_bymic][ctf_dir]/doctransfer-bymic                           ; transfer-function doc, for CTF-correction by micrograph (idealized)
+fr l
+[transfer_dfgrps][ctf_dir]/doctransfer-dfgrps                         ; transfer-function doc, for CTF-correction by defocus groups
+
+; ------------------------- END BATCH HEADER -------------------------
+
+; set temporary filenames
+fr l
+[temp_good_mics]tmp_good_mics
+fr l
+[temp_wfdenom_bygroup]tmp_wfdenom_bygroup_incore
+fr l
+[temp_wfdenom_bymic]tmp_wfdenom_bymic_incore
+fr l
+[temp_transfer_woctf]tmp_transfer_woctf_incore
+fr l
+[temp_transfer_bymic]tmp_transfer_bymic_incore
+fr l
+[temp_transfer_dfgrps]tmp_transfer_dfgrps_incore
+
+; get parameters
+ud ic,5, [pixel-size]
+[parameter_doc]
+ud ic,7, [spherical-aberration]
+[parameter_doc]
+ud ic,8, [source-size]
+[parameter_doc]
+ud ic,9, [defocus-spread]
+[parameter_doc]
+ud ic,12, [amplitude-contrast]
+[parameter_doc]
+ud ic,13, [envelope-halfwidth]
+[parameter_doc]
+ud ic,14, [electron-wavelength]
+[parameter_doc]
+ud ic,15, [max-spfreq]
+[parameter_doc]
+ud ic,17, [img-dim]
+[parameter_doc]
+ud ice    ; close document
+[parameter_doc]
+
+vm
+echo "if(! -d [ctf_dir]) mkdir -p [ctf_dir]"|csh
+
+; get #micrographs
+ud n [num-mics]
+[defocus_bymic]
+
+; CREATE CTF PROFILES FOR EACH MICROGRAPH
+
+vm
+echo "Creating CTF profiles for each micrograph" ; date 
+
+[mic-counter] = 0  ; initialize
+
+; loop through micrographs
+do lb51 [mic-key] = 1,[num-mics]
+    ; get micrograph#, defocus
+    ud ic [mic-key], [mic-num],[defocus-angstroms],[group-num]
+    [defocus_bymic]
+
+    ; get #particles in micrographs
+    ud n [num-parts]
+    [good_particles_bymic]
+
+    ; skip if empty
+    if([num-parts].eq.0) goto lb51
+
+    [mic-counter] = [mic-counter] + 1
+
+    sd [mic-counter], [mic-num],[defocus-angstroms],[group-num]
+    [temp_good_mics]
+
+    ; calculate CTF profile
+    TF L
+    [spherical-aberration]
+    [defocus-angstroms],[electron-wavelength]
+    [img-dim]
+    [max-spfreq]
+    [source-size],[defocus-spread]
+    [amplitude-contrast],[envelope-halfwidth]
+    S            ; _S_traight CTF
+    [ctf_bymic]  ; OUTPUT
+lb51
+; end micrograph-loop
+
+[num-mics] = [mic-counter]
+; (Excludes micrographs where no particles kept)
+
+; get #Radii
+ud n [num-radii]
+[ctf_bymic]
+; (Should be [img-dim]+1)
+
+;; diagnostic
+;vm
+;echo ; echo "Num.Radii: {***[num-radii]}"
+
+; close docs
+sd e
+[temp_good_mics]
+ud ice
+[defocus_bymic]
+
+
+; INITIALIZE IN-CORE DOC FILES FOR TRANSFER FUNCTIONS, ETC.
+
+[zero] = 0  ; dummy register
+
+sd ic new        ; transfer function without CTF-correction
+[temp_transfer_woctf]
+(2,[num-radii])  ; #columns, max.key#
+
+sd ic new        ; Wiener-filter denominator correcting by micrograph
+[temp_wfdenom_bymic]
+(2,[num-radii])  ; #columns, max.key#
+
+sd ic new        ; transfer function correcting by micrograph
+[temp_transfer_bymic]
+(2,[num-radii])  ; #columns, max.key#
+
+sd ic new        ; Wiener-filter denominator using defocus-groups
+[temp_wfdenom_bygroup]
+(2,[num-radii])  ; #columns, max.key#
+
+sd ic new        ; transfer function using defocus-groups
+[temp_transfer_dfgrps]
+(2,[num-radii])  ; #columns, max.key#
+
+; loop through Radii
+do lb63 [radius] = 1,[num-radii]
+    ; calculate Radius in Angstroms^-1
+    [radius-a_1] = ([radius]-1)/([img-dim]*[pixel-size])
+
+    sd ic [radius], [zero],[radius-a_1]
+    [temp_transfer_woctf]
+
+    sd ic [radius], [n-s-ratio],[radius-a_1]
+    [temp_wfdenom_bymic]
+
+    sd ic [radius], [zero],[radius-a_1]
+    [temp_transfer_bymic]
+
+    sd ic [radius], [n-s-ratio],[radius-a_1]
+    [temp_wfdenom_bygroup]
+
+    sd ic [radius], [zero],[radius-a_1]
+    [temp_transfer_dfgrps]
+lb63
+; end Radius-loop
+
+
+; CALCULATE TRANSFER FUNCTION WITHOUT CTF-CORRECTION
+; (Sum of CTFs)
+
+vm
+echo ; echo "Calculating transfer function without CTF-correction"
+
+[tot-parts] = 0  ; initialize counter
+
+; loop through micrographs
+do lb53 [mic-key] = 1,[num-mics]
+    ud ic [mic-key], [mic-num]
+    [temp_good_mics]  ; WAS [defocus_bymic]
+
+    ; get #particles
+    ud n [num-parts]
+    [good_particles_bymic]
+
+    [tot-parts] = [tot-parts] + [num-parts]
+
+    ; loop through Radii
+    do lb65 [radius] = 1,[num-radii]
+        ; get current value in running sum
+        ud ic [radius], [old-sum],[radius-a_1]
+        [temp_transfer_woctf]
+
+        ; get transfer value for current micrograph
+        ud ic [radius], [transfer-value]
+        [ctf_bymic]
+
+        [new-sum] = [old-sum] + [num-parts]*[transfer-value]
+
+        ; update running sum
+        sd ic [radius], [new-sum],[radius-a_1]
+        [temp_transfer_woctf]
+    lb65
+    ; end Radius-loop
+
+    ud ice
+    [ctf_bymic]
+lb53
+; end micrograph-loop
+
+; close docs
+ud ice
+[temp_good_mics]  ; WAS [defocus_bymic]
+
+
+; DIVIDE BY NUMBER OF PARTICLES
+
+;; diagnostic
+;vm
+;echo "Normalizing by {******[tot-parts]} particles"
+
+; loop through Radii
+do lb61 [radius] = 1,[num-radii]
+    ; get sum
+    ud ic [radius], [sum-transfer],[radius-a_1]
+    [temp_transfer_woctf]
+
+    [avg-transfer] = -[sum-transfer]/[tot-parts]
+    ; (I flipped the sign for ease of comparison.)
+
+    ; write average
+    sd ic [radius], [avg-transfer],[radius-a_1]
+    [temp_transfer_woctf]
+lb61
+; end Radius-loop
+
+sd ic copy
+[temp_transfer_woctf]
+[transfer_wo_ctf]
+sd ic e
+[temp_transfer_woctf]
+SD /     TRANSFER     RADIUS_A^1
+[transfer_wo_ctf]
+sd e
+[transfer_wo_ctf]
+
+; CALCULATE TRANSFER FUNCTION IF CORRECTING BY MICROGRAPH
+; Sum of (CTFmic*CTFmic)/WFDENOMmic
+
+vm
+echo "Calculating transfer function when corrected by micrograph"
+
+; CALCULATE WIENER-FILTER DENOMINATOR
+
+; loop through micrographs
+do lb52 [mic-key] = 1,[num-mics]
+; get micrograph#, defocus
+    ud ic [mic-key], [mic-num]
+    [temp_good_mics]  ; WAS [defocus_bymic]
+
+    ; loop through Radii
+
+    do lb64 [radius] = 1,[num-radii]
+        ; get current value for Wiener-filter denominator
+        ud ic [radius], [old-sum],[radius-a_1]
+        [temp_wfdenom_bymic]
+
+        ; get transfer value for current micrograph
+        ud ic [radius], [transfer-value]
+        [ctf_bymic]
+
+        ; get #particles
+        ud n [num-parts]
+        [good_particles_bymic]
+
+        [new-sum] = [old-sum] + [num-parts]*[transfer-value]*[transfer-value]
+
+        ; update denominator
+        sd ic [radius], [new-sum],[radius-a_1]
+        [temp_wfdenom_bymic]
+    lb64
+    ; end Radius-loop
+
+    ud ice
+    [ctf_bymic]
+lb52
+; end micrograph-loop
+
+sd ic copy
+[temp_wfdenom_bymic]
+[wfdenom_bymic]
+sd ic e
+[temp_wfdenom_bymic]
+SD /      WF_DENOM    RADIUS_A^1
+[wfdenom_bymic]
+sd e
+[wfdenom_bymic]
+
+
+; CALCULATE WIENER-FILTER NUMERATOR
+
+; loop through micrographs
+do lb54 [mic-key] = 1,[num-mics]
+    ud ic [mic-key], [mic-num]
+    [temp_good_mics]  ; WAS [defocus_bymic]
+
+    ; loop through Radii
+    do lb66 [radius] = 1,[num-radii]
+        ; get current value in running sum
+        ud ic [radius], [old-sum],[radius-a_1]
+        [temp_transfer_bymic]
+
+        ; get transfer value for current micrograph
+        ud ic [radius], [transfer-value]
+        [ctf_bymic]
+
+        ; get #particles
+        ud n [num-parts]
+        [good_particles_bymic]
+
+        [new-sum] = [old-sum] + [num-parts]*[transfer-value]*[transfer-value]
+
+        ; update running sum
+        sd ic [radius], [new-sum],[radius-a_1]
+        [temp_transfer_bymic]
+    lb66
+    ; end Radius-loop
+
+    ud ice
+    [ctf_bymic]
+lb54
+; end micrograph-loop
+
+; close docs
+ud ice
+[temp_good_mics]  ; WAS [defocus_bymic]
+
+; diagnostic
+sd ic copy
+[temp_transfer_bymic]
+[ctf_dir]/wfnumerator_bymic
+
+; DIVIDE NUMERATOR BY DENOMINATOR
+
+; loop through Radii
+do lb67 [radius] = 1,[num-radii]
+    ; get running sum
+    ud ic [radius], [sum],[radius-a_1]
+    [temp_transfer_bymic]
+
+    ; get denomination value
+    ud ic [radius], [wf-denom]
+    [wfdenom_bymic]
+
+    ; divide
+    [quotient] = [sum]/[wf-denom]
+
+    sd ic [radius], [quotient],[radius-a_1]
+    [temp_transfer_bymic]
+lb67
+; end Radius-loop
+
+ud ice
+[wfdenom_bymic]
+sd ic copy
+[temp_transfer_bymic]
+[transfer_bymic]
+SD /     TRANSFER     RADIUS_A^1
+[transfer_bymic]
+sd e
+[transfer_bymic]
+
+; IF USING DEFOCUS GROUPS...
+if([use-grps].gt.0) then
+    ; get #groups
+    ud n [num-grps]
+    [defocus_bygroup]
+
+    vm
+    echo "Calculating transfer function using {**[num-grps]} defocus-groups"
+
+    ; CALCULATE TRANSFER FUNCTION USING DEFOCUS GROUPS
+    ; Sum of (CTFmic*CTFgrp)/WFDENOMgrp
+
+    ; loop through defocus-groups
+    do lb71 [grp-key] = 1,[num-grps]
+        ; get defocus value
+        ud ic [grp-key], [grp-num],[defocus-angstroms]
+        [defocus_bygroup]
+
+        ; calculate CTF profile
+        TF L
+        [spherical-aberration]
+        [defocus-angstroms],[electron-wavelength]
+        [img-dim]
+        [max-spfreq]
+        [source-size],[defocus-spread]
+        [amplitude-contrast],[envelope-halfwidth]
+        S  ; _S_traight CTF
+        [ctf_bygrp]  ; OUTPUT
+    lb71
+    ; end group-loop
+
+    ud ice
+    [defocus_bygroup]
+
+
+    ; CALCULATE WIENER-FILTER DENOMINATOR USING GROUPS
+
+    ; loop through defocus-groups
+    do lb72 [grp-key] = 1,[num-grps]
+        ; get defocus group#
+        ud ic [grp-key], [grp-num]
+        [defocus_bygroup]
+
+        ; get #particles in defocus-group
+        ud n [num-parts]
+        [good_particles_bygrp]
+
+        ; loop through Radii
+        do lb62 [radius] = 1,[num-radii]
+            ; get current value for Wiener-filter denominator
+            ud ic [radius], [old-sum],[radius-a_1]
+            [temp_wfdenom_bygroup]
+
+            ; get transfer value for current group
+            ud ic [radius], [transfer-value]
+            [ctf_bygrp]
+
+            ; get #particles
+            ud n [num-parts]
+            [good_particles_bygrp]
+
+            [new-sum] = [old-sum] + [num-parts]*[transfer-value]*[transfer-value]
+
+            ; update denominator
+            sd ic [radius], [new-sum],[radius-a_1]
+            [temp_wfdenom_bygroup]
+        lb62
+        ; end Radius-loop
+
+        ud ice
+        [ctf_bygrp]
+    lb72
+    ; end group-loop
+
+    ; close docs
+    ud ice
+    [defocus_bygroup]
+    sd ic copy
+    [temp_wfdenom_bygroup]
+    [wfdenom_bygroup]
+    sd ic e
+    [temp_wfdenom_bygroup]
+    SD /      WF_DENOM    RADIUS_A^1
+    [wfdenom_bygroup]
+    sd e
+    [wfdenom_bygroup]
+
+
+    ; CALCULATE WIENER-FILTER NUMERATOR
+
+    ; loop through micrographs
+    do lb55 [mic-key] = 1,[num-mics]
+        ud ic [mic-key], [mic-num],x99,[grp-num]
+        [temp_good_mics]  ; WAS [defocus_bymic]
+
+        ; loop through Radii
+        do lb68 [radius] = 1,[num-radii]
+            ; get current value in running sum
+            ud ic [radius], [old-sum],[radius-a_1]
+            [temp_transfer_dfgrps]
+
+            ; Get #particles
+            ud n [num-parts]
+            [good_particles_bymic]
+
+            ; get transfer value for current micrograph
+            ud ic [radius], [transfer-bymic]
+            [ctf_bymic]
+
+            ; get transfer value for current defocus-group
+            ud ic [radius], [transfer-bygrp]
+            [ctf_bygrp]
+
+            [new-sum] = [old-sum] + [num-parts]*[transfer-bymic]*[transfer-bygrp]
+            ; (By binning into groups, we're no longer squaring the micrograph's transfer function.)
+
+            ; update running sum
+            sd ic [radius], [new-sum],[radius-a_1]
+            [temp_transfer_dfgrps]
+        lb68
+        ; end Radius-loop
+
+        ; close docs
+        ud ice
+        [ctf_bymic]
+        ud ice
+        [ctf_bygrp]
+    lb55
+    ; end micrograph-loop
+
+    ; close docs
+    ud ice
+    [temp_good_mics]  ; WAS [defocus_bymic]
+    de
+    [temp_good_mics]
+
+    ; diagnostic
+    sd ic copy
+    [temp_transfer_dfgrps]
+    [ctf_dir]/wfnumerator_bygrp
+
+
+    ; DIVIDE NUMERATOR BY DENOMINATOR
+
+    ; loop through Radii
+    do lb69 [radius] = 1,[num-radii]
+        ; get running sum
+        ud ic [radius], [sum],[radius-a_1]
+        [temp_transfer_dfgrps]
+
+        ; get denomination value
+        ud ic [radius], [wf-denom]
+        [wfdenom_bygroup]
+
+        ; divide
+        [quotient] = [sum]/[wf-denom]
+
+        sd ic [radius], [quotient],[radius-a_1]
+        [temp_transfer_dfgrps]
+    lb69
+    ; end Radius-loop
+
+    ud ice
+    [wfdenom_bygroup]
+    sd ic copy
+    [temp_transfer_dfgrps]
+    [transfer_dfgrps]
+    SD /     TRANSFER     RADIUS_A^1
+    [transfer_dfgrps]
+    sd e
+    [transfer_dfgrps]
+endif
+
+sd ic e
+[temp_transfer_dfgrps]
+sd ic e
+[temp_transfer_bymic]
+
+vm
+echo ; echo "Done" ; date
+
+en d
+
+; Modified 2009-01-05

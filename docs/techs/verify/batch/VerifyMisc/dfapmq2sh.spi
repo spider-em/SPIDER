@@ -1,0 +1,95 @@
+; CONVERT APMQ FILES TO APSH FORMAT
+; 
+; NOTE: MIGHT BE FASTER IF I USE SD IC
+
+; --------- Inputs ---------
+fr l
+[defocus_group_list]../Power_Spectra/order_defgrps  ; defocus-group list
+fr l
+[df_dir]../Verify/rec-classesonly/df                ; defocus-group directory prefix
+fr l
+[apmq_doc]docapmqgood                               ; for each defocus-group, in DF_DIR
+fr l
+[reference_angle_doc]../Alignment/refangles         ; reference-angle doc
+
+; --------- Output ---------
+fr l
+[apsh_doc]input/align_01_  ; for each defocus-group
+
+; ---- END BATCH HEADER ----
+
+vm
+echo "Converting APMQ files to APSH"; date
+
+; get number of reference-projections (x19)
+ud n,x19
+[reference_angle_doc]
+
+; get number of defocus-groups (x51)
+ud n,x51
+[defocus_group_list]
+
+; loop through defocus-groups
+do lb1 x10=1,x51
+    vm
+    echo "Working on {***x10}th defocus-group out of {***x51}"
+
+    de  ; clean up pre-existing output
+    [apsh_doc]{***x10}
+    SD /               PHI         THETA         PSI       REF_PROJ      PARTICLE     IN_PLANE     X-SHIFT      Y-SHIFT       #PROJ      ANGLE_CHANGE    CCC       CUM_ANGLE   CUM_X-SHIFT  CUM_Y-SHIFT     MIRROR
+    [apsh_doc]{***x10}
+
+    ; get number of particles (x50)
+    UD N,x50
+    [df_dir]{***x10}/[apmq_doc]
+
+    ; loop through particles
+    do lb5 x55=1,x50
+        ; read APMQ file
+        ud ic,x55,x14,x21,x16,x17,x18,x15
+        [df_dir]{***x10}/[apmq_doc]
+        ; x14==reference-projection#, x21==CCC, x16==in-plane angle
+        ; x17==x-shift, x18==y-shift, x15==particle#
+
+        x41=abs(x14)  ; force reference-projection# to be positive
+
+        ; read phi (x11), theta (x12), psi (x13) for reference-projection
+        ud ic,x41,x11,x12,x13
+        [reference_angle_doc]
+
+        x20=-1   ; dummy variable: angle-change
+        x22=x16  ; in-plane rotation
+        x23=x17  ; x-shift
+        x24=x18  ; y-shift
+        if(x14.gt.0) then  ; x14==reference-projection#
+            x25=0   ; no mirror
+        else
+            x14=-x14     ; now reference-projection > 0
+            x12=x12+180  ; flip theta
+            x25=-1       ; mirror-flag
+        endif
+
+        ; write to AP SH file
+        sd x55,x11,x12,x13,x14,x15,x16,x17,x18,x19,x20,x21,x22,x23,x24,x25
+        [apsh_doc]{***x10}
+        ; phi (x11), theta (x12), psi (x13), reference-projection# (x14), particle# (x15), 
+        ; in-plane angle (x16), x-shift (x17), y-shift (x18), nproj (x19), angle-change (x20), CCC (x21), 
+        ; in-plane angle (x22), x-shift (x23), y-shift (x24), mirror-flag (x25)
+    lb5 
+    ; end particle-loop
+
+    ud ice
+    [df_dir]{***x10}/[apmq_doc]
+lb1
+; end group-loop
+
+ud ice
+[reference_angle_doc]
+
+vm
+echo "Done"; date
+
+en d
+
+; Modified 2005-09-27
+;    2005-09-27 (trs) -- mirrors projections by adding 180 to theta

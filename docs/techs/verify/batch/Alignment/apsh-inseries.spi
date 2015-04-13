@@ -1,0 +1,126 @@
+@apsh-settings([doalign],[shrange],[step],[diam],[r1],[r2],[max-wait])
+
+fr l
+[temp_combined_apsh_incore]tmpcombinedapsh_incore
+
+; initialize particle-counter
+[total-parts] = 0
+
+; get #groups
+ud n [num-grps]
+[group_list]
+
+; loop through groups
+do lb7 [grp-key]=1,[num-grps]
+    ; get group#
+    ud ic [grp-key], [grp]
+    [group_list]
+
+    ; get #particles
+    ud n [grp-parts]
+    [group_particle_list][grp]
+    
+    ; increment counter
+    [total-parts] = [total-parts] + [grp-parts]
+
+;;    VM
+;;    publish './spider spi/$DATEXT @apsh-main {***[grp]} grp={***[grp]}'
+
+    @apsh-main([grp])
+
+    my fl
+lb7
+; end group-loop
+
+
+; WAIT FOR ALL DEFOCUS GROUPS TO FINISH
+
+my fl  ; flush results file
+
+; initialize in-core doc file
+sd ic new
+[temp_combined_apsh_incore]
+(15,[total-parts])
+
+; initialize previous micrograph#
+[prev-mic] = -99
+
+; loop through defocus-groups
+DO LB2 [grp-rank]=1,[num-grps]
+    ; get defocus-group#
+    ud ic [grp-rank], [grp]
+    [group_list]
+
+   IQ SYNC
+   [finished_flag]
+   (10 3600000)
+
+   MY FL
+
+   VM
+   echo "Group #{***[grp]} ({***[grp-rank]}th out of {***[num-grps]}) synced"
+   DE
+   [finished_flag]
+   
+   ; get #particles
+    ud n [grp-parts]
+    [group_particle_list][grp]
+    
+    ; loop through particles
+    do lb5 [part-key] = 1,[grp-parts]
+
+        ; read alignment doc
+        ud ic [part-key], [psi],[theta],[phi],[prj],[grp-slice],[cum-psi],[cum-x],[cum-y],[numproj],[delta],[ccrot],[curr-psi],[curr-x],[curr-y],[mir]
+        [align_parameters][grp]
+        
+        ; get micrograph#
+;        ud ic [part-key], [grp-slice-list], [mic-slice],[grp-num],[mic-num],[global-num]
+        ud ic [part-key], [grp-slice-fromsel], [mic-slice],[grp-fromsel],[mic-num]
+        [group_particle_list][grp]
+        
+        ; close previous micrograph if different from current
+        if([mic-num].ne.[prev-mic]) then
+            ud ice
+            [mic2global_lut][prev-mic]
+        endif
+        
+        ; get global particle#
+        ud ic [mic-slice], [global-num]
+        [mic2global_lut][mic-num]
+        
+        ; write to combined alignment doc
+        sd ic [global-num], [psi],[theta],[phi],[prj],[global-num],[cum-psi],[cum-x],[cum-y],[numproj],[delta],[ccrot],[curr-psi],[curr-x],[curr-y],[mir]
+        [temp_combined_apsh_incore]   
+    lb5
+    
+    ; close docs
+    ud ice
+    [align_parameters][grp]
+    ud ice
+    [group_particle_list][grp]
+    ud ice
+    [mic2global_lut][mic-num]
+    sd ic copy
+    [temp_combined_apsh_incore]
+    [align_params_all]
+    sd ic e
+    [temp_combined_apsh_incore]
+LB2
+; end group-loop
+
+ud ice  ; close
+[group_list]
+
+vm
+echo ; echo "All groups done"; date
+
+en 
+
+; Modified 2013-04-04
+;    TO DO: test RR G
+;    2013-04-04 (trs & cjh) -- bug fix: wrong number of registers passed to apsh-main
+;    2013-01-21 (trs) -- gets global# from mic2global
+;    2011-11-04 (trs) -- adapted from apsh-pubsub.spi
+;    2011-08-23 (trs) -- adapted from realign-pubsub.spi
+;    2009-05-21 (trs) -- exits if selected input files not found
+;    2008-04-11 (trs) -- adapted from JSL's pubsub_recon_start.bat

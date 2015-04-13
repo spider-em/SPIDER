@@ -1,0 +1,230 @@
+; FORCES ALIGNMENT TO SAME VIEW FROM EACH REFERENCE
+
+; ----------------------- Parameters -----------------------
+
+[first-ring]        =  5  ; first ring, for 2D alignment
+[last-ring]         = -1  ; last ring, for 2D alignment (-1==calculated later)
+[search-range]      = 10  ; translation search range, for 2D alignment
+[step-size]         =  2  ; translation step size, for 2D alignment
+[progress-interval] =  4  ; prints progress message to screen every Nth defocus group
+
+; ------------------------- Inputs -------------------------
+fr l
+[params]../params                                          ; parameter doc file, only needed if last ring for AP SH is unspecified
+fr l
+[df_group_list]../Reconstruction/sel_group_cclim           ; for number of defocus groups
+fr l
+[selection]../Reconstruction/sel_particles_{***[grp-num]}  ; selection file, for each defocus group
+fr l
+[ref_1_dir]../Alignment1                                   ; input-output directory for reference #1
+fr l
+[ref_2_dir]../Alignment2                                   ; input-output directory for reference #2
+fr l
+[reference_angles_doc][ref_1_dir]/refangles                ; Euler angles of the reference-projections
+fr l
+[unaligned_images][ref_1_dir]/data{***[grp-num]}@*****     ; unaligned particle stacks
+fr l
+[align_doc]align_01_{***[grp-num]}                         ; alignment docs, in both REF_1_DIR and REF_2_DIR
+fr l
+[ref_projs]projs/prj_{***[grp-num]}@*****                  ; reference projections, in both REF_1_DIR and REF_2_DIR
+
+; ------------------------ Outputs ------------------------
+fr l
+[realigned_align_doc_1][ref_1_dir]/[align_doc]_realigned   ; realignment doc file, reference 1
+fr l
+[realigned_align_doc_2][ref_2_dir]/[align_doc]_realigned   ; realignment doc file, reference 2
+
+; -------------------- END BATCH HEADER --------------------
+
+fr l
+[temp_align_fromref1]tmpapsh1
+fr l
+[temp_align_fromref2]tmpapsh2
+
+md
+vb off
+md
+set mp
+0
+
+vm
+echo "Comparing alignment parameters"; date
+
+IF ([last-ring].LT.0) THEN
+    ; get particle diameter (in pixels) from params
+    UD 18,x39
+    [params] 
+    [last-ring] = INT((x39/2)*1.1)
+ENDIF
+
+; get #defocus-groups
+ud n,x76
+[df_group_list]
+
+; loop through defocus-groups
+do lb7 [grp-num]=1,x76
+    if (int([grp-num]/[progress-interval]).eq.[grp-num]/[progress-interval]) then
+        vm
+        echo "Working on group #{***[grp-num]} out of {***x76}"; date
+    endif
+
+    ; clean up
+    DE
+    [temp_align_fromref1]
+    DE
+    [temp_align_fromref2]
+    DE
+    [realigned_align_doc_1]
+    DE
+    [realigned_align_doc_2]
+    SD /                 PSI        THETA         PHI         REFNUM      SLICENUM    CUM_INPLANE  CUM_XSHIFT   CUM_YSHIFT     NPROJ       ANGDIFF       CCROT       INPLANE       XSHIFT       YSHIFT       MIRROR
+    [realigned_align_doc_1]
+    SD /                 PSI        THETA         PHI         REFNUM      SLICENUM    CUM_INPLANE  CUM_XSHIFT   CUM_YSHIFT     NPROJ       ANGDIFF       CCROT       INPLANE       XSHIFT       YSHIFT       MIRROR
+    [realigned_align_doc_2]
+    ; The headers don't all fit within the character limit, but it's here for reference.
+
+    ; get number of particles (x50) in current defocus group
+    UD N,x50
+    [selection]
+
+    ; loop through particles (x50)
+    do lb1 x10=1,x50
+        ud ic,x10,[slice]
+        [selection]
+
+        ; get projection #s, slice #s, CCROTs
+        ud ic,[slice],x11,x12,x13,[prj-ref1],[slice-ref1],x16,x17,x18,x19,x20,[ccrot-ref1],x22,x23,x24,x25
+        [ref_1_dir]/[align_doc]
+        ud ic,[slice],x51,x52,x53,[prj-ref2],[slice-ref2],x56,x57,x58,x59,x60,[ccrot-ref2],x62,x63,x64,x65
+        [ref_2_dir]/[align_doc]
+
+        ; if aligned to same projection, then save to unchanged docs
+        IF([prj-ref1].eq.[prj-ref2]) then
+            sd [slice-ref1],x11,x12,x13,[prj-ref1],[slice-ref1],x16,x17,x18,x19,x20,[ccrot-ref1],x22,x23,x24,x25
+            [realigned_align_doc_1]
+            sd [slice-ref2],x51,x52,x53,[prj-ref2],[slice-ref2],x56,x57,x58,x59,x60,[ccrot-ref2],x62,x63,x64,x65
+            [realigned_align_doc_2]
+            ; can't replace all of the old registers by named ones, because there's a character limit that these lines would exceed
+
+        ; if didn't align to same projection, then...
+        ELSE
+            ; if CCC1 > CCC2 then...
+            IF ([ccrot-ref1].GE.[ccrot-ref2]) then
+                [nproj] = 1
+                ; the NPROJ value in the new alignment doc will signify whether a particle has been realigned
+
+                ; save to different-but-higher doc 1
+                sd [slice-ref1],x11,x12,x13,[prj-ref1],[slice-ref1],x16,x17,x18,[nproj],x20,[ccrot-ref1],x22,x23,x24,x25
+                [realigned_align_doc_1]
+
+                ; force projection# > 0
+                [prj-ref1] = ABS([prj-ref1])
+
+                ; force alignment to ([prj-ref1])th projection of reference2
+                AP SH
+                [ref_2_dir]/[ref_projs]
+                [prj-ref1]
+                [search-range],[step-size]
+                [first-ring],[last-ring]
+                [reference_angles_doc]
+                [unaligned_images]
+                [slice-ref1]
+                *
+                (0)  ; no angular restriction
+                (1)  ; check mirrored positions
+                [temp_align_fromref2]
+
+                ;;x46 = [slice-ref1]  ; from Linux-flag days
+
+                ud ic [slice-ref1],x71,x72,x73,x74,x75,x76,x77,x78,x79,x80,x81,x82,x83,x84,x85
+                [temp_align_fromref2]
+                [nproj] = -1  ; to signify experimental image was realigned
+                sd    [slice-ref1],x71,x72,x73,x74,x75,x76,x77,x78,[nproj],x80,x81,x82,x83,x84,x85
+                [realigned_align_doc_2] 
+                ud ice
+                [temp_align_fromref2]
+                ; the NPROJ value in the new alignment doc will signify whether a particle has been realigned
+
+                ud ice  ; close doc
+                [temp_align_fromref2]
+            ; if CCC2 > CCC1 then...
+            ELSE
+                [nproj] = 1
+                ; the NPROJ value in the new alignment doc will signify whether a particle has been realigned
+
+                ; save to different-but-higher doc 2
+                sd [slice-ref2],x51,x52,x53,[prj-ref2],[slice-ref2],x56,x57,x58,[nproj],x60,[ccrot-ref2],x62,x63,x64,x65
+                [realigned_align_doc_2]
+
+                ; force projection# > 0
+                [prj-ref2] = ABS([prj-ref2])
+
+                ; force alignment to ([prj-ref2])st projection of reference1
+                AP SH
+                [ref_1_dir]/[ref_projs]
+                [prj-ref2]
+                [search-range],[step-size]
+                [first-ring],[last-ring]
+                [reference_angles_doc]
+                [unaligned_images]
+                [slice-ref2]
+                *
+                (0)  ; no angular restriction
+                (1)  ; check mirrored positions
+                [temp_align_fromref1]
+
+                ;;x46 = [slice-ref2]     ; from Linux-flag days
+
+                ud ic [slice-ref2],x71,x72,x73,x74,x75,x76,x77,x78,x79,x80,x81,x82,x83,x84,x85
+                [temp_align_fromref1]
+                [nproj] = -1  ; to signify experimental image was realigned
+                sd    [slice-ref2],x71,x72,x73,x74,x75,x76,x77,x78,[nproj],x80,x81,x82,x83,x84,x85
+                [realigned_align_doc_1]
+                ; the NPROJ value in the new alignment doc will signify whether a particle has been realigned
+
+                ud ice  ; close doc
+                [temp_align_fromref1]
+            ENDIF
+        ENDIF
+    lb1
+
+    ; clean up
+    sd e
+    [realigned_align_doc_1]
+    sd e
+    [realigned_align_doc_2]
+    ud ice 
+    [realigned_align_doc_1]
+    ud ice
+    [realigned_align_doc_2]
+    ud ice
+    [selection]
+    ud ice
+    [ref_1_dir]/[align_doc]
+    ud ice
+    [ref_2_dir]/[align_doc]
+    DE
+    [temp_align_fromref1]
+    DE
+    [temp_align_fromref2]
+lb7
+; end group-loop
+
+vm
+echo "Done"; date
+
+en d
+
+; Modified 2009-04-17
+;    2009-04-17 (trs) -- added annotation
+;    2009-04-17 (trs) -- Linux flag not used anymore
+;    2007-11-28 (trs, pd) -- input filename now sel_particles
+;    2007-04-05 (DT)  -- uses stack files and eliminates several unnecessary files
+;    2007-03-23 (trs) -- reflects use of stacks in initial reconstruction
+;    2006-08-29 (trs) -- reference projections now stacks
+;    2005-01-20 (trs, pd) -- bug fix
+;    2005-01-13 (trs) -- adapted for AP SH
+;    2005-01-13 (trs) -- made search range, step size user-defined
+;    2005-01-12 (trs) -- added flag to handle Linux-specific differences
+;    2005-01-11 (trs) -- altered labels, added comments
+;    2004-05-18 (trs) -- adapted from K. Mitra

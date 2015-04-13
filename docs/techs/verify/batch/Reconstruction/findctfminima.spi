@@ -1,0 +1,169 @@
+; FIND FIRST CTF MINIMA AND ZEROES 
+
+; ------------ Parameters ------------
+
+x56 = 2  ; prints progress message to screen every (x56)th micrograph
+
+; -------------- Inputs --------------
+fr l
+[micrograph_list]../sel_micrograph     ; micrograph selection list
+fr l
+[defocus_doc]../Power_Spectra/defocus  ; doc file with defocus values for each micrograph
+fr l
+[parameter_doc]../params               ; parameter doc
+
+; -------------- Outputs --------------
+fr l
+[ctf_dir]ctf                   ; output directory
+fr l
+[ctf_profile][ctf_dir]/docctf  ; CTF profile doc file prefix
+fr l
+[first_min_doc]ctf_minima      ; doc file with CTF first minima and first zeroes
+
+; --------- END BATCH HEADER --------- 
+
+vm
+echo "if(! -d [ctf_dir]) mkdir [ctf_dir]"|csh
+
+; get parameters
+ud ic,5,x15   ; pixel size
+[parameter_doc]
+ud ic,7,x17   ; spherical aberration
+[parameter_doc]
+ud ic,8,x18   ; source size (might be overridden below)
+[parameter_doc]
+ud ic,9,x19   ; defocus spread
+[parameter_doc]
+ud ic,12,x22  ; amplitude contrast
+[parameter_doc]
+ud ic,13,x23  ; Gaussian envelope halfwidth
+[parameter_doc]
+ud ic,14,x24  ; wavelength
+[parameter_doc]
+ud ic,15,x25  ; max. spatial frequency
+[parameter_doc]
+ud ic,17,x27  ; image dimension
+[parameter_doc]
+ud ice        ; close document
+[parameter_doc]
+
+x18=0      ; source size
+
+; prepare doc of first minima
+de
+[first_min_doc]
+SD /   MICROGRAPH  FIRST_MIN,A  FIRST_ZERO,A  FIRST_MIN,PX  FIRST_ZERO,PX
+[first_min_doc]
+
+; get number of micrographs
+ud n,x86
+[micrograph_list]
+
+; loop through micrographs
+do lb8 x80=1,x86
+    ; get micrograph#
+    ud ic,x80,x81
+    [micrograph_list]
+
+    if (int(x80/x56).eq.x80/x56) then
+        vm
+        echo "Working on micrograph #{***x81} ({***x80} out of {***x86})"
+    endif
+
+    ; get micrograph# (x83), defocus value (x82)
+    ud ic,x80,x83,x82
+    [defocus_doc]
+
+    ; check that micrograph #s agree
+    if(x81.ne.x83) then
+        vm m
+        echo "Micrograph numbers in [micrograph_list] and [defocus_doc] don't agree" ;
+        echo "Key number: {****x80}, [micrograph_list]: {****x81}, [defocus_doc]: {****x83}" 
+        echo "Please try again."
+.
+        en
+    endif
+
+    ; clean old files
+    de
+    [ctf_profile]{***x81}
+
+    ; generate straight-CTF doc
+    tf l
+    x17      ; spherical aberration
+    x82,x24  ; defocus, wavelength
+    x27      ; image dimension
+    x25      ; max. spatial frequency
+    x18,x19  ; source size, defocus spread
+    x22,x23  ; amplitude contrast, Gaussian envelope halfwidth
+    S        ; _S_traight CTF
+    [ctf_profile]{***x81}
+
+    ; get number of Fourier bins
+    ud n,x66
+    [ctf_profile]{***x81}
+
+    ; initialize first min., abs. min.
+    ud ic,1,x61
+    [ctf_profile]{***x81}
+    x63=1         ; radius for first min.
+    x68=-1        ; initialize first-min. Radius
+    x64=-1        ; initialize first-zero Radius
+
+    ; loop through Fourier radii to find first minimum, first zero,
+    do lb1 x60=2,x66
+        ud ic,x60,x65,x67
+        [ctf_profile]{***x81}
+        ; x65==CTF value, x67==Radius px^-1
+
+        ; check for first local min
+        if(x68.lt.0) then
+            ; x65==current CTF value, x61==previous CTF value
+            if(x65.gt.x61) then
+                x63=x60-1    ; Radius to end trap (used later)
+                x68=x67  ; x68==Radius (Angstroms),  x15==pixel size, x67==Radius px^-1
+;                x68=x15/x67  ; x68==Radius (Angstroms),  x15==pixel size, x67==Radius px^-1
+            endif
+        endif
+
+        ; find first zero
+        if(x64.lt.0) then
+            ; look for when CTF crosses origin
+            if(x65*x61.le.0)x64=x67
+;            if(x65*x61.le.0)x64=x15/x67
+            ; x65==current CTF value, x61==previous CTF value, x15==pixel size, 
+            ; x64==first-zero Radius (Angstroms), x67==current Radius (px^-1)
+        endif
+
+        x61=x65  ; new, previous CTF value==current CTF value
+    lb1
+    ; end radius-loop
+
+
+    ; write Radii (in Angstroms) to doc file
+    ; NOTE: it would be more accurate to interpolate, bi-linearly perhaps, 
+    ;       so these values will be on average 1/2 Fourier pixel off
+
+    ; convert to Angstroms (x15==pixel-size)
+    x69=x15/x68  ; first-min Radius
+    x62=x15/x64  ; first-zero Radius
+
+    sd x80,x81, x69,x62, x68,x64
+    [first_min_doc]
+    ; x80==micrograph counter, x81==micrograph#, 
+    ; Angstroms: x69==first-min. Radius, x62==first-zero Radius
+    ; px^-1:     x68==first-min. Radius, x64==first-zero Radius
+
+    ; clean up
+    ud ice
+    [ctf_profile]{***x81}
+lb8
+; end micrograph-loop
+
+sd e
+[first_min_doc]
+
+en d
+
+; Modified 2008-01-30
+;    2008-01-30 (trs) -- adapted from viewtrap.bat

@@ -1,0 +1,121 @@
+; <html><head><title>Stack particles by defocus groups</title></head><body><pre>
+ ;
+ ; SOURCE: spider/docs/techs/recon0/Procs/win2stk.spi     
+ ;                       Added header mic number       Jul 2011 ArDean Leith
+ ;
+ ; PURPOSE: Stack original particles by defocus groups, renumbering the 
+ ;          original particles. Stores micrograph number and original
+ ;          windowed particle number in particle file header
+ ;
+ ; <b> ------------ Input data ----------------------------------------
+
+ [want-glo-yn] = 1                                        ; Want global lookup table?    (0 == no)
+
+ ; <b> ------------ Input files ---------------------------------------
+                                     
+ [sel_grp]     = 'sel_group'                               ; Defocus group selection file (one)
+
+ [sel_mic_def] = '../Power_Spectra/sel_mic_def'            ; Micrograph selection & defocus file (one)
+                      
+ [sel_part]    = '../Particles/good/sel_part_****'         ; Particle selection files     (one/micrograph)
+
+ [win]         = '../Particles/win/data_bymic_****@******' ; Particle images stacks       (one/micrograph)
+
+ ; --------------- Output files  -------------------------------------
+
+ [stk]         = 'data_***@******'                         ; Particle images stacks       (one/defocus group)
+
+ [part2global] = 'part2glonum_***'                         ; Global particle lookup table (one/group) 
+
+ ; -------------- END BATCH HEADER ------------------------------</b>
+
+ MD
+   TR OFF                                ; Decreases results file output
+ MD
+   VB OFF                                ; Decreases results file output
+ SYS
+   echo " Results file omitted for speed" ; echo  
+ MD
+   RESULTS OFF                          ; Omits any results file output
+
+ UD N [nummics]                         ; Get number of micrographs from defocus file
+   [sel_mic_def]                        ; Micrograph selection doc file    (input)
+   ; /     MICROGRAPH  DEFOCUS    DEF.GROUP   DEF.GRP.AVG                        
+
+ [glo]= 0
+
+ DO                                     ; Loop over all defocus groups --------------
+
+    ; Get current defocus group number from defocus group selection file
+    UD NEXT [keyg], [grp]               ; Get next group (micrograph) number
+      [sel_grp]                         ; Group (micrograph) selection file    (input)
+    IF ( [keyg] <= 0) EXIT              ; Finished with all old groups
+
+    [numingrp] = 0
+
+    IF ( [want-glo-yn] > 0) THEN
+       DE                               ; Remove existing global lookup file 
+         [part2global][grp]             ; Existing global number lookup file (removed)
+       SD / KEY: WIN-NUM   REG: GLOBAL-NUM  MICROGRAPH; Label for new global number doc file
+         [part2global][grp]             ; New global number doc file (output)
+    ENDIF
+
+    DO [keym]=1,[nummics]               ; Loop over all micrographs  ----------------
+
+      UD IC [keym], [mic],[d],[grpt]    ; Get a micrograph number and its group number
+        [sel_mic_def]                   ; Micrograph listing             (input)
+
+      IF ( [grpt] == [grp] ) THEN
+         ; This micrograph's group is the current defocus group 
+
+         IQ FI [exist]                  ; See if there are any particles from this group
+           [sel_part][mic]              ; Images by micrograph selection doc file
+
+         IF ( [exist] > 0 ) THEN
+
+            UD N [numparts]             ; Get number of particles
+              [sel_part][mic]           ; Image selection doc file     (input)
+
+             DO [keyp]=1,[numparts]     ; Loop over all particles in this micrograph ---------------------
+
+               UD IC [keyp], [part]     ; Get particle number by micrograph
+                 [sel_part][mic]        ; Image selection doc file     (input)
+
+               [numingrp] = [numingrp] + 1
+
+               CP                       ; Copy particle image to output stack
+                 [win][mic][part]       ; Original image for this part.  (input)                  
+                 [stk][grp][numingrp]   ; Stacked image                  (output)
+
+               FI H [projnum],[mic],[part],[glo] ; Get header values
+                 [stk][grp][numingrp]            ; Stacked image           (input)
+                 PROJ,MIC,NUM,GLONUM
+
+               IF ( [want-glo-yn] > 0) THEN
+
+                 SD [part],[glo],[mic]          ; Save lookup table
+                   [part2global][grp]           ; Global number doc file (output)
+               ENDIF
+            ENDDO                       ; End of Loop over all particles in this micrograph -------------
+
+            SYS
+              echo " Group: {%I4%[grp]} Particles: {%I5%[numparts]} from Micrograph: {%I5%[mic]}"
+
+            UD ICE                      ; Finished with this micrograph
+              [sel_part][mic]           ; Close doc file                (closed)
+         ENDIF
+      ENDIF
+   ENDDO                                ; End of Loop over all defocus groups ----------------------------
+
+   UD ICE                               ; Finished with this defocus group
+     [sel_mic_def]                      ; Close doc file                (closed)
+
+   SYS
+    echo " Stacked group: {%I4%[grp]} with: {%I5%[numingrp]} particles"
+ ENDDO
+
+ SYS 
+   echo  
+ 
+ EN
+ ; </body></pre></html>

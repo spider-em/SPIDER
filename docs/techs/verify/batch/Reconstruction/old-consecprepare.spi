@@ -1,0 +1,210 @@
+; <html><head><title>Prepare files for input to refinement</title></head><body><pre>
+;
+; Adapted from copyin.pam
+; NOTE: can combine data sets by using input register, by appending to defocus-group list
+;
+; I/O PARAMETERS AND FILES ARE SET HERE:
+;
+; ------------------------- Parameter -------------------------
+
+[firstgrp] = 1  ; first defocus group (can be used to append to data set)
+
+; ------------------------ Input files ------------------------
+FR G
+[initial_params]../params                                     ; Parameter doc. file
+FR G
+[defgrps]sel_group_cclim                                      ; Group selection file 
+FR G
+[defgrps_sorted]sel_group_cclim_sorted                        ; Sorted group selection file 
+FR G
+[initial_vol]vol001                                           ; Initial starting volume
+;;FR G
+;;[df_dir]df***                                                 ; Defocus-group directory
+FR G
+[initial_sel_particles]sel_particles_{***[oldgrp]}            ; Particle selection files
+FR G
+[initial_group_align]../Alignment/goodalign_01_{***[oldgrp]}  ; Initial group alignment parameter files
+FR G
+[initial_unaligned_images]../Alignment/data***                ; Unaligned stacked image files
+FR G
+[initial_aligned_images]../Alignment/dala01_***               ; Aligned stacked image files
+
+; ----------------------- Output files -----------------------
+
+FR G
+[input_dir]../Refinement/input                         ; Output directory
+FR G
+[order_select][input_dir]/order_select                 ; Group selection file
+FR G
+[sorted_order_select][input_dir]/order_select_sort     ; Sorted group selection file
+FR G
+[start_vol][input_dir]/vol01                           ; Initial starting volume
+FR G
+[start_group_align][input_dir]/align_01_{***[newgrp]}  ; Alignment parameter input file 
+FR G
+[sel_particles][input_dir]/select_***                  ; Particle selection files 
+FR G
+[unaligned_images][input_dir]/data***                  ; Unaligned stacked image files
+FR G
+[start_aligned_images][input_dir]/dala01_***           ; Aligned stacked image files
+
+; ---------------------- END BATCH HEADER ---------------------- </b>
+
+MD
+TR OFF                          ; Decreases results file output
+MD
+VB OFF                          ; Decreases results file output
+MD
+SET MP
+0
+
+vm
+echo "Preparing refinement files"; date
+
+VM                              ; Crete refinement input directory
+mkdir -p  [input_dir]
+
+;VM                              ; Put sorted group selection file in input dir 
+;cp [defgrps_sorted].$DATEXT     [sorted_order_select].$DATEXT  
+
+;VM                              ; Put group selection file in input dir 
+;cp [defgrps].$DATEXT            [order_select].$DATEXT  
+
+VM                              ; Put initial volume in input directory 
+cp [initial_vol].$DATEXT        [start_vol].$DATEXT  
+
+VM                              ; Put params file in input dir 
+cp [initial_params].$DATEXT     [input_dir]  
+
+UD N [num-grp]                  ; Get total number of defocus groups
+[defgrps]
+
+DO LB1 [i]=1,[num-grp]          ; Loop over defocus groups  ---------------------
+    UD IC [i], [oldgrp],[num-particles],[defocus-value]
+    [defgrps]                    ; Doc file listing groups              (input)
+
+    [newgrp] = [oldgrp] + [firstgrp] - 1
+
+    sd [i],[newgrp],[num-particles],[defocus-value]
+    [order_select]
+
+    VM                           ; Copy starting alignment parameter files to input dir. 
+    cp     [initial_group_align].$DATEXT  [start_group_align].$DATEXT
+
+    ; clean up pre-existing files
+    de
+    [unaligned_images][newgrp]@
+    de 
+    [start_aligned_images][newgrp]@
+    de
+    [sel_particles][newgrp]
+
+    ; loop though particles
+    do lb2 [slice-counter]=1,[num-particles]
+        ; get slice#
+        ud ic [slice-counter], [old-slice]  ; , [particle-num]
+        [initial_sel_particles]  ; WAS [df_dir][oldgrp]/[initial_sel_particles]
+
+        ; write to selection doc
+        sd [slice-counter], [slice-counter], [old-slice]  ; , [particle-num]
+        [sel_particles][newgrp]
+
+        ; copy from total-particle stacks to good-particle stacks
+        cp
+        [initial_unaligned_images][oldgrp]@{******[old-slice]}
+        [unaligned_images][newgrp]@{******[slice-counter]}
+        cp 
+        [initial_aligned_images][oldgrp]@{******[old-slice]}
+        [start_aligned_images][newgrp]@{******[slice-counter]}
+    lb2
+    ; end particle-loop
+
+    ; close docs
+    ud ice
+    [initial_sel_particles]
+    SD /      NEWSLICE     OLDSLICE
+    [sel_particles][newgrp]
+    sd e
+    [sel_particles][newgrp]
+
+    VM
+    echo " Accumulated group: {***[newgrp]}"
+LB1
+
+UD ICE                          ; Close doc file access
+[defgrps]
+sd e
+[order_select]
+
+doc ren
+[order_select]
+[order_select]_renum
+
+; renumber
+at it
+[order_select]
+[order_select]
+
+SD /       GROUP      PARTICLES     DEFOCUS
+[order_select]
+sd e
+[order_select]
+
+
+; SORT BY #PARTICLES
+
+; clean up
+de
+[sorted_order_select]
+SD /       GROUP      PARTICLES     DEFOCUS
+[sorted_order_select]
+
+de
+[sorted_order_select]_reverse
+
+; sort by #particles
+doc sort
+[order_select]
+[sorted_order_select]_reverse
+(2)  ; column# to sort: #particles
+Y    ; renumber?
+
+UD N [num-grp]
+[sorted_order_select]_reverse
+
+; loop though defocus-groups
+do lb6 [grp-key]=1,[num-grp]
+    ; count from end
+    [group-num] = [num-grp]-[grp-key]+1
+
+    ; read group#, #particles (x52), defocus (x53)
+    ud ic,[group-num],[group-num],x52,x53
+    [sorted_order_select]_reverse
+
+    ; write to sorted doc
+    sd [grp-key],[group-num],x52,x53
+    [sorted_order_select]
+lb6
+; end group-loop
+
+; clean up
+sd e
+[sorted_order_select]
+de
+[order_select]_renum
+ud ice
+[sorted_order_select]_reverse
+de
+[sorted_order_select]_reverse
+
+VM
+echo 'Done'; date
+
+EN D
+; </body></pre></html>
+
+; Modified 2011-01-06
+;    2011-01-05 (trs) -- using more general SEL_PARTICLES as input
+;    2009-01-12 (trs) -- can combine data sets by starting from defocus-group >1
+;    2007-03-21 (trs) -- bug fix
+;    2007-01-30 (trs) -- adapted from copyin.pam

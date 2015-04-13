@@ -1,0 +1,211 @@
+; SEPARATES GOOD PARTICLES BY MICROGRAPH
+
+; ---------------------------- Inputs ----------------------------
+fr l
+[def_avg]../Power_Spectra/def_avg                                ; doc file with defocus-group for each micrograph
+;       MICROGRAPH    DEFOCUS      DF_GROUP    AVGDEFOCUS
+;          used                      used
+fr l
+[df_good_list]../Reconstruction/df{***[df-group]}/goodparticles  ; good-particle list, for each defocus group
+;        DF_SLICE   GLOBAL_PART     CC_ROT
+;          used        used
+fr l
+[tot_particle_list]../Particles/coords/mic2global****            ; file pattern for list of all particles, for each micrograph
+; KEY=MIC_SLICE /  GLOBAL_PART
+;        used         used
+
+; --------------------------- Outputs ----------------------------
+fr l
+[good_dir]../Reconstruction/Bymic  ; directory where output files will go
+fr l
+[mic_good_list]ngood****           ; good-particle list, for each micrograph, in GOOD_DIR
+;        MICSLICE     DF_GROUP     DF_SLICE    GLOBAL_PART    CC_ROT
+fr l
+[mismatch_doc]docmismatch          ; doc file written if MIC2GLOBAL and GOODPARTICLES disagree
+
+; ----------------------- END BATCH HEADER -----------------------
+
+fr l
+[temp_rekeyed_mic2global]tmp_mic2global
+fr l
+[temp_good_mic2global]tmp_goodmic2global
+fr l
+[temp_selbymic]tmp_micsel
+fr l
+[temp_mic_good_list]tmp_ngood
+
+de  ; delete pre-existing file
+[mismatch_doc]
+
+vm
+echo "Making good-particle list for each micrograph"; date
+
+vm
+echo "if(! -d [good_dir]) mkdir -p [good_dir]"|csh
+
+;; get number of good particles (x83)
+;ud n,x83
+;[df_good_list]
+
+; initialize particle-counters
+[output-counter] = 0
+[bad-counter]    = 0
+
+; get number of micrographs (x76)
+ud n,x76
+[def_avg]
+
+; loop through micrographs
+do lb7 x70=1,x76
+    ; get micrograph# (x71), defocus-group#
+    ud ic,x70,x71,x72,[df-group]
+    [def_avg]
+
+    ; shift particle# to 2nd column
+    doc key
+    [tot_particle_list]x71
+    [temp_rekeyed_mic2global]
+
+    ; find union of micrograph-particle list and combined-good list
+    doc and
+    [temp_rekeyed_mic2global]
+    [df_good_list]
+    [temp_good_mic2global]
+    (2)  ; column# to check: particle#
+    ; DF_GOOD_LIST label contains [DF-GROUP]
+    ; This sequence of inputs only shows mic-slice# and global-particle#.
+
+    ; find union of micrograph-particle list and combined-good list
+    doc and
+    [df_good_list]
+    [temp_rekeyed_mic2global]
+    [temp_selbymic]
+    (2)  ; column# to check: particle#
+    ; DF_GOOD_LIST label contains [DF-GROUP]
+    ; This sequence of inputs show everything in the DF_GOOD_LIST
+
+     ; renumber keys
+    doc ren
+    [temp_good_mic2global]
+    [temp_good_mic2global]
+    doc ren
+    [temp_selbymic]
+    [temp_selbymic]
+
+    ; delete pre-existing outputs
+    de
+    [good_dir]/[mic_good_list]x71
+
+    ; initialize
+    [good-counter]=0
+
+    ; get #particles
+    ud n [num-particles]
+    [temp_good_mic2global]
+
+    ; skip if empty
+    if([num-particles].eq.0) then
+        vm
+        echo "Micrograph {*****x71}: Kept 0 particles"
+        goto lb7
+    endif
+
+    ; allocate in-core doc file
+    sd ic new
+    [temp_mic_good_list]
+    (5,[num-particles])  ; #columns, #rows
+;    (7,[num-particles])  ; #columns, #rows
+
+    ; loop through particles
+    do lb5 x50=1,[num-particles]
+        ; read from mic2global doc
+        ud ic x50,[mic-slice],[global-num]
+        [temp_good_mic2global]
+
+        ; read from selbymic doc
+;        ud ic x50,[view-slice],[global-num-check],[df-slice],[ccrot],[mirror],[df-group],[view-num]
+        ud ic x50, [df-slice],[global-num-check],[ccrot]
+        [temp_selbymic]
+
+        ; check if no mismatch
+        if([global-num].eq.[global-num-check]) then
+            [good-counter] = [good-counter]+1  ; increment good-counter
+
+            ; write to output doc
+;            sd ic [good-counter],[mic-slice],[df-group],[df-slice],[view-num],[view-slice],[ccrot],[mirror]
+            sd ic [good-counter], [mic-slice],[df-group],[df-slice],[global-num],[ccrot]
+            [temp_mic_good_list]  ; WAS [good_dir]/[mic_good_list]x71
+        else
+            [bad-counter] = [bad-counter]+1  ; increment bad-counter
+
+;            sd [bad-counter],x71,[mic-slice],[df-group],[df-slice],[view-num],[view-slice],[ccrot],[mirror]
+            sd [bad-counter],x71,[mic-slice],[df-group],[df-slice],[global-num],[ccrot]
+            [mismatch_doc]
+            ; x71==micrograph#
+        endif
+    lb5
+    ; end particle-loop
+
+    [output-counter] = [output-counter]+[good-counter]
+
+;    ; get number of good particles
+;    ud n,[good-counter]
+;    [good_dir]/[mic_good_list]x71
+
+    vm
+    echo "Micrograph {*****x71}: Kept {****[good-counter]} particles"
+
+    ; clean up
+    ud ice
+    [temp_good_mic2global]
+    ud ice
+    [temp_selbymic]
+    sd ic copy
+    [temp_mic_good_list]
+    [good_dir]/[mic_good_list]x71
+    sd ic e
+    [temp_mic_good_list]
+;    SD /      MICSLICE     DF_GROUP     DF_SLICE      VIEWNUM    VIEW_SLICE     CCROT        MIRROR
+    SD /      MICSLICE     DF_GROUP     DF_SLICE    GLOBAL_PART    CC_ROT
+    [good_dir]/[mic_good_list]x71
+    sd e
+    [good_dir]/[mic_good_list]x71
+    de
+    [temp_rekeyed_mic2global]
+    de
+    [temp_good_mic2global]
+    de
+    [temp_selbymic]
+lb7
+; end micrograph loop
+
+vm
+echo ; echo "Total particles sorted by micrograph: {******[output-counter]}"
+
+ud ice  ; close document
+[def_avg]
+
+sd e
+[mismatch_doc]
+iq fi [mismatch-exists]
+[mismatch_doc]
+
+if([mismatch-exists].eq.1) then
+    ud n [num-mismatch]
+    [mismatch_doc]
+
+    vm
+    echo "WARNING: Found {******[num-mismatch]} mismatches -- Check file [mismatch_doc].$DATEXT"
+endif
+
+vm
+echo "Done"; date
+
+en d
+
+; Modified 2012-02-16
+;    TO DO: use SD IC
+;    2011-01-11 (trs) -- uses DF/GOODPARTICLES and DEF_AVG instead of COMBINEDGOOD, for speed
+;    2008-12-30 (trs) -- added information to output file
+;    2008-11-19 (trs) -- combined good-particle list assumed to exist
+;    2004-07-08 (trs) -- micrographs are now four digits

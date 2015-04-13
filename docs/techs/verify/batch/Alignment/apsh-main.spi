@@ -1,0 +1,142 @@
+([grp])
+
+; <html><head><title>Compute alignment parameters and optionally apply them</title></head><body><pre>
+;
+; SOURCE: spider/docs/techs/recon/newprogs/apshgrp.spi   
+;                   New                                 Nov 2004 ArDean Leith
+;                   Rewritten                           Feb 2005 ArDean Leith
+;                   Added alignment option & stack op   Nov 2006 ArDean Leith
+;                   SET MP location                     Feb 2008 ArDean Leith
+;                   VAR name                            Feb 2010 ArDean Leith
+;                   VAR names changed                   Dec 2010 ArDean Leith
+;
+; PURPOSE: Multi-reference alignment of an image series. 
+;          Sample images are aligned with reference projections via
+;          shifts (translations) and rotations.  
+;          FOR PROJECTS WITH MULTIPLE GROUPS- WITH OR WITHOUT PUBSUB.
+
+@apsh-settings([doalign],[shrange],[step],[diam],[r1],[r2],[max-wait])
+
+MD
+TR OFF                                     ; Decrease results file output
+MD
+VB OFF                                     ; Decrease results file output
+MD
+() OFF                                     ; No () necessary in loops
+
+
+;;; DO NOT WORRY IF [grp] IS UNDEFINED HERE, IT IS TAKEN CARE OF BY PUBSUB
+;;IF ([grp] .GT. 0) [pubsub] = 0             ; Secondary PubSub run 
+
+UD N [numgrps]                             ; Get number of groups 
+[group_list]                                  ; Groups selection file        (input)
+
+   MD                 
+   SET MP                                  ; Use all processors (needed here for secondary runs)
+   0
+
+   ; Get rotational alignment radius from object size if needed 
+   IF ([r2].LE.0) THEN                       
+      UD 5,[sp_pixsiz]                     ; Get pixel size (A) 
+      [params]                             ; Reconstruction parameters   (input)
+ 
+      UD 17,[sp_winsiz]                    ; Get window size (pixels) 
+      [params]                             ; Reconstruction parameters   (input)
+
+      [r2] = INT([diam]/(2.0*[sp_pixsiz])) ; Object radius (pixels) for last alignment ring
+      [ring-sh] = [r2] + [shrange]         ; Last ring + translation range
+      [maxrad]  = INT([sp_winsiz]/2) - 2   ; Max. radius of object in window
+
+      IF ([ring-sh] .GE. [maxrad]) THEN
+         [r2] = [maxrad] - [shrange] - 1   ; Reduce radius of outer  ring to fit window
+      ENDIF
+   ENDIF
+
+   IF ([grp] .GT. 0) [numgrps] = 1    ; Group listed on command line, overides list        
+
+;   DO  [grp]=1,[numgrps]           ; Loop over all group(s)
+;
+;      IF ([grp] .LT. 1) THEN          ; Group not on command line, use selection file        
+;         UD [grp],[grp-num]            ; Get current group number 
+;         [group_list]                    ; Group selection file                  (input)
+;      ENDIF
+
+      DE                              ; Delete existing  output doc. files.
+      [align_parameters][grp]
+ 
+      FI H [numpart]                  ; Get number of particles 
+      [unaligned_images]              ; Unaligned particle images              (input)
+      MAXIM                           ; Max. image number in stack      
+
+; wait for previous group
+@apsh-wait([numgrps],[grp-rank])
+[grp]      ; INPUT REGISTER: defocus-group number
+[group_list]  ; INPUT: defocus-group list
+; ------------------ Output Parameters -----------------
+; [numgrps]   ; number of groups
+; [grp-rank]  ; order within groups
+; ------------------ END BATCH HEADER ------------------
+
+; copy into memory
+cp
+[unaligned_images]
+[temp_images]
+[numpart]
+
+vm
+echo "Group #{***[grp]} ({***[grp-rank]}th out of {***[numgrps]}) finished copying stacks"; date
+
+my fl
+
+; If not last-ranked defocus-group, create temporary file
+if([grp-rank].ne.[numgrps]) then
+   vm
+   touch [dummy_wait_file][grp].$DATEXT
+endif
+
+      FI H [numproj]                  ; Get number of projections 
+      [ref_images]                    ; Reference images                       (input)
+      MAXIM                           ; Max. image number in stack      
+
+      VM
+      echo ' 'Aligning group: {****[grp]} with: {******[numpart]} particles  
+
+      AP SH                           ; Find Alignment using multiple references  
+      [ref_images]*****               ; Reference image file name template     (input)
+      (1-[numproj])                   ; List of reference images       
+      [shrange],[step]                ; Shift search range, step size  
+      [r1],[r2]                       ; First and last ring      
+      [ref_images_angles]             ; Ref. angles doc file                   (input)
+      [temp_images]*****  ; WAS [unaligned_images]*****         ; Unaligned particle images              (input)
+      (1-[numpart])                   ; List of particles  
+      *                               ; No unaligned particles align. doc file        
+      (0)                             ; No restriction on angular proj. search 
+      (1)                             ; Check mirrored positions
+      [align_parameters][grp]         ; Alignment angles doc. file             (output)
+
+      IF ([doalign] .GT. 0) THEN
+         ; Apply alignment parameters to unaligned particles
+         ; Order in doc file: PHI,THETA,PSI, REF#,IMG#,  ROT,SX,SY
+
+         RT SQ                        ; Rotate & shift whole stack operation
+         [temp_images]  ; WAS [unaligned_images]           ; Unaligned particles stack              (input) 
+         [aligned_images]             ; Aligned particles stack                (output)
+         (6,0,7,8)                    ; Reg. numbers for angle, scale,& shifts
+         [align_parameters][grp]      ; Alignment angles doc. file             (input)
+      ENDIF
+
+      MY FL                           ; Flush results file
+;;;      [grp] = 0                       ; Reset default group for next group
+;;;      (don't remember what this is for)
+;   ENDDO                              ; End loop for multiple groups
+
+de
+[temp_images]
+    
+RE
+
+; Modified 2011-11-04
+;    2011-08-22 (trs) -- incorporated features from from realign-distribute.spi
+
+; </body></pre></html>
+

@@ -1,0 +1,227 @@
+; CREATES ALIGNMENT DOCUMENT FOR ONLY GOOD PARTICLES
+
+; ----------------------- Inputs -----------------------
+fr l
+[micrograph_list]../Power_Spectra/def_avg               ; micrograph-to-group doc file (if using groups)
+;[micrograph_list]../sel_micrograph                      ; micrograph-to-group doc file (if not using groups)
+;;  / MICROGRAPH  DEFOCUS  DEF.GROUP  DEF.GRP.AVG
+fr l
+[align_dir]../Alignment                                 ; alignment-doc input/output directory
+fr l
+[total_align_doc][align_dir]/align_01_***               ; alignment doc file pattern
+fr l
+[good_particle_list]df{***[group-num]}/goodparticles    ; good-particle list, for each defocus group
+;[good_particle_list]sel_particles_{***[group-num]}      ; good-particle list, for each defocus group
+;        DF_SLICE
+fr l
+[stack2particle_lut]stack2particle***                   ; stack-to-particle lookup table, for each defocus-group
+;      GLOBAL_PART   MICROGRAPH    MICSLICE     DF_SLICE 
+;         used          used         used
+
+; ----------------------- Outputs -----------------------
+fr l
+[good_align_doc][align_dir]/good-align_01_***           ; template for good AP SH doc
+fr l
+[good_slice_doc]sel_particles_***                       ; good-slice doc
+;       DF_SLICE    MIC_SLICE     DF_GROUP    MICROGRAPH   PARTICLE
+
+; ------------------ END BATCH HEADER ------------------
+
+fr l
+[temp_sorted_df_align]tmp_sort_align
+
+UD N [num-mics],[num-cols]
+[micrograph_list]
+
+if ([num-cols].lt.4) then
+    vm
+    echo "Not using defocus groups"; echo
+
+    [using-groups] = 0
+else
+    vm
+    echo "Using defocus groups"; echo
+
+    [using-groups] = 1
+endif
+
+
+; GET THE FIRST AND LAST DEFOCUS-GROUP NUMBERS
+
+; if not using groups, first & last = 1
+if ([using-groups].eq.0) then
+    [first-group] = 1
+    [last-group]  = 1
+else
+; if using groups
+    ud ic,1,x80, x77, [first-group]
+    [micrograph_list]
+
+    [last-group] = [first-group]  ; initialize last defocus-group
+
+    ; loop through micrographs
+    DO LB4 x84=1,[num-mics]
+        ; get defocus-group# (x83)
+        ud ic,x84,x80,x77,[group-num]
+        [micrograph_list]
+
+        ; update first, last defocus-group
+        IF ([group-num].LT.[first-group]) [first-group] = [group-num]
+        IF ([group-num].GT.[last-group])  [last-group]  = [group-num]
+    LB4
+    ; end micrograph-loop
+
+    ud ice  ; close in-core doc
+    [micrograph_list]
+endif
+
+vm
+echo "Generating alignment docs for good particles"; date; echo
+
+[global-counter] = 0
+
+; loop through defocus-groups
+DO LB1 [group-num]=[first-group],[last-group]
+    ; clean up pre-existing files
+    de
+    [good_slice_doc][group-num]
+    SD /      DF_SLICE     MICSLICE     DF_GROUP    MICROGRAPH   PARTICLE
+    [good_slice_doc][group-num]
+    de
+    [good_align_doc][group-num]
+    SD /    PHI,       THE,        PSI,     MIR-REF#,        EXP# ,    CUM INPLANE,    SX,       SY,         NPROJ,        DIFF,     CCROT        INPLANE,      SX,      SY
+    [good_align_doc][group-num]
+
+    ; sort input documents
+    doc sort
+    [total_align_doc][group-num]
+    [temp_sorted_df_align]
+    (5)  ; column for particle#
+    Y    ; renumber keys?
+
+    ; check for empty selection
+    iq fi [sel-exists]
+    [good_particle_list]
+
+    if([sel-exists].eq.1) then
+        ; sort by particle#
+        doc sort
+        [good_particle_list]
+        [good_particle_list]sort
+        (1)  ; column for particle#
+        Y    ; renumber keys?
+
+        ; get number of total particles
+        ud n [num-particles]
+        [temp_sorted_df_align]
+
+        ; get number of good particles
+        ud n [num-good]
+        [good_particle_list]
+
+        [df-counter] = 1  ; initialize good-particle counter
+
+        ; get first good-slice#, particle#
+        ud ic [df-counter], [good-slice]  ; ,[particle-num]
+        [good_particle_list]sort
+
+        ; loop through total particles
+        do lb2 [df-particle] = 1,[num-particles]
+            ; get df-slice# and other parameters
+            ud ic [df-particle],x61,x62,x63,x64,[df-slice],x66,x67,x68,x69,x70,x71,x72,x73,x74,x75
+            [temp_sorted_df_align]
+
+            ; if current particle is good...
+            if([df-slice].eq.[good-slice]) then
+                ; get particle, micrograph#, mic-slice#
+                ud ic [df-slice], [particle-num],[mic-num],[mic-slice]
+                [stack2particle_lut][group-num]
+;                ud ic [df-slice], x99,[mic-slice],x99,[mic-num]
+;                [alignment_selection_doc][group-num]  ; ../Alignment/sel_particles{***[group-num]}
+
+                ; write to alignment doc
+                sd [df-counter],x61,x62,x63,x64,[df-slice],x66,x67,x68,x69,x70,x71,x72,x73,x74,x75
+                [good_align_doc][group-num]
+
+                ; write to good-slice doc
+                ;;sd [df-counter], [df-slice],[particle-num]  ; old format
+                sd [df-counter], [df-slice],[mic-slice],[group-num],[mic-num],[particle-num]
+                [good_slice_doc][group-num]
+                ; (Only the first column is used for the "normal" projection-matching batch files.
+                ;  The first four columns, on the other hand, are used in regroup.spi)
+
+                ; trap for end of good-particle list
+                if([df-counter].lt.[num-good]) then
+                    ; increment good-particle counter
+                    [df-counter] = [df-counter]+1
+
+                    ; get next good-particle#, particle#
+                    ud ic [df-counter],[good-slice]   ; ,[particle-num]
+                    [good_particle_list]sort
+                endif
+            endif
+        lb2
+        ; end particle-loop
+
+        ; close docs
+        ud ice
+        [stack2particle_lut][group-num]
+
+        ; get #good-particles
+        ud n [found-good]
+        [good_align_doc][group-num]
+
+        VM
+        echo "Group #{***[group-num]}: {******[num-particles]} total particles, {******[found-good]} good particles"
+    else
+        [num-particles] = 0
+        [found-good]    = 0
+
+        vm
+        echo "No particles kept in group #{***[group-num]}"
+    endif
+
+    [global-counter] = [global-counter] + [found-good]
+
+    ; clean up
+    SD /      DF_SLICE     MICSLICE     DF_GROUP    MICROGRAPH   GLOBAL_PART 
+    [good_slice_doc][group-num]
+    sd e
+    [good_slice_doc][group-num]
+    sd e
+    [good_align_doc][group-num]
+    ud ice  
+    [good_particle_list]sort
+    ud ice
+    [temp_sorted_df_align]
+    ud ice
+    [alignment_selection_doc][group-num]
+    de
+    [good_particle_list]sort
+    de
+    [temp_sorted_df_align]
+LB1
+; end group-loop
+
+vm
+echo ; echo "Done -- Found {*******[global-counter]} total good particles" ; date
+
+en d
+
+; Modified 2013-12-20
+;    TO DO: write documents in core
+;    2013-12-20 (trs) -- bug fix: didn't close STACK2PARTICLE files
+;    2011-01-05 (trs) -- uses STACK2PARTICLE for global particle number, micrograph, and micrograph slice
+;    2009-06-15 (trs) -- checks for empty defocus groups
+;    2009-06-15 (trs) -- added defocus-group and micrograph info to sel_particles from Alignment/sel_particles
+;    2009-04-14 (trs) -- GOOD_SLICE_DOC now called Reconstruction/sel_particles_***
+;    2009-04-14 (trs) -- replacement option if no defocus-groups used
+;    2009-01-11 (trs) -- uses named registers
+;    2009-01-11 (trs) -- bug fix (cosmetic): writes global particle#
+;    2008-01-31 (trs) -- doesn't use input sel_particles any more
+;    2007-05-30 (trs) -- reflects change to input file sel_particles
+;    2007-03-28 (trs & djt) -- key in goodalign needs to be equal to slice#, not consecutive
+;    2007-03-27 (trs) -- reflects changes to input doc file sel_particles
+;    2007-03-13 (trs & djt) -- writes seltotal file with slice#
+;    2007-03-09 (trs) -- uses Alignment/sel_particles to coordinate slice# and particle#
+;    2004-07-09 (ESB) -- modified from dfgoodapmq

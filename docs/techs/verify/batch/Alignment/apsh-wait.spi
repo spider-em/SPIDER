@@ -1,0 +1,99 @@
+([num-grps],[grp-rank])
+
+;;;EXAMPLE OF USAGE:
+;; wait for previous group
+;@pub_refine_wait([num-grps],[grp-rank])
+;x77                    ; INPUT REGISTER: group number
+;[sorted_order_select]  ; INPUT: group list
+;; Output registers
+;; [num-grps]  number of groups
+;; [grp-rank]  rank of current group
+
+;;;THE FOLLOWING IS NEEDED AFTER COPYING THE ALIGNED IMAGES INTO MEMORY
+;; If not last-ranked group, create temporary file
+;if([grp-rank].ne.[num-grps]) then
+;   vm
+;   touch jnkdocwait{***x77}.$DATEXT
+;endif
+
+; GET GLOBAL INFO
+@apsh-settings([doalign],[shrange],[step],[diam],[r1],[r2],[max-wait])
+; ----------------------- Parameter -----------------------
+; [max-wait]         ; maximum headstart for copying stacks before next group starts
+; ------------------------ Output ------------------------
+; [dummy_wait_file]  ; dummy file created when group done copying
+; -------------------- END BATCH HEADER --------------------
+
+
+; GET INFO FROM CALLING BATCH FILE
+
+; get group number
+rr [grp-num]
+?group number?
+
+; get group list
+fr
+?group sequence?[order_defgrps]
+
+
+; FIGURE OUT PREVIOUS GROUP#
+
+; initialize previous-group#
+[prev-grp]=0
+
+; if previous iteration's head start was used up, jnkdoc will exist
+de
+[dummy_wait_file][grp-num]
+
+; Get #groups
+ud n [num-grps]
+[order_defgrps]
+
+; Loop through groups
+do lb1 [grp-key]=1,[num-grps]
+   ; Get group#
+   ud ic [grp-key],[grp2check]
+   [order_defgrps]
+
+   ; If group# equals current group, exit loop
+   if([grp2check].eq.[grp-num]) then
+      [grp-rank] = [grp-key]  ; rank (to trap for >1)
+      goto lb2
+   endif
+
+   ; Update previous group#
+   [prev-grp]=[grp2check]
+lb1
+; End group-loop
+
+lb2 ; jump here when current group found
+
+; close doc
+ud ice
+[order_defgrps]
+
+
+; If not first group
+if([grp-rank].gt.1) then
+   ; wait for previous group to finish
+   my fl
+   iq sync [wait-time]
+   [dummy_wait_file][prev-grp]
+   (3,-[max-wait])  ; delay, maximum-wait
+
+   iq fi [waitfile-exists]
+   [dummy_wait_file][prev-grp]
+
+   if([waitfile-exists].eq.1) then
+      de
+      [dummy_wait_file][prev-grp]
+
+      vm
+      echo "Group #{***[grp-num]} ({***[grp-rank]}th out of {***[num-grps]}) waited {***[wait-time]} seconds for group #{***[prev-grp]}"; date
+   else
+      vm
+      echo "Group #{***[grp-num]} ({***[grp-rank]}th out of {***[num-grps]}) not waiting for group #{***[prev-grp]} any more"; date
+   endif
+endif
+
+re

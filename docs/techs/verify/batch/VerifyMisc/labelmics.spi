@@ -1,0 +1,110 @@
+; <html><head><title>Label particles on micrographs</title></head><body><pre>
+;
+; Adapted from lfc_pick.spi, pickparticle.spi
+
+; ------------ Parameters ---------------
+
+[decimate] = 8  ; decimation factor applied to input micrographs
+
+; ----------- Input files --------------
+FR G
+[params]../params                       ; Parameter file 
+
+FR G
+[sel_mic]../sel_micrograph              ; Micrograph file numbers
+
+FR G
+[micgr]../Micrographs/sm-mic{****[mic]} ; Micrograph images
+
+FR G
+[sndc]../Particles/coords/goodsndc****  ; Template for doc file with coordinates
+
+; ----------- Output files --------------
+FR G
+[out]../Micrographs/labeled{****[mic]}  ; Labeled, reduced micrographs
+
+; -------------- END BATCH HEADER --------------------------
+
+MD                      ; Use all available processors
+SET MP
+0 
+
+MD                      ; Skip unnecessary output 
+VB OFF
+MD                      ; Skip unnecessary output 
+TR OFF
+MY FL
+
+; Get window size from parameter file
+UD 17, [windiam]        ; Get window diameter
+[params]
+ud e
+
+; calculate downsampled window-dimension
+[windiam] = [windiam]/[decimate]
+
+; calculate downsampled half-dimensions
+X33 = INT([windiam]/2)+1
+X34 = INT([windiam]/2)+1
+
+; calculate circle radius
+x14 = [windiam]/2  ; WINDIAM already decimated
+;X13 = INT([windiam]/2)-1
+;x14 = int(x13/[decimate])  ; for downsampled window
+
+MY FL
+
+; Loop over all micrographs ----------------------------------------------------
+DO  
+    UD NEXT [key],[mic]  ; Get micrograph number
+    [sel_mic]
+    IF ([key].LE. 0) EXIT
+
+    cp
+    [micgr]
+    _99
+    
+    ; get #particles
+    UD N, X38
+    [sndc][mic]
+
+    ; loop through particles
+    DO LB2 X26 = 1,X38
+        UD IC,X26, [x-center],[y-center],X94,X97
+        [sndc][mic]
+        
+        ; calculate top-left coordinates
+        X84 = ([x-center] - X33)/[decimate]  ; x33==downsampled-xdim/2
+        X85 = ([y-center] - X34)/[decimate]  ; x34==downsampled-ydim/2
+
+        ; calculate center coordinates
+        x11 = ([x-center]-1)/[decimate]
+        x12 = ([y-center]-1)/[decimate]
+        
+        ; draw circle
+        pt
+        _99  ; INPUT: downsampled micrograph
+        CL
+        x11,x12  ; x-,y-coordinates
+        x14      ; radius
+        N        ; continue?
+    LB2
+    ; end particle-loop
+
+    ; close doc
+    UD ICE
+    [sndc][mic]
+
+    cp
+    _99
+    [out]
+
+    VM
+    echo ' 'Labeled:  {*****x38} images from micrograph: {*****[mic]}
+ENDDO
+
+VM
+echo 'Done '; date
+
+EN D
+; </body></pre></html>

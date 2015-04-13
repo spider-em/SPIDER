@@ -1,0 +1,148 @@
+; GENERATE MATCHED FILTER
+; 
+; FSC-masking adapted from JSL's makegauss.bat
+
+; ------------------- Parameter -------------------
+
+[radius] = -1  ; object radius for masking before FSC, pixels (use <0 to determine from PARAMS)
+
+; ------------------- Inputs -------------------
+fr l
+[parameter_doc]../params                  ; parameter file
+fr l
+[recon_dir].                              ; input/output directory
+fr l
+[odd_half_volume][recon_dir]/vol01_sub1   ; first half-set volume
+fr l
+[even_half_volume][recon_dir]/vol01_sub2  ; second half-set volume
+
+; -------------------- Output --------------------
+fr l
+[matched_filter_doc][recon_dir]/docmatched-vol01  ; output matched-filter doc
+;       TRANSFER      R,PX^-1      R,A**-1
+
+; --------------- END BATCH HEADER ---------------
+
+vm
+echo "Generating matched-filter doc" ; date
+
+fr l
+[fsc_doc]tmpfscdoc
+
+; get volume dimension
+ud 17,[idim]
+[parameter_doc]
+
+; get pixel size
+ud 5, [pxsz]
+[parameter_doc]
+
+; calculate center
+[center] = [idim]/2 + 1
+
+; calculate radius, if necessary
+if([radius].le.0) then
+    ; get diameter from PARAMS
+    ud 18,[part-diam]
+    [parameter_doc]
+
+    [radius] = [part-diam]/2
+endif
+
+ud e  ; close doc
+
+; create Gaussian
+mo 3
+_11
+[idim],[idim],[idim]        ; dimensions
+G                           ; _G_aussian
+[center],[center],[center]  ; center coordinates
+[radius],[radius],[radius]  ; Gaussian falloff
+
+; get statistics
+fs [max]
+_11
+
+; lift maximum to 1
+ar
+_11
+_12
+p1/[max]
+
+; multiply volumes by mask
+mu
+[odd_half_volume]
+_12  ; INPUT: mask
+_21  ; OUTPUT
+*
+
+mu
+[even_half_volume]
+_12  ; INPUT: mask
+_22  ; OUTPUT
+*
+
+rf 3 [res-pix],[res-freq]
+_21        ; INPUT: odd_half_volume
+_22        ; INPUT: even_half_volume
+(1)        ; ring width (NEEDS TO BE 1 unless volume padded)
+(0.8,1.2)  ; scale-factor range
+C          ; missing _C_one
+(90)       ; maximum tilt angle
+(3)        ; factor for noise comparison
+[fsc_doc]
+
+[res-ang] = [pxsz]/[res-freq]
+[res-ang]
+[res-pix]
+[res-freq]
+
+vm
+echo "Nominal resolution at 0.5FSC: {%f6.2%[res-ang]} Angstroms"
+
+; get #lines from resolution doc
+ud n, [num-fsc-lines]
+[fsc_doc]
+
+de  ; clean up pre-existing file
+[matched_filter_doc]
+
+; loop through Radii
+do lb1 [fsc-line]=3,[num-fsc-lines]
+    ; get FSC (third column)
+    ud ic [fsc-line], [spat-freq], [dummy], [fsc-value]
+    [fsc_doc]
+    
+    ; calculate spatial frequency in Angstroms
+    [spat-angs] = [spat-freq]/[pxsz]
+
+    ; write FSC to new document
+    sd [fsc-line], [fsc-value],[spat-freq],[spat-angs]
+    [matched_filter_doc]
+lb1
+; end Radius-loop
+
+; clean up
+ud ice
+[fsc_doc]
+de
+[fsc_doc]
+SD /      TRANSFER      R,PX**-1       R,A^-1
+[matched_filter_doc]
+[dummy] = -[idim]
+sd [dummy], [res-ang]
+[matched_filter_doc]
+SD /      MASKEDRES
+[matched_filter_doc]
+sd e
+[matched_filter_doc]
+
+en d
+
+; Modified 2013-08-14
+;    2013-08-14 (trs) -- writes masked resolution to output doc
+;    2013-08-14 (trs) -- added column to output doc with spatial frequency in Angstroms
+;    2012-05-21 (trs) -- reports spatial frequency in MATCHED_FILTER_DOC in Angstroms
+;    2012-03-22 (trs) -- reports nominal resolution in Angstroms
+;    2008-01-15 (trs) -- now stand-alone batch file
+

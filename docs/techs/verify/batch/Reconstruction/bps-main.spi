@@ -1,0 +1,331 @@
+([grp])
+
+; CALCULATE TWO HALF-SET RECONSTRUCTIONS FOR EACH GROUP
+;
+; Requires SPIDER version 19.01+ to use 'BP CG 3' (older call to bpcg.spi commented out)
+;
+; Adapted from bpodd.bat (formerly b24.bpo)
+
+@bps-settings([stk-opt],[rad-fsc],[bp-method],[rad-recon],[cg-error],[cg-chisqr],[cg-iter],[cg-mode],[cg-lambda],[rp-lambda],[rp-cor],[rp-iter],[max-wait],[snr])
+
+; Temporary files
+fr l
+[mask_unscaled]_11
+fr l
+[gaussian_mask]_12
+
+; get parameters
+UD IC 5,[pxsz]   ; Pixel size
+[params]
+UD IC 17,[idim]  ; Window size
+[params]
+
+[center] = [idim]/2 + 1                          ; Center coordinate
+
+; calculate reconstruction radius if necessary
+IF ([rad-recon].eq.-1) THEN
+   [rad-recon] = INT( (0.95*[idim])/2.0 )
+ENDIF
+
+; calculate mask radius, if necessary
+if([rad-fsc].le.0) then
+    ; get diameter from PARAMS
+    ud ic 18,[part-diam]
+    [params]
+
+    [radius] = [part-diam]/2
+endif
+
+md
+set mp
+0       ; 0 = use all processors available
+
+; MAKE GAUSSIAN MASK FOR FSC
+
+; create Gaussian
+mo 3
+[mask_unscaled]             ; OUTPUT
+[idim],[idim],[idim]        ; dimensions
+G                           ; _G_aussian
+[center],[center],[center]  ; center coordinates
+[radius],[radius],[radius]  ; Gaussian falloff
+
+; get statistics
+fs [max]
+[mask_unscaled]
+
+; lift maximum to 1
+ar
+[mask_unscaled]
+[gaussian_mask]
+p1/[max]
+
+; clean up
+de
+[mask_unscaled]
+ud ice
+[params]
+
+FI H [numparts]          ; Get number of particles 
+[ali_stack]              ; Unaligned particle images              (input)
+MAXIM                    ; Max. image number in stack      
+
+; if copying stack locally or into memory
+if([stk-opt].ne.0) then
+    ; wait for previous group
+    @bps-wait([numgrps],[grp-rank])
+    [grp]                 ; INPUT REGISTER: group number
+    [sorted_group_list]   ; INPUT: group list
+    ; ------------------ Output Parameters -----------------
+    ; [numgrps]    ; number of groups
+    ; [grp-rank]   ; order within groups
+    ; ------------------ END BATCH HEADER ------------------
+
+    ; make local directory, if necessary
+    if([stk-opt].eq.2) then
+        vm
+        echo "if(! -d [temp_local_dir]) mkdir [temp_local_dir]"|csh
+        
+        fr l
+        [ali][temp_images]*******
+    endif
+
+    ; copying into memory
+    if([stk-opt].eq.1) then
+        fr l
+        [temp_images]_8@  ; (CHECK if original FR G assignment is overridden, and [ali] is updated)
+    endif
+
+    vm
+    echo "Group #{***[grp]} ({***[grp-rank]}th out of {***[numgrps]}) copying stacks"; date
+
+    ; copy locally
+    cp
+    [ali_stack]
+    [temp_images]
+    [numparts]  ; only needed if in-core
+
+    vm
+    echo "Group #{***[grp]} ({***[grp-rank]}th out of {***[numgrps]}) finished copying stacks"; date
+
+    my fl
+
+    ; If not last-ranked group, create temporary file
+    if([grp-rank].ne.[numgrps]) then
+        vm
+        touch [dummy_wait_file][grp].$DATEXT
+    endif
+
+; if using original image-stack (option #0)
+else
+    ; using original image-stack
+    fr l
+    [temp_images][ali_stack]  ; (CHECK that [temp_images] isn't deleted for this case, and [ali] is updated)
+endif
+
+; get #groups
+UD N,[num-grps]
+[group_list]
+
+; create directory, if needed
+vm
+mkdir -p [group_dir]
+;echo "if(! -d [group_dir]) mkdir -p [group_dir]"|csh
+
+; split into odd and even selection lists
+doc split
+[seltotal]              ; INPUT; total-selection file
+[group_dir]/[selodd]    ; OUTPUT
+[group_dir]/[seleven]   ; OUTPUT
+
+if([bp-method].eq.1) then
+    if([grp].eq.1) then
+        vm
+        echo "Using BP CG"
+    endif
+
+    bp cg 3
+    [ali]
+    [seltotal]   
+    [rad-recon]
+    [angles]
+    F   ; _F_ourier-based spline interpolation
+    [group_dir]/[unfiltered_volume]
+    [group_dir]/[vol_odd]
+    [group_dir]/[vol_even]
+    [cg-error],[cg-chisqr]
+    [cg-iter],[cg-mode]
+    [cg-lambda]
+
+;    ; reconstruct even volume
+;    @bpcg([grp],[rad-recon],[cg-error],[cg-chisqr],[cg-iter],[cg-mode],[cg-lambda])
+;    [ali]
+;    [group_dir]/[selodd]
+;    [angles]
+;    [group_dir]/[vol_odd]
+;
+;    ; reconstruct odd volume
+;    @bpcg([grp],[rad-recon],[cg-error],[cg-chisqr],[cg-iter],[cg-mode],[cg-lambda])
+;    [ali]
+;    [group_dir]/[seleven]
+;    [angles]
+;    [group_dir]/[vol_even]
+;
+;    ; reconstruct combined volume
+;    @bpcg([grp],[rad-recon],[cg-error],[cg-chisqr],[cg-iter],[cg-mode],[cg-lambda])
+;    [ali]
+;    [seltotal]
+;    [angles]
+;    [group_dir]/[unfiltered_volume]
+endif
+
+if([bp-method].eq.2) then
+    if([grp].eq.1) then
+        vm
+        echo "Using BP 32F"
+    endif
+
+    bp 32f
+    [ali]
+    [seltotal]   
+    [angles]
+    [symmetry_doc]
+    [group_dir]/[unfiltered_volume]  ; combined reconstruction
+    [group_dir]/[vol_odd]
+    [group_dir]/[vol_even]
+endif
+
+if([bp-method].eq.3) then
+    if([grp].eq.1) then
+        vm
+        echo "Using BP RP"
+    endif
+
+    ; reconstruct even volume
+    @bprp([rad-recon],[rp-lambda],[rp-correct],[rp-iter])
+    [ali]
+    [group_dir]/[selodd]
+    [angles]
+    [symmetry_doc]
+    [group_dir]/[vol_odd]
+
+    ; reconstruct odd volume
+    @bprp([rad-recon],[rp-lambda],[rp-correct],[rp-iter])
+    [ali]
+    [group_dir]/[seleven]
+    [angles]
+    [symmetry_doc]
+    [group_dir]/[vol_even]
+
+    ; reconstruct combined volume
+    @bprp([rad-recon],[rp-lambda],[rp-correct],[rp-iter])
+    [ali]
+    [seltotal]
+    [angles]
+    [symmetry_doc]
+    [group_dir]/[unfiltered_volume]
+endif
+
+if([bp-method].eq.4) then
+    if([grp].eq.1) then
+        vm
+        echo "Using BP 3N"
+    endif
+
+    ; reconstruct even volume
+    bp 3n
+    [ali]
+    [group_dir]/[selodd]
+    [angles]
+    [symmetry_doc]
+    [group_dir]/[vol_odd]
+
+    ; reconstruct odd volume
+    bp 3n
+    [ali]
+    [group_dir]/[seleven]
+    [angles]
+    [symmetry_doc]
+    [group_dir]/[vol_even]
+
+    ; reconstruct combined volume
+    bp 3n
+    [ali]
+    [seltotal]
+    [angles]
+    [symmetry_doc]
+    [group_dir]/[unfiltered_volume]
+endif
+
+
+; CALCULATE UNMASKED AND MASKED RESOLUTION CURVES
+
+; unmasked
+@bps-calcres([unmasked-freq])  ; output parameter: unmasked-freq
+[group_dir]/[vol_odd]   ; INPUT: first volume
+[group_dir]/[vol_even]  ; INPUT: second volume
+*                       ; INPUT: (optional) mask
+[group_dir]/[doc_cmp]   ; OUTPUT: unmasked FSC doc
+
+[unmasked-res] = [pxsz]/[unmasked-freq]
+
+; masked
+@bps-calcres([masked-freq])  ; output parameter: masked-freq
+[group_dir]/[vol_odd]         ; INPUT: first volume
+[group_dir]/[vol_even]        ; INPUT: second volume
+[gaussian_mask]               INPUT: (optional) mask
+[group_dir]/[masked_fsc_doc]  ; OUTPUT: unmasked FSC doc
+
+[masked-res]   = [pxsz]/[masked-freq]
+
+vm
+echo "Group {***[grp]}, Masked resolution: {%f6.2%[masked-res]} Angstroms"
+
+sd [grp], [grp],[unmasked-res],[masked-res]  ; ,[numparts]
+[summary_doc]_temp
+sd e
+[summary_doc]_temp
+
+
+; CLEAN UP
+
+; delete temporary stack
+if([stk-opt].ne.0) then
+    de
+    [temp_images]
+endif
+
+; if copying stack locally, remove temp directory
+if([stk-opt].eq.2) then
+    vm
+    rmdir [temp_local_dir]
+    ; might not be empty
+endif
+
+UD ICE
+[group_list]
+
+vm
+echo "Done with group #{***[grp]}"; date
+
+RE
+
+; Modified 2012-06-13
+;    2012-06-13 (trs) -- using sorted group list
+;    2012-05-15 (trs) -- receives SNR from bps-settings
+;    2012-05-14 (trs) -- reformatted summary doc to comply with plotres.spi
+;    2012-03-13 (trs) -- added option for BP 3N
+;    2011-10-18 (trs) -- updated to named registers
+;    2011-01-14 (trs) -- FSC resolution outsourced to calcres.spi
+;    2011-01-13 (trs) -- writing out both masked and unmasked FSCs
+;    2009-10-23 (trs) -- bug fix for input file pattern in BP32F option
+;    2009-07-10 (trs) -- creates defocus-group directories, if needed
+;    2009-04-14 (trs) -- input selection file now Reconstruction/sel_particles_***
+;    2008-02-01 (trs) -- added option for BP RP
+;    2008-01-31 (trs) -- added option for BP 32F
+;    2007-03-23 (trs) -- uses sel_group as input instad of order_defocus
+;    2007-01-30 (trs) -- half-set selection lists created here
+;    2007-01-30 (trs) -- inputs are now stacks
+;    2006-05-12 (trs) -- calculates radius from PARAMS
+;    2006-05-12 (trs) -- computes resolution curves, from old FSC.SPI
+;    2006-04-05 (trs) -- updated for changes in variable-passing

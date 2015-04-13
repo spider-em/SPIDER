@@ -1,0 +1,98 @@
+; PROJECT REFERENCE VOLUME
+;
+; Adapted from refproj.spi
+
+; ---------------- Parameters ----------------
+
+[single-class] = 2     ; class number to calculate projections (0==all)
+[dtheta]       = 15    ; angular increment for references (15==83 projections)
+
+; ------------------ Inputs ------------------
+fr l
+[parameter_doc]params                     ; parameter doc file
+fr l
+[class_vol]Volumes/vcla{***[class-num]}   ; class volume template
+fr l
+[class_list]goodviews                     ; list of class volumes (required if multiple classes)
+
+; ------------------ Outputs ------------------
+fr l
+[pocs_dir]Pocs                                ; output directory
+fr l
+[ref_angles][pocs_dir]/refangles              ; reference-angles doc file
+fr l
+[list_projs][pocs_dir]/projlist               ; list of reference projections
+fr l
+[prj_stack][pocs_dir]/prj_{***[class-num]}@   ; reference-projection stack
+
+; -------------- END BATCH HEADER --------------
+
+; get image-dimension
+ud 17,[img-dim]
+[parameter_doc]
+ud e
+
+vm
+echo "if(! -d [pocs_dir]) mkdir [pocs_dir]"|csh
+
+de 
+[ref_angles]
+
+; compute projection angles
+VO EA [numang]
+[dtheta]       ; Delta theta
+0,0            ; Range of theta
+0,0            ; Range of phi
+[ref_angles]   ; Doc file of angles       (output)
+
+[numang] = [numang] - 1
+; (Last projection is redundant with (0,0,0).)
+
+doc create
+[list_projs]
+(1)           ; column# to fill
+(1-[numang])  ; values to enter
+
+; check if all classes or single class specified
+if([single-class].eq.0) then
+    ; get #classes
+    ud n [num-classes]
+    [class_list]
+    
+    vm
+    echo "Projecting all {***[num-classes]} classes listed in [class_list]" ; echo
+else
+    [num-classes] = 1
+    [class-num]   = [single-class]
+endif
+
+[prj-radius] = [img-dim]/2 - 1
+
+; loop through classes
+do lb3 [class-key] = 1,[num-classes]
+    ; get class# if not a single class
+    if([single-class].eq.0) then
+        ud ic [class-key], [class-num]
+        [class_list]
+    endif
+    ; (If single class, [class-num] will have been set above.)
+    
+    de
+    [prj_stack]
+
+    vm
+    echo "Projecting [class_vol]"
+
+    ; project volume
+    PJ 3Q
+    [class_vol]        ; Volume to be projected          (input)
+    [prj-radius]       ; Radius
+    (1-[numang])       ; List of file numbers
+    [ref_angles]       ; Proj. angles doc file           (input)
+    [prj_stack]@****   ; Template for projection stack   (output)
+lb3
+; end class-loop
+
+en d
+
+; Modified 2013-03-28

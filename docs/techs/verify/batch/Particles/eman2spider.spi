@@ -1,0 +1,89 @@
+; BATCH CONVERTS EMAN2 COORDINATES FILE TO SPIDER FORMAT
+;
+; NOTE: REQUIRES emancoords2spiderdoc.py
+
+; ---------------------- Inputs ----------------------
+fr l
+[filenums]../sel_micrograph                          ; micrograph list
+fr l
+[eman_coords]../Micrographs/mic{****[mic-num]}.box   ; EMAN coordinates
+
+; ----------------------- Output -----------------------
+fr l
+[coords_dir]coords                                      ; output directory for coordinate docs
+fr l
+[spider_coords][coords_dir]/sndc{****[mic-num]}         ; SPIDER coordinates doc
+fr l
+[win_dir]win                                            ; output directory for selection docs
+fr l
+[mic_part_list][win_dir]/sel_particles{****[mic-num]}   ; particle selection doc
+fr l
+[summary_doc]summary-eman2spi                           ; summary doc
+
+; ------------------ END BATCH HEADER ------------------
+
+; prepare summary doc
+de
+[summary_doc]
+SD /       MICNUM    NUMPARTICLES
+[summary_doc]
+
+[particle-counter] = 0
+
+; create directories if necessary
+vm
+echo "if(! -d [win_dir]) mkdir -p [win_dir]"|csh
+vm
+echo "if(! -d [coords_dir]) mkdir -p [coords_dir]"|csh
+
+; get #micrographs
+ud n [num-mics]
+[filenums]
+
+; loop through micrographs
+do [mic-key] = 1, [num-mics]
+    ; get micrograph#
+    ud ic [mic-key], [mic-num]
+    [filenums]
+
+    ; run Python script
+    vm
+    emancoords2spiderdoc.py [eman_coords] [spider_coords].$DATEXT
+
+    ; get #particles
+    ud n [mic-parts]
+    [spider_coords]
+    
+    ; write selection doc
+    doc create
+    [mic_part_list]
+    (1)  ; column# to populate
+    (1-[mic-parts])
+
+    ; write to summary
+    sd [mic-key], [mic-num], [mic-parts]
+    [summary_doc]
+
+    ; update cumulative counter
+    [particle-counter] = [particle-counter] + [mic-parts]
+enddo
+; end micrograph-loop
+
+VM
+echo ; echo "Converted coordinates for {*******[particle-counter]} particles in {*****[num-mics]} micrographs"
+
+; close doc
+ud ice
+[filenums]
+SD /           NUM_MICS   NUMPARTICLES
+[summary_doc]
+sd -1, [num-mics],[particle-counter]
+[summary_doc]
+sd e
+[summary_doc]
+
+en d
+
+; Modified 2012-07-19
+;    2012-07-19 (trs) -- creates output directories if needed
+;    2012-04-06 (trs) -- added sel_particles output

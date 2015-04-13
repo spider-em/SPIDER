@@ -1,0 +1,128 @@
+; CREATES APMQ DOCUMENT FOR ONLY GOOD PARTICLES
+
+; NOTE: There is a optional, diagnostic output that is commented out 
+;       that will confirm that the correct number of particles is kept.
+
+; ------------------------------ Inputs ------------------------------
+fr l
+[def_avg]../Power_Spectra/def_avg  ; defocus-group doc file
+fr l
+[df]df                             ; directory template for input files
+fr l
+[combined_align_doc]docapmq        ; in directory DF
+fr l
+[good_particle_list]seltotal       ; in directory DF
+
+; ------------------------------ Output ------------------------------
+fr l
+[good_align_doc]docapmqgood  ; in directory DF
+
+; ------------------------- END BATCH HEADER -------------------------
+
+; get number of micrographs (x88)
+UD N,x88
+[def_avg]
+
+; get the first (x81) and last (x82) defocus group numbers
+UD 1,x80, x77, x81
+[def_avg]
+
+x82 = x81  ; initialize last defocus-group
+
+; loop through micrographs
+DO LB4 x84=1,x88
+   ; get defocus-group# (x83)
+   UD x84,x80,x77,x83
+   [def_avg]
+
+   ; update first, last defocus-group
+   IF (x83.LT.x81) x81 = x83
+   IF (x83.GT.x82) x82 = x83
+LB4
+; end micrograph-loop
+
+; loop through defocus-groups
+DO LB1 x85=x81,x82
+    vm
+    echo "Working on defocus group {***x85}"
+
+    de
+    [df]{***x85}/[good_align_doc]
+    SD /    BEST_PROJ    CORR.COEFF     ANGLE       X-SHIFT      Y-SHIFT       PART#  
+    [df]{***x85}/[good_align_doc]
+
+    ; sort input documents
+    doc sort
+    [df]{***x85}/[combined_align_doc]
+    [df]{***x85}/[combined_align_doc]sort
+    (6)  ; column for particle#
+    Y    ; renumber keys?
+
+    doc sort
+    [df]{***x85}/[good_particle_list]
+    [df]{***x85}/[good_particle_list]sort
+    (1)  ; column for particle#
+    Y    ; renumber keys?
+
+    ; get number of total particles (x21)
+    ud n,x21
+    [df]{***x85}/[combined_align_doc]
+
+    ; get number of good particles (x39)
+    ud n,x39
+    [df]{***x85}/[good_particle_list]
+
+    x30=1  ; initialize good-particle counter
+
+    ; get first good-particle# (x37)
+    ud ic,x30,x37
+    [df]{***x85}/[good_particle_list]sort
+
+    ; loop through total particles
+    do lb2 x20=1,x21
+       ; get particle# (x36)
+        ud ic,x20,x31,x32,x33,x34,x35,x36
+        [df]{***x85}/[combined_align_doc]sort
+
+        ; if current particle is good...
+        if(x36.eq.x37) then
+            ; write to alignment doc
+            sd x30,x31,x32,x33,x34,x35,x36
+            [df]{***x85}/[good_align_doc]
+
+            ; increment good-particle counter (x30)
+            x30=x30+1
+
+            ; trap for end of good-particle list
+            if(x30.le.x39) then
+                ; get next good-particle# (x37)
+                ud ic,x30,x37
+                [df]{***x85}/[good_particle_list]sort
+            endif
+        endif
+    lb2
+    ; end particle-loop
+
+;    ; diagnostic
+;    x30=x30-1
+;    sd x85,x39,x30
+;    docgoodapmqstats
+;    ; x85==defocus-group#, x30==particles in input, x39==particles in output
+
+    ; clean up
+    sd e
+    [df]{***x85}/[good_align_doc]
+    ud ice  
+    [df]{***x85}/[good_particle_list]sort
+    ud ice
+    [df]{***x85}/[combined_align_doc]sort
+    de
+    [df]{***x85}/[good_particle_list]sort
+    de
+    [df]{***x85}/[combined_align_doc]sort
+LB1
+; end group-loop
+
+en d
+
+; Modified 2004-08-23

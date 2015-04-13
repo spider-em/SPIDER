@@ -1,0 +1,299 @@
+; WEIGHTS DEFOCUS GROUPS (OPTIONALLY),
+; MERGES RECONSTRUCTIONS, AND
+; APPLIES MATCHED FILTER
+;
+; Adapted from bpodd.bat (formerly b24.bpo)
+;
+; NOTE: Requires calcres.spi and p_matched.spi
+
+; ------------ Parameters --------------
+
+x60 = 1       ; weight defocus groups according to number of particles (0==no)
+x45 = -1      ; object radius for FSC masking, pixels (<0 will retrieve from PARAMS)
+x73 = 3       ; signal-to-noise ratio, for Wiener filter
+
+; ------------ Input files ---------------
+FR L
+[params]../params                         ; parameter doc file
+FR L
+[defgrps]sel_group                        ; defocus doc
+;        DF_GROUP     NUMPARTS    AVGDEFOCUS
+FR L
+[df_dir]df                                ; defocus-group directory prefix
+FR L
+[vol_odd]vol001_odd                       ; half-set volume (one for each defocus group)
+FR L
+[vol_even]vol001_even                     ; half-set volume (one for each defocus group)
+fr l
+[summary_doc]summary-bps                  ; resolution summary doc file (appended, not overwritten)
+
+; ------------ Output files ---------------
+FR L
+[ctf_dir]ctf                              ; output CTF directory
+FR G
+[ctf][ctf_dir]/ctf                        ; CTF file prefix
+FR G
+[weighted_ctf][ctf_dir]/wtctf             ; weighted CTF file prefix (optional)
+FR G
+[res]combires-merged                      ; unmaked resolution curve
+FR L
+[masked_fsc_doc]docfsc-merged             ; masked resolution curve
+FR G
+[unfiltered_volume]vol001-merged01        ; unfiltered, CTF-corrected volume of combined data set
+fr l
+[matched_filter_doc]docmatched-merged     ; matched-filter doc
+fr l
+[filtered_volume]vol001-mergedmatched     ; filtered, CTF-corrected volume of combined data set
+
+; -------------- END BATCH HEADER --------------------------
+
+FR L
+[tmpfscdoc]tmpdocrf3
+fr l
+[mask_unscaled]_11
+fr l
+[gaussian_mask]_12
+fr l
+[temp_merged_odd]_31
+fr l
+[temp_merged_even]_32
+
+md
+set mp
+0       ; 0 = use all processors available
+
+; get CTF parameters
+
+UD IC 5,[pxsz]  ; WAS x41                 ; Pixel size
+[params]
+UD IC 6,[kv]                ; KV
+[params]
+UD IC 7,[cs]                ; Cs
+[params]
+UD IC 8,[ss]                ; Source size
+[params]
+UD IC 9,[defspr]            ; Defocus spread
+[params]
+UD IC 12,[acr]              ; Amplitude contrast ratio
+[params]
+UD IC 13,[genv]             ; Gaussian envelope
+[params]
+UD IC 17,[idim]             ; Window size
+[params]
+
+; calculate mask radius, if necessary
+if(x45.le.0) then
+    ; get diameter from PARAMS
+    ud 18,[part-diam]
+    [params]
+
+    [radius] = [part-diam]/2
+endif
+
+[center] = [idim]/2 + 1                          ; Center coordinate
+[lambda] = 12.398 / SQR([kv] * (1022.0 + [kv]))  ; Lambda
+[maxspf] = 1.0 / (2.0 * [pxsz])                  ; Max. spatial. freq.
+
+
+; MAKE GAUSSIAN MASK FOR FSC
+
+; create Gaussian
+mo 3
+[mask_unscaled]             ; OUTPUT
+[idim],[idim],[idim]        ; dimensions
+G                           ; _G_aussian
+[center],[center],[center]  ; center coordinates
+[radius],[radius],[radius]  ; Gaussian falloff
+
+; get statistics
+fs [max]
+[mask_unscaled]
+
+; lift maximum to 1
+ar
+[mask_unscaled]
+[gaussian_mask]
+p1/[max]
+
+; clean up
+de
+[mask_unscaled]
+ud ice
+[params]
+
+
+vm
+echo "Calculating defocus-group weights"; date; echo
+
+[particle-counter] = 0
+
+; get #defocus-groups
+UD N,[num-grps]
+[defgrps]
+
+; loop through defocus-groups
+DO LB1 x77=1,[num-grps]
+    ; Get current group number, defocus
+    UD IC x77,[grp],[numparts]
+    [defgrps]             ; Group selection file            (input)
+
+    [particle-counter] = [particle-counter] + [numparts]
+LB1
+; end group-loop
+
+UD ICE
+[defgrps]
+
+
+; CREATE WEIGHTED AND UNWEIGHTED CTFs
+
+vm
+echo "if(! -d [ctf_dir]) mkdir [ctf_dir]"|csh
+
+; loop through defocus-groups
+DO LB5 x77=1,[num-grps]
+    ; Get current group number, defocus
+    UD IC x77,[grp],[numparts],[def]
+    [defgrps]             ; Group selection file            (input)
+
+    ; calculate CTF
+    TF C3                 ; Create a model CTF (3D, complex)
+    [ctf]{***[grp]}       ; Output file                     (output)
+    [cs]                  ; Cs
+    [def],[lambda]        ; Defocus, lambda
+    [idim]                ; Dimension of volume
+    [maxspf]              ; Max. spatial freq.
+    [ss],[defspr]         ; Source size, defocus spread
+    (0,0)                 ; Astigmatism, azimuth
+    [acr],[genv]          ; Amplitude contrast ratio, Gaussian halfwidth
+    (-1)                  ; Sign
+
+    if(x60.ne.0) then
+        [wt] = [numparts]*[num-grps]/[particle-counter]
+
+        ; weight CTFs
+        ar
+        [ctf]{***[grp]}
+        [weighted_ctf]{***[grp]}
+        p1*[wt]
+    endif
+lb5
+; end group-loop
+
+UD ICE
+[defgrps]
+
+
+; MERGE DEFOCUS GROUPS
+
+if(x60.ne.0) then
+    vm
+    echo "Weighting defocus groups according to number of particles"
+
+    ; The 'TF CTS' command works on all defocus groups at once
+    TF CTS                   ; CTF correction
+    [df_dir]***/[vol_odd]    ; Template for image file       (input)
+    [defgrps]                ; Group selection file          (input)
+    [weighted_ctf]***                 ; Template for ctf file         (input)
+    x73                      ; SNR
+    [temp_merged_odd]        ; Temp. inline file             (output)
+
+    TF CTS
+    [df_dir]***/[vol_even]   ; Template for image file       (input)
+    [defgrps]                ; Group selection file          (input)
+    [weighted_ctf]***                 ; Template for ctf file         (input)
+    x73                      ; SNR
+    [temp_merged_even]       ; Temp. inline file             (output)
+else
+    vm
+    echo "Weighting defocus groups equally"
+
+    TF CTS                   ; CTF correction
+    [df_dir]***/[vol_odd]    ; Template for image file       (input)
+    [defgrps]                ; Group selection file          (input)
+    [ctf]***                 ; Template for ctf file         (input)
+    x73                      ; SNR
+    [temp_merged_odd]        ; Temp. inline file             (output)
+
+    TF CTS
+    [df_dir]***/[vol_even]   ; Template for image file       (input)
+    [defgrps]                ; Group selection file          (input)
+    [ctf]***                 ; Template for ctf file         (input)
+    x73                      ; SNR
+    [temp_merged_even]       ; Temp. inline file             (output)
+endif
+
+; Add the odd and even volumes together to make combined volume
+AD
+[temp_merged_odd]
+[temp_merged_even]
+[unfiltered_volume]                    ; Volume                        (output) 
+*
+
+
+; CALCULATE UNMASKED AND MASKED RESOLUTION CURVES
+
+; unmasked
+@calcres([unmasked-freq])  ; output parameter: unmasked-freq
+[temp_merged_odd]   ; INPUT: first volume
+[temp_merged_even]  ; INPUT: second volume
+blah                ; INPUT: (optional) mask
+[res]               ; OUTPUT: unmasked FSC doc
+
+[unmasked-res] = [pxsz]/[unmasked-freq]
+
+; masked
+@calcres([masked-freq])  ; output parameter: masked-freq
+[temp_merged_odd]   ; INPUT: first volume
+[temp_merged_even]  ; INPUT: second volume
+[gaussian_mask]     ; INPUT: (optional) mask
+[masked_fsc_doc]    ; OUTPUT: unmasked FSC doc
+
+[masked-res]   = [pxsz]/[masked-freq]
+
+vm
+echo "Overall resolution: {%f6.2%[masked-res]} Angstroms, from {******[particle-counter]} particles"
+
+; clean up
+[dummy] = -[num-grps]
+sd [dummy], [num-grps],[masked-res],[unmasked-res],[particle-counter]
+[summary_doc]
+SD /          NUM_GROUPS   MASKED_RES  UNMASKED_RES   NUMPARTS
+[summary_doc]
+de
+[gaussian_mask]
+
+
+; APPLY MATCHED FILTER
+
+vm
+echo ; echo "Applying matched filter"
+
+; calculate matched filter
+@p_matched
+[radius]              ; PARAMETER: particle radius
+[temp_merged_odd]     ; INPUT: odd half-set volume
+[temp_merged_even]    ; INPUT: even half-set volume
+[unfiltered_volume]   ; INPUT
+[matched_filter_doc]  ; OUTPUT
+[filtered_volume]     ; OUTPUT
+
+; copy subset volumes to disk
+cp
+[temp_merged_odd]
+[vol_odd]
+cp
+[temp_merged_even]
+[vol_even]
+
+vm
+echo "Done"; date
+
+EN
+
+; Modified 2011-01-15
+;    2011-01-14 (trs) -- FSC resolution outsourced to calcres.spi
+;    2011-01-14 (trs) -- optionally weights defocus groups
+;    2011-01-13 (trs) -- applying matched filter to combined reconstruction
+;    2011-01-13 (trs) -- writing out both masked and unmasked FSCs
+;    2011-01-13 (trs) -- adapted from old ctf.spi

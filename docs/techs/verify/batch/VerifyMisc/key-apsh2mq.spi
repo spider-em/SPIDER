@@ -1,0 +1,95 @@
+; CREATES APMQ FILES (FOR DOWNSTREAM COMPATIBILITY) FROM APSH FILES
+
+; PARAMETER:
+
+x56 = 3  ; print progress message to screen every (x56)th micrograph
+
+; INPUTS:
+fr g
+[neg_list]../filenums             ; micrograph list
+fr g
+[particle_lut]../Particles/order  ; micrograph-to-particle look-up table
+fr g
+[apsh_doc]align01_                ; APSH filename template, for each micrograph
+
+; OUTPUTS:
+fr g
+[neg_apmq_doc]apmq/apmq     ; AMPQ filename template, for each micrograph
+fr g
+[combined_apmq_doc]docapmq  ; combined APMQ doc
+
+; END BATCH HEADER
+
+; get number of micrographs
+ud n,x76
+[neg_list]
+
+vm
+echo "Creating APMQ files"; date
+
+; loop through micrographs
+do lb7 x71=1,x76
+    ; get current micrograph# (x70)
+    ud ic,x71,x70
+    [neg_list]
+
+    ; print progress message
+    if (int(x71/x56).eq.x71/x56) then
+        vm
+        echo "Working on micrograph# {****x70}, {***x71} out of {***x76}"
+    endif
+
+    ; prepare output APMQ files
+    de
+    [neg_apmq_doc]{****x70}
+    SD /     REF_PROJ       CCC        ROT.ANGLE    X-SHIFT      Y-SHIFT     PARTICLE#
+    [neg_apmq_doc]{****x70}
+
+    ; get first (x64), last (x65) particles from current micrograph
+    ud ic,x70,x61,x62,x63,x64,x65
+    [particle_lut]
+
+    ; loop through particles
+    do lb6 x60=x64,x65
+        ; read APSH parameters
+        ud ic,x60,x11,x12,x13,x14,x15,x16,x17,x18,x19,x20,x21,x22,x23,x24,x25
+        [apsh_doc]{****x70}
+        ; x14==ref-view#, x15=particle#, x16==in-plane rotation, x17==x-shift, x18==y-shift, x21=CCC
+
+        x66=x60-x64+1  ; x66==particle-counter for current micrograph
+
+        ; write APMQ parameters
+        sd x66,x14,x21,x16,x17,x18,x15
+        [neg_apmq_doc]{****x70}
+        ; x14==ref-view#, x21=CCC, x16==in-plane rotation, x17==x-shift, x18==y-shift, x15=particle#
+
+    lb6
+    ; end particle-loop
+
+    ud ice  ; close in-core, APSH file
+    [apsh_doc]{****x70}
+lb7
+; end micrograph-loop
+
+; combine APMQ files
+vm
+echo "Combining APMQ files"
+
+doc combine
+[neg_apmq_doc]****
+[neg_list]
+[combined_apmq_doc]
+
+SD /     REF_PROJ       CCC        ROT.ANGLE    X-SHIFT      Y-SHIFT     PARTICLE#
+[combined_apmq_doc]
+
+ud ice  ; close in-core micrograph-list
+[neg_list]
+
+vm
+echo "Done"; date
+
+en d
+
+; Modified 2004-04-08
+; (This would probably run faster if it used SD IC. --T.R.S.)

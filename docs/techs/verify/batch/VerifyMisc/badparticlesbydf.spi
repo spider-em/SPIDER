@@ -1,0 +1,101 @@
+; GENERATE BAD-PARTICLE LIST
+; IN GOODPARTICLES FORMAT
+
+; ---------------------- Parameter ----------------------
+x56 = 2  ; prints progress message every (x56)th defocus group
+
+; ------------------------ Inputs ------------------------
+fr l
+[df_group_list]../Reconstruction/sel_group_cclim         ; defocus-group selection list
+fr l
+[stack2particle_lut]../Reconstruction/stack2particle***  ; stack-to-particle lookup table
+;       PARTICLE    MICROGRAPH    MIC_SLICE    GROUP_SLICE
+fr l
+[alignment_doc]../Reconstruction/align_01_***                   ; alignment doc
+fr l
+[df_dir]../Reconstruction/df***                                 ; input-output defocus-group directory
+fr l
+[good_particle_list]goodparticles                        ; good-particle list, in DF_DIR
+;     GROUP_SLICE   PARTICLE       CCROT
+
+; ----------------------- Outputs -----------------------
+fr l
+[total_particle_list]totalparticles                      ; total-particle list, in DF_DIR
+;     GROUP_SLICE   PARTICLE       CCROT
+fr l
+[bad_particle_list]badparticles                          ; bad-particle list, in DF_DIR
+
+; ------------------- END BATCH HEADER -------------------
+
+; get #groups
+ud n [num-groups]
+[df_group_list]
+
+; loop through defocus-groups
+do lb7 [group-key] = 1,[num-groups]
+    ; get group#
+    ud ic [group-key],[group-num]
+    [df_group_list]
+    
+    if (int([group-key]/x56).eq.[group-key]/x56) then
+        vm
+        echo "Working on defocus group {***[group-num]}, #{***[group-key]} out of {***[num-groups]}"
+    endif
+    
+    de
+    [df_dir][group-num]/[total_particle_list]
+    SD /   GROUP_SLICE   PARTICLE       CCROT
+    [df_dir][group-num]/[total_particle_list]
+    
+    ; get #particles
+    ud n [num-particles]
+    [stack2particle_lut][group-num]
+    
+    ; loop through particles
+    do lb5 [slice-num] = 1,[num-particles]
+        ; get ccrot from alignment doc
+        ud ic [slice-num],x91,x92,x93,x94,x95,x96,x97,x98,x99,x90,[ccrot]
+        [alignment_doc][group-num]
+        
+        ; get particle#
+        ud ic [slice-num],[particle-num]
+        [stack2particle_lut][group-num]
+        
+        ; write to total-particle doc
+        sd [slice-num],[slice-num],[particle-num],[ccrot]
+        [df_dir][group-num]/[total_particle_list]
+    lb5
+    ; end particle-loop
+    
+    ; close docs
+    ud ice
+    [alignment_doc][group-num]
+    ud ice
+    [stack2particle_lut][group-num]
+    sd e
+    [df_dir][group-num]/[total_particle_list]
+    
+    ; generate bad-particle list
+    doc subtract
+    [df_dir][group-num]/[total_particle_list]
+    [df_dir][group-num]/[good_particle_list]
+    [df_dir][group-num]/[bad_particle_list]_unrenum  ; OUTPUT
+    (1)  ; column# to subtract: slice#
+    
+    doc ren
+    [df_dir][group-num]/[bad_particle_list]_unrenum
+    [df_dir][group-num]/[bad_particle_list]  ; OUTPUT
+    
+    SD /   GROUP_SLICE   PARTICLE       CCROT
+    [df_dir][group-num]/[bad_particle_list]
+    sd e
+    [df_dir][group-num]/[bad_particle_list]
+    de
+    [df_dir][group-num]/[bad_particle_list]_unrenum
+lb7
+; end group-loop
+
+ud ice
+[df_group_list]
+
+en d

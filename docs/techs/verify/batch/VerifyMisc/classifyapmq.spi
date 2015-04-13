@@ -1,0 +1,308 @@
+; CLASSIFY PARTICLES ASSIGNED TO EACH REFERENCE VIEW
+
+; --------- Parameters ---------
+x81 = 1    ; first reference-view
+x75 = 75   ; particle-to-class ratio
+x76 = 0    ; flag to save variance (1==save)
+x26 = 2    ; reduction factor applied to input particles
+x28 = 115  ; window size (temporary) for labeling
+           ; (Class number and size unlikely to fit in label after size-reduction.)
+           ; Suggestions: 115 for 3-digit class# + 3-digit class-size, 128 for 3+4 or 4+3
+x29 = .05  ; additive constant for correspondance analysis
+           ; (CorAn only works on non-negative pixel values.)
+           ; if unsure, check the range of a few particles or the noise-reference for positivity
+
+; ----------- Inputs -----------
+fr l
+[ref_view_list]projlist          ; list of projection views
+fr l
+[particles]../Particles/flt/flt  ; particle file-pattern
+fr l
+[selection_doc]select/sel        ; selection doc filename prefix, for each view
+fr l
+[parameter_doc]../params         ; parameter document
+fr l
+[ref_proj]prj/prj                ; reference-projection prefix
+
+; ---------- Outputs ----------
+fr l
+[prj_dir]select/prj              ; subdirectory template, for each reference-view, in PRJ_DIR
+fr l
+[class_doc]docclass              ; list of particles for each class, in PRJ_DIR
+fr l
+[class_stats_doc]classes_by_ccc  ; contain CCC for each class-average
+                                 ; in PRJ_DIR, one for each reference-view
+fr l
+[class_map]classmap              ; (temporary) list of each particle with assigned class
+fr l
+[class_avg]classavg              ; class-average, in PRJ_DIR
+fr l
+[class_var]classvar              ; variance for each class, in PRJ_DIR
+                                 ; optional -- see PARAMETER X29
+fr l
+[coran_prefix]verify             ; CorAn output prefix, in PRJ_DIR
+                                 ; IMC is the only one used for classification (here) 
+                                 ; and is the only one saved on disk.
+
+; ------ END BATCH HEADER ------
+
+md
+set mp
+0
+
+md
+vb off
+
+; get image dimension (x65)
+ud 17,x65
+[parameter_doc]
+
+x65=x65/x26  ; x65==reduced-image dimension, x26==reduction factor
+
+; calculate mask radius (x32)
+x32=int(x65/2)  ; x65==reduced image dimension
+
+; make circular mask
+mo  
+_6       ; output mask file
+x65,x65  ; dimensions
+c        ; _C_ircle
+x32      ; radius
+
+; get number of views
+ud n,x83
+[ref_view_list]
+
+vm
+echo "Beginning classification"; date
+
+; loop through reference views
+do lb1 x48=x81,x83
+    ud ic,x48,x80
+    [ref_view_list]
+    ; x80==reference view
+
+    ; get number of particles (x27) in current reference view
+    ud n,x27
+    [selection_doc]{***x80}
+
+    if(x27.eq.0)goto lb1  ; skip unpopulated views
+
+    vm
+    echo "if(! -d [prj_dir]{***x80}) mkdir [prj_dir]{***x80}"|csh
+
+    ; shrink reference-projection
+    dc s
+    [ref_proj]{****x80}  ; INPUT: normalized reference-projection
+    _5                   ; OUTPUT: reduced reference-projection
+    x26,x26              ; reduction factor in x,y
+
+    ; determine number of classes to use (x20)
+    x20=int((x27/x75)+0.5)
+    if(x20.lt.2) then
+        x20=1  ; minimum number of classes will be 1
+        x16=1  ; dummy variable: class#
+
+        ; sort particles by cross-correlation coefficient
+        doc sort
+        [selection_doc]{***x80}                ; INPUT: selection doc (unsorted)
+        [prj_dir]{***x80}/[class_doc]{***x16}  ; OUTPUT: class doc, sorted by CCC
+        (2)                                    ; column# to sort (2==CCC)
+        Y                                      ; renumber?
+
+        goto lb3  ; skip past correspondance analysis + classification
+    endif
+
+    ; CHECK FOR SMALL PIXEL INTENSITIES
+    x79=9999  ; initialize minimum
+
+    ; loop through particles
+    do lb5 x50=1,x27
+    ; get particle number (x52)
+        ud ic,x50,x52
+        [selection_doc]{***x80}
+
+        ; get max (x88)
+        fs
+        [particles]{******x52}
+        fi x88
+        [particles]{******x52}
+        (8)  ; header location for minimum intensity
+
+        ; update if necessary
+        if(x88.lt.x79) then
+            x79=x88  ; minumum intensity
+            x49=x52  ; particle#
+        endif
+    lb5
+    ; end particle-loop
+
+    ud ice  ; close document
+    [selection_doc]{***x80}
+
+
+    ; RUN MULTIVARIATE STATISICAL ANALYSIS
+
+    vm
+    echo "\nReference view: #{***x80}, number of classes: {***x20}"
+    vm
+    echo "Reference view: #{***x80}, minimum intensity: {%f8.4%x79} (image #{******x49})"
+
+    ; run correspondance analysis
+    ca s
+    [particles]******
+    [selection_doc]{***x80}
+    _6                                ; mask
+    (9)                               ; number of eigenfactors
+    C                                 ; _C_orrespondance analysis
+    x29                               ; additive factor (for CorAn)
+    [prj_dir]{***x80}/[coran_prefix]  ; output file prefix
+
+    ; run k-means classification
+    cl km x21,x22,x23,x24,x25
+    [prj_dir]{***x80}/[coran_prefix]_IMC
+    x20                                    ; number of classes
+    (1-9)                                  ; factors to use
+    (0)                                    ; no factor weighting
+    (0)                                    ; no random seed
+    [prj_dir]{***x80}/[class_doc]noccc***  ; OUTPUT (temp): class-list doc
+    [prj_dir]{***x80}/[class_map]
+
+    ; GENERATE CLASS AVERAGES
+
+    ; loop through classes
+    do lb2 x16=1,x20
+        ; add CCC info to class doc
+        doc and
+        [selection_doc]{***x80}
+        [prj_dir]{***x80}/[class_doc]noccc{***x16}   ; INPUT (temp): class-doc
+        [prj_dir]{***x80}/[class_doc]unsort{***x16}  ; OUTPUT (temp): w/CCC, unsorted
+        (1)                                          ; column# to find intersection
+
+        ; sort individual particles by CCC
+        doc sort
+        [prj_dir]{***x80}/[class_doc]unsort{***x16}  ; INPUT (temp): w/CCC, unsorted
+        [prj_dir]{***x80}/[class_doc]{***x16}        ; OUTPUT: class doc, sorted by CCC
+        (2)                                          ; column# to sort (2==CCC)
+        Y                                            ; renumber?
+
+        ; clean up intermediate doc files
+        de
+        [prj_dir]{***x80}/[class_doc]noccc{***x16}
+        de
+        [prj_dir]{***x80}/[class_doc]unsort{***x16}
+
+        lb3  ; skip here if only one class
+
+        ; calculate unlabeled average
+        as r
+        [particles]******
+        [prj_dir]{***x80}/[class_doc]{***x16}  ; INPUT: class-list doc
+        A                                      ; _A_ll images
+        _4                                     ; OUTPUT: class average
+        _7                                     ; OUTPUT: class variance
+
+        ; expand to fit text label, if necessary
+        ip
+        _4  ; INPUT: class-average
+        _2  ; OUTPUT: expanded class-average
+        x28,x28
+
+        ; get class size
+        ud n,x15
+        [prj_dir]{***x80}/[class_doc]{***x16}
+
+        ; label with class number & size
+        la b
+        _2  ; INPUT: expanded class-average
+        _3  ; OUTPUT: expanded, labeled class-average
+        {***x16},n={***x15}
+
+        x51=(x28+36)*x65/x28  ; y-dimension after labeling+shrinking
+                              ; label is 36 pixels tall
+
+        ; shrink back down
+        ip
+        _3  ; INPUT: expanded, labeled class-average
+        [prj_dir]{***x80}/[class_avg]{***x16}
+        x65,x51
+
+        ; delete variance if not needed
+        if(x76.eq.1) then
+            cp
+            _7
+            [prj_dir]{***x80}/[class_var]{***x16}
+        endif
+
+        ; calculate CCC (x33) between reference-projection and class-average
+        cc c,x33
+        _5    ; INPUT: reduced reference-projection
+        _4    ; INPUT: class-average
+        _6    ; INPUT: reduced mask
+
+        ; get standard deviation of the variance (x44)
+        fs m,x41,x42,x43,x44
+        _7  ; class-variance
+        _6  ; reduced mask
+
+        ; trap for variance of a single image
+        if(x15.eq.1)x44=999  ; x15==class-size
+        ; otherwise, the variance of a single image will be NaN
+
+        ; write CCC (x33) and variance-SD (x44) to doc file
+        sd x16,x16,x33,x44
+        [prj_dir]{***x80}/[class_stats_doc]unsort
+    lb2
+    ; end class-loop
+
+    sd e  ; close document
+    [prj_dir]{***x80}/[class_stats_doc]unsort
+
+    ; sort by CCC
+    doc sort
+    [prj_dir]{***x80}/[class_stats_doc]unsort
+    [prj_dir]{***x80}/[class_stats_doc]
+    (2)  ; column for CCC
+    Y    ; renumber?
+
+    SD /      CLASS#        CCC       VARIANCE_SD
+    [prj_dir]{***x80}/[class_stats_doc]
+
+    de
+    [prj_dir]{***x80}/[class_stats_doc]unsort
+
+    ; remove class-map
+    vm
+    rm -f [prj_dir]{***x80}/[class_map].$DATEXT
+    ; class-map doc contains each particle with its assigned class
+
+    vm m
+    rm -f [prj_dir]{***x80}/[coran_prefix]_SEQ.$DATEXT ;
+    rm -f [prj_dir]{***x80}/[coran_prefix]_SET.$DATEXT ;
+    rm -f [prj_dir]{***x80}/[coran_prefix]_PIX.$DATEXT ;
+    rm -f [prj_dir]{***x80}/[coran_prefix]_EIG.$DATEXT ;
+    rm -f [prj_dir]{***x80}/[coran_prefix]_MAS.$DATEXT ;
+.
+lb1  
+; end reference-view loop
+
+ud ice
+[ref_view_list]
+
+vm
+echo "\nDone"; date
+
+en d
+
+; Modified 2005-08-19
+;   2005-03-27 (trs) -- no longer needs how_many file
+;   2005-01-27 (trs & gra) -- deals with variances of single-image classes
+;   2005-01-24 (trs & js) -- bug fix in loop that checks for low intensities
+;   2004-12-22 (trs) -- checks for images with low intensities
+;   2004-12-22 (trs & jl) -- prints standard deviation of the class-variance to stats document
+;   2004-12-22 (trs) -- first reference-view is a parameter, in case you need to resume
+;   2004-05-11 (trs) -- handles poorly-populated classes differently
+;   2004-05-04 (trs) -- adds option to save/delete variance
+;   2004-04-22 (trs) -- sorts individual images by CCC (worst to best)
+;   2004-04-16 (trs) -- uses CorAn instead of PCA
+;   2004-04-14 (trs) -- deletes unused 'CA S' output (all except _IMC)

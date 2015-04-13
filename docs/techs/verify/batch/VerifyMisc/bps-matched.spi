@@ -1,0 +1,248 @@
+; CALCULATE TWO HALF-SET RECONSTRUCTIONS 
+; FOR EACH DEFOCUS GROUP
+
+; Adapted from bpodd.bat (formerly b24.bpo)
+;
+; NOTES:
+; 1) Requires p_matched.spi and either bpcg.spi or bprp.spi
+; 2) Results file saved (to check for number of iterations, for example)
+
+; ------------ Parameters --------------
+
+x20 = 1       ; backprojection method (1==BP CG, 2==BP 32F, 3==BP RP)
+x47 = 47      ; particle radius for masked FSC (use -1 for params_diameter / 2)
+
+; For BP CG
+x41 = 73      ; radius of restored object (use -1 for 95% winsize / 2)
+x52 = 1.0E-5  ; BP CG: error limit
+x53 = 0.0     ; BP CG: chi^2 limit
+x54 = 25      ; BP CG: iteration limit
+x55 = 1       ; BP CG: mode (see BP CG documentation)
+x56 = 2000    ; BP CG: lambda (see BP CG documentation)
+
+; For BP RP
+x42 = 0.2e-5  ; BP RP: lambda
+x43 = 0.0     ; BP RP: correction limit
+x44 = 1000    ; BP RP: iteration limit
+
+; ------------ Input files ---------------
+FR L
+[params]../params                         ; parameter file
+FR L
+[order]sel_group_cclim                    ; list of defocus groups
+FR L
+[ali]../Alignment/dala01_{***x15}@******  ; aligned particles
+FR L
+[angles]../Alignment/align_01_{***x15}    ; angles doc file (from AP SH)
+FR L
+[seltotal]sel_particles_***               ; selection file-template for each defocus-group
+FR L
+[symmetry_doc]*                           ; symmetry doc file (* for none, not available for BP CG)
+
+; ------------ Output files ---------------
+FR L
+[df_dir]df                                ; defocus-group directory prefix
+FR L
+[selodd]selodd                            ; selection file for odd particles 
+FR L
+[seleven]seleven                          ; selection file for even particles 
+FR L
+[vol_odd]vol001_odd                       ; half-set volume (one for each defocus group)
+FR L
+[vol_even]vol001_even                     ; half-set volume (one for each defocus group)
+FR L
+[vol_all]vol001                           ; unfiltered reconstruction (one for each defocus group)
+FR L
+[fsc_doc]doccmp001                        ; resolution curve (one for each defocus group)
+FR L
+[vol_matched]vol001_matched               ; filtered volume  (one for each defocus group)
+FR L
+[match_doc]docmatchedfilter               ; matched-filter doc file
+
+; -------------- END BATCH HEADER --------------------------
+
+FR L
+[tmp]tmpdocrf3
+
+md 
+set mp 
+0       ; 0 = use all processors available
+
+; get #defocus-groups
+UD N,x10
+[order]
+
+; calculate reconstruction radius if necessary
+IF (x41.lt.0) THEN
+   UD 17,x17     ; key 17 = windowsize
+   [params]
+   x41 = INT( (0.95*x17)/2.0 )
+ENDIF
+
+; calculate reconstruction radius if necessary
+IF (x47.lt.0) THEN
+   UD 18,x18     ; key 18 = particle-size
+   [params]
+   x47 = (x18+1)/2
+ENDIF
+
+vm
+echo "Calculating backprojections"; date; echo
+
+DO LB1 x15=1,x10
+    ; create directory, if needed
+    vm
+    echo "if(! -d [df_dir]{***x15}) mkdir [df_dir]{***x15}"|csh
+
+    ; split into odd and even selection lists
+    doc split
+    [seltotal]x15                ; INPUT; total-selection file
+    [df_dir]{***x15}/[selodd]    ; OUTPUT
+    [df_dir]{***x15}/[seleven]   ; OUTPUT
+
+    if(x20.eq.1) then
+        if(x15.eq.1) then
+            vm
+            echo "Using BP CG"
+        endif
+
+        ; reconstruct even volume
+        @bpcg(x15,x41,x52,x53,x54,x55,x56)
+        [ali]
+        [df_dir]{***x15}/[selodd]
+        [angles]
+        [df_dir]{***x15}/[vol_odd]
+
+        ; reconstruct odd volume
+        @bpcg(x15,x41,x52,x53,x54,x55,x56)
+        [ali]
+        [df_dir]{***x15}/[seleven]
+        [angles]
+        [df_dir]{***x15}/[vol_even]
+
+        ; reconstruct combined volume
+        @bpcg(x15,x41,x52,x53,x54,x55,x56)
+        [ali]
+        [seltotal]x15
+        [angles]
+        [df_dir]{***x15}/[vol_all]
+    endif
+
+    if(x20.eq.2) then
+        if(x15.eq.1) then
+            vm
+            echo "Using BP 32F"
+        endif
+
+        bp 32f
+        [ali]
+        [seltotal]x15
+        [angles]
+        [symmetry_doc]
+        [df_dir]{***x15}/[vol_all]  ; combined reconstruction
+        [df_dir]{***x15}/[vol_odd]
+        [df_dir]{***x15}/[vol_even]
+    endif
+
+    if(x20.eq.3) then
+        if(x15.eq.1) then
+            vm
+            echo "Using BP RP"
+        endif
+
+        ; reconstruct even volume
+        @bprp(x41,x42,x43,x44)
+        [ali]
+        [df_dir]{***x15}/[selodd]
+        [angles]
+        [symmetry_doc]
+        [df_dir]{***x15}/[vol_odd]
+
+        ; reconstruct odd volume
+        @bprp(x41,x42,x43,x44)
+        [ali]
+        [df_dir]{***x15}/[seleven]
+        [angles]
+        [symmetry_doc]
+        [df_dir]{***x15}/[vol_even]
+
+        ; reconstruct combined volume
+        @bprp(x41,x42,x43,x44)
+        [ali]
+        [seltotal]x15
+        [angles]
+        [symmetry_doc]
+        [df_dir]{***x15}/[vol_all]
+    endif
+
+
+    ; CALCULATE RESOLUTION CURVE
+
+    ; clean up pre-existing files
+    DE
+    [df_dir]{***x15}/[fsc_doc]
+    DE
+    [tmp]
+
+    RF 3
+    [df_dir]{***x15}/[vol_even]  ; first input volume
+    [df_dir]{***x15}/[vol_odd]   ; second input volume
+    (0.5)                    ; ring width
+    (0.2,2)                  ; lower, upper scale factors
+    c                        ; c = missing cone
+    (90)                     ; max. tilt angle
+    (3)                      ; factor for noise comparison
+    [tmp]                    ; output doc file
+
+    DOC REN
+    [tmp]
+    [tmp]
+
+    UD N,x60
+    [tmp]
+
+    SD /    NORM'D FREQ    DPR        FSC        FSCCRIT     VOXELS
+    [df_dir]{***x15}/[fsc_doc]
+
+    DO LB2 x61 = 1,x60
+        UD x61,x62,x63,x64,x65,x66
+        [tmp]
+        SD x61,x62,x63,x64,x65,x66
+        [df_dir]{***x15}/[fsc_doc]
+    LB2
+
+    UD E
+    ;close [TMP]
+    de
+    [tmp]
+
+    ; calculate matched filter
+    @p_matched
+    x47                             ; PARAMETER: particle radius
+    [df_dir]{***x15}/[vol_odd]      ; INPUT
+    [df_dir]{***x15}/[vol_even]     ; INPUT
+    [df_dir]{***x15}/[vol_all]      ; INPUT
+    [df_dir]{***x15}/[match_doc]    ; OUTPUT
+    [df_dir]{***x15}/[vol_matched]  ; OUTPUT
+
+    vm
+    echo "Finished defocus group {***x15}"
+LB1
+
+vm
+echo "Done"; date
+
+EN
+
+; Modified 2010-07-30
+;    2010-07-27 (trs) -- applies matched filter
+;    2009-07-10 (trs) -- creates defocus-group directories, if needed
+;    2009-04-14 (trs) -- input selection file now Reconstruction/sel_particles_***
+;    2008-02-01 (trs) -- added option for BP RP
+;    2008-01-31 (trs) -- added option for BP 32F
+;    2007-03-23 (trs) -- uses sel_group as input instad of order_defocus
+;    2007-01-30 (trs) -- half-set selection lists created here
+;    2007-01-30 (trs) -- inputs are now stacks
+;    2006-05-12 (trs) -- calculates radius from PARAMS
+;    2006-05-12 (trs) -- computes resolution curves, from old FSC.SPI
+;    2006-04-05 (trs) -- updated for changes in variable-passing

@@ -1,0 +1,173 @@
+; <html><head><title>Prepare files for input to refinement</title></head><body><pre>
+;
+; Adapted from copyin.pam
+; NOTE: uses labels instead of registers, so requires rcent version of SPIDER
+; 
+; PURPOSE: Prepare files for input to refinement. 
+;
+; I/O PARAMETERS AND FILES ARE SET HERE:
+;
+; -------------------- Input files -----------------------------------
+FR G
+[initial_params]../params                                   ; Parameter doc. file
+FR G
+[defgrps]sel_group_cclim                                    ; Group selection file 
+FR G
+[defgrps_sorted]sel_group_cclim_sorted                      ; Sorted group selection file 
+FR G
+[initial_vol]vol001                                         ; Initial starting volume
+FR G
+[initial_sel_particles]df{***[grp]/seltotal                ; Particle selection files 
+FR G
+[initial_group_align]../Alignment/goodalign_01_{***[grp]}   ; Initial group alignment parameter files
+FR G
+[initial_unaligned_images]../Alignment/data{***[grp]}       ; Unaligned stacked image files
+FR G
+[initial_aligned_images]../Alignment/dala01_{***[grp]}      ; Aligned stacked image files
+
+; -------------------------- Output files ---------------------------
+
+FR G
+[input_dir]../Refinement/input                       ; output directory
+FR G
+[order_select][input_dir]/order_select               ; Group selection file
+FR G       
+[sorted_order_select][input_dir]/order_select_sort   ; Sorted group selection file
+FR G
+[start_vol][input_dir]/vol01                         ; Initial starting volume
+FR G
+[start_group_align][input_dir]/align_01_{***[grp]}   ; Alignment parameter input file 
+FR G
+[sel_particles][input_dir]/select_{***[grp]}         ; Particle selection files 
+FR G
+[unaligned_images][input_dir]/data{***[grp]}         ; Unaligned stacked image files
+FR G
+[start_aligned_images][input_dir]/dala01_{***[grp]}  ; Aligned stacked image files
+
+; -------------- END BATCH HEADER ------------------------------</b>
+
+MD
+TR OFF                          ; Decreases results file output
+MD
+VB OFF                          ; Decreases results file output
+MD
+SET MP
+0
+
+VM                              ; Crete refinement input directory
+mkdir -p  [input_dir]
+
+VM                              ; Put sorted group selection file in input dir 
+cp [defgrps_sorted].$DATEXT     [sorted_order_select].$DATEXT  
+
+VM                              ; Put initial volume in input directory 
+cp [initial_vol].$DATEXT        [start_vol].$DATEXT  
+
+VM                              ; Put params file in input dir 
+cp [initial_params].$DATEXT     [input_dir]  
+
+ud 17, [window-size]
+[initial_params]
+ud e
+
+VM                              ; Put group selection file in input dir 
+cp [defgrps].$DATEXT            [order_select].$DATEXT  
+
+UD N [num-grp]                  ; Get total number of defocus groups
+[defgrps]
+
+DO LB1 [i]=1,[num-grp]          ; Loop over defocus groups  ---------------------
+;    UD IC [i], [grp], [num-particles]
+;    [defgrps]                    ; Doc file listing groups              (input)  
+
+    ; INDEXED-STACK VERSION
+
+    UD IC [i], [grp]  ; , [num-particles]
+    [defgrps]                    ; Doc file listing groups              (input)  
+
+    VM                           ; Copy starting alignment parameter files to input dir. 
+    cp     [initial_group_align].$DATEXT  [start_group_align].$DATEXT
+
+    ; get #particles
+    ud n [num-particles]
+    [initial_sel_particles]
+    ; this should equal the number in the second column of [defgrps]
+
+    ; get last particle#
+    ud ic [num-particles], [last-particle]
+    [initial_sel_particles]
+
+    ; make inline, indexed stacks
+    ms i
+    _7@  ; unaligned stack
+    [window-size],[window-size]
+    [num-particles]
+    [last-particle]
+    ms i
+    _8@  ; aligned stack
+    [window-size],[window-size]
+    [num-particles]
+    [last-particle]
+
+    ; clean up pre-existing stacks
+    de
+    [unaligned_images]@
+    de 
+    [start_aligned_images]@
+
+    ; loop though particles
+    do lb2 [slice-counter]=1,[num-particles]
+        ; get slice#
+        ud ic [slice-counter], [old-slice], [particle-num]
+        [initial_sel_particles]
+
+        ; write to selection doc
+        sd [slice-counter], [old-slice], [particle-num]
+        [sel_particles]
+
+        ; copy from total-particle stacks to good-particle stacks
+        cp
+        [initial_unaligned_images]@{******[old-slice]}
+        _7@{******[old-slice]}  ; WAS [unaligned_images]@{******[slice-counter]}
+        cp 
+        [initial_aligned_images]@{******[old-slice]}
+        _8@{******[old-slice]}  ; WAS [start_aligned_images]@{******[slice-counter]}
+    lb2
+    ; end particle-loop
+
+    ud ice
+    [initial_sel_particles]
+    sd e
+    [sel_particles]
+
+    VM
+    echo " Writing to disk: {***[grp]}"
+
+    cp
+    _7@
+    [unaligned_images]@
+    cp
+    _8@
+    [start_aligned_images]@
+
+    ; clean up in-core stacks
+    de
+    _7@
+    de
+    _8@
+
+    VM                             
+    echo " Accumulated group: {***[grp]}"  
+LB1
+
+UD ICE                          ; Close doc file access
+[defgrps]
+VM                             
+echo ' '  
+
+EN D
+; </body></pre></html>
+
+; Modified 2007-03-21
+;    2007-03-21 (trs & xa) -- bug fix: in-core stacks need to be deleted
+;    2007-01-30 (trs) -- Adapted from copyin.pam

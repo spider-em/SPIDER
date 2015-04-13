@@ -1,0 +1,188 @@
+; RE-SEPARATE SEL_PARTICLES FILES BY VIEW
+;
+; Useful for supervised-classification output
+
+; ------------------------- Parameters -------------------------
+[progress-interval] = 10  ; prints progress message every Nth view
+
+; --------------------------- Inputs ---------------------------
+fr l
+[recon_dir]../Reconstruction                                   ; reconstruction input/output directory
+fr l
+[defocus_list][recon_dir]/sel_group                            ; list of defocus groups
+fr l
+[df_select_doc][recon_dir]/Ref2/select_***                     ; defocus-group selection-file template
+;       DF_SLICE    DELTACCROT      CC_ROT
+FR L
+[group2particle_lut][recon_dir]/stack2particle***              ; stack-to-particle lookup table template, for each defocus-group
+; KEY:DF_SLICE /     PARTICLE    MICROGRAPH    MIC_SLICE    GROUP_SLICE
+fr l
+[total_view_doc][recon_dir]/select/sel{***x80}                 ; by-view selection list (all defocus groups combined)
+; /      PARTICLE     DF_SLICE      CC_ROT       MIRROR      GROUPNUM       VIEW
+fr l
+[projection_list]../Alignment/projlist                         ; list of projection views
+
+; -------------------------- Outputs --------------------------
+fr l
+[reselect_view_doc][recon_dir]/select/prj{***x80}/ref2_select  ; by-view selection file
+; /     VIEW_SLICE    PARTICLE     DF_SLICE      CC_ROT       MIRROR      GROUPNUM       VIEW
+fr l
+[summary_doc][recon_dir]/summary_selectbyview_ref2             ; summary doc
+
+; ---------------------- END BATCH HEADER ----------------------
+
+vm
+echo "Separating selection lists by view"; date
+
+fr l
+[temp_combined_select]tmpcombinedsel
+fr l
+[temp_combined_particles_incore]tmpcombined_incore
+fr l
+[temp_combined_particles]tmpcombinedparts
+
+de
+[summary_doc]
+SD /      VIEW_NUM   NUMPARTICLES
+[summary_doc]
+
+vm
+echo "Combining defocus groups' selection lists"; echo
+
+; combine groups' selection files (only to get #particles)
+doc combine
+[df_select_doc]
+[defocus_list]
+[temp_combined_select]
+
+; get #particles in defocus-group selection
+ud n [num-dfsel]
+[temp_combined_select]
+de
+[temp_combined_select]
+
+; initialize in-core doc
+sd ic new
+[temp_combined_particles_incore]
+(3,[num-dfsel])  ; #columns, #particles
+
+; initialize particle-counter
+[particle-counter] = 0
+
+; get #groups
+ud n [num-groups]
+[defocus_list]
+
+; loop through groups
+do lb7 [grp-num] = 1,[num-groups]
+    ; get #particles in current group
+    ud n [num-partsgrp]
+    [df_select_doc][grp-num]
+
+    ; loop through particles
+    do lb5 x55 = 1,[num-partsgrp]
+        ; read df-slice
+        ud ic x55, [df-slice]
+        [df_select_doc][grp-num]
+
+        ; read particle#
+        ud ic [df-slice], [particle-num]
+        [group2particle_lut][grp-num]
+
+        [particle-counter] = [particle-counter] + 1
+
+        ; write to in-core doc
+        sd ic [particle-counter], [particle-num],[grp-num],[df-slice]
+        [temp_combined_particles_incore]
+    lb5
+    ; end particle-loop
+
+    ; close docs
+    ud ice
+    [df_select_doc][grp-num]
+    ud ice
+    [group2particle_lut][grp-num]
+lb7
+; end group-loop
+
+sd ic copy
+[temp_combined_particles_incore]
+[temp_combined_particles]
+sd ic e
+[temp_combined_particles_incore]
+
+vm
+echo "Done combining defocus groups' selection lists"; date ; echo
+
+
+; GENERATE LISTS BY VIEW
+
+; initialize view-particle counter
+[num-byview] = 0
+
+; get #views
+ud n [num-views]
+[projection_list]
+
+; loop through views
+do lb8 x80=1,[num-views]
+    if (int(x80/[progress-interval]).eq.x80/[progress-interval]) then
+        vm
+        echo "Working on view #{***x80} out of {***[num-views]}"
+    endif
+
+    ; intersect with combined selection list
+    doc and
+    [total_view_doc]
+    [temp_combined_particles]  ; WAS [temp_combined_select]
+    [reselect_view_doc]_unrekey
+    (1)  ; column# to intersect: slice#
+
+    ; renumber view-doc
+    doc key
+    [reselect_view_doc]_unrekey
+    [reselect_view_doc]
+
+    SD /     VIEW_SLICE    PARTICLE     DF_SLICE      CC_ROT       MIRROR      GROUPNUM       VIEW
+    [reselect_view_doc]
+    sd e
+    [reselect_view_doc]
+
+    ; clean up
+    de
+    [reselect_view_doc]_unrekey
+
+    ; get #particles
+    ud n [num-partsview]
+    [reselect_view_doc]
+
+    ; increment counter
+    [num-byview] = [num-byview] + [num-partsview]
+
+    ; write to summary
+    sd x80,x80,[num-partsview]
+    [summary_doc]
+lb8
+; end view-loop
+
+; clean up
+SD /     PARTSAFTER   PARTSBEFORE
+[summary_doc]
+[dummy] = -[num-views]
+sd [dummy], [num-byview],[num-dfsel]
+[summary_doc]
+sd e
+[summary_doc]
+de
+[temp_combined_particles]
+
+vm m
+echo "Done"; echo ; 
+echo "Combined particles in defocus-group files:  {******[num-dfsel]}" ; 
+echo "Combined particles in view-selection files: {******[num-byview]}" ;
+date
+.
+en d
+
+; Modified 2009-05-29
+

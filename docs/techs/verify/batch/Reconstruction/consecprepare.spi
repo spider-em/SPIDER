@@ -1,0 +1,162 @@
+; <html><head><title>Prepare files for input to refinement</title></head><body><pre>
+;
+; Adapted from copyin.pam
+; NOTE: can combine data sets by using input register, by appending to defocus-group list
+;
+; I/O PARAMETERS AND FILES ARE SET HERE:
+;
+; ------------------------- Parameter -------------------------
+
+[firstgrp] = 1  ; first defocus group (can be used to append to data set)
+[dala-yn]  = 1  ; write aligned images? (0==no)
+
+; ------------------------ Input files ------------------------
+
+FR G
+[defgrps]sel_group_cclim                                      ; Group selection file 
+;        DF_GROUP     NUMPARTS    AVGDEFOCUS
+;          used                      used
+FR G
+[initial_sel_particles]sel_particles_{***[oldgrp]}            ; Particle selection files
+;        DF_SLICE
+FR G
+[initial_unaligned_images]../Alignment/data***                ; Unaligned stacked image files
+FR G
+[initial_aligned_images]../Alignment/dala01_***               ; Aligned stacked image files
+
+; ----------------------- Output files -----------------------
+
+FR G
+[good_dir]../Reconstruction                         ; Output directory
+FR G
+[order_select][good_dir]/good-sel_group_cclim       ; Group selection file
+;                                                   ; (may contain appended groups)
+FR G
+[sel_particles][good_dir]/good-sel_particles_***    ; Particle selection files 
+;        NEWSLICE      OLDSLICE
+FR G
+[unaligned_images]../Alignment/good-data***         ; Unaligned stacked image files
+FR G
+[start_aligned_images]../Alignment/good-dala01_***  ; Aligned stacked image files
+
+; ---------------------- END BATCH HEADER ---------------------- </b>
+
+MD
+TR OFF                          ; Decreases results file output
+MD
+VB OFF                          ; Decreases results file output
+MD
+SET MP
+0
+
+if([dala-yn].ge.1) then
+    vm
+    echo "Writing aligned images"
+else
+    vm
+    echo "Writing unaligned but not aligned images"
+endif
+
+vm
+echo ; echo "Preparing refinement files"; date
+
+VM                              ; Crete refinement input directory
+mkdir -p  [good_dir]
+
+; initialize combined particle-counter
+[global-counter] = 0
+
+UD N [num-grp]                  ; Get total number of defocus groups
+[defgrps]
+
+DO LB1 [i]=1,[num-grp]          ; Loop over defocus groups  ---------------------
+    UD IC [i], [oldgrp],x99,[defocus-value]
+    [defgrps]                    ; Doc file listing groups              (input)
+
+    [newgrp] = [oldgrp] + [firstgrp] - 1
+
+    ; clean up pre-existing files
+    de
+    [unaligned_images][newgrp]@
+    de
+    [sel_particles][newgrp]
+    
+    if([dala-yn].ge.1) then
+        de 
+        [start_aligned_images][newgrp]@
+    endif
+
+    ud n [num-particles]
+    [initial_sel_particles]
+
+    sd [i],[newgrp],[num-particles],[defocus-value]
+    [order_select]
+
+    ; loop though particles
+    do lb2 [slice-counter]=1,[num-particles]
+        ; get slice#
+        ud ic [slice-counter], [old-slice]  ; , [particle-num]
+        [initial_sel_particles]  ; WAS [df_dir][oldgrp]/[initial_sel_particles]
+
+        ; write to selection doc
+        sd [slice-counter], [slice-counter], [old-slice]  ; , [particle-num]
+        [sel_particles][newgrp]
+
+        ; increment global particle-counter
+        [global-counter] = [global-counter] + 1
+        
+        ; copy from total-particle stacks to good-particle stacks
+        cp
+        [initial_unaligned_images][oldgrp]@{******[old-slice]}
+        [unaligned_images][newgrp]@{******[slice-counter]}
+        
+        if([dala-yn].ge.1) then
+            cp 
+            [initial_aligned_images][oldgrp]@{******[old-slice]}
+            [start_aligned_images][newgrp]@{******[slice-counter]}
+        endif
+    lb2
+    ; end particle-loop
+
+    ud ice
+    [initial_sel_particles]
+    sd e
+    [sel_particles][newgrp]
+
+    VM
+    echo " Accumulated {*****[num-particles]} particles in group: {***[newgrp]}"
+LB1
+
+UD ICE                          ; Close doc file access
+[defgrps]
+sd e
+[order_select]
+
+; renumber
+at it
+[order_select]
+[order_select]
+
+SD /        GROUP       PARTICLES      DEFOCUS
+[order_select]
+[dummy] = -[num-grp]
+sd [dummy], [num-grp],[global-counter]
+[order_select]
+SD /           NUMGROUPS   TOT_PARTICLES
+[order_select]
+sd e
+[order_select]
+
+VM
+echo ; echo 'Done -- Wrote {*******[global-counter]} particles'; date
+
+EN D
+; </body></pre></html>
+
+; Modified 2012-08-15
+;    2012-06-04 (trs) -- added option to write aligned-image stacks (no longer used in refinement)
+;    2011-01-07 (trs) -- refinement batch files using fewer and different inputs
+;    2011-01-05 (trs) -- using more general SEL_PARTICLES as input
+;    2009-01-12 (trs) -- can combine data sets by starting from defocus-group >1
+;    2007-03-21 (trs) -- bug fix
+;    2007-01-30 (trs) -- adapted from copyin.pam

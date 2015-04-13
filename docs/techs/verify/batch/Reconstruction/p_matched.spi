@@ -1,0 +1,133 @@
+; GENERATE AND APPLY MATCHED FILTER
+;
+; Adapted from make_matched.spi and matchedfilter.spi
+
+; ------------- Parameter -------------
+
+rr [radius]  ; object radius for masking before FSC, pixels (use <0 for no mask)
+?radius?
+
+; -------------- Inputs --------------
+fr
+?first half-set volume?[odd_half_volume]
+fr
+?second half-set volume?[even_half_volume]
+fr
+?volume to be filtered?[unfiltered_volume]
+
+; -------------- Output --------------
+fr
+?output matched-filter doc?[matched_filter_doc]
+fr
+?filtered volume?[filtered_volume]
+
+; --------- END BATCH HEADER ---------
+
+fr l
+[fsc_doc]tmpmatchdoc
+
+; mask volumes for FSC, if necessary
+if([radius].gt.0) then
+    ; get volume dimensions
+    fi [idim]
+    [odd_half_volume]
+    (12)  ; header position for NSAM
+
+    ; calculate center
+    [center] = [idim]/2 + 1
+
+    ; create Gaussian
+    mo 3
+    _11
+    [idim],[idim],[idim]        ; dimensions
+    G                           ; _G_aussian
+    [center],[center],[center]  ; center coordinates
+    [radius],[radius],[radius]  ; Gaussian falloff
+
+    ; get statistics
+    fs [max]
+    _11
+
+    ; lift maximum to 1
+    ar
+    _11
+    _12
+    p1/[max]
+
+    ; multiply volumes by mask
+    mu
+    [odd_half_volume]
+    _12  ; INPUT: mask
+    _21  ; OUTPUT
+    *
+
+    mu
+    [even_half_volume]
+    _12  ; INPUT: mask
+    _22  ; OUTPUT
+    *
+; if masking not specified, then simply copy volumes into memory
+else
+    cp
+    [odd_half_volume]
+    _21  ; OUTPUT
+
+    cp
+    [even_half_volume]
+    _22  ; OUTPUT
+endif
+
+rf 3 [res-pix],[res-freq]
+_21        ; INPUT: odd_half_volume
+_22        ; INPUT: even_half_volume
+(1)        ; ring width (NEEDS TO BE 1 unless volume padded)
+(0.8,1.2)  ; scale-factor range
+C          ; missing _C_one
+(90)       ; maximum tilt angle
+(3)        ; factor for noise comparison
+[fsc_doc]
+
+[res-pix]
+[res-freq]
+
+;vm
+;echo "Nominal resolution at 0.5FSC: {%f6.4%[res-freq]} pixels^-1"
+
+; get #lines from resolution doc
+ud n, [num-fsc-lines]
+[fsc_doc]
+
+de  ; clean up pre-existing file
+[matched_filter_doc]
+
+; loop through Radii
+do lb1 [fsc-line]=2,[num-fsc-lines]
+    ; get FSC (third column)
+    ud ic [fsc-line], [spat-freq], [dummy], [fsc-value]
+    [fsc_doc]
+
+    ; write FSC to new document
+    sd [fsc-line], [fsc-value], [spat-freq]
+    [matched_filter_doc]
+lb1
+; end Radius-loop
+
+; clean up
+ud ice
+[fsc_doc]
+de
+[fsc_doc]
+sd e
+[matched_filter_doc]
+
+; apply to volume
+fd
+[unfiltered_volume]   ; INPUT: volume to be filtered
+[filtered_volume]     ; OUTPUT: filtered volume
+[matched_filter_doc]  ; INPUT: filter doc
+
+re  ; saving results file to refer back to nominal resolution
+
+; Modified 2011-01-14
+;    2010-07-27 (trs) -- adapted from make_matched.spi and matchedfilter.spi
+

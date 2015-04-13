@@ -1,0 +1,156 @@
+ ; <html><head><title>Stack particles by defocus groups</title></head><body><pre>
+ ;
+ ; SOURCE: spider/docs/techs/recon/Procs/nat2stk.spi     
+ ;
+ ; PURPOSE: Stack original particles by group, renumbering the 
+ ;          original particles. Reads serially listed individual particles
+ ;          provided in the Nature Protocols paper and stacks them.
+ ;          Not used with current versions of particle picking procedures!!!
+ ;          Renames: Micrographs/raw*** -- raw****
+ ;          Renumbers:  good/ngood*** -- Alignment/sel_particles_***
+ ; NOTE:    The Nature protocols data lacks info necessary to recreate the
+ ;          whole original micrograph series, only four micrographs are 
+ ;          included in the data set although the windowed particles 
+ ;          appear to come from 7 micrographs?, so this just 
+ ;          creates defocus group stacks not micrograph stacks.
+ ;
+ ; <b> ---------- Parameters ---------------------------------------
+
+ [proj] = 1                                     ; Arbitrary number
+
+ ; -------------- Input files ---------------------------------------
+
+ [microg]         = 'Micrographs/raw***'        ; Original micrograph files        (one/micrograph)
+
+ [ord_sel]        = 'Particles/order_select'    ; Part. numbers * defocus doc file (one)
+
+ [win]            = 'Particles/win/ser*****'    ; Individual particle images       (many!)
+ 
+ [sel_part_bygrp] = 'Particles/good/ngood***'   ; Particle selection doc files     (one/group)
+
+ ; --------------- Output files  -------------------------------------
+
+ [newmicrog]      = 'Micrographs/raw****'       ; Renamed micrographs (one/micrograph)
+
+ [stk]            = 'Alignment/data_****@*****' ; Particle images stacks       (one/group)
+
+ [sel_grp]        = 'Alignment/sel_group'       ; Group selection file         (one)
+
+ [new_sel_part]   = 'Alignment/sel_part_***'    ; Particle selection files (one/group)
+
+ [part2global]    = 'Alignment/part2glonum_***' ; Global particle lookup table  (one/group) 
+
+ ; -------------- END BATCH HEADER ------------------------------</b>
+
+ MD
+   TR OFF                              ; Decreases results file output
+ MD
+   VB OFF                              ; Decreases results file output
+ SYS
+   echo " Results file omitted for speed" ; echo 
+ MD
+   RESULTS OFF                         ; Omits any results file output
+
+ DO [mic] = 1,4                        ; Loop over all micrographs  ----------------
+
+   SYS                                 ; Add digit to name
+     \mv  [microg][mic].$DATEXT [newmicrog][mic].$DATEXT
+
+   SYS
+     echo " Renamed micrograph: {%I5%[mic]}"
+ ENDDO
+
+ DE
+   [sel_grp]                           ; Group selection doc file           (removed)
+ 
+
+ SYS
+   echo ;  echo " Slow stacking step, please wait"
+
+ [totparts] = 0
+
+ DO                                   ; Loop over all defocus groups  -----------------------
+   UD NEXT [grp],[npart],[iend],[def] ; Get group number & ending particle number
+     [ord_sel]
+   IF ( [grp] <= 0 ) EXIT             ; End of groups in doc file
+
+   !SYS
+   !   echo " Group: {%I3%[grp]} Particles: {%I4%[npart]}"
+ 
+   DE                               ; Remove existing global lookup file 
+     [part2global][grp]             ; Existing global number lookup file (removed)
+   SD / KEY: WIN-NUM   REG: GLOBAL-NUM  MICROGRAPH; Label for global number doc file
+     [part2global][grp]             ; New global number doc file         (output)
+
+   DE
+     [new_sel_part][grp]            ; Renumbered files of sel. particles (output)
+   SD /          #        ORIG_MICRO     MIC_WIN_#     GLOBAL_#       GRP
+     [new_sel_part][grp]            ; particle selection file (output)
+
+   [num] = 0
+
+   [mic] = [grp]                    ; We do not know real micrograph numbers
+
+   DO                               ; Loop over particles in this group  -----------------------
+     UD NEXT [key],[ipart]          ; Get particle number
+        [sel_part_bygrp][grp]
+     IF ( [key] <= 0 ) EXIT         ; End of particles in doc file
+
+     [num] = [num] + 1
+
+     CP                             ; Copy particle image to output stack
+       [win][ipart]                 ; Original image for this particle   (input)                  
+       [stk][grp][num]              ; Stacked image                      (output)
+
+     [mic] = [grp]                  ; I do not know this
+     [glo] = [ipart]                ; Arbitrary decision
+
+     ; Put proj #, mic #, window # and global # into image header
+     ST H                           ; Set header values
+       [stk][grp][num]              ; Stacked image                      (output)
+       PROJ,MIC,NUM,GLONUM          ; Header locations
+       [proj],[mic],[ipart],[glo]   ; Values
+
+     SD [num],[glo],[mic]           ; Save lookup table
+       [part2global][grp]           ; Part to global number doc file     (output)
+
+     ; #  ORIG_MICRO  MIC_WIN_#  GLOBAL_# GRP
+     SD [num],[mic],[ipart],[glo],[grp]     
+       [new_sel_part][grp]    ; Renumbered sel particle file       (output)
+
+     IF ( [num] == 1 ) THEN
+       SYS
+         echo " From: [win][ipart]  To: [stk][grp][num]  Glo: {%I6%[glo]} Def: {%I0%[def]}"; 
+     ENDIF
+
+   ENDDO                            ; End of: Loop over all particles in this group ---------
+
+   SD [grp],[grp],[num],[def]       ; Write number & defocus value              
+     [sel_grp]                      ; Group selection doc file       (output)
+
+   [totparts] = [totparts] + [num]
+
+   SYS
+     echo " Group: {%I3%[grp]}     Particles: {%I4%[num]} "
+
+   SD E                             ; Close doc file
+     [new_sel_part][grp]            ; Particle selection file    (closed)
+   SD E                             ; Close doc file
+     [part2global][grp]             ; Global number doc file     (closed)
+ 
+   UD NEXT END                      ; Finished with this defocus group
+      [sel_part_bygrp][grp]         ; Doc file                   (closed)
+  ENDDO                             ; End of: Loop over all all defocus groups -------------
+
+ UD NEXT END                        ; Finished with groups
+   [ord_sel]                        ; Doc file                   (closed)
+
+ SYS
+   echo ; echo " Total particles: {%I0%[totparts]}" ; echo 
+
+ EN
+ ; </body></pre></html>
+
+
+ tar cvf natproc_data_parts.tar  *.dat Alignment/part2glonum_*.dat Alignment/data_*.dat  Alignment/sel_group*.dat Alignment/sel_part_*.dat  
+

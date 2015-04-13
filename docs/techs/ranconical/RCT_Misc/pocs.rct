@@ -1,0 +1,187 @@
+; RUNS PROJECTIONS ONTO CONVEX SETS
+;
+; Adapted from Michael Radermacher's pocscs.rec
+
+; ---------------------- Parameters ----------------------
+
+[class-num]         = 2      ; volume number
+[num-iter]          = 99     ; number of iterations of POCS
+[tilt-angle]        = 50     ; tilt angle
+[yprj-phi]          = 65.4   ; angle phi for y-projections (Euler angles will be (PHI,90,0))
+[pass-band]         = 37.6   ; Butterworth filter pass-band (Angstroms)
+[stop-band]         = 28.2   ; Butterworth filter stop-band (Angstroms)
+[progress-interval] = 10     ; progress message written to screen every Nth iteration
+
+; ------------------------ Inputs ------------------------
+fr l
+[parameter_doc]params                       ; parameter doc file
+fr l
+[vol_dir]Volumes                            ; volume I/O directory
+fr l
+[class_vol][vol_dir]/vcla{***[class-num]}   ; unaligned experimental volume template
+fr l
+[mask][vol_dir]/vcla{***[class-num]}-mask   ; mask
+
+; ----------------------- Outputs -----------------------
+fr l
+[pocs_dir]Pocs                                           ; output directory
+;fr l
+;[central_slice][pocs_dir]/central{**[class-num]}_***     ; central slice
+fr l
+[y_projections][pocs_dir]/yprj_{***[class-num]}_***      ; y-projections
+fr l
+[pocs_stats_doc][pocs_dir]/docpocsstats                  ; volume statistcs for each iteration
+fr l
+[pocs_vol][vol_dir]/volpocs{***[class-num]}              ; POCS volume
+fr l
+[filt_pocs_vol][vol_dir]/volpocs{***[class-num]}-filt    ; filtered POCS volume
+
+; ------------------- END BATCH HEADER -------------------
+
+; Temporary files
+fr l
+[temp_vol_incore]_10
+fr l
+[temp_vol_ft]_11
+fr l
+[temp_masked_vol]_12
+fr l
+[temp_masked_ft]_13
+fr l
+[temp_filtered_ft]_14
+fr l
+[temp_filtered_vol]_15
+
+; get pixel-size
+ud 5, [pixel-size]
+[parameter_doc]
+ud e
+
+; convert filter radii to px^-1
+[pass-band] = [pixel-size]/[pass-band]
+[stop-band] = [pixel-size]/[stop-band]
+
+vm
+echo "Running [class_vol].$DATEXT through {***[num-iter]} iterations of POCS" ; date ; echo
+
+cp
+[class_vol]
+[temp_vol_incore]
+
+; get volume dimension
+fi x [ydim]
+[temp_vol_incore]
+(2)   ; header position for NROW
+
+[mid-y] = ([ydim]/2) + 1
+
+vm
+echo "if(! -d [pocs_dir]) mkdir [pocs_dir]"|csh
+
+[iter]  = 0
+
+;; pick slice
+;ps y
+;[temp_vol_incore]
+;[central_slice][iter]
+;[mid-y]
+
+; project in y
+pj 3
+[temp_vol_incore]
+[ydim],[ydim]
+[y_projections][iter]
+([yprj-phi],90,0)
+
+; Fourier transform
+ft
+[temp_vol_incore]
+[temp_vol_ft]
+
+de
+[pocs_stats_doc]
+
+; loop through iterations
+do lb1 [iter] = 1,[num-iter]
+    if (int([iter]/[progress-interval]).eq.[iter]/[progress-interval]) then
+        vm
+        echo "Working on iteration #{***[iter]} out of {***[num-iter]}"
+    endif
+    
+    ; multiply by mask
+    mu
+    [temp_vol_incore]   ; initially input volume, will be overwritten by CV REPL
+    [mask]
+    [temp_masked_vol]   ; OUTPUT
+    *                   ; no more files to multiply
+
+    ; Fourier transform
+    ft
+    [temp_masked_vol]
+    [temp_masked_ft]
+    
+    ; Fourier filter
+    ff
+    [temp_masked_ft]
+    [temp_filtered_ft]
+    (7)   ; Butterworth low-pass
+    [pass-band],[stop-band]
+
+    ; convex sets, projector replace
+    cv repl
+    [temp_filtered_ft]   ; INPUT (overwritten)
+    [temp_vol_ft]        ; INPUT
+    C                    ; _C_onical tilting
+    [tilt-angle]
+
+    ; inverse Fourier
+    ft
+    [temp_filtered_ft]
+    [temp_vol_incore]
+
+    ; find statistics
+    fs [fmax],[fmin],[favg],[stdev]
+    [temp_vol_incore]
+
+    ; write to doc file
+    sd [iter], [fmax],[fmin],[favg],[stdev]
+    [pocs_stats_doc]
+
+;    ; pick slice
+;    ps y
+;    [temp_vol_incore]
+;    [central_slice][iter]
+;    [mid-y]
+    
+    ; project in y
+    pj 3
+    [temp_vol_incore]
+    [ydim],[ydim]
+    [y_projections][iter]
+    ([yprj-phi],90,0)
+lb1
+; end iteration-loop
+
+; close doc
+SD /        FMAX          FMIN          FAVG          S.D.
+[pocs_stats_doc]
+sd e
+[pocs_stats_doc]
+; copy to final
+cp
+[temp_vol_incore]
+[pocs_vol]
+
+; filter
+fq np
+[pocs_vol]
+[filt_pocs_vol]
+(7)   ; Butterworth low-pass
+[pass-band],[stop-band]
+
+vm
+echo ; echo "Done" ; date
+
+en d
+
+; Modified 2012-10-10

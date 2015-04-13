@@ -1,0 +1,251 @@
+; AVERAGE IMAGES BY VIEW, WITH ALL DEFOCUS GROUPS COMBINED
+;
+; Adapted from average.spi, filterbyview.spi
+
+; ----------------------- Parameters -----------------------
+[img-dim]           = 80   ; image dimension
+[mirror-flag]       = 0    ; mirror aligned images (1==yes (for dala files), 0==no (for stkfilt))
+[progress-interval] = 4    ; progress message written to screen every Nth view
+
+; ------------------------- Inputs -------------------------
+fr l
+[view_list]../Alignment/projlist                           ; list of reference projections
+fr l
+[selection_doc]select/prj{***x80}/goodsel                  ; selection-doc template
+fr l
+[aligned_images]select/prj{***x80}/stkfilt@*****           ; aligned-image stack (pre-mirrored)
+;[aligned_images]../Alignment/dala01_{***[df-group]}@*****  ; aligned-image stack (unmirrored)
+
+; ------------------------ Outputs ------------------------
+fr l
+[avg_dir]avg                                               ; output directory
+;[avg_dir]select/prj{***x80}                                ; output directory
+fr l
+[good_view_avg][avg_dir]/goodavg{***x80}                   ; average template
+;[good_view_avg][avg_dir]/goodavg                           ; average template
+fr l
+[good_view_var]_2                                          ; variance (not saved)
+;[good_view_var][avg_dir]/goodvar{***x80}                   ; variance template (saved)
+fr l
+[by_view_doc][avg_dir]/how_many-good                       ; particles-per-view doc 
+
+; -------------------- END BATCH HEADER --------------------
+
+fr l
+[temp_aligned]_1@
+
+de
+[by_view_doc]
+;SD /        VIEW      #PARTICLES   VARIANCE_SD
+SD /     #PARTICLES   VARIANCE_SD
+[by_view_doc]
+
+[half-dim] = int([img-dim]/2)  ; used for mask radius for computing variance
+
+; make circular mask
+mo  
+_6                   ; OUTPUT: mask file
+[img-dim],[img-dim]  ; image dimensions
+C                    ; _C_ircle
+[half-dim]           ; radius
+
+vm
+echo "if(! -d [avg_dir]) mkdir [avg_dir]"|csh
+
+[tot-particles] = 0
+
+
+vm
+echo "Averaging images"; date
+
+; get #views
+ud n [num-views]
+[view_list]
+
+; loop through views
+do lb8 x48 = 1,[num-views]
+    ; get reference-view# (x80)
+    ud ic,x48,x80
+    [view_list]
+
+    if(x48.eq.1) then
+        if([mirror-flag].ge.1) then
+            vm
+            echo "Using dala-type files (not mirrored)"
+        else
+            vm
+            echo "Using stkfilt-type files (already mirrored)"
+        endif
+    endif
+
+    if (int(x80/[progress-interval]).eq.x80/[progress-interval]) then
+        vm
+        echo "Working on view #{***x80}, {***x48} out of {***[num-views]}"
+    endif
+
+    ; check if selection doc exists
+    iq fi [doc-exists]
+    [selection_doc]
+
+    if ([doc-exists].eq.1) then
+        ; get #particles
+        ud n [num-parts]
+        [selection_doc]
+    else
+        [num-parts] = 0
+    endif
+
+    [tot-particles] = [tot-particles] + [num-parts]
+
+    ; if #particles=0 then create blank images
+    if([num-parts].eq.0) then
+        bl
+        [good_view_avg]
+        [img-dim],[img-dim]
+        N    ; background from image?
+        (0)  ; background 
+
+        bl
+        [good_view_var]
+        [img-dim],[img-dim]
+        N    ; background from image?
+        (0)  ; background 
+    endif
+
+    ; if #particles=1 then...
+    if([num-parts].eq.1) then
+        ; get parameters
+        ud 1,[view-slice],x92,[df-slice],x94,[flip-flop],[df-group]
+        [selection_doc]
+        ud e
+
+        ; if need to check mirroring
+        if([mirror-flag].ge.1) then
+            ; if mirroring necessary for this particle, then mirror
+            if([flip-flop].eq.1) then
+                mr
+                [aligned_images][df-slice]
+                [good_view_avg]
+                Y  ; mirror-axis
+            ; if mirroring unnecessary for this particle, then copy
+            else
+                cp
+                [aligned_images][df-slice]
+                [good_view_avg]
+            endif
+
+            ; create blank image for variance
+            bl
+            [good_view_var]
+            [img-dim],[img-dim]
+            N    ; background from image?
+            (0)  ; background 
+
+        ; if don't need to check mirroring, then...
+        else
+            cp
+            [aligned_images][view-slice]
+            [good_view_avg]
+
+            bl
+            [good_view_var]
+            [img-dim],[img-dim]
+            N    ; background from image?
+            (0)  ; background 
+        endif
+    endif
+
+    ; if #particles>1 then...
+    if([num-parts].gt.1) then
+        ; if need to check mirroring
+        if([mirror-flag].ge.1) then
+            ; make stack
+            ms
+            [temp_aligned]
+            [img-dim],[img-dim]
+            [num-parts]
+
+            ; loop through particles
+            do lb5 xx55=1,[num-parts]
+                ; get parameters
+                ud ic x55,[view-slice],x92,[df-slice],x94,[flip-flop],[df-group]
+                [selection_doc]
+
+                ; if mirroring necessary for this particle, then mirror
+                if([flip-flop].eq.1) then
+                    mr
+                    [aligned_images][df-slice]
+                    [temp_aligned]{*****x55}
+                    Y  ; mirror-axis
+
+                    ; if mirroring unnecessary for this particle, then copy
+                else
+                    cp
+                    [aligned_images][df-slice]
+                    [temp_aligned]{*****x55}
+                endif
+            lb5
+            ; end particle-loop
+
+            ; average
+            as r
+            [temp_aligned]*****
+            (1-[num-parts])
+            A
+            [good_view_avg]
+            [good_view_var]
+
+            ; clean up
+            de
+            [temp_aligned]
+            ud ice
+            [selection_doc]
+
+        ; if don't need to check mirroring
+        else
+            ; average
+            as r
+            [aligned_images]
+            [selection_doc]  ; WAS (1-[num-parts])
+            A
+            [good_view_avg]
+            [good_view_var]
+        endif
+    endif
+
+    ; get standard deviation of the variance
+    fs m,x41,x42,x43,[sd-var]
+    [good_view_var]  ; variance map
+    _6               ; circular mask
+
+    ; write info to document
+;    sd x48,x80,[num-parts],[sd-var]
+    sd x80,[num-parts],[sd-var]
+    [by_view_doc]
+lb8
+; end view-loop
+
+; finish summary
+[dummy] = -x48
+SD /     TOTALPARTS
+[by_view_doc]
+sd [dummy], [tot-particles]
+[by_view_doc]
+
+; close docs
+ud ice
+[view_list]
+sd e
+[by_view_doc]
+
+vm
+echo ; echo "Done -- Averaged {******[tot-particles]} particles"; date
+
+en d
+
+; Modified 2010-05-06
+;    2010-05-06 (trs) -- changed format of HOW_MANY file to that of normal batch files, may be non-consecutive
+;    2009-06-05 (trs) -- can operate on non-consecutive views from list
+;    2009-05-05 (trs) -- bug fix: had used first N images from stkfilt
+;    2009-04-23 (trs) -- added SDVAR info to output doc file
+;    2009-03-13 (trs) -- checks for existence of selection doc first

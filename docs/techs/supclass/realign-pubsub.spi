@@ -1,0 +1,111 @@
+; FORCES ALIGNMENT TO SAME VIEW FROM EACH REFERENCE
+;
+; USAGE:  ./spider spi/dat @realign-pubsub 1 > log1.txt &
+
+@realign-settings(x41,x42,x43,x44,x65)
+; ------------------------- Inputs -------------------------
+; [df_group_list]         list of defocus groups
+; [selection]             selection file, for each defocus group
+; [ref_1_dir]             input-output directory for reference #1
+; [ref_2_dir]             input-output directory for reference #2
+; [reference_angles_doc]  Euler angles of the reference-projections
+; [unaligned_images]      unaligned particle stacks
+; [align_doc]             alignment docs, in both REF_1_DIR and REF_2_DIR
+; [ref_proj_stem]         reference projections, in both REF_1_DIR and REF_2_DIR
+; [finished_flag]         dummy file created when defocus-group done with everything
+; -------------------- END BATCH HEADER --------------------
+
+; get #defocus-groups
+ud n [num-grps]
+[df_group_list]
+
+; loop through defocus-groups
+do lb7 [grp-key]=1,[num-grps]
+    ; get defocus-group#
+    ud ic [grp-key], [grp-num]
+    [df_group_list]
+
+    ; for first group, check whether files exist
+    if([grp-key].eq.1) then
+        @realign-check(x11)
+        [df_group_list]
+
+        @realign-check(x12)
+        [selection]
+
+        @realign-check(x13)
+        [reference_angles_doc]
+
+        @realign-check(x14)
+        [unaligned_images]
+
+        @realign-check(x15)
+        [ref_1_dir]/[align_doc]
+
+        @realign-check(x16)
+        [ref_2_dir]/[align_doc]
+
+        @realign-check(x17)
+        [ref_1_dir]/[ref_proj_stem]
+
+        @realign-check(x18)
+        [ref_2_dir]/[ref_proj_stem]
+
+        ; if any file is missing, product of flags will be zero
+        [iqfi-product] = x11*x12*x13*x14*x15*x16*x17*x18
+
+        if([iqfi-product].eq.0) then
+            vm
+            echo ; echo "Exiting" ; echo
+
+            en d
+        else
+            vm
+            echo "Input files OK"; echo
+
+        endif
+    endif
+
+    VM
+    publish './spider spi/$DATEXT @realign-distribute {***[grp-num]} grp-num={***[grp-num]}'
+
+    my fl
+lb7
+; end group-loop
+
+
+; WAIT FOR ALL DEFOCUS GROUPS TO FINISH
+
+my fl  ; flush results file
+
+; loop through defocus-groups
+DO LB2 [grp-rank]=1,[num-grps]
+    ; get defocus-group#
+    ud ic [grp-rank], [grp-num]
+    [df_group_list]
+
+   IQ SYNC
+   [finished_flag]
+   (10 3600000)
+
+   MY FL
+
+   VM
+   echo "Group #{***[grp-num]} ({***[grp-rank]}th out of {***[num-grps]}) synced"
+   DE
+   [finished_flag]
+LB2
+; end group-loop
+
+ud ice  ; close
+[df_group_list]
+
+vm
+echo ; echo "All groups done"; date
+
+en 
+
+; Modified 2009-07-01
+;    TO DO: don't need to check for df_group_list, since it is needed before that loop anyway
+;    2009-05-21 (trs) -- exits if selected input files not found
+;    2008-04-11 (trs) -- Adapted from JSL's pubsub_recon_start.bat

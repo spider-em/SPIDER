@@ -1,0 +1,352 @@
+; MAKE SELECTION DOC FILES FOR EACH REFERENCE VIEW,
+; COMBINED FOR ALL DEFOCUS-GROUPS
+;
+; REQUIRES reversedoc_7col.spi
+
+; ------------------ Parameters ------------------
+
+[grp-progress]  = 4    ; prints progress message every Nth defocus group
+[view-progress] = 20   ; prints progress message every Nth reference view
+[num-views]     = 83   ; number of reference-projections
+
+; ------------------ Input files ----------------
+FR L
+[group_list]../Alignment/sel_group                ; list of defocus groups
+FR L
+[group2micslice]../Alignment/sel_particles_***    ; slice-to-particle lookup-table, for each group
+;        GRPSLICE     MICSLICE     GRPGROUP    MICROGRAPH
+;          used         used                      used
+FR L
+[mic2global]../Particles/coords/mic2global****    ; micrograph-particle lookup-table, for each micrograph
+; KEY=MIC_SLICE /  COLUMN1=GLOBAL_PART 
+FR L
+[align_doc]../Alignment/align_01_***              ; total-particle alignment-doc, for each defocus group
+
+; ------------------ Output files ----------------
+FR L
+[ref_view_list]../Alignment/projlist   ; list of reference views
+FR L
+[stack2particle_lut]stack2particle***  ; stack-to-particle lookup table, for each defocus-group
+; /     PARTICLE    MICROGRAPH    MIC_SLICE    GROUP_SLICE
+FR L
+[grp_dir]df{***[grp]}                  ; defocus-group directory prefix
+FR L
+[view_dir]select                       ; output directories, one for each group and one combined
+fr g
+[prj_dir][view_dir]/prj{***[view]}     ; output subdirectory prefix, for each reference-view
+FR L
+[by_view_list]sel***                   ; by-view list, in GRP_DIR/VIEW_DIR and combined in VIEW_DIR
+; /     VIEW_SLICE  GLOBPARTICLE   GRPSLICE      CC_ROT       MIRROR      GROUPNUM       VIEW
+FR L
+[sorted_view_list]sortsel              ; by-view list, sorted by CCROT, in PRJ_DIR
+FR L
+[view_slice_lut]particle_lut_***       ; slice-to-particle lookup-table, in GRP_DIR/VIEW_DIR
+FR L
+[summary_doc]how_many-total            ; particles per view
+
+; ------------- END BATCH HEADER ------------------
+
+; set temporary filenames
+fr l
+[how_many]tmp_how_many
+fr l
+[temp_stack2particle_incore]tmp_stack2particle
+fr l
+[temp_grp_view_slice_lut]tmp_grpslice_lut_incore
+fr l
+[temp_view_list_unrekeyed]tmp_view_list_unrekeyed
+fr l
+[temp_view_list_unreversed]tmpsort_unreversed
+
+md
+set mp
+(0)
+md
+vb off
+
+; generate view-list
+doc create
+[ref_view_list]
+(1)      ; column to be filled
+(1-[num-views])  ; numbers to put in column
+
+VM
+echo "Separating particles for {***[num-views]} reference views"; date
+
+[prev-mic] = -1  ; initialize previous-micrograph#
+
+; get #defocus-groups
+ud n [num-grps]
+[group_list]
+
+; loop through defocus-groups
+do lb5 [grp] = 1,[num-grps]
+    if (int([grp]/[grp-progress]).eq.[grp]/[grp-progress]) then
+        vm
+        echo "Working on group #{***[grp]} out of {***[num-grps]}"
+    endif
+
+    ; GENERATE STACK-TO-PARTICLE LOOKUP TABLE
+
+    ; get #particles
+    ud n [num-grp-particles]
+    [group2micslice][grp]
+
+    sd ic new
+    [temp_stack2particle_incore]
+    (4,[num-grp-particles])  ; #columns, #particles
+
+    ; loop through particles
+    do lb4 [part-key4] = 1,[num-grp-particles]
+        ; read group-slice#, micrograph-slice#, micrograph#
+        ud ic [part-key4], [grp-slice4],[mic-slice],[v43],[mic]
+        [group2micslice][grp]
+
+        ; if previous was different, then close previous
+        if([prev-mic].ne.[mic]) then
+            ud ice
+            [mic2global][prev-mic]
+
+            [prev-mic] = [mic]  ; update previous
+        endif
+
+        ; read global-particle#
+        ud ic [mic-slice], [global-num4]
+        [mic2global][mic]
+
+        ; write to lookup table
+        sd ic [part-key4], [global-num4],[mic],[mic-slice],[grp-slice4]
+        [temp_stack2particle_incore]
+        ; global-particle#
+    lb4
+    ; end particle-loop
+
+    ; clean up
+    ud ice
+    [group2micslice][grp]
+    ud ice
+    [mic2global][mic]
+    sd ic copy
+    [temp_stack2particle_incore]
+    [stack2particle_lut][grp]
+    sd ic e
+    [temp_stack2particle_incore]
+    SD /     PARTICLE    MICROGRAPH    MIC_SLICE    GROUP_SLICE
+    [stack2particle_lut][grp]
+    sd e
+    [stack2particle_lut][grp]
+
+
+    ; GENERATE DEFOCUS-GROUP VIEW LIST
+
+    ; create directories if needed
+    vm
+    echo "if(! -d [grp_dir]/[view_dir]) mkdir -p [grp_dir]/[view_dir]"|csh
+
+    ; clean up pre-existing files
+    [view] = 1  ; dummy variable
+    de a
+    [grp_dir]/[view_dir]/[by_view_list][view]
+
+    ; split by view
+    vo mq
+    (0)           ; CCC threshold
+    [align_doc][grp]
+    [num-views]   ; #reference-projections
+    [grp_dir]/[view_dir]/[by_view_list]
+    [grp_dir]/[how_many]
+
+    ; delete how_many file
+    de
+    [grp_dir]/[how_many]
+lb5
+; end group-loop
+
+
+vm
+echo ; echo "Adding global particle numbers"; date 
+
+; Make sure output dir. present
+vm
+echo "if(! -d [view_dir]) mkdir [view_dir]"|csh
+
+; clean up
+[view] = 1  ; dummy variable
+de a
+[view_dir]/[by_view_list][view]
+de
+[summary_doc]
+
+; initialize variables
+[max-imgs]       = -1
+[min-imgs]       = 9999999
+[combined-parts] = 0
+
+; loop through reference-views
+do lb8 [view] = 1,[num-views]
+    if (int([view]/[view-progress]).eq.[view]/[view-progress]) then
+        vm
+        echo "Working on view #{***[view]} out of {***[num-views]}"
+    endif
+
+    vm
+    echo "if(! -d [prj_dir]) mkdir [prj_dir]"|csh
+
+    ; initialize combined particle-counter
+    [combined-view-counter] = 0
+
+    ; loop through defocus-groups
+    do lb7 [grp] = 1,[num-grps]
+        ; get #particles in group->view
+        ud n [num-grpviewparts]
+        [grp_dir]/[view_dir]/[by_view_list][view]
+
+        ; skip if empty
+        if([num-grpviewparts].eq.0)goto lb7
+
+        ; initialize in-core doc
+        sd ic new
+        [temp_grp_view_slice_lut]
+        (4,[num-grpviewparts])
+
+        ; loop through particles
+        do lb6 [part-key6] = 1,[num-grpviewparts]
+            ; get slice#, CCROT, mirror-flag
+            ud ic [part-key6], [grp-slice6],[ccrot],[mirror-flag]
+            [grp_dir]/[view_dir]/[by_view_list][view]
+
+            ; get particle#
+            ud ic [grp-slice6], [global-num6]
+            [stack2particle_lut][grp]
+
+            ; increment particle-counter
+            [combined-view-counter] = [combined-view-counter]+1
+
+            ; write particle# for all-group view doc
+            sd [combined-view-counter], [global-num6],[grp-slice6],[ccrot],[mirror-flag],[grp],[view]
+            [temp_view_list_unrekeyed]
+
+            ; write for current-group view doc also
+            sd ic [part-key6],[global-num6],[grp-slice6],[ccrot],[mirror-flag]
+            [temp_grp_view_slice_lut]
+        lb6
+        ; end particle-loop
+
+        ; close documents
+        sd ic copy
+        [temp_grp_view_slice_lut]
+        [grp_dir]/[view_dir]/[view_slice_lut][view]
+        sd ic e
+        [temp_grp_view_slice_lut]
+        SD /     PARTICLE       SLICE        CCC         MIRROR
+        [grp_dir]/[view_dir]/[view_slice_lut][view]
+        sd e
+        [grp_dir]/[view_dir]/[view_slice_lut][view]
+        ud ice
+        [grp_dir]/[view_dir]/[by_view_list][view]
+        ud ice
+        [stack2particle_lut][grp]
+    lb7
+    ; end group-loop
+
+    sd e  ; close document
+    [temp_view_list_unrekeyed]
+
+    ; check if particle-list exists
+    iq fi [list-exists]
+    [temp_view_list_unrekeyed]
+    ; (will not exist if no particles in view)
+
+    ; skip if particle-list doesn't exist
+    if([list-exists].eq.0) then
+        vm
+        echo "No particles in view #{***[view]} -- Skipping..."
+
+        [combined-view-counter] = 0
+        
+        goto lb3  ; WAS lb8
+    endif
+
+    ; re-key
+    doc key
+    [temp_view_list_unrekeyed]
+    [view_dir]/[by_view_list][view]
+
+    ; sort by CC
+    doc sort
+    [view_dir]/[by_view_list][view]
+    [temp_view_list_unreversed]
+    (4)   ; column# to sort: CCROT
+    Y     ; renumber?
+
+    ; reverse order, from highest to lowest
+    @reversedoc_7col
+    [temp_view_list_unreversed]   ; INPUT
+    [prj_dir]/[sorted_view_list]  ; OUTPUT
+
+    lb3  ; jump here if no particles in view
+
+    ; label columns
+    SD /     VIEW_SLICE  GLOBPARTICLE   GRPSLICE      CC_ROT       MIRROR      GROUPNUM       VIEW
+    [prj_dir]/[sorted_view_list]
+    sd e
+    [prj_dir]/[sorted_view_list]
+
+    SD /     VIEW_SLICE  GLOBPARTICLE   GRPSLICE      CC_ROT       MIRROR      GROUPNUM       VIEW
+    [view_dir]/[by_view_list][view]
+    sd e
+    [view_dir]/[by_view_list][view]
+
+    ; clean up
+    de
+    [temp_view_list_unreversed]
+    de
+    [temp_view_list_unrekeyed]
+    
+    ; update min, max
+    if([combined-view-counter].gt.[max-imgs]) [max-imgs]=[combined-view-counter]
+    if([combined-view-counter].lt.[min-imgs]) [min-imgs]=[combined-view-counter]
+    
+    ; updated combined counter
+    [combined-parts] = [combined-parts] + [combined-view-counter]
+
+    ; write to summary
+    sd [view], [combined-view-counter]
+    [summary_doc]
+lb8
+; end view-loop
+
+; finish summary file
+SD /   #VIEWS  TOTPARTS       MAXIMGS       MINIMGS
+[summary_doc]
+[dummy] = -[num-views]
+sd [dummy], [combined-parts],[max-imgs],[min-imgs]
+[summary_doc]
+sd e
+[summary_doc]
+
+vm
+echo ; echo "Done"; date
+
+EN D
+
+; Modified 2014-08-06
+;    TO DO -- enable skipping of defocus-groups
+;    2012-05-23 (trs) -- added summary output file
+;    2009-06-03 (trs) -- adding slice number as first column of select/sel
+;    2009-05-15 (trs) -- added progress message going through defocus groups
+;    2009-05-14 (trs) -- sorting by CCROT reversedoc_7col.spi
+;    2009-04-22 (trs) -- using SD IC
+;    2009-04-21 (trs) -- added version of select/sel sorted by CCROT
+;    2009-02-23 (trs) -- added view# to select/sel output
+;    2008-10-03 (trs) -- uses MIC2GLOBAL to get global particle# instead of SNDC
+;    2008-04-24 (trs) -- number of reference projections now an input parameter
+;    2008-01-30 (trs) -- added output stack2particle, which lists global particle#
+;    2008-01-30 (trs) -- last angle in refangles not necessarily redundant
+;    2007-08-07 (trs) -- reflects changes to input doc file sel_particles
+;    2007-06-06 (trs) -- bug fix cleaning out pre-existing files, format change
+;    2007-05-30 (trs) -- reflects changes to input doc file sel_particles
+;    2007-03-27 (trs) -- reflects changes to input doc file sel_particles
+;    2007-02-22 (trs & djt) -- use same names/labels for df***/select/sel and combined select/sel
+;    2007-02-20 (trs & djt) -- projlist now an output
+;    2007-02-20 (trs & djt) -- bug fix: defocus-group directories were not correctly created
