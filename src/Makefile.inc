@@ -47,12 +47,10 @@ ELEMENTS =  \
  $(LIB)(apshift.o)\
  $(LIB)(apshift_fou.o)\
  $(LIB)(ap_end.o)     \
- $(LIB)(apfou_patm.o) \
  $(LIB)(ap_getangas.o)\
  $(LIB)(ap_getdata.o) \
  $(LIB)(apref_p.o)    \
  $(LIB)(apref_pm.o)   \
- $(LIB)(apsh_cuda.o)  \
  $(LIB)(apsh_psc.o)   \
  $(LIB)(apsh_ps.o)    \
  $(LIB)(apsh_ss.o)    \
@@ -60,7 +58,6 @@ ELEMENTS =  \
  $(LIB)(apmaster.o)   \
  $(LIB)(apmaster_tool.o)\
  $(LIB)(aprings.o)      \
- $(LIB)(aprings_patm.o) \
  $(LIB)(aprings_coef.o) \
  $(LIB)(aprings_trans.o)\
  $(LIB)(applyw.o)  \
@@ -439,7 +436,6 @@ ELEMENTS =  \
  $(LIB)(macf.o) \
  $(LIB)(macf_p.o) \
  $(LIB)(mahal.o) \
- $(LIB)(make_patm.o) \
  $(LIB)(make_close_list.o) \
  $(LIB)(maktab.o) \
  $(LIB)(malfi3.o) \

@@ -10,11 +10,12 @@ C              @*** VAR INIT BUG                  NOV 2009 ARDEAN LEITH
 C              NECHO                              SEP 2012 ARDEAN LEITH
 C              ! COMMENT BUG                      DEC 2013 ARDEAN LEITH
 C              NO LOAD [] FOR @ LINE              MAY 2014 ARDEAN LEITH
+C              REG_GET_SEL aCESSES GLOBAL BUG     APR 2015 ARDEAN LEITH
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2014  Health Research Inc.,                         *
+C=* Copyright 1985-2015  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -264,7 +265,7 @@ C        LOAD [] REGISTER VARIABLES IN NSEL LIST, ZERO UNUSED REGISTERS
             IBANK = 0
             IF (ANS(1:4) == 'RR G') IBANK = 1
             CALL REG_GET_SEL(IBANK,ANS(IGOBRAK:IENDBRAK),
-     &                          .TRUE.,.FALSE.,NREG,IRTFLG)
+     &                       .TRUE.,.TRUE.,NREG,IRTFLG)
          ENDIF
       ELSE
          !if(igobrak>1)write(6,*)'Skip nsel load',igobrak,igoeq,ans(:nchar)

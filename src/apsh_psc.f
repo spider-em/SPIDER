@@ -9,12 +9,13 @@ C                   IRAY CALCULATION              FEB 12 ARDEAN LEITH
 C                   AP_ENDS                       MAR 12 ARDEAN LEITH
 C                   DENOISE                       SEP 12 ARDEAN LEITH
 C                   FOURIER LOWPASS DENOISE       OCT 12 ARDEAN LEITH
+C                   AP_STAT_SHC USED              APR 15 ARDEAN LEITH
 C
 C **********************************************************************
 C=* This file is part of:                                              * 
 C=* SPIDER - Modular Image Processing System.                          *
 C=* Authors: J. Frank & A. Leith                                       *
-C=* Copyright 1985-2012  Health Research Inc.                          *
+C=* Copyright 1985-2015  Health Research Inc.                          *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -112,7 +113,7 @@ cpgi$g opt=3
         LOGICAL              :: TRANS        ! FLAG FOR REFORMED RINGS
         LOGICAL              :: CPLX         ! FLAG FOR COMPLEX CROSRNG
         LOGICAL              :: USECOEF      ! FOR TESTING
-        LOGICAL              :: ANGINHEADER,GOTEXPANG   
+        LOGICAL              :: ANGINHEADER,GOTEXPANG,FIRST   
         INTEGER              :: NXT
 
 C       AUTOMATIC ARRAYS
@@ -203,6 +204,8 @@ C       FIND NUMBER OF OMP THREADS
            GOTO 9999
         ENDIF
  
+        ANGINHEADER = .FALSE. ! unfinished !!!!!!!!!!!
+
         IF (DENOISE) THEN
 
            N2X   = NX * 2
@@ -473,11 +476,15 @@ C             UPDATE CCROT & ANGULAR DISPLACEMENT STATISTICS COUNTERS
 
         IF (LUNDOC > 0) THEN
 C         SAVE CCROT & ANGULAR DISPLACEMENT STATISTICS
-          CALL AP_STAT(NUMEXP,ANGDIFTHR,IBIGANGDIF,
+
+          ! IF NO ALIGN DOC INPUT -->  NO CCROT DIFFERENCES
+          FIRST   = NGOTPAR == 0        ! FIRST FILE, NO DIFFERENCES
+
+          CALL AP_STAT_SHC(NUMEXP,ANGDIFTHR,IBIGANGDIF,
      &                 ANGDIFAVG, CCROTAVG,
      &                 IMPROVCCROT,CCROTIMPROV,
      &                 IWORSECCROT,CCROTWORSE,
-     &                 NBORDER,NSUBPIX,LUNDOC)
+     &                 NBORDER,NSUBPIX,LUNDOC,FIRST)
         ENDIF
 
 9999    CONTINUE

@@ -8,6 +8,7 @@
 ;         More stacks                      ArDean Leith Dec 2006
 ;         Small angles limits              ArDean Leith Oct 2010
 ;         pixsiz, resol headers,r2,...     ArDean Leith Aug 2012
+;         [n-big]                          ArDean Leith Apr 2015
 ;
 ; PURPOSE: Controls serial reconstruction refinement 
 ;
@@ -22,7 +23,6 @@
 ;   [iter-end]               Ending   iteration
 ;   [lambda]                 Lambda (A)            (Used in prepare)
 ;   [small-ang]              Small angle refinement flag (1 is true) 
-;   [converg]                Convergence criterion percentage
 ;
 ; INPUT FILES:
 ;   [params]                ../params                             Input params file  
@@ -56,18 +56,19 @@
    0
 
  ; Input initial parameters & file names
- @refine_settings([pixsiz],[r2],[alignsh],[prj-radius],[iter1],[iter-end],[lambda],[small-ang],[winsize],[converg])
+ @refine_settings([pixsiz],[r2],[alignsh],[prj-radius],[iter1],[iter-end],[lambda],[small-ang],[winsize])
 
  ; Redefine [temp_local_dir] location to current work directory for non-PubSub run
  GLO [temp_local_dir] = '[temp_work_dir]'
 
- IF ([iter1].LE.1) THEN
+ IF ([iter1] <= 1) THEN
    ; Prepare input files (only needs to be done once) 
    @prepare([pixsiz],[lambda],[iter1])
-   SD /     Iteration       group        resolution 
-     [iter_resol]          ; Resolution doc file              (output)
-   SD /     Iteration       group        resolution 
-     [grp_resol]           ; Resolution doc file              (output)
+
+   SD /     ITERATION       GROUP        RESOLUTION 
+     [iter_resol]          ; Resolution doc file               (output)
+   SD /     ITERATION       GROUP        RESOLUTION 
+     [grp_resol]           ; Resolution doc file               (output)
  ENDIF
 
 
@@ -91,7 +92,7 @@
 
    ; Create reference angle doc file for this iteration 
 
-   IF([small-ang].EQ.0) THEN  
+   IF ( [small-ang] == 0 ) THEN  
 
       ; For normal angle refinement
       RR S [ang-step]
@@ -104,7 +105,7 @@
         0, 359.9           ; Phi range
         [iter_refangs]     ; Reference angles doc file       (output)
 
-      RR S [ang-limit]     ; Restriction on angular search      (varies with iteration)
+      RR S [ang-limit]     ; Restriction on angular search   (varies with iteration)
         [ang-limits]
         [iter]
    ELSE                    ; Small angle refinement
@@ -118,35 +119,40 @@
    ENDIF
 
    ; Process all defocus groups one by one
-   [num-big] = 0           ; Number of large proj. angle displacements
-   DO [i]=1,[num-grps]
-      UD S [i],[grp]       ; Get defocus group number from list  
-        [sel_group]        ; Group selection file            (input)
+   [n-big]    = -1
+   [ntot-big] = 0
+   [ntot]     = 0
 
-      VM
-        echo -n " Processing group: {***[grp]}   " ; date  '+ TIME: %x  %X'
+   DO [i]=1,[num-grps]
+      UD S [i],[grp],[n-part] ; Get defocus group number from list  
+        [sel_group]           ; Group selection file         (input)
+
+      SYS
+        echo -n " Processing group: {%I0%[grp]}   " ; date  '+ TIME: %x  %X'
       MY FL                ; Flush results file
  
-      ; grploop/smangloop returns [stop] 
-      IF([small-ang].EQ.0)THEN  ; Runs main refinement grploop tasks
-         @grploop([ang-step],[ang-limit],[r2],[alignsh],[prj-radius],[iter],[grp],[stop],[pixsiz])
+      ; Run main refinement loop task
+      IF ( [small-ang] == 0 ) THEN        ; Runs normal refinement loop
+         @grploop([ang-step],[ang-limit],[r2],[alignsh],[prj-radius],[iter],[grp],[n-big],[pixsiz])
+         [ntot-big] = [ntot-big] + [n-big]
+         [ntot]     = [ntot] + [n-part]
       ELSE
-         @smangloop([r2],[alignsh],[prj-radius],[iter],[grp],[stop],[pixsiz])
+         @smangloop([r2],[alignsh],[prj-radius],[iter],[grp],[pixsiz])
       ENDIF
-
-      ; Check size of projection angular changes
-      ; [stop] returns % of images whose proj. angle moved by >1.5*[ang-step]
-      IF([stop].GT.[converg])  [num-big]=[num-big]+1  ; Excessive ang. change for this group  
 
       MY FL                ; Flush results file
    ENDDO
    UD E                    ; Finished with incore doc file
 
-   VM
-     echo " Iteration: {**[iter]} Excessive proj. ang. changes in: {***[num-big]} groups"
- 
-   ; If projection angular changes small in all groups, can stop now
-   IF([num-big].EQ.0) EXIT  
+   IF ( [n-big] > 0 ) THEN
+     [per-big] = INT([ntot-big] / [n-big])
+
+     SYS
+       echo " Iteration: {%I0%[iter]}   Images with large proj. ang. changes: {%I0%[per-big]}%"
+   ELSE
+     SYS
+       echo " Iteration: {%I0%[iter]}"
+   ENDIF
 
    ; Consolidate data for CTF corrections
    @mergegroups([pixsiz],[iter],[ampenhance],[r2])
@@ -157,24 +163,27 @@
    MY FL                    ; Flush results file
  ENDDO
 
- VM
-   echo ' ' ; echo -n " Alignment halting after iteration: {**[iter]}  " ; date '+ TIME: %x  %X' ; echo ' '
+ SYS
+   echo ; echo -n " Alignment halting after iteration: {%I0%[iter]}  " ; date '+ TIME: %x  %X' ; echo 
 
  DO [i]=1,[num-grps]     
    UD IC [i], [grp]         ; Get defocus group number from list
      [sel_group]            ; Group selection doc file         (input)
 
    @endmerge([prj-radius],[grp],[iter],[pixsiz],[r2])
+
  ENDDO
 
  UD ICE                     ; End doc file 'UD IC' use
   [sel_group]               ; Group selection doc file        (finished)
 
+
  ; Prepare final resolution files
  @endrefine([r2],[pixsiz],[iter])    
 
- VM
-   echo " " ; echo -n  " FINISHED REFINEMENT    " ; date '+ TIME: %x  %X'
+ SYS
+   echo  ; echo -n  " FINISHED REFINEMENT    " ; date '+ TIME: %x  %X'
 
  EN
+
 ; </body></pre></html>

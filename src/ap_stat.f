@@ -4,12 +4,14 @@ C
 C    AP_STAT.F    NEW                               MAR 05 ARDEAN LEITH
 C                 CCDIF = CCROT-CCROTLAS            AUG 10 ARDEAN LEITH
 C                 NBORDER,NSUBPIX                   OCT 10 ARDEAN LEITH
+C                 FNUMPIX                           APR 15 ARDEAN LEITH
+C                 AP_STAT_R ADDED                   APR 15 ARDEAN LEITH
 C               
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Copyright 1985-2015  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -39,7 +41,7 @@ C--*********************************************************************
      &                       CCROTAVG,IBIGANGDIF,ANGDIFAVG,IMPROVCCROT,
      &                       CCROTIMPROV,IWORSECCROT,CCROTWORSE)
 
-        IF (NGOTPAR .LT. 0) THEN
+       IF (NGOTPAR < 0) THEN
 C          INITIALIZE CCROT CHANGE STATISTICS
 
            CCROTAVG    = 0.0
@@ -51,76 +53,309 @@ C          INITIALIZE CCROT CHANGE STATISTICS
            IWORSECCROT = 0
            CCROTWORSE  = 0.0
            RETURN
-        ENDIF  
+       ENDIF  
 
-C       COMPILE CCROT CHANGE STATISTICS
+C      COMPILE CCROT CHANGE STATISTICS
 
-        CCROTAVG = CCROTAVG + CCROT
+       CCROTAVG = CCROTAVG + CCROT
 
-        IF (NGOTPAR .GE. 8) THEN
-           IF (ANGDIF .GT. ANGDIFTHR) IBIGANGDIF = IBIGANGDIF + 1
+       IF (NGOTPAR >= 8) THEN
+           IF (ANGDIF > ANGDIFTHR) IBIGANGDIF = IBIGANGDIF + 1
            ANGDIFAVG = ANGDIFAVG + ANGDIF
            CCDIF     = CCROT - CCROTLAS     ! DIFFERENCE
 
-           IF (CCDIF .GE. 0.0) THEN
+           IF (CCDIF >= 0.0) THEN
               IMPROVCCROT = IMPROVCCROT + 1
               CCROTIMPROV = CCROTIMPROV + CCDIF
            ELSE
               IWORSECCROT = IWORSECCROT + 1
               CCROTWORSE  = CCROTWORSE + ABS(CCDIF)
            ENDIF
-        ENDIF   ! END OF: IF (NGOTPAR .GE. 8)
+       ENDIF   ! END OF: IF (NGOTPAR >= 8)
+
+       END
+
+C       -------------------- AP_STAT_ADD_R -------------------------------
+
+      SUBROUTINE AP_STAT_ADD_R(NGOTPAR,
+     &              ANGDIF,ANGDIFTHR, IBIGANGDIF,ANGDIFAVG,
+     &              CC,CCLAS,CCAVG,
+     &              IMPROVCC,CCIMPROV,IWORSECC,CCWORSE,
+     &              FIRSTCC)
+
+       IMPLICIT  NONE
+
+       INTEGER  :: NGOTPAR,IBIGANGDIF, IMPROVCC,IWORSECC
+
+       REAL     :: ANGDIF,ANGDIFTHR,ANGDIFAVG,
+     &             CC,CCLAS,CCAVG,CCIMPROV,CCWORSE 
+
+       LOGICAL  :: FIRSTCC
+       REAL     :: CCDIF
+
+       IF (NGOTPAR < 0) THEN
+C          INITIALIZE CCR CHANGE STATISTICS
+
+           IBIGANGDIF = 0
+           ANGDIFAVG  = 0.0
+
+           CCAVG      = 0.0
+           IMPROVCC   = 0
+           CCIMPROV   = 0.0
+           IWORSECC   = 0
+           CCWORSE    = 0.0
+
+           RETURN
+        ENDIF  
+
+C       COMPILE CC CHANGE STATISTICS
+
+        CCAVG = CCAVG + CC
+
+        IF (NGOTPAR >= 8) THEN
+           IF (ANGDIF > ANGDIFTHR) IBIGANGDIF = IBIGANGDIF + 1
+
+           ANGDIFAVG = ANGDIFAVG + ANGDIF
+
+           IF (.NOT. FIRSTCC) THEN
+              CCDIF     = CC - CCLAS              ! DIFFERENCE
+
+              IF (CCDIF >= 0.0) THEN
+                 IMPROVCC = IMPROVCC + 1
+                 CCIMPROV = CCIMPROV  + CCDIF
+              ELSE
+                 IWORSECC = IWORSECC + 1
+                 CCWORSE  = CCWORSE + ABS(CCDIF)
+              ENDIF
+           ENDIF  ! END OF: IF (.NOT. FIRSTCC)
+        ENDIF     ! END OF: IF (NGOTPAR >= 8)
 
         END
 
+
 C       -------------------- AP_STAT -------------------------------
 
-       SUBROUTINE AP_STAT(NUMEXP,ANGDIFTHR,IBIGANGDIF,
-     &                    ANGDIFAVG, CCROTAVG,
-     &                    IMPROVCCROT,CCROTIMPROV,
-     &                    IWORSECCROT, CCROTWORSE,
-     &                    NBORDER,NSUBPIX,LUNDOC)
-       
-        REAL, DIMENSION(8)  :: DLIST
-        CHARACTER (LEN=118) :: COMMENT 
+       SUBROUTINE AP_STAT(NUMEXP,ANGDIFTHR,IBIGANGDIF, ANGDIFAVG, 
+     &            CCRAVG, IMPROVCCR,CCRIMPROV, IWORSECCR, CCRWORSE,
+     &            NBORDER,NSUBPIX,LUNDOC)
+
+        IMPLICIT NONE 
+          
+        INTEGER         :: NUMEXP,IBIGANGDIF,IMPROVCCR,IWORSECCR 
+        INTEGER         :: NBORDER,NSUBPIX,LUNDOC
+
+        REAL            :: ANGDIFTHR,ANGDIFAVG,CCRAVG,CCRIMPROV,CCRWORSE
+        REAL            :: FNUMEXP
+      
+        INTEGER         :: NLIST, NC, IRTFLG
+        REAL            :: DLIST(9)
+
+        CHARACTER(LEN=132) :: COMMENT 
 
 
-C       SAVE CCROT & ANGULAR DISPLACEMENT STATISTICS
+C       SAVE CCR & ANGULAR DISPLACEMENT STATISTICS
         FNUMEXP  = NUMEXP
+
         DLIST(1) = 0.0
-        IF (ANGDIFTHR .GT. 0)DLIST(1) = 100 * FLOAT(IBIGANGDIF)/FNUMEXP
+        IF (ANGDIFTHR > 0)DLIST(1) = 100 * FLOAT(IBIGANGDIF)/FNUMEXP
 
         DLIST(2) = ANGDIFAVG / FNUMEXP
-        DLIST(3) = CCROTAVG  / FNUMEXP
-        DLIST(4) = 100 * FLOAT(IWORSECCROT) / FNUMEXP
+        DLIST(3) = CCRAVG  / FNUMEXP
+        DLIST(4) = 100 * FLOAT(IWORSECCR) / FNUMEXP
 
         DLIST(5) = 0.0
-        IF (IWORSECCROT .GT. 0)DLIST(5) = CCROTWORSE/FLOAT(IWORSECCROT)
+        IF (IWORSECCR > 0)DLIST(5) = CCRWORSE/FLOAT(IWORSECCR)
 
         DLIST(6) = 0.0
-        IF (IMPROVCCROT .GT. 0)DLIST(6) = CCROTIMPROV/FLOAT(IMPROVCCROT)
+        IF (IMPROVCCR > 0)DLIST(6) = CCRIMPROV/FLOAT(IMPROVCCR)
+
+        DLIST(7) = FNUMEXP
+
+        NLIST    = 9
+        NC       = 132
 
         IF (NBORDER > 0 .OR. NSUBPIX > 0) THEN
 
-           DLIST(7) = NBORDER
-           DLIST(8) = NSUBPIX
+           DLIST(8) = NBORDER
+           DLIST(9) = NSUBPIX
 
-C            123456789 123456789 123456789 123456789 123456789 123456789 1
-           COMMENT='      '//
-     &      '  %BIG-ANGDIF,   AVG-ANGDIF,     AVG-CCROT,     %WORSE, '//
-     &      '    AVG-WORSE,    AVG-BETTER       #BORDER,    #SUB_PXL'
-           CALL LUNDOCPUTCOM(LUNDOC,COMMENT,IRTFLG)
-           CALL LUNDOCWRTDAT(LUNDOC,-2,DLIST,8,IRTFLG)
+C           123456789 123456789 123456789 123456789 123456789 123456789 1
+           COMMENT =  
+     &     '        ' // 
+     &     '%BIG-ANGDIF,   AVG-ANGDIF,    AVG-CCR,      %WORSE,    '//
+     &     ' AVG-WORSE,   AVG-BETTER,    #PARTICLES,        #BORDER,'//
+     &     '    #SUB_PXL'
       
         ELSE
-C                123456789 123456789 123456789 123456789 123456789 123456789 1
-           COMMENT='      '// 
-     &          '%BIG-ANGDIF,   AVG-ANGDIF,     AVG-CCROT,   %WORSE,'//
-     &          '  AVG-WORSE,   AVG-BETTER'
-           CALL LUNDOCPUTCOM(LUNDOC,COMMENT,IRTFLG)
-           CALL LUNDOCWRTDAT(LUNDOC,-2,DLIST,6,IRTFLG)
+           NLIST = 7
+           
+C           123456789 123456789 123456789 123456789 123456789 123456789 1
+           COMMENT =      
+     &     '        '// 
+     &     '%BIG-ANGDIF,   AVG-ANGDIF,      AVG-CCR,      %WORSE,'//
+     &     '     AVG-WORSE,   AVG-BETTER,    #PARTICLES'
         ENDIF
+
+        CALL LUNDOCPUTCOM(LUNDOC,COMMENT(:NC),IRTFLG)
+        CALL LUNDOCWRTDAT(LUNDOC,-2,DLIST,NLIST,IRTFLG)
 
         CLOSE(LUNDOC)
 
         END
+
+
+
+C       -------------------- AP_STAT_SHC -------------------------------
+
+       SUBROUTINE AP_STAT_SHC(NUMEXP,ANGDIFTHR,IBIGANGDIF, ANGDIFAVG, 
+     &            CCRAVG, IMPROVCCR,CCRIMPROV, IWORSECCR, CCRWORSE,
+     &            NBORDER,NSUBPIX,LUNDOC,FIRST)
+
+        IMPLICIT NONE 
+          
+        INTEGER         :: NUMEXP,IBIGANGDIF,IMPROVCCR,IWORSECCR 
+        INTEGER         :: NBORDER,NSUBPIX,LUNDOC
+        LOGICAL         :: FIRST
+
+        REAL            :: ANGDIFTHR,ANGDIFAVG,CCRAVG,CCRIMPROV,CCRWORSE
+        REAL            :: FNUMEXP
+      
+        INTEGER         :: NLIST, NC, IRTFLG
+        REAL            :: DLIST(9)
+
+        CHARACTER(LEN=132) :: COMMENT 
+
+
+C       SAVE CCR & ANGULAR DISPLACEMENT STATISTICS
+        FNUMEXP  = NUMEXP
+
+        DLIST    = 0.0
+
+        IF (ANGDIFTHR > 0) DLIST(1) = 100 * FLOAT(IBIGANGDIF) / FNUMEXP
+
+        DLIST(2) = ANGDIFAVG / FNUMEXP
+        DLIST(3) = CCRAVG    / FNUMEXP
+        DLIST(4) = 100 * FLOAT(IWORSECCR) / FNUMEXP
+
+        IF (IWORSECCR > 0) DLIST(5) = CCRWORSE / FLOAT(IWORSECCR)
+        IF (IMPROVCCR > 0) DLIST(6) = CCRIMPROV / FLOAT(IMPROVCCR)
+
+        DLIST(7) = FNUMEXP
+        DLIST(8) = NBORDER
+        DLIST(9) = NSUBPIX
+
+        NLIST    = 9
+        NC       = 132
+
+        IF (FIRST) THEN
+
+           DLIST(1) = 0.0
+           DLIST(2) = 0.0
+           DLIST(4) = 0.0
+           DLIST(5) = 0.0
+           DLIST(6) = 0.0
+
+C           123456789 123456789 123456789 123456789 123456789 123456789 1
+           COMMENT =  
+     &     '        ' // 
+     &     '     UNUSED,       UNUSED,     AVG-CCR,       UNUSED,    '//
+     &     '    UNUSED,      UNUSED,     #PARTICLES,     #BORDER,'    //
+     &     '     #SUB_PXL'
+      
+        ELSE
+           
+C           123456789 123456789 123456789 123456789 123456789 123456789 1
+           COMMENT =      
+     &     '        '// 
+     &     '%BIG-ANGDIF,   AVG-ANGDIF,     AVG-CCR,       %WORSE,    '//
+     &     ' AVG-WORSE,   AVG-BETTER,    #PARTICLES,     #BORDER, '   //
+     &     '    #SUB_PXL'
+        ENDIF
+
+        CALL LUNDOCPUTCOM(LUNDOC,COMMENT(:NC),IRTFLG)
+        CALL LUNDOCWRTDAT(LUNDOC,-2,DLIST,NLIST,IRTFLG)
+
+        CLOSE(LUNDOC)
+
+        END
+
+
+
+
+
+C       -------------------- AP_STAT_R -------------------------------
+
+        SUBROUTINE AP_STAT_R(NUMEXP,ANGDIFTHR,IBIGANGDIF,ANGDIFAVG, 
+     &                      CCAVG,IMPROVCC,CCIMPROV, IWORSECC,CCWORSE,
+     &                      FIRST,FIRSTCC, LUNDOC)
+ 
+        IMPLICIT NONE
+
+        INTEGER             :: NUMEXP,IBIGANGDIF,IMPROVCC,IWORSECC
+        LOGICAL             :: FIRST,FIRSTCC
+        INTEGER             :: LUNDOC
+      
+        REAL                :: ANGDIFTHR, ANGDIFAVG, CCAVG
+        REAL                :: CCIMPROV, CCWORSE
+ 
+        INTEGER             :: NLIST,NC,IRTFLG
+        REAL                :: FNUMEXP
+        REAL                :: DLIST(7)
+        CHARACTER (LEN=132) :: COMMENT 
+
+C       SAVE CC & ANGULAR DISPLACEMENT STATISTICS IN DOC FILE
+
+        FNUMEXP  = NUMEXP
+        DLIST    = 0.0
+        DLIST(3) = CCAVG     / FNUMEXP
+        DLIST(7) = FNUMEXP
+
+        NLIST    = 7
+        NC       = 120
+
+        IF (FIRST) THEN
+
+C               123456789 123456789 123456789 123456789 123456789 123456789 12
+           COMMENT =      
+     &         '        ' // 
+     &         '     UNUSED,        UNUSED,         AVG-CC,    '  //
+     &         'UNUSED,         UNUSED,       UNUSED,   #PARTICLES'
+
+        ELSE
+
+           IF (ANGDIFTHR > 0)DLIST(1) = 100 * FLOAT(IBIGANGDIF)/FNUMEXP
+
+           DLIST(2) = ANGDIFAVG / FNUMEXP
+           DLIST(3) = CCAVG     / FNUMEXP
+           DLIST(4) = 100 * FLOAT(IWORSECC) / FNUMEXP
+
+           IF (IWORSECC > 0) DLIST(5) = CCWORSE / FLOAT(IWORSECC)
+           IF (IMPROVCC > 0) DLIST(6) = CCIMPROV / FLOAT(IMPROVCC)
+
+           IF ( FIRSTCC) THEN
+
+C               123456789 123456789 123456789 123456789 123456789 123456789 1
+              COMMENT =      
+     &         '        ' // 
+     &         '%BIG-ANGDIF,    AVG-ANGDIF,         AVG-CC,    '  //
+     &         'UNUSED,      UNUSED,       UNUSED,     #PARTICLES'
+           ELSE
+C               123456789 123456789 123456789 123456789 123456789 123456789 1
+              COMMENT =      
+     &         '        ' // 
+     &         '%BIG-ANGDIF,    AVG-ANGDIF,         AVG-CC,    '  //
+     &         '%WORSE,      AVG-WORSE,   AVG-BETTER,   #PARTICLES'
+           ENDIF
+
+        ENDIF
+
+C       WRITE TO DOC FILE
+        CALL LUNDOCPUTCOM(LUNDOC,COMMENT(:NC),IRTFLG)
+        CALL LUNDOCWRTDAT(LUNDOC,-2,DLIST,NLIST,IRTFLG)
+
+        CLOSE(LUNDOC)
+
+        END
+
+
+

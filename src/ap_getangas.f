@@ -5,12 +5,13 @@ C    AP_GETANGAS.F
 C                          ADDED CCROT RETRIEVAL  FEB 05 ARDEAN LEITH
 C                          '-'                    FEB 11 ARDEAN LEITH
 C                          ADDED DIR. VECTORS     FEB 11 ARDEAN LEITH
+C                          ADDED CC RETURN        APR 15 ARDEAN LEITH
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2011  Health Research Inc.,                         *
+C=* Copyright 1985-2015  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -35,7 +36,7 @@ C                DIRECTIONAL VECTORS.
 C
 C PARAMETERS:
 C       ILIST               LIST OF IMAGE FILE NUMBERS        (INPUT)
-C       NIMA                NO. OF IMAGES                     (INPUT)
+C       NIMA                NUMBER OF IMAGES                  (INPUT)
 C       IMIT                IMAGE NUMBER (0 IF ALL)           (INPUT)
 C       ANGDOCNAM           ANGLES FILE NAME                  (INPUT)
 C       IMGPAT              IMAGE SERIES FILE TEMPLATE        (INPUT)
@@ -45,11 +46,11 @@ C       LUNANG              PROJ. ANGLE FILE IO UNIT          (INPUT)
 C       NWANT               NUMBER OF PARAMS TO RETRIEVE      (INPUT)
 C       ANGS                PROJ. ANGLES                      (OUTPUT)
 C       GOTANGS             FLAG FOR SUCCESS READING ANGLES   (OUTPUT)
-C       ANGS                PROJ. ANGLES                      (OUTPUT)
 C       NGOTX               # OF ALIGNMENT PAR. RETURNED      (OUTPUT)                      (OUTPUT)
 C       WANTDIRS            WANT DIRECTIONAL VECTORS          (INPUT)                      (OUTPUT)
 C       DIRS                DIRECTIONAL VECTORS               (OUTPUT)                      (OUTPUT)
 C       IRTFLG              ERROR FLAG                        (OUTPUT)
+C                              IF == -8999 WANT MIRCC NOT ROTCC 
 C
 C--*********************************************************************
 
@@ -76,23 +77,24 @@ C--*********************************************************************
 
         CHARACTER (LEN=MAXNAM)  :: ANGDOCNAMPE
         CHARACTER (LEN=MAXNAM)  :: FILNAM
-        REAL                    :: BUFIN(15)
+        REAL                    :: BUFIN(16)
 
 C       DOC FILE POINTER
         REAL, POINTER           :: ANGBUF(:,:)
 
-        LOGICAL                 :: ANGINHEADER
+        LOGICAL                 :: ANGINHEADER,WANTCCMIR
         INTEGER                 :: IGO,IEND,NLET,MAXX,MAXY,IMI,IV
         INTEGER                 :: MAXIM,LSAM,LROW,NSLICE,KEY,NLIST
         INTEGER                 :: INTFLAG
-        REAL                    :: ZT
+        REAL                    :: ZT,CCMIR
 
         GOTANGS     = .FALSE.
+        WANTCCMIR   = ( IRTFLG == -8999)    !WANT MIRCC NOT ROTCC 
+        ANGINHEADER = (ANGDOCNAM(1:1) == '-')
+        IRTFLG      = 0
 
-        ANGINHEADER = (ANGDOCNAM(1:1) .EQ. '-')
-
-        IF (ANGDOCNAM(1:1) .EQ. '*' .OR.
-     &      ANGDOCNAM(1:1) .EQ. CHAR(0) ) THEN
+        IF (ANGDOCNAM(1:1) == '*' .OR.
+     &      ANGDOCNAM(1:1) == CHAR(0) ) THEN
 C          NO ANGLES AVAILABLE IN DOC FILE OR HEADER
            IF (NWANT > 0) ANGS = 0.0    ! ARRAY ZERO
            IF (WANTDIRS)  DIRS = 0.0    ! ARRAY ZERO
@@ -121,12 +123,16 @@ C          ANGLES ARE IN DOC FILE, GET THE FILE NAME
 C          RETRIEVE ARRAY WITH ANGLES DATA IN IT, CAN NOT USE
 C          LUNDOCGETANG BECAUSE OF ILIST!
            MAXX = 8 + 1
-           IF (NWANT .GT. 7) MAXX = 11 + 1       ! GET CCROT ALSO
+           IF (NWANT > 7) MAXX = 11 + 1      ! GET CCROT ALSO
+           IF (WANTCCMIR) MAXX = 15 + 1      ! GET CCMIR 
+           !write(6,*) ' nwant,maxx:',nwant,maxx
+
 
            MAXY = MAXVAL(ILIST(1:NIMA))
            CALL GETDOCDAT(' ',.FALSE.,ANGDOCNAMPE,LUNANG,.FALSE.,
      &                 MAXX,MAXY,ANGBUF,IRTFLG)
            IF (IRTFLG .NE. 0) GOTO 9999
+
         ENDIF
 
 	DO  IMI=IGO,IEND
@@ -174,7 +180,7 @@ C                WANT OTHER ALIGNMENT PARAMETERS ALSO
                  ZT           = MAXVAL(BUFIN(6:9))
                  IF (ZT > 0.0) NGOTX = 7
               ENDIF
-              IF (NWANT >= 8) THEN
+              IF (NWANT == 8) THEN
 C                WANT CCROT PARAMETER ALSO
                  ANGS(8,IV) = BUFIN(11)
                  NGOTX      = 8
@@ -187,7 +193,8 @@ C             EXTRACT ALIGN. PARAM. FROM ANGBUF
               KEY   = ILIST(IMI)
               NLIST = 3
               IF (NWANT >= 7) NLIST = 8
-              IF (NWANT >= 8) NLIST = 11
+              IF (NWANT == 8) NLIST = 11
+              IF (WANTCCMIR)  NLIST = 17
               CALL LUNDOCGETKEY(LUNANG,ANGBUF(1,1),MAXX,MAXY,KEY,
      &                          BUFIN,NLIST,.TRUE.,IRTFLG)
 	      IF (IRTFLG .NE. 0) THEN
@@ -204,10 +211,14 @@ C                WANT OTHER ALIGNMENT PARAMETERS ALSO
                  ANGS(7,IV)   = 0.0
                  IF (BUFIN(4) < 0) ANGS(7,IV) = 1.0
               ENDIF
-              IF (NWANT >= 8) THEN
+              IF (NWANT == 8) THEN
 C                WANT CCROT PARAMETER ALSO
                  ANGS(8,IV) = BUFIN(11)
                  NGOTX      = 8
+                 IF (WANTCCMIR) THEN
+C                   WANT MIR-CC PARAMETER INSTEAD OF CCROT
+                    ANGS(8,IV) = BUFIN(15)
+                 ENDIF
               ENDIF
            ENDIF
 	ENDDO

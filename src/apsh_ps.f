@@ -247,6 +247,7 @@ C          DUMMY ALLOCATE TO AVOID BUS ERROR ON SOME SYSTEMS
            ENDIF 
         ENDIF
 
+        anginheader = .FALSE. ! unfinished !!!!!!!!!!!
         IF (ROTFIRST) THEN
 	   ALLOCATE(TMPBUF(NX,NY), STAT=IRTFLG)
 	   IF (IRTFLG .NE. 0) THEN
@@ -563,6 +564,7 @@ C       === PARTITION AND DISTRIBUTE EXPERIMENTAL IMAGES ===
         TCOM0 = MPI_WTIME()
 #endif
 
+        ANGINHEADER = .FALSE. ! unfinished !!!!!!!!!!!
         IF (ROTFIRST) THEN
 	   ALLOCATE(TMPBUF(NX,NY), STAT=IRTFLG)
 	   IF (IRTFLG .NE. 0) THEN

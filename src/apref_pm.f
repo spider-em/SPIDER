@@ -22,12 +22,14 @@ C                   ROTFIRST                      FEB 11 ARDEAN LEITH
 C                   MAKE_CLOSE_LIST, GETANGAS     FEB 11 ARDEAN LEITH
 C                   AP_GETDATA USED               NOV 11 ARDEAN LEITH
 C                   FBS_WANTED                    JAN 12 ARDEAN LEITH
+C                   ANGINHEADER BUG               APR 15 ARDEAN LEITH
+C                   AP_STAT_R USED                APR 15 ARDEAN LEITH
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2011  Health Research Inc.,                         *
+C=* Copyright 1985-2015  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -49,6 +51,11 @@ C  APREF_PM
 C
 C  PURPOSE: FIND ROTATIONAL AND SHIFT PARAMETERS TO ALIGN A SERIES OF
 C           REFERENCE IMAGES WITH SAMPLE IMAGES  'AP REF'
+C           USED WHEN: CTYPE == 'T' OR
+C           (CIRCREF_IN_CORE AND NUMBER OF THREADS > 1 AND
+C           NUMBER OF EXP IMAGES > NUMBER OF THREADS).  THIS OCCURS
+C           ALMOST ALWAYS ON MULTIPORCESSOR MACHINES EXCEPT WHEN 
+C           USING A SINGLE EXP. IMAGE. 
 C
 C  ORDER OF PROCESSING:
 C 1 - CONVERT EACH REFERENCE IMAGE TO RINGS, DO THE FFTS
@@ -65,21 +72,19 @@ C       IREFLIST            LIST OF REF. IMAGE FILE NUMBERS   (INPUT)
 C       NUMREF              NO. OF IMAGES                     (INPUT)
 C       IEXPLIST            LIST OF EXP. IMAGE FILE NUMBERS   (INPUT)
 C       NUMEXP              NO. OF IMAGES                     (INPUT)
-C       NSAM,NROW           ACTUAL (NOT-WINDOWED) IMAGE SIZE  (INPUT)
+C       NX,NY               ACTUAL (NOT-WINDOWED) IMAGE SIZE  (INPUT)
 C       REFANGDOC           REF. ANGLES FILE NAME             (INPUT)
 C       EXPANGDOC           EXP. ANGLES FILE NAME             (INPUT)
 C       REFPAT              REF. IMAGE SERIES FILE TEMPLATE   (INPUT)
 C       EXPPAT              EXP. IMAGE SERIES FILE TEMPLATE   (INPUT)
 C
 C  OPERATIONS:  'AP REF'
-C  USED WHEN: (CIRCREF_IN_CORE && NUMTH.GT.1 && NUMEXP.GT.NUMTH) .OR. 
-C          CTYPE .EQ. 'T' )
 C
 C23456789 123456789 123456789 123456789 123456789 123456789 123456789 12
 C--*********************************************************************
 
         SUBROUTINE APREF_PM(IREFLIST,NUMREF,IEXPLIST,NUMEXP,
-     &             NSAM,NROW,ANGDIFTHR,RANGE,
+     &             NX,NY,ANGDIFTHR,RANGE,
      &             NRING,LCIRC,NUMR,CIRCREF,
      &             MODE, REFANGDOC,EXPANGDOC,SCRFILE,FFTW_PLANS,
      &             REFPAT,EXPPAT,CKMIRROR,CTYPE,
@@ -91,7 +96,7 @@ C--*********************************************************************
         INTEGER                     :: NUMREF,NUMEXP
 	INTEGER                     :: IREFLIST(NUMREF) 
 	INTEGER                     :: IEXPLIST(NUMEXP) 
-        INTEGER                     :: NSAM,NROW
+        INTEGER                     :: NX,NY
 	REAL                        :: ANGDIFTHR,RANGE
         INTEGER                     :: NRING,LCIRC
         INTEGER                     :: NUMR(3,NRING)
@@ -104,7 +109,7 @@ C--*********************************************************************
         CHARACTER (LEN=*)           :: CTYPE
         LOGICAL                     :: ROTFIRST
         INTEGER                     :: ISHRANGE,LUNDOC
-        LOGICAL                     :: FBS_WANTED
+        LOGICAL                     :: FBS_WANTED,FIRST,FIRSTCC
 
 C       ALLOCATABLE ARRAYS
 	REAL,    ALLOCATABLE        :: EXPBUF(:,:,:)
@@ -122,7 +127,7 @@ C       ALLOCATABLE ARRAYS
         LOGICAL                     :: CIRCREF_IN_CORE
         LOGICAL                     :: MIRRORNEW
         LOGICAL                     :: GOTREFANG,GOTEXPANG
-        LOGICAL                     :: ANGINHEADER
+        LOGICAL,PARAMETER           :: ANGINHEADER = .FALSE.
 
 C       AUTOMATIC ARRAYS
 	REAL                        :: DLIST(6)
@@ -147,25 +152,12 @@ C       AUTOMATIC ARRAYS
 C       FIND NUMBER OF OMP THREADS 
         CALL GETTHREADS(NUMTH) 
 
-#ifdef DEBUGD
-        NR     = NUMR(1,NRING)     ! OUTER RING NUMBER
-        MAXRIN = NUMR(3,NRING)
-
-        write(88,*) ' DEBUG OUTPUT FROM APREF_PM'
-        write(88,902) NR,MAXRIN
-902     format(' OUTER RING NUMBER: ',I10,' RING LENGTH:',I10)
-        do i = 1, nring
-           write(88,901) NUMR(1,I),NUMR(2,I),NUMR(3,I)
-901        format(3i10)
-        enddo
-#endif
-
 	RANGECOS = COS(RANGE*DGR_TO_RAD)
 
 C       MAKE EXPBUF BIG ENOUGH FOR ALL THREADS
-        MWANTX = NSAM * NROW * NUMTH
+        MWANTX = NX * NY * NUMTH
 
-	ALLOCATE(EXPBUF(NSAM,NROW,NUMTH), 
+	ALLOCATE(EXPBUF(NX,NY,NUMTH), 
      &           AVI(NUMTH),
      &           SIGI(NUMTH),
      &           ILIST(NUMTH),
@@ -180,9 +172,9 @@ C       MAKE EXPBUF BIG ENOUGH FOR ALL THREADS
            GOTO 9999
         ENDIF
         IF (ROTFIRST) THEN
-	   ALLOCATE(TMPBUF(NSAM,NROW), STAT=IRTFLG)
+	   ALLOCATE(TMPBUF(NX,NY), STAT=IRTFLG)
 	   IF (IRTFLG .NE. 0) THEN
-              CALL ERRT(46,'APREF_PM; TMPBUF',NSAM*NROW)
+              CALL ERRT(46,'APREF_PM; TMPBUF',NX*NY)
               GOTO 9999
            ENDIF
            IF (FBS_WANTED) THEN
@@ -193,8 +185,8 @@ C       MAKE EXPBUF BIG ENOUGH FOR ALL THREADS
         ENDIF 
 
 C       DUMMY CALL TO INITIALIZE REV. FFTW3 PLAN FOR USE WITHIN OMP ||
- 	CALL FMRS_PLAN(.FALSE.,DUM,NSAM,NROW,1, 1, -1, IPLAN, IRTFLG)
- 	CALL FMRS_PLAN(.FALSE.,DUM,NSAM,NROW,1, 1, +1, IPLAN, IRTFLG)
+ 	CALL FMRS_PLAN(.FALSE.,DUM,NX,NY,1, 1, -1, IPLAN, IRTFLG)
+ 	CALL FMRS_PLAN(.FALSE.,DUM,NX,NY,1, 1, +1, IPLAN, IRTFLG)
 
 C       ZERO DLIST ARRAY
 	DLIST = 0.0
@@ -208,24 +200,35 @@ C       CONVERT REF ANGLES TO UNITARY DIRECTIONAL VECTORS (REFDIR).
 
 C       GET EXP PROJ. ANGLES FROM DOC FILE  OR IMAGE HEADER (IF WANTED)
 C       CONVERT EXP. ANGLES TO UNITARY DIRECTIONAL VECTORS (EXPDIR).
+        IRTFLG = -8999   ! WANT CC MIR NOT CCROT
         CALL AP_GETANGAS(IEXPLIST,NUMEXP,0,EXPANGDOC,EXPPAT,
      &                   INPIC,INANG,8,ANGEXP,GOTEXPANG,NGOTPAR,
      &                  .TRUE.,EXPDIR,IRTFLG)
         IF (IRTFLG .NE. 0) GOTO 9999
 
+        ! NEED EXISTING ALIGN FILE FOR CC DIFFERENCES
+        FIRST   = (NGOTPAR == 0)        ! FIRST FILE, NO DIFFERENCES
+
+        ! NEED EXISTING CC CONTAINING ALIGN FILE FOR CC DIFFERENCES
+        FIRSTCC = ANGEXP(8,1) ==  1.0 .OR. 
+     &            ANGEXP(8,1) == -1.0 
+
+        !write(6,*) 'angexp:',angexp(:,1), firstcc
+
+
 C       READ REF IMAGES INTO REF RINGS (CIRCREF) ARRAY 
         CIRCREF_IN_CORE = .TRUE.
 
-        CALL APRINGS_NEW(IREFLIST,NUMREF, NSAM,NROW,
+        CALL APRINGS_NEW(IREFLIST,NUMREF, NX,NY,
      &               NRING,LCIRC,NUMR,MODE,FFTW_PLANS, 
      &               REFPAT,INPIC,CIRCREF,CIRCREF_IN_CORE,
      &               LUNRING,SCRFILE,IRTFLG)
         IF (IRTFLG .NE. 0) GOTO 9999
 
-C       INITIALIZE CCROT STATISTICS
-        CALL  AP_STAT_ADD(-1,CCROT,ANGDIF,ANGDIFTHR,CCROTLAS,
-     &                   CCROTAVG,IBIGANGDIF,ANGDIFAVG,IMPROVCCROT,
-     &                   CCROTIMPROV,IWORSECCROT,CCROTWORSE)
+C       INITIALIZE CC STATISTICS
+        CALL AP_STAT_ADD_R(-1,ANGDIF,ANGDIFTHR, IBIGANGDIF,ANGDIFAVG,
+     &               CC,CCLAS,CCAVG,IMPROVCC,CCIMPROV,IWORSECC,CCWORSE)
+
 
         DO IEXPT=1,NUMEXP,NUMTH
 C         LOOP OVER ALL EXPERIMENTAL (SAMPLE) IMAGES
@@ -236,14 +239,14 @@ C         LOAD NUMTH EXPERIMENTAL IMAGES INTO ARRAY EXPBUF
           IF (ROTFIRST) THEN
 C            WANT TO ROTATE/SHIFT EXP IMAGES WHEN READING THEM
 	     CALL AP_GETDATA_RTSQ(IEXPLIST,NUMEXP,
-     &                        NSAM,NROW, NSAM,NROW, 0.0,
+     &                        NX,NY, NX,NY, 0.0,
      &                        NUMTH,EXPPAT,INPIC, IEXPT,IEND,
      &                        ANGINHEADER, ANGEXP, 
      &                        .TRUE.,TMPBUF,EXPBUF,
      &                        .TRUE.,AVI,SIGI,FBS_WANTED,IRTFLG)
           ELSE
 	     CALL AP_GETDATA(IEXPLIST,NUMEXP,
-     &                       NSAM,NROW, NSAM,NROW, 0.0,
+     &                       NX,NY, NX,NY, 0.0,
      &                       NUMTH,EXPPAT,INPIC, IEXPT,IEND,
      &                       .TRUE., EXPBUF,
      &                       .TRUE.,AVI,SIGI, IRTFLG)
@@ -254,7 +257,7 @@ C         FIND CLOSEST MATCHING REFERENCE IMAGE FOR EACH EXP. IMAGE
 c$omp     parallel do private(IEXP,IT)
 	  DO IEXP=IEXPT,IEND
              IT  = IEXP-IEXPT+1
-	     CALL APREF_2(EXPBUF(1,1,IT),NSAM,NROW,NUMR,NRING,
+	     CALL APREF_2(EXPBUF(1,1,IT),NX,NY,NUMR,NRING,
      &              MODE,CIRCREF,LCIRC,NUMREF,
      &              REFDIR,EXPDIR(1,IEXP),RANGECOS,
      &	            ILIST(IT),CCLIST(IT),RANGNLIST(IT),MIRLIST(IT),
@@ -270,7 +273,7 @@ C            IT POINTS TO CURRENT EXP. IMAGE IN THE SUBLIST
 C            ILIST(IT) IS LIST NUMBER OF MOST SIMILAR REF. IMAGE 
              IREF      = ILIST(IT)
 
-             IF (IREF .LE. 0) THEN
+             IF (IREF <= 0) THEN
 C               NO NEARBY REFERENCE IMAGE
                 IMGREF = 0
 C               IREFT IS FOR REFDIR INDEX
@@ -289,13 +292,13 @@ C               IREFT IS FOR REFDIR INDEX
              XSHNEW    = 0.0
              YSHNEW    = 0.0
 
-             IF (IMGREF .GT. 0 .AND. ISHRANGE .GT. 0) THEN
+             IF (IMGREF > 0 .AND. ISHRANGE > 0) THEN
 C               DETERMINE SHIFT PARAMETERS FOR EXP. IMAGE IN EXPBUF 
-                NSAMP = 2*NSAM+2
-                NROWP = 2*NROW
+                NXP = 2*NX+2
+                NYP = 2*NY
 
                 CALL APSHIFT(INPIC,  REFPAT,IMGREF,
-     &                 NSAM,NROW, NSAMP,NROWP,
+     &                 NX,NY, NXP,NYP,
      &                 EXPBUF(1,1,IT),AVI(IT),SIGI(IT), ISHRANGE,
      &                 RANGNEW,XSHNEW,YSHNEW,MIRRORNEW,PEAKV,IRTFLG)
                 IF (IRTFLG .NE. 0) RETURN
@@ -309,25 +312,24 @@ C            AP_END WRITES ALIGNMENT PARAMETERS TO DOC FILE
      &            RANGNEW,XSHNEW,YSHNEW,MIRRORNEW,REFPAT,
      &            NPROJ(IT), CTYPE, LUNDOC,PARLIST)
 
-C            WRITE ALIGNMENT DATA TO IMAGE HEADER
-             CALL AP_END_HEAD(IMGEXP,EXPPAT,INPIC,PARLIST,8,IRTFLG)
+C           WRITE ALIGNMENT DATA TO IMAGE HEADER
+            CALL AP_END_HEAD(IMGEXP,EXPPAT,INPIC,PARLIST,8,IRTFLG)
 
-             CALL AP_STAT_ADD(NGOTPAR,CCROT,PARLIST(10),
-     &                    ANGDIFTHR,ANGEXP(8,IEXP),
-     &                    CCROTAVG,IBIGANGDIF,ANGDIFAVG,IMPROVCCROT,
-     &                    CCROTIMPROV,IWORSECCROT,CCROTWORSE)
-
+            CALL AP_STAT_ADD_R(NGOTPAR,
+     &            PARLIST(10),ANGDIFTHR,IBIGANGDIF,ANGDIFAVG,
+     &            PEAKV,ANGEXP(8,IEXP),CCAVG,
+     &            IMPROVCC,CCIMPROV,IWORSECC,CCWORSE ,FIRSTCC)
           ENDDO
        ENDDO
 
-      IF (LUNDOC .GT. 0) THEN
-C         SAVE CCROT & ANGULAR DISPLACEMENT STATISTICS
-          CALL AP_STAT(NUMEXP,ANGDIFTHR,IBIGANGDIF,
-     &                 ANGDIFAVG, CCROTAVG,
-     &                 IMPROVCCROT,CCROTIMPROV,
-     &                 IWORSECCROT,CCROTWORSE,
-     &                 NBORDER,NSUBPIX,LUNDOC)
-      ENDIF
+      IF (LUNDOC > 0) THEN
+C         SAVE CC & ANGULAR DISPLACEMENT STATISTICS IN DOC FILE
+
+          CALL AP_STAT_R(NUMEXP,ANGDIFTHR,IBIGANGDIF,ANGDIFAVG, 
+     &                   CCAVG,IMPROVCC,CCIMPROV, IWORSECC,CCWORSE,
+     &                   FIRST,FIRSTCC, LUNDOC)
+ 
+       ENDIF
 
 9999   IF (ALLOCATED(EXPBUF))    DEALLOCATE(EXPBUF)
        IF (ALLOCATED(AVI))       DEALLOCATE(AVI)
@@ -346,7 +348,7 @@ C         SAVE CCROT & ANGULAR DISPLACEMENT STATISTICS
 C++************************** APREF_2 **********************************
 
 
-	SUBROUTINE APREF_2(XIM,NSAM,NROW, NUMR,NRING,MODE,
+	SUBROUTINE APREF_2(XIM,NX,NY, NUMR,NRING,MODE,
      &		         CIRCREF,LCIRC,NUMREF,
      &                   REFDIR,EXPDIR,RANGECOS,
      &                   IMGREFL,CCROT,RANGNEW,MIRNEW,NPROJ,
@@ -355,7 +357,7 @@ C++************************** APREF_2 **********************************
 C       NOTE: RUNS WITHIN OMP PARALLEL SECTION OF CODE!
         INCLUDE 'MAKE_CLOSE_LIST.INC'  
 
-        REAL                    :: XIM(NSAM,NROW)
+        REAL                    :: XIM(NX,NY)
         INTEGER                 :: NUMR(3,NRING)
 	CHARACTER (LEN=1)       :: MODE
 	REAL                    :: CIRCREF(LCIRC,NUMREF)
@@ -375,10 +377,7 @@ C       ALLOCATABLE ARRAYS
         REAL, ALLOCATABLE       :: CIRCEXP(:)
 
 
-        MAXRIN     = NUMR(3,NRING)
-#ifdef SP_LIBFFTW3
         MAXRIN     = NUMR(3,NRING) - 2
-#endif
 
         ALLOCATE(CIRCEXP(LCIRC),  STAT=IRTFLG)
         IF (IRTFLG .NE. 0) THEN
@@ -388,7 +387,7 @@ C       ALLOCATABLE ARRAYS
 
         WR         = 0.0
         NPROJ      = NUMREF
-        LIMITRANGE = (RANGECOS .LT. 1.0)
+        LIMITRANGE = (RANGECOS < 1.0)
         NULLIFY(LCG)  ! FOR INTEL COMPILER
 
 C       IF LIMITRANGE, LIST CLOSE REF. IMAGES, RETURNS: NPROJ
@@ -397,7 +396,7 @@ C       IF LIMITRANGE, LIST CLOSE REF. IMAGES, RETURNS: NPROJ
      &                       RANGECOS, .TRUE., 
      &                       LCG, NPROJ, IRTFLG)
 
-        IF (NPROJ .LE. 0) THEN
+        IF (NPROJ <= 0) THEN
 C          NO REF. IMAGE WITHIN COMPARISON ANGLE
            IMGREFL = 0 
            CCROT   = -1.0
@@ -407,11 +406,11 @@ C          NO REF. IMAGE WITHIN COMPARISON ANGLE
         ENDIF
     
 C       CALCULATE DIMENSIONS FOR NORMALIZING IN APRINGS_ONE
-	CNS2 = NSAM/2+1
-	CNR2 = NROW/2+1
+	CNS2 = NX/2+1
+	CNR2 = NY/2+1
 
 C       EXTRACT EXP. IMAGE RINGS, NORMALIZE & FFT THEM
-        CALL APRINGS_ONE_NEW(NSAM,NROW, CNS2,CNR2, XIM, .FALSE.,
+        CALL APRINGS_ONE_NEW(NX,NY, CNS2,CNR2, XIM, .FALSE.,
      &                       MODE,NUMR,NRING,LCIRC, WR,FFTW_PLANS,
      &                       CIRCEXP,IRTFLG)
     
@@ -424,8 +423,8 @@ C       EXTRACT EXP. IMAGE RINGS, NORMALIZE & FFT THEM
 
            IF (CKMIRROR .AND. LIMITRANGE) THEN
 C              ONLY SEARCH EITHER MIRRORED OR NON-MIRRORED
-               USE_UN  = (LCG(IMIL) .GE. 0)
-               USE_MIR = (LCG(IMIL) .LT. 0)
+               USE_UN  = (LCG(IMIL) >= 0)
+               USE_MIR = (LCG(IMIL) < 0)
            ELSE
 C              SEARCH BOTH MIRRORED & NON-MIRRORED IF CHKMIR
                USE_UN  = .TRUE.
@@ -439,7 +438,7 @@ C          CHECK MIRRORED/ NON-MIRRORED POSITION
      &                    USE_UN,USE_MIR,
      &                    ISMIRRORED,  TOTMIN,TOT)
 
-           IF (TOTMIN .GE. CCROTD)  THEN
+           IF (TOTMIN >= CCROTD)  THEN
 C             GOOD MATCH WITH TOTA (MIRRORED OR NOT)  POSITION 
               CCROTD  = TOTMIN
               RANGNEW = TOT
@@ -449,7 +448,7 @@ C             GOOD MATCH WITH TOTA (MIRRORED OR NOT)  POSITION
 
        ENDDO !END OF: DO IMIL=1,NPROJ
           
-       IF (MODE .EQ. 'F')  THEN
+       IF (MODE == 'F')  THEN
            RANGNEW = (RANGNEW-1.0) / MAXRIN*360.0
        ELSE
            RANGNEW = (RANGNEW-1.0) / MAXRIN*180.0
@@ -462,4 +461,16 @@ C             GOOD MATCH WITH TOTA (MIRRORED OR NOT)  POSITION
 
        END
 
+#ifdef DEBUGD
+        NR     = NUMR(1,NRING)     ! OUTER RING NUMBER
+        MAXRIN = NUMR(3,NRING)
+
+        write(88,*) ' DEBUG OUTPUT FROM APREF_PM'
+        write(88,902) NR,MAXRIN
+902     format(' OUTER RING NUMBER: ',I10,' RING LENGTH:',I10)
+        do i = 1, nring
+           write(88,901) NUMR(1,I),NUMR(2,I),NUMR(3,I)
+901        format(3i10)
+        enddo
+#endif
 

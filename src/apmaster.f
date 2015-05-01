@@ -49,11 +49,13 @@ C                   AP SHC PARAM. SUMMARY         FEB 12 ARDEAN LEITH
 C                   AP FOU PATM                   JUN 12 ARDEAN LEITH
 C                   DENOISE, ROTFIRST=FBS         SEP 12 ARDEAN LEITH
 C                   RING LIMIT TRAP               FEB 13 ARDEAN LEITH
-C
+C                   REMOVED CUDA SUPPORT          APR 15 ARDEAN LEITH
+C                   REMOVED 'FOU' PATM SUPPORT    APR 15 ARDEAN LEITH
+C 
 C **********************************************************************
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* Authors: J. Frank & A. Leith                                       *
-C=* Copyright 1985-2013  Health Research Inc.,                         *
+C=* Copyright 1985-2015  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -87,9 +89,7 @@ C    'AP SH'   -- APSH_SS or APSH_PS
 C    'AP SHC'  -- APSH_PSC; COEFF, NON-TRANSFORMED RINGS, CPLX VAR.
 C    'AP SHF'  -- NON-INCORE EVEN IF SIZE IS OK
 C    'AP SHT'  -- FORCES: APSH_SS
-C    'AP SHG'  -- GPU (MAY NOT BE LINKED)
 C    'AP I'    -- CREATE RINGS FILE ONLY
-C    'AP FOU'  -- NEW ALGORITHM
 C
 C23456789 123456789 123456789 123456789 123456789 123456789 123456789 12
 C--*********************************************************************
@@ -121,7 +121,7 @@ C--*********************************************************************
 	CHARACTER(LEN=80)      :: PROMPT,MSG
 	CHARACTER(LEN=220)     :: COMMEN
         LOGICAL                :: CIRCREF_IN_CORE,CKMIRROR
-        LOGICAL                :: WINDOW,NEWFILE,WEIGHT,GPU,WANTDOC
+        LOGICAL                :: WINDOW,NEWFILE,WEIGHT,WANTDOC
         LOGICAL                :: ROTFIRST,GOTMIR,FBS_WANTED 
         LOGICAL                :: DENOISE,GOTRTSH 
         REAL                   :: VALUES(6)
@@ -230,28 +230,6 @@ C          CHECK SEARCH RANGE AND STEP SIZE.
               GOTO 9999
 	   ENDIF
 
-        ELSEIF ( CTYPE(1:3) == 'FOU' ) THEN
-	   CALL RDPRIS(ISHRANGE,IVAL2,NOT_USED,
-     &     'TRANSLATION SEARCH RANGE IN X AND IN Y (OPTIONAL)',IRTFLG)
-           IF (IRTFLG .NE. 0)  GOTO 9999
-	   ISHRANGE   = MAX(ISHRANGE,1)       
-	   ISHRANGEX  = ISHRANGE            ! _ & 5
-           IF (IVAL2 == 999999) THEN        ! 5
-              ISHRANGEY = ISHRANGEX
-           ELSE                             ! 5,3,1
-              ISHRANGEY = MAX(1,IVAL2)
-           ENDIF
-	   ISTEP = 1
-
-C          CHECK SEARCH RANGE.
-	   IF (ISHRANGEX  > NX/2-2)  THEN
-	      CALL ERRT(102,'X SEARCH MUST BE LESS THAN',NX/2-2)
-              GOTO 9999
-	   ELSEIF (ISHRANGEY  > NX/2-2)  THEN
-	      CALL ERRT(102,'Y SEARCH MUST BE LESS THAN',NX/2-2)
-              GOTO 9999
-	   ENDIF
-
         ELSEIF ( CTYPE(1:3) == 'REF' ) THEN
            CALL RDPRI1S(ISHRANGE,NOT_USED,
      &         'TRANSLATION SEARCH RANGE (ZERO FOR NONE)' ,IRTFLG)
@@ -269,8 +247,7 @@ C          CHECK SEARCH RANGE.
         !write(6,*) 'center:' , (NX/2+1),(NY/2+1)
         !write(6,*) 'nx,ny,maxrad:' ,nx,ny,maxrad 
 
-	IF (CTYPE(1:2) == 'OR' .OR. 
-     &      CTYPE(1:3) == 'FOU' ) THEN
+	IF (CTYPE(1:2) == 'OR' ) THEN
            ISKIP = 1
            CALL RDPRIS(MR,NR,NOT_USED,'FIRST & LAST RING',IRTFLG)
            IF (IRTFLG .NE. 0)  GOTO 9999
@@ -340,7 +317,6 @@ C          CHECK SEARCH RANGE AND STEP SIZE TOGETHER
 
         REFANGDOC = NULL
         IF (CTYPE(1:3) == 'REF' .OR. 
-     &      CTYPE(1:3) == 'FOU' .OR.
      &      CTYPE(1:2) == 'SH') THEN
 C          GET NAME OF REFERENCE IMAGES ANGLES DOCUMENT FILE
            CALL FILERD(REFANGDOC,NREFA,NULL,
@@ -384,12 +360,7 @@ C        FIND NUMBER OF OMP THREADS
          IASK8 = (LCIRC * NUMREF)*4
          CALL BIGALLOC(IASK8,IOK,.FALSE.,.FALSE.,IRTFLG)
 
-         GPU = (CTYPE(1:4) == 'SH G')
-         IF (GPU) THEN
-C           GPU MUST USE IN_CORE
-            CIRCREF_IN_CORE = .TRUE.
-            
-         ELSEIF (CTYPE(1:4) == 'REFF' .OR. 
+         IF (CTYPE(1:4) == 'REFF' .OR. 
      &           CTYPE(1:3) == 'SHF'  .OR. 
      &           CTYPE(1:1) == 'I' ) THEN
 C           INITIATE NON-INCORE EVEN IF SIZE IS OK
@@ -437,10 +408,8 @@ C              GWP - HAVE TO FIX THE ALLOCATION HERE FOR DEC UNIX
 
          IF ((CTYPE(1:2) .EQ. 'AL') .OR. 
      &       (CTYPE(1:2) .NE. 'SH'  .AND.
-     &        CTYPE(1:3) .NE. 'FOU' .AND.
      &        CTYPE(1:2) .NE. 'OR') .OR.
-     &       (CTYPE(1:2) .EQ. 'SH'  .AND. .NOT. CIRCREF_IN_CORE) .OR.
-     &       (CTYPE(1:3) .EQ. 'FOU' .AND. .NOT. CIRCREF_IN_CORE)) THEN
+     &       (CTYPE(1:2) .EQ. 'SH'  .AND. .NOT. CIRCREF_IN_CORE)) THEN
 C
 C           ~9 IS TO ACCEPT EXTENSION IF FILE IS NAMED
             CALL FILERD(ASK,NA,NULL,'REFERENCE-RINGS~9',IRTFLG)
@@ -530,8 +499,7 @@ C           GET LIST OF EXPERIMENTAL IMAGES TO BE ALIGNED
 
         EXPANGDOC = NULL
         IF (CTYPE(1:2) == 'SH'  .OR. 
-     &      CTYPE(1:3) == 'REF' .OR.
-     &      CTYPE(1:3) == 'FOU') THEN
+     &      CTYPE(1:3) == 'REF') THEN
 
 C          GET NAME OF DOC FILE HOLDING EXPERIMENTAL IMAGES ANGLES
            CALL FILERD(EXPANGDOC,NEXPA,NULL,
@@ -542,8 +510,7 @@ C          GET NAME OF DOC FILE HOLDING EXPERIMENTAL IMAGES ANGLES
         RANGE     = 0.0
         ANGDIFTHR = 0.0
         IF (CTYPE(1:3) == 'REF' .OR.
-     &      CTYPE(1:3) == 'FOU' .OR.
-     &     (CTYPE(1:2) == 'SH'  .AND. .NOT. GPU) ) THEN
+     &      CTYPE(1:2) == 'SH') THEN
 
            CALL RDPRM2S(RANGE,ANGDIFTHR,NOT_USED,
      &      'RANGE OF PROJECTION ANGLE SEARCH & ANGLE CHANGE THRESHOLD',
@@ -564,10 +531,9 @@ C          GET NAME OF DOC FILE HOLDING EXPERIMENTAL IMAGES ANGLES
        CKMIRROR   = .TRUE.
        FBS_WANTED = .FALSE.
 
-       IF ((CTYPE(1:3) == 'REF') .OR.
-     &      CTYPE(1:3) == 'FOU'  .OR.
+       IF ( CTYPE(1:3) == 'REF'  .OR.
      &      CTYPE(1:3) == 'ORS'  .OR.
-     &     (CTYPE(1:2) == 'SH'   .AND. .NOT. GPU)) THEN
+     &      CTYPE(1:2) == 'SH' ) THEN
 
           IF (CTYPE(1:3) == 'SHC') THEN
 C                      123456789 123456789 1234567890
@@ -623,7 +589,6 @@ C                      123456789 123456789 1234567890
              ENDDO
  
           ELSEIF ((CTYPE(1:3) == 'REF') .OR.
-     &             CTYPE(1:3) == 'FOU'  .OR.
      &             CTYPE(1:2) == 'SH') THEN
 C                      123456789 123456789 1234567890
              PROMPT = 'CHECK MIRRORED POSITIONS?, ' //
@@ -679,9 +644,6 @@ C                      123456789 123456789 1234567890
              ENDDO
           ENDIF
 
-       ELSEIF (GPU) THEN
-C          MIRRORING TOO COMPLEX LOGIC FOR GPU
-           CKMIRROR = .FALSE.
        ENDIF
 
 C      GET NAME FOR OUTPUT DOC FILE
@@ -714,8 +676,7 @@ C           DO NOT WANT OUTPUT DOC FILE
          ELSE
 C           WANT OUTPUT DOC FILE
             IF (CTYPE(1:2) == 'SH'  .OR. 
-     &          CTYPE(1:3) == 'REF' .OR.
-     &          CTYPE(1:3) == 'FOU' ) THEN
+     &          CTYPE(1:3) == 'REF' ) THEN
                IF (USE_LONGCOL) THEN    ! FROM CMBLOCK.INC
                COMMEN ='                 '                           //
      &         ' PSI,          THE,          PHI,         REF#,     '//
@@ -749,22 +710,7 @@ C       INITIALIZE FFTW3 PLANS FOR USE WITHIN OMP || SECTIONS
         CALL APRINGS_INIT_PLANS(NUMR,NRING,
      &                          FFTW_PLANS,NPLANS,NX,NY,IRTFLG)
 
-        IF (CTYPE(1:3) == 'FOU') THEN
-C          --------------------'FOU'   ------------------------ 'AP FOU'
- 
-          IF (MYPID <= 0) WRITE(NOUT,*) 
-     &           ' Calling: APFOU_PATM FOR: ',CTYPE(1:4),' -----------'
-          CALL FLUSHFILE(6)
-
-          CALL APFOU_PATM(INUMBR,NUMREF, IMGLST,NUMEXP, 
-     &                NX,NY, RANGE,ANGDIFTHR,
-     &                NRING,LCIRC,NUMR,CIRCREF,CIRCREF_IN_CORE,
-     &                REFANGDOC,EXPANGDOC,SCRFILE,FFTW_PLANS,
-     &                REFPAT,EXPPAT, CKMIRROR,CTYPE,
-     &                ROTFIRST,ISHRANGEX,ISHRANGEY,
-     &                NOUTANG,FBS_WANTED)
-
-         ELSEIF (CTYPE(1:3) == 'REF') THEN
+        IF (CTYPE(1:3) == 'REF') THEN
 C           --------------------'REF'   ----------------------- 'AP REF'
  
             IF ((CIRCREF_IN_CORE .AND. 
@@ -806,22 +752,7 @@ C        ---- ' SH', 'ORS',  ---------------------------------- 'AP_SH'
               T0 = MPI_WTIME()
 #endif
 
-	   IF (GPU) THEN
-C             FOR GPU ACCELERATED, USES COEF. TO SPEED UP APRINGS
- 
-              IF (MYPID <= 0) WRITE(NOUT,*)
-     &             ' Calling: APSH_CUDA FOR: ',CTYPE(1:3),' ----------'
-              IF (MYPID <= 0) WRITE(6,*)
-     &             ' Calling: APSH_CUDA FOR: ',CTYPE(1:3),' ----------'
-              CALL FLUSHFILE(6)
-
-              CALL APSH_CUDA(INUMBR,NUMREF, IMGLST,NUMEXP, 
-     &               NX,NY,ISHRANGEX,ISHRANGEY,ISTEP,
-     &               NUMR,NRING,
-     &               MODE, REFANGDOC,EXPANGDOC,FFTW_PLANS,
-     &               REFPAT,EXPPAT,NOUTANG)
-
-           ELSEIF (CIRCREF_IN_CORE .AND. (CTYPE(3:3) == 'C')) THEN
+	   IF (CIRCREF_IN_CORE .AND. (CTYPE(3:3) == 'C')) THEN
 C             FOR MP, LARGE NUMBER OF IMAGES TO BE ALIGNED, OR SP.
 C             USES COEF. TO SPEED UP APRINGS          
               IF (MYPID <= 0) WRITE(NOUT,*)

@@ -179,13 +179,14 @@ C       MAKE EXPBUF AT LEAST NSAM*NROW FOR USE BY APSHIFT
            GOTO 9999
         ENDIF
 
+        ANGINHEADER = .FALSE. ! unfinished !!!!!!!!!!!
         IF (ROTFIRST) THEN
 	   ALLOCATE(TMPBUF(NSAM,NROW), STAT=IRTFLG)
 	   IF (IRTFLG .NE. 0) THEN
               CALL ERRT(46,'APREF_P; TMPBUF',NSAM*NROW)
               GOTO 9999
            ENDIF
-           anginheader = (rotfirst .and. expangdoc .eq. '*') ! unfinished !!!!!!!!!!!
+           !anginheader = (rotfirst .and. expangdoc .eq. '*') ! unfinished !!!!!!!!!!!
            IF (FBS_WANTED) THEN
             WRITE(NOUT,*)' ALIGNING INPUT IMAGES WITH FBS INTERPOLATION'
            ELSE

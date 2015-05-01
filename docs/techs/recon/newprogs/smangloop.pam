@@ -1,4 +1,4 @@
-([r2],[alignsh],[prj-radius],[iter],[grp],[toobig],[pixsiz])
+([r2],[alignsh],[prj-radius],[iter],[grp],[pixsiz])
 ; <html><head><title>Small angle refinement group loop</title></head><body><pre>
 ;
 ; SOURCE: spider/docs/techs/recon/newprogs/smangloop.pam
@@ -8,18 +8,19 @@
 ;         More stacks                      ArDean Leith  Dec  2006
 ;         Filenames & UD NEXT              ArDean Leith  Dec  2009
 ;         COG centering removed            ArDean Leith  Sep  2010
-;         TF COR                           ArDean Leith  Nov  2010
-;         UD NEXT E                        ArDean Leith  Sep  2011
-;         Dala removal                     ArDean Leith  Jan  2012
-;         pixsiz, resol headers,...        ArDean Leith  Aug 2012
+;         'TF COR'                         ArDean Leith  Nov  2010
+;         'UD NEXT E                       ArDean Leith  Sep  2011
+;         Dala file removed                ArDean Leith  Jan  2012
+;         pixsiz, resol headers,...        ArDean Leith  Aug  2012
+;         [n-big]                          ArDean Leith  Apr  2015
 ; 
-; PURPOSE: Small angle refinement group loop.  Runs for each defocus 
-;          group on each iteration
+; PURPOSE: Small angle refinement group loop.  Runs for each defocus group on each iteration
 ;
 ; CALLED FROM: <a href="./pub_refine_start.pam">pub_refine_start</a> or   
 ;              <a href="./refine.pam">refine.pam</a>  
 ;
-; REGISTERS AND FILES ARE SET IN: <a href="refine settings.pam">refine settings.pam</a>
+; REGISTERS
+ AND FILES ARE SET IN: <a href="refine_settings.pam">refine_settings.pam</a>
 ;
 ; INPUT REGISTERS:
 ;   [r2]                    Radius (pixels) of the object
@@ -27,7 +28,6 @@
 ;   [prj-radius]            Radius (pixels) of object for projection
 ;   [iter]                  Alignment step iteration counter  
 ;   [grp]                   Current defocus group                      
-;   [toobig]                Iteration ending flag   (returned)
 ;   [ang-step]              Angular difference stopping limit (String)   
 ;
 ; '##' denotes iteration,  '##+' denotes next iteration, and '***' denotes group
@@ -51,11 +51,10 @@
 ; 
 ; INLINE BUFFERS USED: _1, _13
 
- VM
-   echo -n " In smangloop, Iteration: {**[iter]}  Group: {***[grp]}  " ; date '+ Time: %x  %X'
+ SYS
+   echo -n " In smangloop, Iteration: {%I0%[iter]}  Group: {%I0%[grp]}  " ; date '+ Time: %x  %X'
 
  [radius1]   = 5.0                   ; First radius for 'AP REF' (Can alter this)
- [converg]   = 10000                 ; Dummy angular distance limit for stopping iters.
 
  [next-iter] = [iter]+1
  
@@ -86,13 +85,11 @@
  SD /PSI, THE, PHI, REF, EXP, ANG, SX, SY, NPROJ, DIFF, CCROT, ANG, SX, SY, MIR-CC
    [next_group_align]                ; (output)
 
- [num-big]    = 0                    ; Number of angular changes above iter. stop limit
- [toobig]     = 0                    ; Not OK to stop iterating
- [sum-ccrot]  = 0.0                  ; Sum of CCROT correlation coefficients
+ [sum-ccrot]  = 0.0                  ; Sum of    CCROT correlation coefficients
  [num-degred] = 0.0                  ; Number of CCROT degredations
- [sum-degred] = 0.0                  ; Sum of CCROT degredations
+ [sum-degred] = 0.0                  ; Sum of    CCROT degredations
  [num-impr]   = 0.0                  ; Number of CCROT improvements
- [sum-impr]   = 0.0                  ; Sum of CCROT improvements
+ [sum-impr]   = 0.0                  ; Sum of    CCROT improvements
  [sum-diff]   = 0.0
  [num-imgs]   = 0                    ; Number of images in current group
 
@@ -132,20 +129,20 @@
       [temp_ref_projs]******         ; Template of existing ref. projections (input) 
       (1-[num-refs])                 ; Ref. projection file numbers
       [alignsh]                      ; Shift search range
-      [radius1],[r2],1           ; First, last ring, & skip
+      [radius1],[r2],1               ; First, last ring, & skip
       [img_ang_vora]                 ; Ref. angles file                  (input)
       [ref_rings].{******[grp]}      ; No scratch file (usually will fit in-core)
       [unaligned_images]@******      ; Aligned original image stack      (input)
       [img]                          ; Current exp. image file number
       [group_align]                  ; Alignment parameters doc file     (input)
-      0, 0                           ; Angular projection search restriction
+      0, 0                           ; Angular projection search restrictions
       N,Y                            ; Check mir projections, align first
 
     ;         PSI,THE,PHI,         REF#,EXP#, ANG,  SX,  SY,   NPROJ,DIFF,CCROT
     SD [img], [psi],[the],[phi],  [ref],[img],[inp],[sx],[sy], [num-refs],[diff],[ccrot], x70,x71,x72,x73
       [next_group_align]                               ; Next align. doc file (output)
 
-    IF ([ccrot] .LT. [old-ccrot]) THEN
+    IF ([ccrot] < [old-ccrot]) THEN
        [sum-degred]=[sum-degred]+([old-ccrot]-[ccrot]) ; Sum average CCROT degredation
        [num-degred]=[num-degred]+1                     ; Increment   CCROT degredations counter
     ELSE
@@ -153,7 +150,6 @@
        [num-impr]=[num-impr]+1                         ; Increment   CCROT improvements counter
     ENDIF
 
-    IF ([diff] .GT.[converg]) [num-big]=[num-big]+1    ; Increment large displacement counter
     [sum-ccrot]=[sum-ccrot]+[ccrot]                    ; Sum rotational CCC (for average).
     [sum-diff]=[sum-diff]+[diff]                       ; Sum of angular differences
       
@@ -207,15 +203,15 @@
    [next_group_fsc]             ; FSC group doc file                  (output)
    *                            ; No Gnuplot file wanted
 
- VM
-   echo " Group: {**[grp]}        Resolution:  {%f6.2%[res]}" 
+ SYS
+   echo " Group: {%I0%[grp]}        Resolution:  {%f6.2%[res]}" 
  SD [iter], [iter],[grp],[res]  ; Save in doc file
    [grp_resol]                  ; Group resolution summary file      (output)
 
  DE                             ; Remove ref. projections file        (removed)
  [temp_ref_projs] 
 
- IF ([iter] .GT. 1) THEN        ; Not first iteration
+ IF ( [iter] > 1 ) THEN         ; Not first iteration
     DE                          ; Remove previous group vol. 
       [group_vol]              
     DE                          ; Remove previous subset 1 group vol.
@@ -224,27 +220,25 @@
       [group_vol]_sub2
  ENDIF
 
- ; Find % of images showing excessive change in angular displacement
- [toobig] = 100*[num-big]/[num-imgs]  ; % of images with excessive 
+ SYS
+   echo " Iteration: {%I0%[iter]} Group: {%I0%[grp]}"
 
- VM
-   echo " Iteration: {**[iter]} Group: {***[grp]}   Excessive changes: {***[toobig]}%"
+ [dummy ]     = 0                                              ; Unused
+ [avg-ccrot]  = [sum-ccrot]/[num-imgs]                         ; Average CCROT 
+ [avg-degred] = 0.0                                            ; Average CCROT degredation
+ IF ([num-degred] > 0)[avg-degred]=[sum-degred] /[num-degred]  ; Average CCROT degredation
+ [avg-impr]   = 0.0                                            ; Average CCROT improvement
+ IF ([num-impr] > 0) [avg-impr]=[sum-impr]/[num-impr]          ; Average CCROT improvement
+ [per-degred] = 100*[num-degred]/[num-imgs]                    ; Percent images with CCROT degredation
+ [avg-diff]   = [sum-diff]/[num-imgs]                          ; Average angular difference
 
- [avg-ccrot]  = [sum-ccrot]/[num-imgs]                           ; Average CCROT 
- [avg-degred] = 0.0                                              ; Average CCROT degredation
- IF ([num-degred] .GT. 0)[avg-degred]=[sum-degred] /[num-degred] ; Average CCROT degredation
- [avg-impr]   = 0.0                                              ; Average CCROT improvement
- IF ([num-impr] .GT. 0) [avg-impr]=[sum-impr]/[num-impr]         ; Average CCROT improvement
- [per-degred] = 100*[num-degred]/[num-imgs]                      ; Percent images with CCROT degredation
- [avg-diff]   = [sum-diff]/[num-imgs]                            ; Average angular difference
-
- VM
-   echo " CCROT degred.: {***[per-degred]}%  Avg degred.: {%F8.2%[avg-degred]}  Avg improve: {%F8.2%[avg-impr]}"
+ SYS
+   echo " CCROT degred.: {%I0%[per-degred]}%  Avg degred.: {%F8.2%[avg-degred]}  Avg improve: {%F8.2%[avg-impr]}"
 
  SD / %Large angles, Avg. Ang-diff,  Avg. CCROT, % degred.,  Avg degred.,  Avg improv.
    [next_group_align]                 ; Next align. doc file   (output)
 
- SD -2, [toobig],[avg-diff],[avg-ccrot],[per-degred],[avg-degred],[avg-impr]
+ SD -2, [dummy],[avg-diff],[avg-ccrot],[per-degred],[avg-degred],[avg-impr]
    [next_group_align]                 ; Next align. doc file   (output)
 
  SD E                                 ; Close doc file  

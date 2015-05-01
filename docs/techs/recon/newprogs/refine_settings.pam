@@ -1,4 +1,4 @@
-([sp_pixsiz],[r2],[shrange],[prj-radius],[iter1],[iter-end],[sp_lambda],[small-ang],[sp_winsiz],[converg])
+([sp_pixsiz],[r2],[alignsh],[prj-radius],[iter1],[iter-end],[sp_lambda],[small-ang],[sp_winsiz])
 ;
 ; <html><head><title>Sets refinement parameters and files</title></head><body><pre>
 ;
@@ -8,12 +8,13 @@
 ;          Rewritten  More stacks                 ArDean Leith Dec 2006
 ;          Input locations altered                ArDean Leith Dec 2009
 ;          Variable assignment                    ArDean Leith Jan 2010
-;          Uses AP SH for 2 iters                 ArDean Leith Oct 2010
+;          Uses 'AP SH' for 2 iters               ArDean Leith Oct 2010
 ;          Even-odd replaced                      ArDean Leith Jan 2011
 ;          Dala removal                           ArDean Leith Jan 2012
 ;          [pixsiz] returned, fsc, ofsc...        ArDean Leith Aug 2012
 ;          Skip 3.3,3...                          ArDean Leith Sep 2012
-;          gmask                                  ArDean Leith Dec 2012
+;          [ang-steps] changed for 'AP SH' use    ArDean Leith Apr 2015
+;          [converg] removed                      ArDean Leith Apr 2015
 ;
 ; INPUT REGISTERS:
 ;   none
@@ -21,97 +22,65 @@
 ; OUTPUT REGISTERS (SET  BELOW):
 ;   [sp_pixsiz]          Pixel size                  (A) 
 ;   [r2]                 Object alignment radius     (pixels)
-;   [shrange]            Alignment shift +- allowed  (pixels) 
+;   [alignsh]            Alignment shift +- allowed  (pixels) 
 ;   [prj-radius]         Object projection radius    (pixels)
 ;   [iter1]              Starting iteration
 ;   [iter-end]           Ending   iteration
 ;   [sp_lambda]          Electron wavength Lambda    (A)
 ;   [small-ang]          Small angle refinement flag (1 = true)
 ;   [sp_winsiz]          Image/window size = volume size
-;   [converg]            Convergence criterion fraction
 ;
-;<b> ============== DO NOT COPY FROM WEB BROWSER ==============</b>
-;<b> ---------Set Refinement parameters from parameter file ----------</b>
+;<b>    ============== DO NOT COPY FROM WEB BROWSER ==============</b>
 ;<pre> 
    
- GLO [params]  = '../params'     ; Parameter doc file    (REQUIRED input file)
+ ; ---- Adjust these parameters for your project -------------------- EDIT -----
 
- UD 5,[sp_pixsiz]     ; Get pixelsize (A)   
-   [params]           ; Parameter doc. file
+ [alignsh]   = 6      ; Alignment shift (pixels) searched is +- this value
 
- UD 6,[sp_kev]        ; Electron energy (kV)
-   [params]           ; Parameter doc. file
+ [iter1]     = 1      ; Starting alignment step   (iteration)
+ [iter-end]  = 8      ; Ending   alignment step   (iteration)
 
- UD 17,[sp_winsiz]    ; Get windowsize (pixels), used to find projection radius 
-   [params]           ; Parameter doc. file
-
- UD E                 ; End params doc. file usage
-
- ; Calculate lambda (A) from electron voltage now 
- [sp_lambda] = 12.398 / SQR([sp_kev] * (1022.0 + [sp_kev]))
-
- ; ---- Adjust these parameters for your project --------------------- EDIT -----
-
- [shrange]  = 6       ; Alignment shift (pixels) searched is +- this value
- [iter1]    = 1       ; Starting alignment step (iteration)
- [iter-end] = 5       ; Ending alignment step   (iteration)
-
- [diam]     = 349     ; Diameter of the structure (A) used in alignment search.
-                      ;   (Default is for ribosome. EDIT as needed.)
+ [diam]      = 349    ; Diameter of the structure (A) used in alignment search.
                       ;   Diameter is used to find radius for last alignment ring.
+                      ;   This default is for a ribosome. EDIT as needed!
   
- [win-frac] = 0.95    ; Fraction of window diameter used in projection (.95= use 95% window size)
+ [win-frac]  = 0.95   ; Fraction of window diameter used in projection (.95 = use 95% of window size)
 
- [converg]  = 0.05    ; Convergence criterion fraction
-                      ;   Converges when [converg] of all images move < 1.5 * stepsize.
+ [small-ang] = 1      ; Use small angle refinement instead of regular (1 == Yes)
 
- [small-ang] = 0      ; For SMALL angle refinement set this to 1
-
- IF ([small-ang].NE.1)) THEN
+ ; Following two variables are used during refinement (one value / iteration) (Defined for: 20 iterations)
+ IF ( [small-ang] .NE. 1 ) THEN
    ; For normal angle refinement
-   GLO [ang-steps]  = '3.3,3.,2.,2.,2.,1.5,1.5,1.5,1.5,1.5,1.5,1.5,1.5,1.5,1.5,1.5'  ; Angular degree steps   
-   GLO [ang-limits] = '0.,0.,15.,8.,6.,5.,5.,5.,5.,5.,5.,5.,5.,5.,5.,5.'            ; Angular limits
+   GLO [ang-steps]  = '15,3.3, 3,2,2,   2,1.5,1.5,1.5,1.5, 1.5,1.5,1.5,1.5,1.5, 1.5,1.5,1.5,1.5,1.5' ; Angular degree steps           
+   GLO [ang-limits] =  '0,0,   15,15,8, 6,5,5,5,5,         5,5,5,5,5,           5,5,5,5,5'           ; Angular limits
  ELSE
    ; For SMALL angle refinement
    GLO [ang-step-sm]  = '(0.5)'      ; Angular degree steps      
    GLO [theta-range]  = '(2.0)'      ; Theta range  
  ENDIF
 
- GLO [amp-enhance-flags] = '.0,.0,.0,.0,.0,.0,.0,.0,.0,.0,.0,.0,.0,.0,.0,.0'  ; Amplitude enhancement selector 
+ ; Following flag variables are used to activate OPTIONAL amplitude enhancement on each step
+ GLO [amp-enhance-flags] = '0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0'     ; Amplitude enhancement selector 
 
- ; ---- Should not need to adjust following parameters --------------------------
 
- [r2]  = INT([diam]/(2.0*[sp_pixsiz])) ; Alignment radius (pixels) used in alignment search
-
- ; Ensure that sum of alignment radius + translation are within window dimensions 
- [ring-sh] = [r2] + [shrange]          ; Last ring + translation step
- [maxrad]  = INT([sp_winsiz]/2) - 1    ; Max. radius of object in window
-
- IF ([ring-sh].GE.[maxrad]) THEN
-   ; Must reduce radius of outer ring, not translation step
-   [r2] = [maxrad] - [shrange] - 2    ; Reduces rotational search radius 
- ENDIF
-
- [prj-radius] = INT(([win-frac]*[sp_winsiz])/2.0 )  ; Convert fraction to radius in pixels 
-
- ;<b> ============== DO NOT COPY FROM WEB BROWSER ==============</b>
  ; ----------------- Input files ---  May have to EDIT these names ------
 
- GLO [input_dir]             = 'input/'                                     ; Main dir. for input files
+ GLO [params]                = '../params'                                  ; Parameter doc file  (REQUIRED input file)
 
- GLO [vol_orig]              = '../Reconstruction/vol{**[iter]}'            ; Initial reconstructed volume   
+ GLO [input_dir]             = 'input/'                                     ; Main dir. for input files (Used in prepare)
+
+ GLO [vol_orig]              = '../Reconstruction/vol{**[iter]}'            ; Initial reconstructed volume (reference volume)   
 
  GLO [sel_group_orig]        = '../Reconstruction/sel_group_cclim'          ; Group selection doc file                    
 
  GLO [sel_particles_orig]    = '../Reconstruction/sel_particles_{***[grp]}' ; Particle selection doc file
 
- GLO [group_align_orig]      = '../Alignment/align_{**[iter]}_{***[grp]}'   ; Initial alignment parameter file 
+ GLO [group_align_orig]      = '../Alignment/align_{**[iter]}_{***[grp]}'   ; Initial alignment parameter file (Used in prepare)
 
  GLO [unaligned_images_orig] = '../Alignment/data{***[grp]}'                ; Original unaligned images stack
 
- ; Following two files OPTIONAL (Only needed if using amplitude enhancement)
- GLO [scattering_doc]        = 'input/scattering'                           ; OPTIONAL enhancement document input
- GLO [mask]                  = 'input/mask'                                 ; OPTIONAL mask for amplitude enhancement
+ ; Following file is OPTIONAL - Only needed if using amplitude enhancement
+ GLO [scattering_doc]        = 'input/scattering'                           ; OPTIONAL enhancement doc file
 
  ; -------------- Output files -- No need to edit for default refinement ----------
 
@@ -140,7 +109,7 @@
  GLO [next_group_vol]         = 'work/vol_{**[next-iter]}_{***[grp]}'       ; Next group volumes   
  GLO [next_group_vol_template]= 'work/vol_{**[next-iter]}_***'              ; Group volume template  
 
- IF ([small-ang].EQ.0) THEN
+ IF ([small-ang] == 0) THEN
    GLO [temp_ref_projs]       = '[temp_local_dir]/refproj{**[iter]}_{***[grp]}' ; For temp. local scratch file (deleted)
  ELSE
    GLO [img_ang_vora]         = 'final/angvora_{**[iter]}_{***[grp]}'       ; For Small angles use only  
@@ -171,10 +140,37 @@
        
  GLO [bpr]                    = 'final/bpr{**[next-iter]}'                  ; Refined output volume
 
- GLO [temp_gmask]             = '[temp_work_dir]/gmask_{***[grp]}'          ; Mask for back projection
-
  GLO [enhance_doc]            = 'work/enhance_doc_{**[next-iter]}'          ; OPTIONAL Enhancement doc file output
  GLO [ref_rings]              = 'work/SCR_{**[iter]}_{***[grp]}'            ; OPTIONAL Reference rings files output
+
+ ; <b> ------------ Should not need to alter following parameters retrieved from 'params' file --------------- </b>
+
+ UD 5,[sp_pixsiz]                      ; Get pixelsize (A)   
+   [params]                            ; Parameter doc file
+
+ UD 6,[sp_kev]                         ; Electron energy (kV)
+   [params]                            ; Parameter doc file
+
+ UD 17,[sp_winsiz]                     ; Get window size (pixels), used to find projection radius 
+   [params]                            ; Parameter doc file
+
+ UD E                                  ; End params doc file usage
+
+ ; Calculate lambda (A) from electron voltage  
+ [sp_lambda] = 12.398 / SQR([sp_kev] * (1022.0 + [sp_kev]))
+
+ [r2]  = INT([diam]/(2.0*[sp_pixsiz])) ; Alignment radius (pixels) used in alignment search
+
+ ; Ensure that sum of alignment radius + translation are within window dimensions 
+ [ring-sh] = [r2] + [alignsh]          ; Last ring + translation step
+ [maxrad]  = INT([sp_winsiz]/2) - 1    ; Max. radius of object in window
+
+ IF ([ring-sh] .GE. [maxrad]) THEN
+   ; Must reduce radius of outer ring, not translation step
+   [r2] = [maxrad] - [alignsh] - 2     ; Reduces rotational search radius 
+ ENDIF
+
+ [prj-radius] = INT(([win-frac]*[sp_winsiz])/2.0 )  ; Convert fraction to radius in pixels 
 
  ; ----------------- END BATCH HEADER ---------------------------------
 

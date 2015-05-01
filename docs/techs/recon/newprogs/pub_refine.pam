@@ -11,6 +11,7 @@
 ;         COG centering                    ArDean Leith  Sep 2010
 ;         Dala files removed               ArDean Leith  Jan 2012
 ;         pixsiz, resol headers,...        ArDean Leith  Aug 2012
+;         [n-big]                          ArDean Leith  Apr 2015
 ;
 ; PURPOSE: Runs on master node to control PubSub refinement
 ;
@@ -66,17 +67,18 @@
    1
 
  ; Input initial parameters & file names but not angular steps
- @refine_settings([pixsiz],[r2],[alignsh],[prj-radius],[iter1],[iter-end],[lambda],[small-ang],[winsize],[converg])
+ @refine_settings([pixsiz],[r2],[alignsh],[prj-radius],[iter1],[iter-end],[lambda],[small-ang],[winsize])
 
- IF([iter1].LE.1)THEN 
+ IF ( [iter1] <= 1 ) THEN 
     ; Prepare input files (only needs to be done once)  
-    @prepare([pixsiz],[lambda],[iter1])   
-    SD /     Iteration       group        resolution
+    @prepare([pixsiz],[lambda],[iter1])  
+ 
+    SD /     ITERATION        GROUP       RESOLUTION
       [iter_resol]          ; Resolution doc file               (output)
-    SD /     Iteration       group        resolution
+    SD /     ITERATION        GROUP       RESOLUTION
       [grp_resol]           ; Resolution doc file               (output)
     SD E     
-      [grp_resol]           ; Resolution doc file              (finished)
+      [grp_resol]           ; Resolution doc file               (finished)
  ENDIF
 
  UD N [num-grps]             ; Find number of defocus groups
@@ -93,11 +95,11 @@
      [iter]
  
    DE
-     [iter_refangs]          ; Reference angles doc file         (removed)
+     [iter_refangs]          ; Reference angles doc file          (removed)
 
    ; Create reference angle doc file for this iteration 
 
-    IF([small-ang] .EQ. 0) THEN  
+    IF( [small-ang] == 0 ) THEN  
       ; Usual case.  For normal angle refinement
       RR S [ang-step]
         [ang-steps]           ; Angular step for projection angle  (varies with iteration)
@@ -119,7 +121,7 @@
         [ang-step-sm]         ; Theta angular step     
         0,[theta-range]       ; Theta range 
         0, 359.9              ; Phi range
-        [iter_refangs]        ; Reference angles doc file       (output)
+        [iter_refangs]        ; Reference angles doc file        (output)
  
     ENDIF
 
@@ -134,8 +136,8 @@
         [sel_group_sorted]    ; Defocus group selection file     (input)
 
       ; Use pub_refine_start to create parallel grploop for each defocus group   
-      VM
-        publish './spider $PRJEXT/$DATEXT @pub_refine_start {***[grp]} task={*[task]} iter={**[iter]} grp={***[grp]} rn={****[rn]}' 
+      SYS
+        publish './spider $PRJEXT/$DATEXT @pub_refine_start {%I0%[grp]} task={%I0%[task]} iter={%I0%[iter]} grp={%I0%[grp]} rn={****[rn]}' 
       
    ENDDO
 
@@ -144,38 +146,35 @@
 
    ;  Wait for all subscribers to finish grploop, returns [num-big]
    [task] = 0                 ; When [task]=0, pub_refine_start starts: grploop
-   @pub_refine_wait([task],[num-big],[num-grps],[iter],[converg],[rn])
+   @pub_refine_wait([task],[num-big],[num-grps],[iter],[rn])
 
    ; [num-big] returns number of groups having excessive changes
    ; (this is summed in: pub_refine_wait)
-   VM
-     echo " After pub_refine_wait, Excessive changes in: {***[num-big]} groups"
-
-   ; If angular changes were small in all groups, can stop iterating now
-   IF([num-big].EQ.0) EXIT  
+   SYS
+     echo " After pub_refine_wait, Excessive changes in: {%I0%[num-big]} groups"
 
    ; Consolidate data for CTF corrections, create iteration's output volume
    @mergegroups([pixsiz],[iter],[ampenhance],[r2])
 
    DE                         ; Delete existing iterations Fourier vol.
-     [iter_vft]               ; Fourier file                          (removed)                
+     [iter_vft]               ; Fourier file                     (removed)                
 
-   VM
+   SYS
      echo " Iteration: {**[iter]} Finished"
 
    MY FL                      ; Flush results
  ENDDO
 
- VM                           ; Echo current time 
-   echo -n " Alignment halting after iteration: {**[iter]}   " ; date '+ TIME: %x  %X' ; echo " " 
+ SYS                           ; Echo current time 
+   echo -n " Alignment halting after iteration: {%I0%[iter]}   " ; date '+ TIME: %x  %X' ; echo " " 
 
  ; Start up endmerge using PubSub
  DO [i]=1,[num-grps]          ; Loop over all groups ----------------------
     UD IC [i],[grp]           ; Get this defocus group number
       [sel_group_sorted]      ; Defocus group selection file  (input)
 
-    VM                        ; When [task]=2, pub_refine_start starts: endmerge 
-      publish './spider $PRJEXT/$DATEXT @pub_refine_start {***[grp]} task=2 iter={**[iter]} grp={***[grp]} rn={****[rn]}' 
+    SYS                        ; When [task]=2, pub_refine_start starts: endmerge 
+      publish './spider $PRJEXT/$DATEXT @pub_refine_start {%I0%[grp]} task=2 iter={%I0%[iter]} grp={%I0%[grp]} rn={****[rn]}' 
  ENDDO
 
  UD ICE                       ; End doc file incore use for [sel_group_sorted]
@@ -183,12 +182,12 @@
 
  ; Wait for all parallel endmerge tasks
  [task]=2
- @pub_refine_wait([task],[num-big],[num-grps],[iter],[converg],[rn])
+ @pub_refine_wait([task],[num-big],[num-grps],[iter],[rn])
 
  ; Prepare final resolution files
  @endrefine([r2],[pixsiz],[iter])    
 
- VM                          ; Echo current time 
+ SYS                          ; Echo current time 
    echo -n " REFINEMENT FINISHED   " ; date '+ TIME: %x  %X'
 
  EN

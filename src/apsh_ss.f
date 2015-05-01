@@ -249,6 +249,7 @@ C          THIS RETURNS NGOTPAR
            IF (IRTFLG .NE. 0) GOTO 9999
         ENDIF
 
+        ANGINHEADER = .FALSE. ! unfinished !!!!!!!!!!!
         IF (ROTFIRST) THEN
 	   ALLOCATE(TMPBUF(NX,NY), STAT=IRTFLG)
 	   IF (IRTFLG .NE. 0) THEN
