@@ -4,7 +4,7 @@
 
 **SPIDER**  (**S**ystem for **P**rocessing **I**mage **D**ata from **E**lectron microscopy and **R**elated fields) 
 is an image processing system for electron microscopy, especially usefull for single-particle reconstruction. 
-[*SPIDER*](spider.html) has been in use since 1978. 
+[*SPIDER*](http://www.wadsworth.org/spider_doc/spider/docs/spider.html) has been in use since 1978. 
   
 This repository holds only *SPIDER* source code and text documentation since the 
 complete documentation is not suitable for inclusion in Github. 
