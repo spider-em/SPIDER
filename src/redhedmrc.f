@@ -25,7 +25,7 @@ C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
 C **********************************************************************
 C                                                                      *
-C REDHEDMRC(BUF,NSAM,NROW,NSLICE,MODE,DMIN,DMAX,DMEAN,FLIP)
+C REDHEDMRC(BUF,NX,NY,NZ,MODE,DMIN,DMAX,DMEAN,FLIP)
 C                                                                      *
 C  PURPOSE:                                                            *
 C                                                                      *
@@ -107,7 +107,7 @@ C	DMIN,DMAX,DMEAN   : Min, Max, & Mean densities
 C
 C **********************************************************************
 
-	SUBROUTINE REDHEDMRC(BUF,NSAM,NROW,NSLICE,MODE,
+	SUBROUTINE REDHEDMRC(BUF,NX,NY,NZ,MODE,
      &                       DMIN,DMAX,DMEAN,FLIP)
 
         INCLUDE 'CMBLOCK.INC'
@@ -200,9 +200,9 @@ C          MUST FLIP BUF CONTENTS BEFORE USE
 
         CALL CCPIBY(CLABLS,LABLS,800)
 	
-        NSAM   = INXYZ(1)
-        NROW   = INXYZ(2)
-        NSLICE = INXYZ(3)
+        NX   = INXYZ(1)
+        NY   = INXYZ(2)
+        NZ = INXYZ(3)
 
 C       WRITE OUT HEADER INFORMATION
 	WRITE(NOUT,1011) (INXYZ(K),K=1,3) 
@@ -219,7 +219,7 @@ C       WRITE OUT HEADER INFORMATION
 
 	WRITE(NOUT,1041) (MXYZ(K),K=1,3)
 1041	FORMAT(/
-     &  4X,'Grid sampling on x, y, z ....................',3I6)
+     &  4X,'Grid sampling in x, y, z ....................',3I6)
 
 	WRITE(NOUT,1002) (CEL(K),K=1,6)
 1002	FORMAT(/
@@ -229,7 +229,7 @@ C       WRITE OUT HEADER INFORMATION
         WRITE(NOUT,1042) (LXYZ(MAPCRS(K)),K=1,3),(ORIGXY(K),K=1,2)
 1042	FORMAT(/
      &  4X,'Fast, medium, slow axes .....................',3(4X,A1)/
-     &	4X,'Origin on x,y ...............................',2G13.5)
+     &	4X,'Origin in x, y ..............................',2G13.5)
 
 	WRITE(NOUT,1003) DMIN,DMAX,DMEAN 
 1003	FORMAT(/
@@ -246,7 +246,6 @@ C       WRITE OUT HEADER INFORMATION
      &  4X,'Number of titles ............................',I5/
      & ' Titles :'/10(1X,20A4/))
      	
-	RETURN
         END
 
 
@@ -254,17 +253,16 @@ C -----------------------------------------------------------
 
       SUBROUTINE CCPMVI (ARR1,ARR2,NUM)
 
-C     THIS ROUTINE ASSIGNS THE FIRST NUM WORDS OF ARR2 TO ARR1
+C     PURPOSE:  ASSIGNS THE FIRST NUM WORDS OF ARR2 TO ARR1
 
-      INTEGER NUM
-      REAL    ARR1(*),ARR2(*)
-      INTEGER J
+      INTEGER  :: NUM
+      REAL     :: ARR1(*),ARR2(*)
+      INTEGER  :: J
 
       DO J=1,NUM
-         ARR1(J)=ARR2(J)
+         ARR1(J) = ARR2(J)
       ENDDO
 
-      RETURN
       END
 
  
@@ -287,31 +285,31 @@ C               IF <0, -THE NUMBER OF ELEMENTS TO BE COPIED TO SIGNED BYTES
 
       SUBROUTINE CCPIBY(IBYT,IA,NB)
       
-      INTEGER     IA(*)
-      INTEGER * 1 IBYT(*)
-      INTEGER * 1 JBYT(4)
+      INTEGER     :: IA(*)
+      INTEGER * 1 :: IBYT(*)
+      INTEGER * 1 :: JBYT(4)
       EQUIVALENCE (JA,JBYT(1))
-      LOGICAL     CALLED, LITEND
-      EXTERNAL    LITEND
-      INTEGER     IND
-      SAVE        CALLED, IND
+      LOGICAL     :: CALLED, LITEND
+      EXTERNAL    :: LITEND
+      INTEGER     :: IND
+      SAVE        :: CALLED, IND
 
       DATA    CALLED/.FALSE./
 
-      IF (.NOT.CALLED) THEN
+      IF (.NOT. CALLED) THEN
         IF (LITEND(1)) THEN
           IND = 1
         ELSE
           IND = 4
         ENDIF
-        CALLED=.TRUE.
+        CALLED = .TRUE.
       ENDIF
       
       NE = NB
-      IF (NE.GT.0) THEN
+      IF (NE > 0) THEN
          DO  I=1,NE
-           JA=IA(I)
-           IBYT(I)=JBYT(IND)
+           JA = IA(I)
+           IBYT(I) = JBYT(IND)
 	 ENDDO
       ELSE
          NE = -NE
@@ -319,6 +317,7 @@ C               IF <0, -THE NUMBER OF ELEMENTS TO BE COPIED TO SIGNED BYTES
            IBYT(I) = IA(I)
 	 ENDDO
       ENDIF
+
       END
 
 
@@ -330,8 +329,8 @@ C        CHECK ENDEDNESS, RETURNS TRUE IF LITTLE ENDIAN (VAX, FX2800,
 C                                                   ULTRIX, CONVEX)
 C                              FALSE IF BIG ENDIAN (IBM,IRIS,ESV)
 
-         INTEGER       I, IDUM
-         INTEGER * 1   B(4)
+         INTEGER       :: I, IDUM
+         INTEGER * 1   :: B(4)
          EQUIVALENCE   (I,B(1))
 
 C        INITIALISE B

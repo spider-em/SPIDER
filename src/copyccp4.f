@@ -114,10 +114,12 @@ C***********************************************************************
 
         IERR = 0
 
-C       FIND IF CURRENTLY SWAPPING BYTES
+C       FIND IF CURRENTLY SWAPPING BYTES DURING FILE OUTPUT
+C       THIS MAY BE DONE BY COMPILER, SO HAVE TO ACTUALLY TEST OUTPUT
+
         ISSWABT = ISSWAB(99)
 
-        IF (FCHAR(4:5)  == 'TO')      GOTO 1000
+        IF (FCHAR(4:5) == 'TO')      GOTO 1000
 
 
 C       COPY FROM MRC TO SPIDER FILE FORMAT --------------- FROM MRC
@@ -459,12 +461,20 @@ C	OPEN NEW MRC FILE FOR DIRECT ACCESS, RECORD LENGTH 1024 BYTES
         CALL OPAUXFILE(.TRUE.,MRCFILE,DATEXC,LUNMRC,LENOPENB,'U',
      &                 'MRC OUTPUT',.TRUE.,IRTFLG)
 
+C       FLIP BYTES DURING MRC FILE OUTPUT
+        IF (ISSWABT) THEN
+           CALL LUNSETFLIP(LUNMRC,1,IRTFLG)
+           ISSWABT = .FALSE.
+        ENDIF
+
+
         IVAL    = 8
         IBOTLEF = 0
         CALL RDPRI2S(IVAL,IBOTLEF,NOT_USED,
-     &       'MRC DATA LENGTH (8/32 BITS), FLIP TOP/BOTTOM =1 (0/1)',
-     &        IRTFLG)
+     &  'MRC DATA LENGTH (8/32 BITS), INVERT IMAGE TOP/BOTTOM =1 (0/1)',
+     &     IRTFLG)
         IF (IRTFLG .NE. 0) GOTO 9999
+
         MODE = 2
         IF (IVAL == 8) MODE = 0
         BOTLEFT = (IBOTLEF > 0)   ! USUAL MRC BOTTOM!!

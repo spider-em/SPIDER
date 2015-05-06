@@ -157,7 +157,7 @@ C       @@@@@@@@@@@@@@@@@@@@@@@@@@ DATA STATEMENTS @@@@@@@@@@@@@@@@@@@@
 C       @@@@@@@@@@@@@@@@@@@@@@ VERSION INITIALIZATION @@@@@@@@@@@@@@@@@
 
 CHERE               123456789 123456789 123456789 1234567890 
-        DATA CVERS/'VERSION:  UNIX  22.10 ISSUED:  4/21/2015'/
+        DATA CVERS/'VERSION:  UNIX  22.11 ISSUED:  5/05/2015'/
 
         DATA RESULM/'results'/
         DATA LOGM/'LOG'/

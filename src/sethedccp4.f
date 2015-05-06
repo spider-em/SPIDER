@@ -1,24 +1,24 @@
 
 C *********************************************************************
 c
-C SETHEDCCP4                       ISSWAB ADDED    JUL  02 ARDEAN LEITH
+C SETHEDCCP4                   ISSWAB ADDED        JUL  02 ARDEAN LEITH
 C                              ANGSTROMS/PIXEL     JAN  05 ARDEAN LEITH 
 C                              STARTING            FEB  06 ARDEAN LEITH 
 C                              MRC PROMPTS         MAY  12 ARDEAN LEITH 
 C *********************************************************************
 c
-C SETHEDCCP4(HEADBUF, NSAM, NROW, NSLICE,
-C            DMIN,DMAX,DMEAN,DSIG, MODE,ISSWAB,IRTFLG)
+C SETHEDCCP4(HEADBUF, NX, NY, NZ,
+C            DMIN,DMAX,DMEAN,DSIG, IMODE,ISSWAB,IRTFLG)
 C
 C PURPOSE: CREATE NEW CCP4 HEADER. ALL OF THE STANDARD IMAGE 
 C          DEFAULTS ARE SET UP GIVEN THE REQUESTED INFORMATION. 
 C          HEADER NOT WRITTEN.
 C
-C       NOTE: THE STARTING POINT FOR COLUMNS,ROWS,SECTIONS
-C	ARE SET TO 0 BY DEFAULT.!!!!!!!!!
+C          NOTE: THE STARTING POINT FOR COLUMNS,ROWS,SECTIONS
+C	   ARE SET TO 0 BY DEFAULT.!!!!!!!!!
 C
 C PARAMETERS:
-C	NSAM...  # OF INTERVALS COLUMNS, ROWS, SECTIONS
+C	NX...    # OF INTERVALS COLUMNS, ROWS, SECTIONS
 C	IMODE    DATA STORAGE MODE (1-4)
 C				0 = IMAGE		INTEGER*1
 C				1 = IMAGE               INTEGER*2
@@ -30,38 +30,38 @@ C NOTE:  SEE REDHEDCCP4 FOR DETAILS
 C
 C *********************************************************************
 
-	SUBROUTINE SETHEDCCP4(HEADBUF, NSAM, NROW, NSLICE,
-     &                       DMIN,DMAX,DMEAN,DSIG, SCALE,IMODE,
-     &                       ISSWAB,IRTFLG)
+	SUBROUTINE SETHEDCCP4(HEADBUF, NX, NY, NZ,
+     &                        DMIN,DMAX,DMEAN,DSIG, SCALE,IMODE,
+     &                        ISSWAB,IRTFLG)
 
         INCLUDE 'CMBLOCK.INC'
 
-        REAL, DIMENSION(*) :: HEADBUF 
+        REAL               :: HEADBUF(*)
 
         CHARACTER(LEN=44)  :: LABEL1 
         CHARACTER(LEN=4)   :: CVAL
-        CHARACTER(LEN=1)   :: NULL
+        CHARACTER(LEN=1)   :: BLANK = CHAR(32)
 	LOGICAL            :: ISSWAB
 
-        NULL = CHAR(1)
- 
 c	NOTE: COPY IMAGE DATA IN REAL*4 FORMAT.	
 	
-        CALL CCPMVI(HEADBUF(1),NSAM,1)
-        CALL CCPMVI(HEADBUF(2),NROW,1)
-        CALL CCPMVI(HEADBUF(3),NSLICE,1)
+        CALL CCPMVI(HEADBUF(1),NX,1)
+        CALL CCPMVI(HEADBUF(2),NY,1)
+        CALL CCPMVI(HEADBUF(3),NZ,1)
+
+C	COPY IMAGE DATA IN REAL*4 FORMAT.	
         CALL CCPMVI(HEADBUF(4),IMODE,1)
 
 C       SET START POINTS ON COLUMNS, ROWS, SECTIONS
  	WRITE(NOUT,*)' '
- 	WRITE(NOUT,*)' STARTING (X,Y,Z) DEFAULT VALUE:(-(NSAM/2)+ 1, ',
-     &               '-(NROW/2)+1), -(NSLICE/2)+1'
- 	WRITE(NOUT,*)'  (+1 ADDED ONLY IF LENGTH IS ODD)'
-	WRITE(NOUT,*)' USE <CR> TO KEEP DEFAULT VALUE'
+ 	WRITE(NOUT,*)' STARTING (X,Y,Z) DEFAULT VALUE:(-(NX/2)+ 1, ',
+     &               '-(NY/2)+1), -(NZ/2)+1'
+ 	WRITE(NOUT,*)'   (+1 ADDED ONLY IF LENGTH IS ODD)'
+	WRITE(NOUT,*)' USE <CR> FOR DEFAULT VALUE'
 	
-        ISTARTX = -(NSAM/2)   + (MOD(NSAM,2))
-        ISTARTY = -(NROW/2)   + (MOD(NROW,2))
-        ISTARTZ = -(NSLICE/2) + (MOD(NSLICE,2))
+        ISTARTX = -(NX/2) + (MOD(NX,2))
+        ISTARTY = -(NY/2) + (MOD(NY,2))
+        ISTARTZ = -(NZ/2) + (MOD(NZ,2))
  
 	CALL RDPRI3S(ISTARTX,ISTARTY,ISTARTZ,NOT_USED,
      &              'STARTING X, Y, & Z FOR MRC DATA',IRTFLG)
@@ -69,10 +69,10 @@ C       SET START POINTS ON COLUMNS, ROWS, SECTIONS
         CALL CCPMVI(HEADBUF(6),ISTARTY,1)
         CALL CCPMVI(HEADBUF(7),ISTARTZ,1)
 
-C       GRID SAMPLING ON X, Y, Z (MX..) SAME AS NSAM, NROW, NSLICE
-        CALL CCPMVI(HEADBUF(8), NSAM,1)
-        CALL CCPMVI(HEADBUF(9), NROW,1)
-        CALL CCPMVI(HEADBUF(10),NSLICE,1)
+C       GRID SAMPLING ON X, Y, Z (MX..) SAME AS NX, NY, NZ
+        CALL CCPMVI(HEADBUF(8), NX,1)
+        CALL CCPMVI(HEADBUF(9), NY,1)
+        CALL CCPMVI(HEADBUF(10),NZ,1)
 
 C       CELL AXES (CELLAX..) 
         IF (SCALE .NE. 0) THEN
@@ -89,9 +89,9 @@ C       CELL AXES (CELLAX..)
 
 	CALL RDPRM3S(SCALEX,SCALEY,SCALEZ,NOT_USED,
      &              'ANGSTROMS/PIXEL FOR  X, Y, & Z AXIS',IRTFLG)
-        HEADBUF(11) = SCALEX * NSAM
-        HEADBUF(12) = SCALEY * NROW
-        HEADBUF(13) = SCALEZ * NSLICE
+        HEADBUF(11) = SCALEX * NX
+        HEADBUF(12) = SCALEY * NY
+        HEADBUF(13) = SCALEZ * NZ
 
 C       CELL ANGLES (CELLBX..) 
         HEADBUF(14) = 90.0
@@ -120,18 +120,18 @@ C       ZERO THE EXTRA POSITIONS
         ENDDO
 
 C	ORIGIN ON X,Y & Z AXIS 
-        ORIGX = (NSAM/2)   + (MOD(NSAM,2))
-        ORIGY = (NROW/2)   + (MOD(NROW,2))
-        ORIGZ = (NSLICE/2) + (MOD(NSLICE,2))
+        ORIGX = (NX/2) + (MOD(NX,2))
+        ORIGY = (NY/2) + (MOD(NY,2))
+        ORIGZ = (NZ/2) + (MOD(NZ,2))
  
  	WRITE(NOUT,*)' '
- 	WRITE(NOUT,*)' ORIGIN (X,Y,Z) DEFAULT VALUE:((NSAM/2)+ 1, ',
-     &               '(NROW/2)+1),  (NSLICE/2)+1'
- 	WRITE(NOUT,*)'  (+1 ADDED ONLY IF AXIS LENGTH IS ODD)'
-	WRITE(NOUT,*)' USE <CR> TO KEEP DEFAULT VALUE'
+ 	WRITE(NOUT,*)' ORIGIN (X,Y,Z) DEFAULT VALUE:((NX/2)+ 1, ',
+     &               '(NY/2)+1), (NZ/2)+1'
+ 	WRITE(NOUT,*)'   (+1 ADDED ONLY IF AXIS LENGTH IS ODD)'
+	WRITE(NOUT,*)' USE <CR> FOR DEFAULT VALUE'
 	
 	CALL RDPRM3S(ORIGX,ORIGY,ORIGZ,NOT_USED,
-     &              'X, Y, & Z ORIGIN FOR MRC DATA',IRTFLG)
+     &               'X, Y, & Z ORIGIN FOR MRC DATA',IRTFLG)
 	
         HEADBUF(50) = ORIGX
         HEADBUF(51) = ORIGY
@@ -155,14 +155,14 @@ C       SET NUMBER OF LABELS
         NLABEL = 1  
         CALL CCPMVI(HEADBUF(56), NLABEL,1)
 
-C       ZERO ALL LABELS WITH NULLS
-        CVAL = NULL // NULL // NULL // NULL
+C       ZERO ALL LABELS WITH BLANKS
+        CVAL = BLANK // BLANK // BLANK // BLANK
         DO I = 57,256
            CALL CCPMVC(HEADBUF(I),CVAL,ISSWAB)
         ENDDO
 
 C       NOW GO BACK AND ADD IN ONE LABEL
-        LABEL1 = 'CONVERTED FROM SPIDER TO MRC USING SPIDER  '
+        LABEL1 = 'Converted from SPIDER to MRC using SPIDER '
         INOW   = 56
         DO I = 1,44,4
            CVAL = LABEL1(I:I+3)
@@ -172,7 +172,6 @@ C       NOW GO BACK AND ADD IN ONE LABEL
 	
 	IRTFLG = 0
 
-	RETURN
         END
 
 C ------------------------- CCPMVC --------------------------
@@ -186,9 +185,9 @@ C     REVERSE      FLAG TO INVERT STRING                       SENT
 
       SUBROUTINE CCPMVC(I1ARRAY,CIN,REVERSE)
 
-      CHARACTER(LEN=4) ::   CIN
-      INTEGER * 1           I1ARRAY(4)
-      LOGICAL          ::   REVERSE
+      CHARACTER(LEN=4) :: CIN
+      INTEGER * 1      :: I1ARRAY(4)
+      LOGICAL          :: REVERSE
 
       IF (REVERSE) THEN
          DO I = 1,4
@@ -200,22 +199,21 @@ C     REVERSE      FLAG TO INVERT STRING                       SENT
          ENDDO
       ENDIF
 
-      RETURN
       END
 
 C ---------------------- SETSTAMP -----------------------------------
  
       SUBROUTINE SETSTAMP(MACHSTMP,ISSWAB)
 
-C  PURPOSE: SETS MACHINE STAMP FOR THIS ARCHITECTURE
+C     PURPOSE: SETS MACHINE STAMP FOR THIS ARCHITECTURE
 
-C  NOTE: I HAVE EXTRACTED THIS FROM THE MRC 2000 CODE AND
-C        CONVERTED TO FORTRAN. BUT I MAY HAVE BOTCHED IT? al
+C     NOTE: I HAVE EXTRACTED THIS FROM THE MRC 2000 CODE AND
+C           CONVERTED TO FORTRAN. BUT I MAY HAVE BOTCHED IT? al
 
-      INTEGER * 4 MACHSTMP
-      LOGICAL :: ISSWAB
+      INTEGER * 4 :: MACHSTMP
+      LOGICAL     :: ISSWAB
 
-        INCLUDE 'CMBLOCK.INC'
+      INCLUDE 'CMBLOCK.INC'
 
 c       Little-ended Intel and some MIPS
 #if defined(MIPSEL) || defined(i386) || defined(i860)
@@ -272,13 +270,13 @@ C       Little-endian AMD OPTERON,
 
       IF (ISSWAB) THEN
 C        RUNNING WITH NON-NATIVE BYTE-SWAPPING
-         IF (NATIVEFTT .EQ. 1) THEN
+         IF (NATIVEFTT == 1) THEN
             MACHSTMP = 4369
          ELSE
             MACHSTMP = 286326784
          ENDIF
       ELSE
-         IF (NATIVEFTT .EQ. 1) THEN
+         IF (NATIVEFTT == 1) THEN
             MACHSTMP = 286326784
          ELSE
             MACHSTMP = 4369
@@ -296,13 +294,12 @@ C -----------------------------------------------------------
 
 C     THIS ROUTINE ASSIGNS  ARR2 TO ARR1
 
-      REAL  ARR1(N),ARR2(N)
+      REAL  :: ARR1(N),ARR2(N)
 
       DO I = 1,N
          ARR1(I) = ARR2(I)
       ENDDO
 
-      RETURN
       END
 
  

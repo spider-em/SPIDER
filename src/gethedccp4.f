@@ -142,7 +142,7 @@ C       WRITE OUT CONVERSION INFORMATION
            ENDIF
 
            IF (FLIP) THEN
-	      WRITE(NOUT,*)' Flipping byte order!'
+	      WRITE(NOUT,*)' Flipping byte order'
            ENDIF
         ENDIF
 
@@ -217,7 +217,7 @@ C          WRITE OUT HEADER INFORMATION
      &	     CELLAX,CELLAY,CELLAZ,CELLBX,CELLBY,CELLBZ,
      &       LXYZ(MAPC),LXYZ(MAPR),LXYZ(MAPS),
      &	     DMIN,DMAX,DMEAN,RMS,ORX,ORY,ORZ,ISPG,NSYMBT,
-     &       MACHST,NLABL,MAP
+     &       MACHST,MAP,NLABL
 
 1000	   FORMAT(/
      &     2X,'Number of columns, rows, sections ........ ',3(I7,1X)/
@@ -234,14 +234,14 @@ C          WRITE OUT HEADER INFORMATION
      &     2X,'Origins .................................. ',3F10.2/
      &	   2X,'Space group, # bytes symmetry ............ ',2I7/
      &	   2X,'Machine stamp ............................ ',I12/
-     &     2X,'Number of labels ......................... ',I7/
-     &     2X,'Map ......................................    ',A,//)
+     &     2X,'Map ......................................    ',A/
+     &     2X,'Number of labels ......................... ',I7)
 
 	   IF (NLABL > 0) THEN
               WRITE(NOUT,1001)
-1001          FORMAT(' Labels:')
+1001          FORMAT('  Labels:')
               WRITE(NOUT,1002) CLABLS(1:NLABL * 80)
-1002          FORMAT(5X,100(A80))
+1002          FORMAT(3X,100(A80))
            ENDIF
            WRITE(NOUT,*) ' '
 
