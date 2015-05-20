@@ -290,7 +290,14 @@ C             ASCII VALUES, SET LENGTH FOR CVAL BUFFER
               IF ( ICOUNT  > ICVAL_LEN) THEN
                  IF (ALLOCATED(CVAL)) DEALLOCATE(CVAL)
                  ICVAL_LEN = ICOUNT
-                 ALLOCATE(CVAL(1)(ICVAL_LEN), STAT=IRTFLG)
+
+C POSSIBLE CODE SYNTAX FOR ifort INTEL COMPILER
+c ifdef __INTEL_COMPILER 
+c                CHARACTER(LEN=:), ALLOCATABLE :: CVAL(:)
+c                ...
+c                ALLOCATE(CHARACTER(ICVAL_LEN) :: CVAL(1))
+c endif  
+ 	         ALLOCATE(CVAL(1)(ICVAL_LEN), STAT=IRTFLG)
                 
                  IF (IRTFLG .NE. 0) THEN
                    CALL ERRT(46,'COPYFROMTIF; CVAL...',ICVAL_LEN)
