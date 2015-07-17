@@ -1,33 +1,34 @@
 C++*********************************************************************
 C
-C  COPY1.F                   REMOVED FROM UTIL2    JUL 96 ArDean Leith
-C                            ADDED NT INTERFACES   OCT 98 ArDean Leith
-C                            REMOVED 'CP FROM LUM' FEB 99 ArDean Leith
-C                            ADDED 'CP FROM XP'    OCT 00 Pawel Penczek
-C                            'CP TO NT' ON NT      JUN 01 ArDean Leith
-C                            'CP FROM SG' ON NT    SEP 01 ArDean Leith
-C                            'CP TO/FROM CCP4'     FEB 02 ArDean Leith
-C                            'CP FROM EMI'         FEB 02 ArDean Leith
-C                            INDEXED STACK         JAN 02 ArDean Leith
-C                            'CP TO OPEND'         FEB 03 ArDean Leith
-C                            'CP TO' NORM          JUL 03 ArDean Leith
-C                            'CP FIX' REMOVED      OCT 03 ArDean Leith
-C                            MPI                   OCT 03 Chao Yang
-C                            'CP TO SF3' GONE      DEC 04 ArDean Leith
-C                            'CP FROM NIK'         JAN 05 ArDean Leith
-C                            'CP TO PDS' GONE      MAR 09 ArDean Leith
-C                            'CP TO SGI' GONE      MAY 09 ArDean Leith
-C                            'CP TO VV'  GONE      DEC 10 ArDean Leith
-C                            'CCP4' NOW JUST MRC   FEB 12 ArDean Leith
-C                            'CP TO JPG'           APR 13 ArDean Leith
-C                            'CP TO VOL'           MAY 13 ArDean Leith
-C                            'CP FROM TIF'         MAR 14 ArDean Leith
+C  COPY1.F      REMOVED FROM UTIL2                  JUL 96 ArDean Leith
+C               ADDED NT INTERFACES                 OCT 98 ArDean Leith
+C               REMOVED 'CP FROM LUM'               FEB 99 ArDean Leith
+C               ADDED 'CP FROM XP'                  OCT 00 Pawel Penczek
+C               'CP TO NT' ON NT                    JUN 01 ArDean Leith
+C               'CP FROM SG' ON NT                  SEP 01 ArDean Leith
+C               'CP TO/FROM CCP4'                   FEB 02 ArDean Leith
+C               'CP FROM EMI'                       FEB 02 ArDean Leith
+C               INDEXED STACK                       JAN 02 ArDean Leith
+C               'CP TO OPEND'                       FEB 03 ArDean Leith
+C               'CP TO' NORM                        JUL 03 ArDean Leith
+C               'CP FIX' REMOVED                    OCT 03 ArDean Leith
+C               MPI                                 OCT 03 Chao Yang
+C               'CP TO SF3' GONE                    DEC 04 ArDean Leith
+C               'CP FROM NIK'                       JAN 05 ArDean Leith
+C               'CP TO PDS' GONE                    MAR 09 ArDean Leith
+C               'CP TO SGI' GONE                    MAY 09 ArDean Leith
+C               'CP TO VV'  GONE                    DEC 10 ArDean Leith
+C               'CCP4' NOW JUST MRC                 FEB 12 ArDean Leith
+C               'CP TO JPG'                         APR 13 ArDean Leith
+C               'CP TO VOL'                         MAY 13 ArDean Leith
+C               'CP FROM TIF'                       MAR 14 ArDean Leith
+C               'CP TO MRC' STACKS                  JUN 15 ArDean Leith
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2014  Health Research Inc.,                         *
+C=* Copyright 1985-2015  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -54,13 +55,23 @@ C--*********************************************************************
 
         SUBROUTINE COPY1(MAXDIM)
 
+        IMPLICIT NONE
+
         INCLUDE 'CMBLOCK.INC'
         INCLUDE 'CMLIMIT.INC'
 
+        INTEGER               :: MAXDIM
+        INTEGER               :: ICOMM,MYPID,MPIERR
+        INTEGER               :: NILMAX,IRTFLG,NLET,ITYPE,NX,NY,NZ,NE
+        INTEGER               :: MAXIM,NDUM,NIMG,IMGNUM,LOCAT,LOCAST
+        LOGICAL               :: VERBOSET       
+
         CHARACTER(LEN=MAXNAM) :: FILOLD,FILNEW
- 
+        INTEGER, ALLOCATABLE  :: ILIST(:)
+
         CHARACTER(LEN=1)      :: NULL = CHAR(0)
-        LOGICAL               :: INDXD,FLIPOUT
+        LOGICAL               :: INDXD,FLIPOUT,ASKNAM,FOUROK,BARE
+        LOGICAL               :: ISSTACK
 
         INTEGER,PARAMETER     :: IDELAY  = 3
 
@@ -72,9 +83,8 @@ C--*********************************************************************
         INTEGER, PARAMETER    :: LUNXM1  = 83 
         INTEGER, PARAMETER    :: LUNXM2  = 84 
 
-C       FROM/'AS','MR','PD','RA','NI','TE','VA','EM','NT','XP'/
-  
-C       TO/'AS','BR','MR','PO','RA','TI','XP','OP','JPG'/  
+C       FROM/'AS','MR','PD','RA','NI','TE','VA','EM','NT','XP'
+C       TO  /'AS','BR','MR','PO','RA','TI','XP','OP','JPG'  
 
         CALL SET_MPI(ICOMM,MYPID,MPIERR) ! SETS ICOMM AND MYPID
 
@@ -103,73 +113,103 @@ C                                    12345678     1234567890
         CASE ('I','I ') ! --------------------------------------- 'CP I'
 #endif
 #endif
-
-C          STANDARD COPY OR STANDARD COPY TO INDEXED STACK
+C          STANDARD COPY TO INDEXED STACK
            INDXD   = .TRUE.
            FLIPOUT = .FALSE.
            CALL COPYD(LUN1,LUN2,LUNDOC,LUNXM1,LUNXM2,INDXD,FLIPOUT)
 
-        CASE ('')    ! -------------------------------------------- 'CP'
+        CASE ('')    ! ------------------------------------------ 'CP'
 C          STANDARD COPY 
            INDXD   = .FALSE.
            FLIPOUT = .FALSE.
            CALL COPYD(LUN1,LUN2,LUNDOC,LUNXM1,LUNXM2,INDXD,FLIPOUT)
 
 
+        CASE ('TO')  ! ------------------------------------- 'CP TO **'
 
-        CASE ('TO')  ! -------------------------------- ----- 'CP TO **'
+C          OPEN INPUT IMAGE(S), (NOT FOURIER)
+           NILMAX = NIMAX  ! FROM CMLIMIT.INC
+           ALLOCATE(ILIST(NILMAX), STAT=IRTFLG)
+           IF (IRTFLG .NE. 0) THEN
+              CALL ERRT(46,'COPY1; ILIST....',NILMAX)
+              RETURN
+           ENDIF
 
-C          OPEN INPUT FILE, WHOLE STACK NOT ALLOWED
-           MAXIM = 0
-           CALL OPFILEC(0,.TRUE.,FILOLD,LUN1,'O',ITYPE,
-     &                   NX1,NY1,NZ1,MAXIM,'SPIDER INPUT',
-     &                   .FALSE.,IRTFLG)
-           IF (IRTFLG .NE. 0) GOTO 9000
+           ASKNAM = .TRUE.
+           FOUROK = .FALSE.
+           CALL OPFILES(0,LUN1,LUNDOC,LUNXM1, 
+     &                  ASKNAM,FILOLD,NLET, 'O',
+     &                  ITYPE,NX,NY,NZ,MAXIM,
+     &                  'SPIDER INPUT',
+     &                  FOUROK,ILIST,NILMAX, 
+     &                  NDUM,NIMG,IMGNUM, IRTFLG) 
+           IF (IRTFLG .NE. 0) RETURN
 
-           IF (IMAMI .NE. 1) 
-     &         CALL NORM3(LUN1,NX1,NY1,NZ1,FMAX,FMIN,AV)
+           LOCAT   = INDEX(FILOLD,'@')
+           LOCAST  = INDEX(FILOLD,'*')
+           ISSTACK = (MAXIM > 0)                    ! USING A STACK
+           BARE    = (LOCAT > 0 .AND. LOCAT == NLET)  ! BARESTACK
+
+           IF (FCHAR(7:9) .NE. 'MRC') THEN
+              IF (BARE) THEN
+                 CALL ERRT(101,
+     &                  'THIS OPERATION CAN NOT COPY A WHOLE STACK',NE)
+                 RETURN
+              ENDIF
+              IF (IMAMI .NE. 1) 
+     &            CALL NORM3(LUN1,NX,NY,NZ,FMAX,FMIN,AV)
+           ENDIF
+
 
            SELECT CASE(FCHAR(7:8)) 
 
            CASE ('AS') 
 C             FROM SPIDER IMAGE INTO EDITABLE IMAGE ------ 'CP TO ASCII'
-              CALL COPYE(LUN1,LUN2,NX1,NY1,NZ1)
+              CALL COPYE(LUN1,LUN2,NX,NY,NZ)
 
            CASE ('BR')
 C             FROM 3D SPIDER FILE TO BRIX FORMAT----------- 'CP TO BRIX'
-              CALL COPYBRIX(LUN1,LUN2,NX1,NY1,NZ1)
+              CALL COPYBRIX(LUN1,LUN2,NX,NY,NZ)
 
            CASE ('MR','CC')
 C             FROM SPIDER IMAGE FILE INTO MRC FORMAT ------- 'CP TO MRC'
-              CALL COPYCCP4(LUN1,LUN2,NX1,NY1,NZ1)
-              ! OBSOLETE CALL COPYMRC(LUN1,LUN2,NX1,NY1,NZ1)
+
+              IF (ISSTACK) THEN 
+C                COPYING WHOLE STACK
+                 CALL COPYTOCCP4_STK(LUN1,LUN2,FILOLD, 
+     &                             ILIST,NIMG,MAXIM,
+     &                             NX,NY,NZ)
+             ELSE
+C                COPYING IMAGE/VOLUME
+                 CALL COPYTOCCP4(LUN1,LUN2,NX,NY,NZ)
+              ENDIF
 
            CASE ('PO')
 C             FROM SPIDER TO POSTSCRIPT IMAGE (8 BIT)------ 'CP TO POST'
-              CALL COPYPOS(FILOLD,LUN1,LUN2,NX1, NY1, NZ1)
+              CALL COPYPOS(FILOLD,LUN1,LUN2,NX, NY, NZ)
 
            CASE ('RA')
 C             FROM SPIDER IMAGE FILE INTO RAW IMAGE FILE --- 'CP TO RAW'
-              CALL COPYU(LUN1,LUN2,NX1,NY1,NZ1)
+              CALL COPYU(LUN1,LUN2,NX,NY,NZ)
  
            CASE ('TI')
 C             FROM SPIDER FORMAT TO TIFF FORMAT ----------- 'CP TO TIFF'
-              CALL SPDTOTIFF(LUN1,LUN2,NX1,NY1,NZ1,IRTFLG)
+              CALL SPDTOTIFF(LUN1,LUN2,NX,NY,NZ,IRTFLG)
  
            CASE ('XP')
 C             SPIDER IMAGE FILE INTO XPLOR FILES --------- 'CP TO XPLOR'
-              CALL COPYTOXPLOR(LUN1,FILOLD,LUN2,NX1,NY1,NZ1)
+              CALL COPYTOXPLOR(LUN1,FILOLD,LUN2,NX,NY,NZ)
 
            CASE ('JP')
 C             SPIDER IMAGE FILE INTO JPG FILES ------------- 'CP TO JPG'
               VERBOSET = VERBOSE  ! FROM CMBLOCK
               FILNEW   = NULL
-              CALL COPYTOJPG(LUN1,LUNT,FILNEW,NX1,NY1,NZ1,
+              CALL COPYTOJPG(LUN1,LUNT,FILNEW,NX,NY,NZ,
      &                       VERBOSET,IDELAY)
 
            CASE DEFAULT
 C             NO SUCH COPY FUNCTION
-              CALL ERRT(101,'NO SUCH CP OPERATION, CHECK MENU',IDUM)
+              CALL ERRT(101,'NO SUCH CP OPERATION, CHECK MENU',NE)
           
            END SELECT
 
@@ -185,8 +225,7 @@ C             EDITABLE IMAGE FILE TO SPIDER IMAGE FILE - 'CP FROM ASCII'
 
            CASE ('MR','CC')
 C             FROM MRC FORMAT TO SPIDER ------------------ 'CP FROM MRC'
-              CALL COPYCCP4(LUN1,LUN2,NSAM,NROW,NSLICE)
-              ! NO LONGER SUPPORTED: COPYMRC(LUN1,LUN2,NX,NY,NZ)
+              CALL COPYFROMCCP4(LUN1,LUN2,NX,NY,NZ)
 
            CASE ('PD')
 C             FROM PDB FILE TO SPIDER VOLUME FILE -------- 'CP FROM PDB'
@@ -216,7 +255,7 @@ C             EMI FORMAT TO SPIDER ----------------------- 'CP FROM EMI'
 
            CASE ('NT')
 C             FROM NT FORMAT TO SPIDER -------------------- 'CP FROM NT'
-              CALL ERRT(101,'USE OPERATION: <CP TO OPEND> ',IDUM)
+              CALL ERRT(101,'USE OPERATION: <CP TO OPEND> ',NE)
 
            CASE ('XP')
 C             FROM XPLO FORMAT TO SPIDER ------------------ 'CP FROM XP'
@@ -224,7 +263,7 @@ C             FROM XPLO FORMAT TO SPIDER ------------------ 'CP FROM XP'
 
            CASE ('SG')
 C             FROM TO SGI BYTE FORMAT --------------------- 'CP FROM SG'
-              CALL ERRT(101,"USE OPERATION: <CP TO OPEND> ",IDUM)
+              CALL ERRT(101,"USE OPERATION: <CP TO OPEND> ",NE)
 
            CASE ('TI')
 C             FROM TIFF TO SPIDER FORMAT ----------------- 'CP FROM TIF'
@@ -232,18 +271,18 @@ C             FROM TIFF TO SPIDER FORMAT ----------------- 'CP FROM TIF'
 
 
            CASE DEFAULT
-
 C             NO SUCH COPY FUNCTION
-              CALL ERRT(101,"NO SUCH 'CP' OPERATION, CHECK MENU",IDUM)
+              CALL ERRT(101,"NO SUCH 'CP' OPERATION, CHECK MENU",NE)
 
            END SELECT
 
         CASE DEFAULT
-           CALL ERRT(101,'NO SUCH CP OPERATION, CHECK MENU',IDUM)
+           CALL ERRT(101,'NO SUCH CP OPERATION, CHECK MENU',NE)
 
         END SELECT
 
 9000    CLOSE(LUN1)
         CLOSE(LUN2)
+        IF (ALLOCATED(ILIST)) DEALLOCATE(ILIST)
 
         END
