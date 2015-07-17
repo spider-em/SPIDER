@@ -1,10 +1,11 @@
 
 C **********************************************************************
-C                                                                      
-C  GETHEDCCP4                                                                      *
+C 
+C  GETHEDCCP4                                                  
 C                INTEL BYTE_ORDER                  JUL 09 ARDEAN LEITH
 C                FORMATTING                        SEP 14 ARDEAN LEITH
 C                FORMATTING                        JAN 15 ARDEAN LEITH
+C                ISPG PASSED                       JUL 15 ARDEAN LEITH
 C                                                                      
 C **********************************************************************
 C=*                                                                    *
@@ -29,50 +30,51 @@ C=*                                                                    *
 C **********************************************************************
 C                                                                      
 C  GETHEDCCP4(HEADBUF,NX,NY,NZ,IMODE,DMIN,DMAX,
-C             DMEAN,RMS,NSYMBT,ISSWABT,FLIP,MACHST,IRTFLG)
+C             DMEAN,RMS,NSYMBT,ISSWABT,FLIP,MACHST,ISPG,MZ,IRTFLG)
 C                                                                      
-C  PURPOSE:     DECODE CCP4 (MRC IMAGE 2000) HEADER                                        *
+C  PURPOSE:     DECODE CCP4 (MRC IMAGE 2000) HEADER      
 C                                            
 C  PARAMETERS: 
 C  
 C  MAP/IMAGE HEADER FORMAT
 C 
-C 	LENGTH = 1024 BYTES, ORGANIZED AS 56 LONG WORDS FOLLOWED
-C                BY SPACE FOR 10 80 BYTE TEXT LABELS.
+C  LENGTH = 1024 BYTES, ORGANIZED AS 56 LONG WORDS FOLLOWED
+C           BY SPACE FOR 10 80 BYTE TEXT LABELS.
 C 
-C  1	NX		# OF COLUMNS	(FASTEST CHANGING IN MAP)
-C  2	NY		# OF ROWS
-C  3	NZ		# OF SECTIONS 	(SLOWEST CHANGING IN MAP)
-C  4	MODE		DATA TYPE
-C			0	IMAGE : SIGNED 8-BIT BYTES RANGE -128 	
-C					TO 127				
-C			1	IMAGE : 16-BIT HALFWORDS		
-C			2	IMAGE : 32-BIT REALS			
-C			3	TRANSFORM : COMPLEX 16-BIT INTEGERS	
-C			4	TRANSFORM : COMPLEX 32-BIT REALS	
-C  5	NXSTART		NUMBER OF FIRST COLUMN  IN MAP 
-C  6	NYSTART		NUMBER OF FIRST ROW     IN MAP       
-C  7	NZSTART		NUMBER OF FIRST SECTION IN MAP       
-C  8	MX		NUMBER OF INTERVALS ALONG X
-C  9	MY		NUMBER OF INTERVALS ALONG Y
-C 10	MZ		NUMBER OF INTERVALS ALONG Z
-C 11-13	CELLA           CELL DIMENSIONS IN ANGSTROMS
-C 14-16	CELLB           CELL ANGLES IN DEGREES				
-C 17	MAPC		AXIS CORRESPONDING TO COLUMNS  (1,2,3 FOR X,Y,Z)
-C 18	MAPR		AXIS CORRESPONDING TO ROWS     (1,2,3 FOR X,Y,Z)
-C 19	MAPS		AXIS CORRESPONDING TO SECTIONS (1,2,3 FOR X,Y,Z)
-C 20	DMIN		MINIMUM DENSITY VALUE
-C 21	DMAX		MAXIMUM DENSITY VALUE
-C 22	DMEAN		MEAN    DENSITY VALUE    
-C 23	ISPG		SPACE GROUP NUMBER 0 OR 1 (DEFAULT=0)
-C 24	NSYMBT		NUMBER OF BYTES USED FOR SYMMETRY DATA (0 OR 80)
+C  1    NX              # OF COLUMNS    (FASTEST CHANGING IN MAP)
+C  2    NY              # OF ROWS
+C  3    NZ              # OF SECTIONS   (SLOWEST CHANGING IN MAP)
+C  4    MODE            DATA TYPE
+C                       0   IMAGE: SIGNED 8-BIT BYTES RANGE -128 -->127                          
+C                       1   IMAGE: 16-BIT HALFWORDS                
+C                       2   IMAGE: 32-BIT REALS                    
+C                       3   TRANSFORM: COMPLEX 16-BIT INTEGERS     
+C                       4   TRANSFORM: COMPLEX 32-BIT REALS        
+C                       6   IMAGE : UNSIGNED 8-BIT BYTES RANGE 0 -->255        
+C  5    NXSTART         NUMBER OF FIRST COLUMN  IN MAP 
+C  6    NYSTART         NUMBER OF FIRST ROW     IN MAP       
+C  7    NZSTART         NUMBER OF FIRST SECTION IN MAP       
+C  8    MX              NUMBER OF INTERVALS ALONG X
+C  9    MY              NUMBER OF INTERVALS ALONG Y
+C 10    MZ              NUMBER OF INTERVALS ALONG Z    (>1 FOR STACK)
+C 11-13 CELLA           CELL DIMENSIONS IN ANGSTROMS
+C 14-16 CELLB           CELL ANGLES IN DEGREES                          
+C 17    MAPC            AXIS CORRESPONDING TO COLUMNS  (1,2,3 FOR X,Y,Z)
+C 18    MAPR            AXIS CORRESPONDING TO ROWS     (1,2,3 FOR X,Y,Z)
+C 19    MAPS            AXIS CORRESPONDING TO SECTIONS (1,2,3 FOR X,Y,Z)
+C 20    DMIN            MINIMUM DENSITY VALUE
+C 21    DMAX            MAXIMUM DENSITY VALUE  
+C 22    DMEAN           MEAN    DENSITY VALUE  
+C 23    ISPG            SPACE GROUP NUMBER  (IMAGES == 0, VOL. == 1 )
+C 24    NSYMBT          NUMBER OF BYTES USED FOR SYMMETRY DATA (0 OR 80)
+C                       PLUS ANY EXTRA HEADER BYTES
 C 25-49 EXTRA           EXTRA, USER DEFINED STORAGE SPACE. 29 WORDS MAX.
-C 50-52	ORIGIN          ORIGIN IN X,Y,Z USED FOR TRANSFORMS		
-C 53	MAP	        CHARACTER STRING 'MAP ' TO IDENTIFY FILE TYPE	
-C 54	MACHST          MACHINE STAMP					
-C 55	RMS	        RMS DEVIATION OF MAP FROM MEAN DENSITY		
-C 56	NLABL	        NUMBER OF LABELS BEING USED			
-C 57-256	        LABEL(20,10) 10 80-CHARACTER TEXT LABELS
+C 50-52 ORIGIN          ORIGIN IN X,Y,Z USED FOR TRANSFORMS             
+C 53    MAP             CHARACTER STRING 'MAP ' TO IDENTIFY FILE TYPE   
+C 54    MACHST          MACHINE STAMP                                   
+C 55    RMS             RMS DEVIATION OF MAP FROM MEAN DENSITY          
+C 56    NLABL           NUMBER OF LABELS BEING USED                     
+C 57-256                LABEL(20,10) 10 80-CHARACTER TEXT LABELS
 C 
 C SYMMETRY RECORDS FOLLOW - IF ANY - STORED AS TEXT AS IN INTERNATIONAL
 C TABLES, OPERATORS SEPARATED BY * AND GROUPED INTO 'LINES' OF 80
@@ -81,26 +83,44 @@ C 80-CHARACTER 'LINES' AND THE 'LINES' DO NOT TERMINATE IN A *).
 C 
 C DATA RECORDS FOLLOW.
 C
+C NOTES:
+C        DMAX < DMIN                         MAX & MIN UNDETERMINED
+C        DMEAN < (SMALLER OF DMIN and DMAX)  DMEAN     UNDETERMINED
+C        RMS < 0.0                           RMS       UNDETERMINED
+C
 C23456789012345678901234567890123456789012345678901234567890123456789012
 CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 
-	SUBROUTINE GETHEDCCP4(HEADBUF,NX,NY,NZ,IMODE,DMIN,DMAX,
-     &            DMEAN,RMS,NSYMBT,ISSWABT,FLIP,MACHST,IRTFLG)
+        SUBROUTINE GETHEDCCP4(HEADBUF,NX,NY,NZ,IMODE,DMIN,DMAX,
+     &             DMEAN,RMS,NSYMBT,ISSWABT,FLIP,MACHST,
+     &             ISPG,MZ,IRTFLG)
 
+        IMPLICIT NONE
         INCLUDE 'CMBLOCK.INC'
 
         REAL                  :: HEADBUF(*)
+        INTEGER               :: NX,NY,NZ,IMODE
+        REAL                  :: DMIN,DMAX,DMEAN,RMS
+        INTEGER               :: NSYMBT
+        LOGICAL               :: ISSWABT,FLIP
+        INTEGER               :: MACHST,ISPG,MZ,IRTFLG
 
-	CHARACTER(LEN=800)    :: CLABLS
+        CHARACTER(LEN=800)    :: CLABLS
         CHARACTER(LEN=4)      :: MAP
         LOGICAL               :: BIGENDARCH,BIGENDED
         LOGICAL               :: BIGENDFILE,SAMEENDFILE
-        LOGICAL               :: FLIP,ISSWABT
+
+        INTEGER               :: MAPC,MAPR,MAPS,LNBLNKN,NXSTART
+        INTEGER               :: NYSTART,NZSTART,MX,MY
+        REAL                  :: CELLAX,CELLAY,CELLAZ
+        REAL                  :: CELLBX,CELLBY,CELLBZ
+        REAL                  :: ORX,ORY,ORZ
+        INTEGER               :: NLABL,INOW,I,IEND
 
         INTEGER               :: LENMAP
-	CHARACTER(LEN=1)      :: LXYZ(3)
+        CHARACTER(LEN=1)      :: LXYZ(3)
 
-	DATA LXYZ/'X','Y','Z'/
+        DATA LXYZ/'X','Y','Z'/
 
 C       GET CURRENT ARCHITECTURE ENDED-NESS
         BIGENDARCH = BIGENDED(0)
@@ -113,7 +133,7 @@ C       DETERMINE CURRENT FILE ENDED-NESS
 
         !write(6,*) ' mapc,mapr,maps: ',mapc,mapr,maps
 
-	SAMEENDFILE = ((MAPC.EQ.1) .OR. (MAPR.EQ.1) .OR. (MAPS.EQ.1))
+        SAMEENDFILE = ((MAPC.EQ.1) .OR. (MAPR.EQ.1) .OR. (MAPS.EQ.1))
 
         BIGENDFILE = ((      SAMEENDFILE .AND.       BIGENDARCH) .OR.
      &                (.NOT. SAMEENDFILE .AND. .NOT. BIGENDARCH))
@@ -122,27 +142,27 @@ C       IF FILE ENDEDNESS DIFFERS FROM THIS MACHINES MUST FLIP BYTES
         FLIP = .NOT. SAMEENDFILE
 
 C       WRITE OUT CONVERSION INFORMATION
-        IF (VERBOSE) THEN    	
+        IF (VERBOSE) THEN       
            IF (BIGENDARCH) THEN
-	      WRITE(NOUT,*)' On big ended architecture'
+              WRITE(NOUT,*)' On big ended architecture'
            ELSE
-	      WRITE(NOUT,*)' On little ended architecture'
+              WRITE(NOUT,*)' On little ended architecture'
            ENDIF
 
            IF (BIGENDFILE) THEN
-	      WRITE(NOUT,*)' Reading big ended file'
+              WRITE(NOUT,*)' Reading big ended file'
            ELSE
-	      WRITE(NOUT,*)' Reading little ended file'
+              WRITE(NOUT,*)' Reading little ended file'
            ENDIF
 
            IF (.NOT. ISSWABT) THEN
-	      WRITE(NOUT,*)' SPIDER I/O Native byte order'
+              WRITE(NOUT,*)' SPIDER I/O Native byte order'
            ELSE
-	      WRITE(NOUT,*)' SPIDER I/O Non-native byte order'
+              WRITE(NOUT,*)' SPIDER I/O Non-native byte order'
            ENDIF
 
            IF (FLIP) THEN
-	      WRITE(NOUT,*)' Flipping byte order'
+              WRITE(NOUT,*)' Flipping byte order'
            ENDIF
         ENDIF
 
@@ -159,10 +179,10 @@ C           OLD STYLE, MRC MAP OR UNKNOWN FILE TYPE
             WRITE(NOUT,*) ' *** BAD MAP STRING IN CCP4 FILE: ',MAP
         ENDIF
 
-	CALL MVNFLIP(HEADBUF( 1), NX,     FLIP) 
-	CALL MVNFLIP(HEADBUF( 2), NY,     FLIP)
-	CALL MVNFLIP(HEADBUF( 3), NZ,     FLIP)
-	CALL MVNFLIP(HEADBUF( 4), IMODE,  FLIP)
+        CALL MVNFLIP(HEADBUF( 1), NX,     FLIP) 
+        CALL MVNFLIP(HEADBUF( 2), NY,     FLIP)
+        CALL MVNFLIP(HEADBUF( 3), NZ,     FLIP)
+        CALL MVNFLIP(HEADBUF( 4), IMODE,  FLIP)
 
         CALL MVNFLIP(HEADBUF( 5), NXSTART,FLIP)
         CALL MVNFLIP(HEADBUF( 6), NYSTART,FLIP)
@@ -207,21 +227,21 @@ C          GET LABELS
            DO I = 57,56 + NLABL * 20
               CALL MVNREV(HEADBUF(I),CLABLS(INOW:INOW+3),ISSWABT)
               INOW = INOW + 4
-	   ENDDO
+           ENDDO
         ENDIF
 
-        IF (VERBOSE) THEN    	
+        IF (VERBOSE) THEN       
 C          WRITE OUT HEADER INFORMATION
-	   WRITE(NOUT,1000) NX,NY,NZ,IMODE,
-     &       NXSTART,NYSTART,NZSTART,MX,MY,MZ,
-     &	     CELLAX,CELLAY,CELLAZ,CELLBX,CELLBY,CELLBZ,
+           WRITE(NOUT,1000) NX,NY,NZ,IMODE,
+     &       NXSTART,NYSTART,NZSTART, MX,MY,MZ,
+     &       CELLAX,CELLAY,CELLAZ, CELLBX,CELLBY,CELLBZ,
      &       LXYZ(MAPC),LXYZ(MAPR),LXYZ(MAPS),
-     &	     DMIN,DMAX,DMEAN,RMS,ORX,ORY,ORZ,ISPG,NSYMBT,
+     &       DMIN,DMAX,DMEAN,RMS,ORX,ORY,ORZ,ISPG,NSYMBT,
      &       MACHST,MAP,NLABL
 
-1000	   FORMAT(/
-     &     2X,'Number of columns, rows, sections ........ ',3(I7,1X)/
-     &     2X,'Pixel mode ............................... ',I6/
+1000       FORMAT(/
+     &     2X,'Columns, rows, sections .................. ',3(I7,1X)/
+     &     2X,'Mode ..................................... ',I6/
      &     2X,'Start points on columns, rows, sections .. ',3I7/
      &     2X,'Grid sampling on x, y, z ................. ',3I7/
      &     2X,'Cell axes ................................ ',3F10.2/
@@ -232,22 +252,23 @@ C          WRITE OUT HEADER INFORMATION
      &     2X,'Mean density ............................. ',F25.12/
      &     2X,'RMS deviation ............................ ',F25.12/
      &     2X,'Origins .................................. ',3F10.2/
-     &	   2X,'Space group, # bytes symmetry ............ ',2I7/
-     &	   2X,'Machine stamp ............................ ',I12/
-     &     2X,'Map ......................................    ',A/
+     &     2X,'Space group, # bytes symmetry ............ ',2I7/
+     &     2X,'Machine stamp ............................ ',I12/
+     &     2X,'Map ......................................      ',A/
      &     2X,'Number of labels ......................... ',I7)
 
-	   IF (NLABL > 0) THEN
+           IF (NLABL > 0) THEN
               WRITE(NOUT,1001)
 1001          FORMAT('  Labels:')
-              WRITE(NOUT,1002) CLABLS(1:NLABL * 80)
+              IEND = lnblnkn(CLABLS)
+              WRITE(NOUT,1002) CLABLS(1:IEND)
 1002          FORMAT(3X,100(A80))
            ENDIF
            WRITE(NOUT,*) ' '
 
         ENDIF
 
-        END
+         END
 
 C --------------------------- MVNREV -------------------------------
 
