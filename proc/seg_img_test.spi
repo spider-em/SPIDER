@@ -7,29 +7,44 @@
 ;           results of 22 different SPIDER segmentation 
 ;           filters/operations.
 ;
-; INPUT:    A SPIDER image.  Operates on a windowed subimage from the image.
+; INPUT:    A SPIDER image.  Should be reasonably small (e.g. <= 500 x 500)  
 ;
-; USAGE:    Use Web -- Pixel operation to find location of a good window
-;               for testing.  Window will be 200x200 unless you alter it below.
-;           Invoke this procedure in SPIDER and it solicits input for: 
+; USAGE:    First alter: 
 ;               Input image name, 
-;               Input window location, CE AD' Denoising Iterations and Time-step
-;           To limit the types of operations studied alter the 
-;           selection toggles (e.g.[CE_GNC] = 1) in the procedure.
+;               Input parameters
+;           Then run SPIDER and invoke the procedure:
+;           spider spi/dat @seg_img_test
 ;
-;           While running - use Web to look at results in:       seg_stk 
-;           When finished - use Web to look at final montage in: seg_montage
+;           Use Web to look at results in:       seg_stk 
+;             or
+;           Use Web to look at final montage in: seg_montage
 ;
-; OUTPUT:   1) Stack of images created with various parameter settings.
+; OUTPUTS:  1) Stack of images created with various parameter settings.
 ;           2) Montage of resulting images.
 ; 
-; USAGE:    spider spi/dat @seg_test_img
+; INVOCATION:    spider spi/dat @seg_img_test
 
+
+ ; -----------------------------------  INPUT IMAGE  
+
+ [imgin] = 'sav_bz_sli_75'      ; Input image file  
+ [imgin] = 't4_59_win'          ; Input image file  
+
+ ; -----------------------------------  OUTPUT FILES  
+
+ [stkout]  = 'seg_stk'          ; Labeled output stack file
+ [montage] = 'seg_montage'      ; Final labeled output montage
+
+ ; -----------------------------------  INPUT PARAMETERS  
+
+ ; Set parameters for initial denoising using 'CE AD'
+ [aditer]  =   5                ; Iteration ('CE AD' Iterations)
+ [time]    = .02                ; Time-step ('CE AD' Time step) (0... 0.25)
+ [sigma]   = 3.0                ; Sigma     ('CE AD' Standard deviation)
+ [lambda]  =  10                ; Lambda    ('CE AD' Contrast) (integers)
 
  ; Toggles to select type of input and types of outputs
  ; Value of '1' is true.
-
- [FR]        = 1     ; = 1 Use 'FR' Interactive input instead of local file input
 
  [CE_GNC]    = 1
  [CE_MED]    = 1
@@ -54,117 +69,61 @@
  [CE_TOP]    = 1         ; Usefull for particles only
  [FQ]        = 1         
 
- ; -----------------------------------  DEFAULT INPUT IMAGE  
- IF ([FR] .EQ. 0) THEN
-    [imgin] = 'sav_bz_sli_75'    
- ENDIF
-
- ; -----------------------------------  OUTPUT FILES  
-
- [stkout]  = 'seg_stk'          ; Labeled output stack file
- [montage] = 'seg_montage'      ; Final labeled output montage
-
- ; -----------------------------------  INPUT PARAMETERS  
-
- FI H [nx],[ny],[nz]
-   [imgin]                      ; Original image            (input)
-   NX,NY,NZ                     ; NX,NY, & NZ locations
-
- [wnx]     = 350                ; Window X dimension
- [wny]     = 350                ; Window Y dimension
-
- IF ([FR] .EQ. 0) THEN
-  [wx]     = [nx]/2 - [wnx]/2   ; Window upper left X location 260
-  [wy]     = [ny]/2 - [wnx]/2   ; Window upper left Y location 50
-
-  [aditer] =   5                ; Iteration
-  [time]   = .02                ; Time-step (0... 0.25)
- ENDIF
-
- [sigma]   = 3.0                ; Sigma     ('CE AD' Standard deviation)
- [lambda]  =  10                ; Lambda    ('CE AD' Contrast-- integers)
-
  ; -------------- END BATCH HEADER -------------------------------------------
 
- IF ([FR] .NE. 0) THEN          ; Interative input parameters
-    FR                          ; Input image
-      ? Input image?[imgin] 
 
-    ; Report input image size, location, etc
-    VM
-      echo " Size:       {****[nx]} x {****[ny] x {****[nz]}  "
+ ; ----------------------------------- INITIALIZATION
 
-    FR
-      ? Window location- X,Y,Z?[location]
-    RR S [wx][wy],[slice]       ; Split out variables  
-      [location]                ; Variable
-      1                         ; Positions
-
-    FR
-      ? AD Iterations & Time-Step?[iterations]
-    RR S [aditer][time]         ; Split out variables 
-      [iterations]              ; Variable    
-      1                         ; Positions
-
-    VM
-      echo "  "
- ELSE
-    VM
-      echo " File:       [imgin]"
- ENDIF
-
-
-; Remove any existing output files
+ ; Remove any existing output files
  DE 
    [stkout] 
  DE 
-   [montage] 
-    
+   [montage]
+ 
  ; Report input image size, location, etc
- FI H [nx],[ny],[nz]
-   [imgin]                      ; Input image 
-   NX,NY,NZ                     ; NX,NY,NZ locations
-  
- VM
-   echo " Size:       {****[nx]} x {****[ny]} x {****[nz]}  "
- VM
-   echo " Windowed:   {****[wnx]} x {****[wny]}  "
- VM
-   echo "       At:   {****[wx]},  {****[wy]} "
+ FI H [nx],[ny],[nz],[fmax],[fmin],[favg]
+   [imgin]                   ; Original image        (input)
+   NX,NY,NZ,MAX,MIN,AV       ; NX,NY, & NZ locations
+           
+ SYS
+   echo " File:         [imgin]"
+ SYS
+   echo " Size:         {%i0%[nx]} x {%i0%[ny]} x {%i0%[nz]}  "
 
+ IF ([nz] > 1) THEN
+   SYS
+     echo " Does not work in volumes,  Window out a slice!  "
+   EN
+ ENDIF
 
- ; Window the input image  
- WI                             ; Window operation
+ SYS
+   echo ' Image range: {%f9.2%[fmin]} ... {%f8.2%[fmax]}  Avg: {%f8.2%[favg]} '
+
+ ; Copy the input image to inline file 
+ CP                             ; Copy operation
    [imgin]                      ; Image                  (input)
    _1                           ; Image                  (output
-   [wnx],[wny]                  ; Window size
-   [wx],[wy]                    ; Window location
 
  ; Scale image values: 0...255
  AR SCA                         ; Scale image 0...255
    _1                           ; Image                  (input
    _2                           ; Image                  (output)
- 0 255                          ; Scaling range
+   0 255                        ; Scaling range
 
- ;NEG                           ; Negate the image (MAY NOT BE NECESSARY)
+ ;NEG                           ; Negate the image (MAY BE NECESSARY)
   ;_2                           ; Image                  (input)
   ;_2                           ; Image                  (output) 
 
-
- ; Report windowed image range (For setting threshold)
- FI H [fmax],[fmin],[favg]
+ ; Report scaled image range (For setting threshold)
+ FI H [max],[min],[iavg]
    _2                            ; Image                  (input)
    MAX,MIN,AVG
- VM
-   echo " Avg:        {***[favg]}"
- VM
-   echo "  "
- VM                
-   echo " Denoising Iter:{***[aditer]}  Time:{%f3.2%[time]}  S:{%f3.1%[sigma]} L: {**[lambda]}" 
- VM
+ SYS
+   echo ' Image scaled:        {%i0%[min]} ... {%i0%[max]}       Avg:  {%f6.2%[iavg]}'
+ SYS
    echo "  "
 
- [imgnum] = 0                  ; Initialize output image 
+ [imgnum] = 0                  ; Initialize output image number
 
  ; ----------------------------------- ORIGINAL SLICE 
 
@@ -174,11 +133,12 @@
    [stkout]@{****[imgnum]}     ; Image                  (output) 
    ORIGINAL
 
- VM  
-   echo " N: {***[imgnum]} Original" 
+ SYS  
+   echo " N: {%i3%[imgnum]} Original" 
 
  ; ----------------------------------------- CE AD
  
+
  CE AD                         ; Anisotropic Diffusion 
    _2                          ; Input image 
    _5                          ; Image                  (output) 
@@ -194,14 +154,16 @@
    [stkout]@{****[imgnum]}     ; Image                  (output) 
    CE AD ORIGINAL
 
- VM  
-   echo " N: {***[imgnum]} CE AD Denoised Original" 
+ SYS  
+   echo " N: {%i3%[imgnum]} CE AD       Iter: {%i0%[aditer]}  Time: {%f3.2%[time]}  S:{%f3.1%[sigma]} L: {%i0%[lambda]}" 
 
-cp
-_2
-_5
 
- IF ([CE_MED] .EQ. 1) THEN
+ ; Comment out 'CP' to use denoised image not original image!!!!
+ CP
+   _2
+   _5
+
+ IF ([CE_MED] == 1) THEN
    ; ----------------------------------- CE -- Median 
     
    DO [iter]=1,3 
@@ -218,12 +180,12 @@ _5
         [stkout]@{****[imgnum]} ; Image                  (output) 
         CE MED R:{***[radius]}
    
-      VM  
-        echo " N: {***[imgnum]} CE Median Radius: {***[radius]}" 
+      SYS  
+        echo " N: {%i3%[imgnum]} CE Median   Radius: {%i0%[radius]}" 
    ENDDO 
  ENDIF
 
- IF ([CE_GNC] .EQ. 1) THEN
+ IF ([CE_GNC] == 1) THEN
   ; ----------------------------------- CE -- GNC 
     
    DO [iter]=1,3 
@@ -241,13 +203,13 @@ _5
         [stkout]@{****[imgnum]} ; Image                  (output) 
         CE GNC L:{***[glambda]}
    
-      VM  
-        echo " N: {***[imgnum]} CE GNC Lambda: {***[glambda]}" 
+      SYS  
+        echo " N: {%i3%[imgnum]} CE GNC      Lambda: {%i0%[glambda]}" 
    ENDDO 
  ENDIF
 
 
- IF ([CE_HI] .EQ. 1) THEN
+ IF ([CE_HI] == 1) THEN
    
    ; ----------------------------------- CE -- Histogram Equalization
    
@@ -262,12 +224,12 @@ _5
      [stkout]@{****[imgnum]}    ; Image                  (output) 
    CE HI
    
-   VM  
-   echo " N: {***[imgnum]} CE HI" 
+   SYS  
+     echo " N: {%i3%[imgnum]} CE HI" 
  ENDIF
  
 
- IF ([CE_LAH] .EQ. 1) THEN
+ IF ([CE_LAH] == 1) THEN
    ; ----------------------------------- CE -- LAH 
     
    [bins]   = 64                   ; Number of bins 
@@ -287,12 +249,12 @@ _5
         [stkout]@{****[imgnum]}    ; Image                  (output) 
         CE LAH R:{**[radius]} B:{**[bins]}  
    
-      VM  
-        echo " N: {***[imgnum]} CE LAH Radius: {**[radius]} Bins: {***[bins]}" 
+      SYS  
+        echo " N: {%i3%[imgnum]} CE LAH      Radius: {%i2%[radius]} Bins: {%i0%[bins]}" 
    ENDDO
  ENDIF
 
- IF ([CE_HAR] .EQ. 1) THEN
+ IF ([CE_HAR] == 1) THEN
    ;------------------------------ CE -- Haralick 
     
    [off] = 2
@@ -313,10 +275,10 @@ _5
          LA                        ; Label the image 
            _6                      ; Image                  (input) 
            [stkout]@{****[imgnum]} ; Image                  (output) 
-           CE HAR M:{*[mode]} R:{**[radius]} O:2 
+           CE HAR M:{*[mode]} R:{%i2%[radius]} O:2 
    
-         VM
-           echo " N: {***[imgnum]} CE Haralick Radius: {**[radius]} Mode: {*[mode]} Off: 2"
+         SYS
+           echo " N: {%i3%[imgnum]} CE Haralick Radius: {%i2%[radius]} Mode: {*[mode]} Offset: 2"
       ENDDO 
    ENDDO 
    
@@ -338,15 +300,15 @@ _5
          LA                        ; Label the image 
            _6                      ; Image                   (input) 
            [stkout]@{****[imgnum]} ; Image                   (output) 
-           CE HAR M:{*[mode]} R:{**[radius]} O:4" 
+           CE HAR M:{*[mode]} R:{%i2%[radius]} O:4" 
    
-         VM
-           echo " N: {***[imgnum]} CE Haralick Radius: {**[radius]} Mode: {*[mode]} Off: 4"
+         SYS
+           echo " N: {%i3%[imgnum]} CE Haralick Radius: {%i2%[radius]} Mode: {*[mode]} Offset: 4"
       ENDDO 
    ENDDO 
  ENDIF
 
- IF ([CE_HURST] .EQ. 1) THEN
+ IF ([CE_HURST] == 1) THEN
    ;------------------------------ CE -- Hurst 
     
    DO  [iter]=1,3 
@@ -363,14 +325,14 @@ _5
         [stkout]@{****[imgnum]}    ; Image                  (output) 
         CE HURST  R:{***[radius]}
    
-      VM  
-        echo " N: {***[imgnum]} CE Hurst Radius: {***[radius]}" 
+      SYS  
+        echo " N: {%i3%[imgnum]} CE Hurst    Radius: {%i0%[radius]}" 
    ENDDO
  ENDIF
 
 
 
- IF ([CE_MAX] .EQ. 1) THEN
+ IF ([CE_MAX] == 1) THEN
    ;------------------------------ CE -- Maximum 
    
    DO [iter]=1,3 
@@ -387,12 +349,12 @@ _5
         [stkout]@{****[imgnum]}   ; Image                  (output) 
         CE MAX R:{***[radius]}
    
-      VM  
-        echo " N: {***[imgnum]} CE Max Radius: {***[radius]}" 
+      SYS  
+        echo " N: {%i3%[imgnum]} CE MAX      Radius: {%i0%[radius]}" 
    ENDDO
  ENDIF
 
- IF ([CE_VAR] .EQ. 1) THEN
+ IF ([CE_VAR] == 1) THEN
    ;------------------------------ CE -- Variance 
    
    DO  [iter]=1,3 
@@ -409,13 +371,12 @@ _5
         [stkout]@{****[imgnum]} ; Image                  (output) 
         CE VAR R:{***[radius]}
    
-      VM  
-        echo " N: {***[imgnum]} CE VAR Radius: {***[radius]}" 
+      SYS  
+        echo " N: {%i3%[imgnum]} CE VAR      Radius: {%i0%[radius]}" 
    ENDDO
  ENDIF
-lb11
 
- IF ([CE_RANGE] .EQ. 1) THEN
+ IF ([CE_RANGE] == 1) THEN
    ;------------------------------ CE -- Range 
    
    DO [iter]=1,3 
@@ -433,15 +394,13 @@ lb11
         [stkout]@{****[imgnum]} ; Image                  (output) 
         CE RANGE R:{***[radius]}
    
-      VM  
-        echo " N: {***[imgnum]} CE Range Radius: {***[radius]}" 
+      SYS  
+        echo " N: {%i3%[imgnum]} CE Range    Radius: {%i0%[radius]}" 
    ENDDO
  ENDIF
 
 
-
-
- IF ([CE_G] .EQ. 1) THEN
+ IF ([CE_G] == 1) THEN
    ;------------------------------ CE -- Gradient 
    
    CE G                         ; Gradient 
@@ -454,11 +413,11 @@ lb11
      [stkout]@{****[imgnum]}    ; Image                  (output) 
      CE GRADIENT  
    
-   VM  
-     echo " N: {***[imgnum]} CE Gradient" 
+   SYS  
+     echo " N: {%i3%[imgnum]} CE Gradient" 
  ENDIF
 
- IF ([CE_LAP] .EQ. 1) THEN
+ IF ([CE_LAP] == 1) THEN
    ;------------------------------ CE -- Laplacian 
    
    DO [iter]=0,2 
@@ -475,12 +434,12 @@ lb11
         [stkout]@{****[imgnum]} ; Image                  (output) 
         CE LAP R:{***[radius]}
    
-      VM  
-        echo " N: {***[imgnum]} CE Laplacian Radius: {***[radius]}" 
+      SYS  
+        echo " N: {%i3%[imgnum]} CE Laplacian Radius: {%i0%[radius]}" 
    ENDDO
  ENDIF
 
- IF ([CE_SO] .EQ. 1) THEN
+ IF ([CE_SO] == 1) THEN
    ;------------------------------ CE -- Sobel 
    
    CE S                        ;  
@@ -493,11 +452,11 @@ lb11
      [stkout]@{****[imgnum]}   ; Image                  (output) 
      CE SOBEL
    
-   VM  
-     echo " N: {***[imgnum]} CE Sobel" 
+   SYS  
+     echo " N: {%i3%[imgnum]} CE Sobel" 
  ENDIF
 
- IF ([CE_FREI] .EQ. 1) THEN
+ IF ([CE_FREI] == 1) THEN
    ;------------------------------ CE -- Frei Chen 
    
    CE F                         ; Frei Chen 
@@ -510,11 +469,11 @@ lb11
      [stkout]@{****[imgnum]}    ; Image                  (output)
      CE FREI-CHEN
    
-   VM  
-     echo " N: {***[imgnum]} CE Frei-Chen " 
+   SYS  
+     echo " N: {%i3%[imgnum]} CE Frei-Chen " 
  ENDIF
 
- IF ([CE_PR] .EQ. 1) THEN
+ IF ([CE_PR] == 1) THEN
    ;------------------------------ CE -- Prewitt 
    
    CE PR                        ; Prewitt  
@@ -527,11 +486,11 @@ lb11
      [stkout]@{****[imgnum]}    ; Image                  (output) 
      CE PREWITT
    
-   VM  
-     echo " N: {***[imgnum]} CE Prewitt" 
+   SYS  
+     echo " N: {%i3%[imgnum]} CE Prewitt" 
  ENDIF
 
- IF ([FC] .EQ. 1) THEN
+ IF ([FC] == 1) THEN
    ;------------------------------ FC
    
    [levels] = 4
@@ -548,11 +507,11 @@ lb11
      [stkout]@{****[imgnum]}    ; Image                  (output) 
      FC LEVELS:{**[levels]}
    
-   VM  
-     echo " N: {***[imgnum]} FC Levels: {**[levels]}" 
+   SYS  
+     echo " N: {%i3%[imgnum]} FC Levels: {%i0%[levels]}" 
  ENDIF
 
- IF ([ED] .EQ. 1) THEN
+ IF ([ED] == 1) THEN
    ;------------------------------ ED 
    
    DO  [Thresh]=1,3 
@@ -570,13 +529,13 @@ lb11
            [stkout]@{****[imgnum]} ; Image                  (output) 
            ED M:{**[mode]} T:{*[Thresh]} 
    
-         VM
-           echo " N: {***[imgnum]} ED Mode: {**[mode]} Thresh: {*[Thresh]}"
+         SYS
+           echo " N: {%i3%[imgnum]} ED Mode: {%i0%[mode]} Thresh: {%i0%[Thresh]}"
       ENDDO
    ENDDO
   ENDIF
 
- IF ([CE_WATER] .EQ. 1) THEN
+ IF ([CE_WATER] == 1) THEN
    ;------------------------------ CE WATER
    
    CE WATER                     ;  
@@ -589,13 +548,13 @@ lb11
      [stkout]@{****[imgnum]}    ; Image                  (output) 
      CE WATERSHED   
    
-   VM  
-     echo " N: {***[imgnum]} CE Watershed" 
+   SYS  
+     echo " N: {%i3%[imgnum]} CE Watershed" 
  ENDIF
 
 
 
- IF ([ER_WA] .EQ. 1) THEN
+ IF ([ER_WA] == 1) THEN
    ; ----------------------------------- ER -- Watershed 
 
    ER WA                        ; Erode to Watershed Skeleton 
@@ -608,11 +567,11 @@ lb11
      [stkout]@{****[imgnum]}    ; Image                  (output)   
      ER WA 
 
-   VM  
-     echo " N: {***[imgnum]} ER WA" 
+   SYS  
+     echo " N: {%i3%[imgnum]} ER WA" 
  ENDIF
 
- IF ([CE_RIDGE] .EQ. 1) THEN
+ IF ([CE_RIDGE] == 1) THEN
    ; ----------------------------------- CE -- Ridge 
    
    CE RIDGE                   ; Erode to Watershed Skeleton 
@@ -625,12 +584,12 @@ lb11
      [stkout]@{****[imgnum]}  ; Image                  (output) 
      CE RIDGE 
 
-   VM  
-     echo " N: {***[imgnum]} CE Ridge" 
+   SYS  
+     echo " N: {%i3%[imgnum]} CE Ridge" 
  ENDIF
 
- IF ([ER_EDM] .EQ. 1) THEN
-   ;------------------------------ ER EDM DIStance Map
+ IF ([ER_EDM] == 1) THEN
+   ;------------------------------ ER EDM Distance Map
    
    [level] = 100
    
@@ -642,14 +601,14 @@ lb11
    [imgnum]=[imgnum]+1        ; Increment stack pointer 
    LA                         ; Label the image 
      _6                       ; Image                  (input) 
-     [stkout]@{****[imgnum]} ; Image                (output) 
+     [stkout]@{****[imgnum]}  ; Image                (output) 
      ER EDM  L:{***[level]}
    
-   VM  
-     echo " N: {***[imgnum]} ER EDM Level: {***[level]}" 
+   SYS  
+     echo " N: {%i3%[imgnum]} ER EDM    Level: {%i0%[level]}" 
  ENDIF
 
- IF ([CE_TOP] .EQ. 1) THEN
+ IF ([CE_TOP] == 1) THEN
    ;------------------------------ CE -- TopHat 
    
    DO  [iter]=2,6 
@@ -667,14 +626,14 @@ lb11
         [stkout]@{****[imgnum]} ; Image                 (output) 
         CE TOPHAT R:{***[radius]}
    
-      VM  
-        echo " N: {***[imgnum]} CE TopHat Radius: {***[radius]}" 
+      SYS  
+        echo " N: {%i3%[imgnum]} CE TopHat Radius: {%i2%[radius]}" 
    ENDDO
  ENDIF
  ; ----------------------------------- 
 
 
- IF ([FQ] .EQ. 1) THEN
+ IF ([FQ] == 1) THEN
    ;------------------------------------ FQ  
     
    DO [mode]=1,2;6 
@@ -691,15 +650,15 @@ lb11
            [stkout]@{****[imgnum]} ; Image                (output) 
            FQ: {*[mode]} R:{**[radius]}  
    
-         VM
-           echo " N: {***[imgnum]}  Mode: {*[mode]} Radius: {**[radius]}"
+         SYS
+           echo " N: {%i3%[imgnum]} FQ Mode: {%i0%[mode]} Radius: {%i2%[radius]}"
       ENDDO 
    ENDDO 
    
    ;------------------------------------ FINISHED -------------------------  
 
- VM
-   echo " Total Frames: {***[imgnum]}"
+ SYS
+   echo ; echo " Total Frames: {%i3%[imgnum]}"
 
  MN S                       ; Montage the output images
    [stkout]@****            ; Image template       (input)
@@ -711,7 +670,9 @@ lb11
  FS
    [montage]                ; Output file
 
- VM
+ SYS
+   echo " Stack in:   [stkout]" 
+ SYS
    echo " Montage in: [montage]" ; echo " "
 
  EN
