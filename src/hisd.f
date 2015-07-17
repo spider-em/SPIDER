@@ -5,11 +5,12 @@ C HISD.F
 C          ADDED NBINS                           OCT 2006 ARDEAN LEITH
 C          'HIS D                                OCT 2006 ARDEAN LEITH
 C          'HIS' ONLY NOW                        FEB 2014 ARDEAN LEITH
+C          WANTDOC DECLARED                      JUN 2015 ARDEAN LEITH
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2014  Health Research Inc.,                         *
+C=* Copyright 1985-2015  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -33,8 +34,8 @@ C    PURPOSE:    COMPUTE HISTOGRAM FROM ONE COLUMN OF
 C                DOCUMENT FILE, DISPLAY HISTOGRAM ON 
 C                LINE PRINTER OR IN DOC FILE.
 C
-C    NOTES:      FCHAR = HD      - FULL HISTOGRAM TO RESULTS FILE
-C    NOTES:      FCHAR = HD D    - FULL HISTOGRAM TO DOC FILE
+C    NOTES:      FCHAR = HD      - FULL  HISTOGRAM TO RESULTS FILE
+C    NOTES:      FCHAR = HD D    - FULL  HISTOGRAM TO DOC FILE
 C    NOTES:      FCHAR = HD RD   - RANGE HISTOGRAM TO DOC FILE
 C    NOTES:      FCHAR = HD R    - RANGE HISTOGRAM TO RESULTS FILE
 C
@@ -54,6 +55,7 @@ C--*********************************************************************
 	REAL                  :: PLIST(4)
         LOGICAL               :: ADDEXT,ASKNAM,ISOLD,APPEND
         LOGICAL               :: MESSAGE,NEWFILE
+        LOGICAL               :: WANTDOC
 
 	IF (FCHAR(4:4) == 'D' ) THEN
 	  WRITE(NOUT,*) " OBSOLETE OPERATION, USE 'HD' NOW"
