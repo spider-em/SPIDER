@@ -13,7 +13,7 @@ C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Copyright 1985-2015  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -59,7 +59,7 @@ C     FOR ISTOP
      &                     IPNUMSTACK,IPARNUM
 
       ILEVEL = ILEVELT
-      IF (ILEVEL .LE. 0) ILEVEL = ISTOP
+      IF (ILEVEL <= 0) ILEVEL = ISTOP
 
       CALL SYMPAR_SUB(INPUT,OUTPUT,NCHAR,ILEVEL,DONOTRECURSE,IRTFLG)
 

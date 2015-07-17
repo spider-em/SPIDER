@@ -17,7 +17,7 @@ C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Copyright 1985-2015  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -46,7 +46,6 @@ C                   IRTFLG     RETURN FLAG (0 IS NORMAL)   (RETURNED)
 C   
 C23456789012345678901234567890123456789012345678901234567890123456789012
 C--*********************************************************************
-
 
 
       MODULE SYMPAR_STUFF
@@ -105,15 +104,14 @@ C------------------------- SETSYMPAR ---------------------------------
 
       CHARACTER(LEN=*)  :: SYMPARID,SYMPARVAL
       LOGICAL           :: LOCAL
-      CHARACTER(LEN=1)  :: NULL
+      CHARACTER(LEN=1)  :: NULL = CHAR(0)
 
       IBANK = 0
       IF (LOCAL) IBANK = ISTOP
 
-      NULL = CHAR(0)
-      IF (SYMPARID .EQ. NULL) THEN
+      IF (SYMPARID == NULL) THEN
 C        SET INITIAL VARIABLE INFO (BEST MIGRATED INTO SPIDER CALL)
-	 CALL SYMPAR_INIT(IBANK,IRTFLG)
+         CALL SYMPAR_INIT(IBANK,IRTFLG)
          IRTFLG = 0
          RETURN
       ENDIF
@@ -121,7 +119,7 @@ C        SET INITIAL VARIABLE INFO (BEST MIGRATED INTO SPIDER CALL)
 C     SEARCH FOR AN EXISTING VARIABLE OF SAME NAME
       CALL SYMPAR_FIND(IBANK,SYMPARID,ICVAR,IRTFLG)
 
-      IF (ICVAR .LE. 0) THEN
+      IF (ICVAR <= 0) THEN
 C        CREATE NEW VARIABLE 
          CALL SYMPAR_NEW(IBANK,SYMPARID,SYMPARVAL,ICVAR,IRTFLG)
 
@@ -130,7 +128,6 @@ C        REPLACE VARIABLE VALUE
          CALL SYMPAR_OLD(ICVAR,SYMPARVAL,IRTFLG)
       ENDIF
 
-      RETURN
       END
 
 C++*********************************************************************
@@ -171,13 +168,13 @@ C     WRITE(NDAT,*)' CREATING VARIABLE: ',NAME
 C     INCREMENT VARIABLE NUMBER
       ICVAR = IENDCVARNUM(IBANK) + 1
 
-      IF (IBANK .EQ. 0 .AND. ICVAR .GT. NCVAR(IBANK)) THEN
+      IF (IBANK == 0 .AND. ICVAR > NCVAR(IBANK)) THEN
 C        OVER-RUN OF GLOBAL VARIABLE VALUE ARRAY
          IT = NCVAR(IBANK)
          CALL ERRT(102,'TOO MANY GLOBAL VARIABLES REQUESTED, LIMIT',IT)
          RETURN
 
-      ELSEIF (ICVAR .GT. NCVAR(IBANK)) THEN
+      ELSEIF (ICVAR > NCVAR(IBANK)) THEN
 C        OVER-RUN OF CVAR VARIABLE VALUE ARRAY
 
          write(6,*) ' NEW VARIABLE NAME:  ',NAME
@@ -198,7 +195,7 @@ C     PLACE VARIABLE NAME STRING IN CSTRQ ARRAY
       LENVAR  = LEN(CVALUE)         ! LENGTH OF VARIABLE VALUE
       LENNAM  = LEN(NAME)           ! LENGTH OF VARIABLE NAME
 
-      IF (LENNAM .GT. 80) THEN
+      IF (LENNAM > 80) THEN
          WRITE(NOUT,*) '  VARIABLE NAME: ',NAME
          CALL ERRT(102, 'OVERLENGTH VARIABLE NAME, CHARS.',LENNAM)
          RETURN
@@ -246,7 +243,6 @@ C        OVER-RUN OF CSTRQG ARRAY
       IENDCVARNUM(IBANK) = ICVAR
       IRTFLG             = 0
 
-      RETURN
       END
 
 C++*********************************************************************
@@ -304,13 +300,13 @@ C--*******************************************************************
       IF (IBANK .LT. 0) THEN
          CALL ERRT(102,'ILLEGAL VARIABLE BANK:',IBANK)
          RETURN
-      ELSEIF (IBANK .GT. MAXPRC) THEN
+      ELSEIF (IBANK > MAXPRC) THEN
          IT     = MAXPRC
          CALL ERRT(102,'VARIABLE BANK EXCEEDS MAXPRC',IT)
          RETURN
       ENDIF
 
-      IF (NUMCVAR .LE. 0) THEN
+      IF (NUMCVAR <= 0) THEN
 C        CREATE THE CVAR STORAGE ARRAY (ONLY OCCURS ONCE)
          MWANT = NUMCVAR_ORIG + NUMCVARG_ORIG
          ALLOCATE (CVARVALUES(MWANT), STAT=IRTFLG)
@@ -328,14 +324,14 @@ C        CREATE THE CVAR STORAGE ARRAY (ONLY OCCURS ONCE)
          LENCSTRQ(1:MAXPRC) = MAXCSTRQ + MAXCSTRQG
       ENDIF
 
-      IF (IBANK .EQ. 0) THEN
+      IF (IBANK == 0) THEN
 C        INITIALIZE GLOBAL BANK ZERO, (SHOULD ONLY OCCUR ONCE)
 
          IGOCSTRQ(IBANK)    = 1
          IGOCVARNUM(IBANK)  = 1
          IENDCVARNUM(IBANK) = 0
 
-      ELSEIF (IBANK .EQ. 1) THEN
+      ELSEIF (IBANK == 1) THEN
          IGOCSTRQ(IBANK)    = MAXCSTRQG         + 1
          IGOCVARNUM(IBANK)  = NUMCVARG          + 1
          IENDCVARNUM(IBANK) = IGOCVARNUM(IBANK) - 1
@@ -355,7 +351,6 @@ C     PUT INITIAL < IN CSTRQ
 #endif
       IRTFLG = 0
  
-      RETURN
       END
 
 C++*********************************************************************
@@ -393,7 +388,7 @@ C     FOR ISTOP
       IF (ILEVEL .LT. 0) ILEVEL = ISTOP
 
       CALL SYMPAR_FIND(ILEVEL,NAME,ICVAR,IRTFLG)
-      IF (IRTFLG .EQ. 1 .OR. ICVAR .LE. 0) THEN
+      IF (IRTFLG == 1 .OR. ICVAR <= 0) THEN
 C        NOT AT THIS BANK, TRY GLOBAL
          IF (ILEVEL .NE. 0) THEN
             ILEVEL = 0
@@ -438,7 +433,7 @@ C     <> ARE USED AS VARIABLE ID DELIMITERS IN CSTRQ
       IRTFLG = 0
       ICVAR  = 0
 
-      IF (IENDQ .GT. IGOQ) THEN
+      IF (IENDQ > IGOQ) THEN
 C        SEARCH FOR THIS VARIABLE AT THIS LEVEL
          CALL ASSOCARRAY(CSTRQ(IGOQ:IENDQ),NAMET(1:LENT),
      &                   IGO,IEND,IRTFLG)
@@ -448,7 +443,7 @@ C        SEARCH FOR THIS VARIABLE AT THIS LEVEL
          write(6,*) ' IN: ',CSTRQ(IGOQ:IENDQ)
 #endif
 
-         IF (IRTFLG .EQ. 0) THEN
+         IF (IRTFLG == 0) THEN
 C           VARIABLE EXISTS, FIND VARIABLE NUMBER
 #ifdef DEBUGD
             write(6,*) ' FOUND VAR NUMBER: ', CSTRQ(IGO:IEND)
@@ -470,7 +465,6 @@ C           VARIABLE EXISTS, FIND VARIABLE NUMBER
 
       ENDIF
 
-      RETURN
       END
 
 
@@ -530,7 +524,7 @@ C        FIND START AND END OF FIRST VARIABLE STRING IN OUTPUT
      &                  IP1,IP2,NCT)
 
 C        GET OUT OF LOOP IF NO SYMBOL SET [] FOUND
-         IF (NCT .LE. 0) EXIT
+         IF (NCT <= 0) EXIT
 
 C        FIND SYMBOL STRING FOR SUBSTITUTION.
 
@@ -543,13 +537,13 @@ C        <> ARE USED AS SYMBOL ID DELIMITERS IN CSTRQ
          IGOQ            = IGOCSTRQ(ILEVEL)
          IENDQ           = IENDCSTRQ(ILEVEL)
 
-         IF (IENDQ .GT. IGOQ) THEN
+         IF (IENDQ > IGOQ) THEN
 C           SEARCH FOR THIS LOCAL VARIABLE
             IGOQ   = IGOCSTRQ(ILEVEL)
             IENDQ  = IENDCSTRQ(ILEVEL)
             CALL SYMPAR_FIND(ILEVEL,OUTPUT(IP1:IP2),ICVAR,IRTFLG)
 
-            IF (ICVAR .GT. 0) THEN
+            IF (ICVAR > 0) THEN
 C              VARIABLE WAS FOUND
 #ifdef DEBUGD
                write(6,*) ' ILEVEL: ',ILEVEL
@@ -571,13 +565,13 @@ C              COPY CORRESPONDING CSTRQ STRING TO OUTPUT & UPDATE NCHAR
             ENDIF
          ENDIF
 
-         IF (IRTFLG .NE. 0 .AND. IENDCSTRQ(0) .GT. 0) THEN
+         IF (IRTFLG .NE. 0 .AND. IENDCSTRQ(0) > 0) THEN
 C           SEARCH FOR A GLOBAL VARIABLE
             IGOQ   = IGOCSTRQ(ILEVEL)
             IENDQ  = IENDCSTRQ(ILEVEL)
             CALL SYMPAR_FIND(0,OUTPUT(IP1:IP2),ICVAR,IRTFLG)
 
-            IF (ICVAR .GT. 0) THEN
+            IF (ICVAR > 0) THEN
 C              FOUND A GLOBAL VARIABLE
 #ifdef DEBUGD
                write(6,*) ' ILEVEL: ',ILEVEL
@@ -602,7 +596,7 @@ C              COPY CORRESPONDING CSTRQ STRING TO OUTPUT & UPDATE NCHAR
 C        END OF SUBSTITUTION
          IP2N = IP2N + (IENDQ - IGOQ) - (IP2 - IP1)
 
-         IF (ICVAR .EQ. 0) THEN
+         IF (ICVAR == 0) THEN
 C           NO SUBSTITUTION, PROBABLY A REGISTER VARIABLE
             INOT          = INOT + 1
             DONOT(INOT)   = IP1
@@ -613,7 +607,7 @@ C           NO SUBSTITUTION, PROBABLY A REGISTER VARIABLE
 C        NEXT SEARCH IS OVER WHOLE STRING
          LENT  = NCHAR
          IDONE = IDONE + 1
-         IF (IDONE .GT. 100000) THEN
+         IF (IDONE > 100000) THEN
             CALL ERRT(102,'RECURSIVE VARIABLE ???? LOOPS',IDONE)
             RETURN
          ENDIF
@@ -621,18 +615,19 @@ C        NEXT SEARCH IS OVER WHOLE STRING
       ENDDO
 
 C     END SYMBOL SUBSTITUTION 
+c     write(6,*) ' in sub, now:',nchar,':',output(1:16)
 
 C     FIX <> BEFORE RETURNING
-      IF (INOT .GT. 0) THEN
+      IF (INOT > 0) THEN
          DO IV=1,INOT,2
             I = DONOT(IV)
-            IF (OUTPUT(I:I) .EQ. '<') THEN
+            IF (OUTPUT(I:I) == '<') THEN
                OUTPUT(I:I) = '['
             ELSE
                CALL ERRT(102,'LOCATION IS NOT <',I)
             ENDIF
             I = DONOT(IV+1)
-            IF (OUTPUT(I:I) .EQ. '>') THEN
+            IF (OUTPUT(I:I) == '>') THEN
                OUTPUT(I:I) = ']'
             ELSE
                CALL ERRT(102,'LOCATION IS NOT >',I)
@@ -683,7 +678,7 @@ C--*********************************************************************
      &            'NUMBER OF VARIABLES WANTED',IRTFLG)
       IF (IRTFLG .NE. 0) RETURN
 
-      IF (NCVARN .GT. NCVAR(MAXPRC)) THEN
+      IF (NCVARN > NCVAR(MAXPRC)) THEN
          ALLOCATE (CVARVALUEST(NCVARN), STAT=IRTFLG)
          IF (IRTFLG .NE. 0) THEN
             CALL ERRT(102,'UNABLE TO INCREASE VARIABLES:',NCVAR)
@@ -707,7 +702,6 @@ C--*********************************************************************
 
       IRTFLG = 0
  
-      RETURN
       END
 
 C++*********************************************************************
@@ -734,6 +728,7 @@ C--*******************************************************************
        NCHAR  =  MAXCSTRQG + MAXCSTRQ
 
        END
+
 
 C++*********************************************************************
 C
@@ -772,7 +767,7 @@ C     FIND STARTING LOCATION OF SEARCH STRING IN QSTRQ
       IGO = INDEX(QSTRQ,QFIND)
 
 C     RETURN IF NO SEARCH STRING IN QSTRQ  xlf90 compiler bug hack
-      IF (IGO .LE. 0) THEN
+      IF (IGO <= 0) THEN
           IRTFLG = 1
           RETURN
       ENDIF
@@ -792,7 +787,6 @@ C     RETURN IF NO ASSOCIATED VALUE xlf90 compiler bug hack
 
       IRTFLG = 0
 
-      RETURN
       END
 
 
