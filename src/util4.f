@@ -28,12 +28,13 @@ C                     REPLACED VAR3Q,VAR 3R         MAY 11 ARDEAN LEITH
 C                     NX, 'AP FOU' 'H' mode         MAY 12 ARDEAN LEITH
 C                     REMOVED 'HF'                  DEC 12 ARDEAN LEITH
 C                     INQUIRECOMP                   APR 13 ARDEAN LEITH
+C                     'IQ PAR' PROMPT               JUN 15 ARDEAN LEITH
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2013  Health Research Inc.,                         *
+C=* Copyright 1985-2015  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -321,7 +322,7 @@ C             DO NOT UPPERCASE THE INPUT LINE, DO NOT STRIP AFTER ;
               ENDATSEMI = .TRUE.
               STRIP     = .TRUE.
 
-              CALL RDPR('VARIABLE (WITH [])',NCHAR,CID,GETANS,
+              CALL RDPR('VARIABLE NAME (WITH [])',NCHAR,CID,GETANS,
      &             UPPER,WANTSUB,SAYPRMT,SAYANS,ENDATSEMI,STRIP,IRTFLG)
               IF (IRTFLG .NE. 0) RETURN
 
