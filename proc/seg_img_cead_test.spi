@@ -1,0 +1,256 @@
+; MASTER COPY: /usr8/spider/proc/seg_img_cead_test.spi
+;
+; AUTHOR:  ArDean Leith   October 2006 & June 2015
+;
+; PURPOSE:  Studies influence of parameter selection on
+;           results of SPIDER Anisotropic Diffusion Operation
+;            'CE AD'   "HEG"
+;
+; INPUT:    A SPIDER image.  Should be reasonably small (e.g. <= 500 x 500)
+;  
+; OUTPUTS:  1) Stack   of images created with various parameter settings.
+;           2) Montage of images created with various parameter settings.
+; 
+; USAGE:    First alter: 
+;               Input image name, 
+;               CE AD Iterations - Initial, Final, & Step
+;               CE AD Times  - Initial, Final, & Step
+;               CE AD Sigma  - Initial, Final, & Step
+;               CE AD Lambda - Initial, Final, & Step
+;
+;           Then run SPIDER and invoke the procedure:
+;           spider spi/dat @seg_img_cead_test
+;
+;           Use Web to look at results in:       seg_stk 
+;             or
+;           Use Web to look at final montage in: seg_montage
+;
+; INVOCATION:    spider spi/dat @seg_img_cead_test
+;
+; tingvol    68,229,121  10,25,5  .05,.15,.05
+; ryrvol     260,50,55   5,100,25 .00,.21,.10  20,110,90
+; benzervol  260,50,66   3,23,10  .01,.13,.06
+
+ [FR]  = 0                  ; Toggles to select type of input  Value of '1' is interactive read.
+
+ ; ----------------------------------- GET INPUT PARAMETERS
+ [nfx] = 5                       ; Frames across in montage
+
+ [FR]  = 0                       ; Toggles to select type of input  Value of '1' is interactive read.
+
+ [iter_go]     =   3             ; Starting iteration
+ [iter_end]    =  33             ; Ending iteration
+ [iter_step]   =  10             ; Iteration step 
+
+ [time_go]     = .005            ; Starting time-step (0... 0.25)
+ [time_end]    = .015            ; Ending time-step
+ [time_step]   = .005            ; Time-step step 
+
+ [sigma_go]    = 1.0             ; Starting sigma     (Standard deviation)
+ [sigma_end]   = 3.0             ; Ending sigma        
+ [sigma_step]  = 1.0             ; Sigma step
+
+ [lambda_go]   =  10             ; Starting lambda    (Contrast-- integers)
+ [lambda_end]  =  10; 20             ; Ending lambda
+ [lambda_step] =  10             ; Lambda step
+          
+ ; -----------------------------------  INPUT IMAGE  
+
+ [imgin] = 'sav_bz_sli_75'       ; Input image file  
+ [imgin] = 'small'               ; Input image file  
+ [imgin] = 't4_59_win'           ; Input image file  
+
+ ; -----------------------------------  OUTPUT FILES  
+
+ [stkout]  = 'cead_seg_stk'      ; Labeled output stack file
+
+ [montage] = 'cead_seg_montage'  ; Final labeled output montage
+
+ ; -------------- END BATCH HEADER -------------------------------------------
+
+
+ IF ([FR] .NE. 0) THEN           ; Interative input parameters
+
+   ; Input parameters  
+   FR
+     ?Input image?[imgin]
+
+   FR
+     ? Iterations- Initial, Final, & Step?[iterations]
+   RR S [iter_go],[iter_end],[iter_step]; Split out variables 
+     [iterations]               ; Variable    
+     1                          ; Positions
+
+   FR
+     ? Times- Initial, Final, & Step?[times]
+   RR S [time_go],[time_end],[time_step]; Split out variables  
+     [times]                    ; Variable
+     1                          ; Positions
+ ENDIF
+
+ ; ----------------------------------- INITIALIZATION
+
+ ; Remove any existing output files
+ DE 
+   [stkout] 
+ DE 
+   [montage]
+
+ ; Report input image size, location, etc
+ FI H [nx],[ny],[nz],[fmax],[fmin],[favg]
+   [imgin]                     ; Original image        (input)
+   NX,NY,NZ,MAX,MIN,AV         ; NX,NY, & NZ locations
+           
+ SYS
+   echo " File:         [imgin]"
+ SYS
+   echo " Size:         {%i0%[nx]} x {%i0%[ny]} x {%i0%[nz]}  "
+
+ IF ([nz] > 1) THEN
+    SYS
+      echo " Does not work in volumes,  Specify a slice!  "
+    EN
+ ENDIF
+
+ SYS
+   echo ' Image range: {%f9.2%[fmin]} ... {%f8.2%[fmax]}  Avg: {%f8.2%[favg]} '
+
+ ; Scale image values: 0...255
+ AR SCA                         ; Scale image 0...255
+   [imgin]                      ; Image           (input)
+   _9                           ; Image           (output)
+   0 255                        ; Scaling range
+
+ ;NEG                           ; Negate the image (MAY BE NECESSARY)
+  ;_9                           ; Image           (input)
+  ;_9                           ; Image           (output) 
+
+ ; Report scaled image range (For evaluating threshold)
+ FI H [max],[min],[iavg]
+   _9                           ; Scaled image    (input)
+   MAX,MIN,AVG
+ SYS
+   echo ' Image scaled:        {%i0%[min]} ... {%i0%[max]}       Avg:  {%f6.2%[iavg]}'
+ SYS
+   echo "  "
+
+ [imgnum] = 0
+
+ [iter_loops]   = 1             ; Protect against division by zero
+ IF ([iter_step] > 0) THEN
+   [iter_loops]   = INT((([iter_end]   - [iter_go])   / [iter_step]) + 0.5 ) + 1
+ ENDIF
+ [time_loops]   = 1
+ IF ([time_step] > 0) THEN
+   [time_loops]   = INT((([time_end]   - [time_go])   / [time_step]) + 0.5)  + 1
+ ENDIF
+ [sigma_loops]  = 1
+ IF ([sigma_step] > 0) THEN
+   [sigma_loops]  = INT((([sigma_end]  - [sigma_go])  / [sigma_step]))  + 1
+ ENDIF
+ [lambda_loops] = 1
+ IF ([lambda_step] > 0) THEN
+   [lambda_loops] = INT((([lambda_end] - [lambda_go]) / [lambda_step])) + 1
+ ENDIF
+
+ ; Find number of output images
+ [frames]       = [iter_loops]*[time_loops]*[sigma_loops]*[lambda_loops]
+
+ ; Report steps
+ SYS
+   echo " Iterations: {%i3%[iter_loops]}    Times:      {%i3%[time_loops]}"
+ SYS
+   echo " Sigmas:     {%i3%[sigma_loops]}    Lambdas:    {%i3%[lambda_loops]}"
+ SYS
+   echo " Tests:      {%i3%[frames]}"
+ SYS
+   echo "  "
+ SYS
+   echo " Output stack:   [stkout]"
+ SYS
+   echo " Output montage: [montage]"; echo "  "
+
+ [imgnum] = 0
+
+; ----------------------------------- Original Unfiltered Image
+
+ [imgnum] = [imgnum] + 1       ; Increment stack pointer
+
+ CP
+   _9                          ; Scaled image (input)
+   _1                          ; Image        (output)
+
+ LA                            ; Label the image 
+   _1                          ; Image                 (input)
+   [stkout]@{****[imgnum]}     ; Image                 (output) 
+   N: {%i3%[imgnum]}  Original
+
+ SYS 
+   echo " N: {%i3%[imgnum]} Scaled Unfiltered Image"
+
+  ; -----------------------------------  CE -- AD, HEG 
+
+ ; Carry out filtering steps
+
+ DO  [iter_loop]=1,[iter_loops]
+   [iter]= [iter_go] + ([iter_loop] -1) * [iter_step]
+   
+   DO  [time_loop]=1,[time_loops]
+      [time]= [time_go] + ([time_loop] -1) * [time_step]
+
+      DO  [sigma_loop]=1,[sigma_loops]
+            [sigma]= [sigma_go] + ([sigma_loop] -1) * [sigma_step]
+
+         DO  [lambda_loop]=1,[lambda_loops]
+            [lambda]= [lambda_go] + ([lambda_loop] -1) * [lambda_step]
+
+            ; Increment image stack pointer 
+            [imgnum] = [imgnum] + 1  
+   
+            CE AD                ; Anisotropic Diffusion 
+              _1                 ; Input volume 
+              _2                 ; Temp. output volume 
+              HEG                ; AD filter type
+              [iter]             ; Iterations 
+              [time]             ; Time step 
+              [sigma],[lambda]   ; Sigma & Lambda 
+ 
+            ; Echo image description to terminal
+
+            [t] = [time] * 1000
+            SYS                  ; Systems call
+               echo " N: {%i3%[imgnum]}  Iter: {%i2%[iter]}  Tx1000: {%i2%[t]}  S: {%f3.1%[sigma]} L: {%i0%[lambda]}"
+
+            ; Put label in output image
+            LA                   ; Label the image 
+              _2                 ; Input image 
+               [stkout]@{****[imgnum]}            ; Output stack 
+              N: {%i3%[imgnum]}  I:{%i3%[iter]} T:{%i2%[t]} S: {%f3.1%[sigma]} L: {%i3%[lambda]}  
+
+         ENDDO
+      ENDDO
+   ENDDO
+ ENDDO
+
+ SYS
+   echo " Total Frames: {%i0%[imgnum]}"
+
+ MN S                    ; Montage the output images
+   [stkout]@****         ; Input file template
+   1-[imgnum]            ; File numbers
+   [nfx],1               ; Images / row, margin width
+   0                     ; Margin value
+   [montage]             ; Output file
+
+ FS
+   [montage]             ; Output file
+
+ SYS
+   echo " Output stack: [stkout]"
+ SYS
+   echo " Output montage: [montage]" ; echo " "
+
+ EN
+
+
+ 

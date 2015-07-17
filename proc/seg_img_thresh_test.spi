@@ -1,0 +1,281 @@
+; MASTER COPY: /usr8/spider/proc/seg_img_thresh_test.spi
+;
+; AUTHOR:   ArDean Leith   August 2013 
+;
+; PURPOSE:  Tests some SPIDER enhancement filters which require a 
+;           threshold setting with different input parameters on an image.
+.
+; INPUT:    A SPIDER image.  Should be reasonably small (e.g. <= 500 x 500)  
+;
+; USAGE:    First alter: 
+;               Input image name, 
+;               Threshold value
+;               Change loop in operation 'TH F' below
+;           Then run SPIDER and invoke the procedure:
+;           spider spi/dat @seg_img_thresh_test
+;
+;           While running - use Web to look at results in:       seg_stk 
+;           When finished - use Web to look at final montage in: seg_montage
+;
+; OUTPUTS:  1) Stack of images created with various parameter settings.
+;           2) Montage of resulting images.
+; 
+; INVOCATION:    spider spi/dat @seg_img_thresh_test
+;
+;
+; ----------------------------------- GET INPUT PARAMETERS
+
+ [FR]  = 0  ; Toggles to select type of input  Value of '1' is interactive read.
+           
+ [thr] = 20 ; Image threshold value 
+
+ ; -----------------------------------  INPUT IMAGE  
+
+ [imgin] = 'sav_bz_sli_75'      ; Input image file  
+ [imgin] = 'small'              ; Input image file  
+
+ ; -----------------------------------  OUTPUT FILES  
+
+ [stkout]  = 'thr_seg_stk'          ; Labeled output stack file
+ [montage] = 'thr_seg_montage'      ; Final labeled output montage
+
+
+ ; -------------- END BATCH HEADER -------------------------------------------
+
+ IF ( [FR] == 1) THEN
+   ; Input parameters  
+   FR
+     ?Input image?[imgin]
+
+   RR [thr]
+     ?Threshold?
+ ENDIF
+
+ ; ----------------------------------- INITIALIZATION
+
+ ; Remove any existing output files
+ DE 
+   [stkout] 
+ DE 
+   [montage]
+
+ ; Report input image size, location, etc
+ FI H [nx],[ny],[nz],[fmax],[fmin],[favg]
+   [imgin]                   ; Original image        (input)
+   NX,NY,NZ,MAX,MIN,AV       ; NX,NY, & NZ locations
+           
+ SYS
+   echo " File:         [imgin]"
+ SYS
+   echo " Size:         {%i0%[nx]} x {%i0%[ny]} x {%i0%[nz]}  "
+
+ IF ([nz] > 1) THEN
+    SYS
+      echo " Does not work in volumes,  Specify a slice!  "
+    EN
+ ENDIF
+
+ SYS
+   echo ' Image range: {%f9.2%[fmin]} ... {%f8.2%[fmax]}  Avg: {%f8.2%[favg]} '
+
+ ; Scale image values: 0...255
+ AR SCA                         ; Scale image 0...255
+   [imgin]                      ; Image           (input)
+   _9                           ; Image           (output)
+   0 255                        ; Scaling range
+
+ ;NEG                           ; Negate the image (MAY BE NECESSARY)
+  ;_9                           ; Image           (input)
+  ;_9                           ; Image           (output) 
+
+ ; Report scaled image range (For evaluating threshold)
+ FI H [max],[min],[iavg]
+   _9                           ; Scaled image    (input)
+   MAX,MIN,AVG
+ SYS
+   echo ' Image scaled:        {%i0%[min]} ... {%i0%[max]}       Avg:  {%f6.2%[iavg]}'
+ SYS
+   echo "  "
+
+[imgnum] = 0
+
+
+ ; ----------------------------------- Original Unfiltered Image
+
+ [imgnum] = [imgnum] + 1     ; Increment stack pointer
+
+ CP
+   _9                          ; Scaled image (input)
+   _8                          ; Image        (output)
+
+ LA                            ; Label the image 
+   _8                          ; Image                 (input)
+   [stkout]@{****[imgnum]}     ; Image                 (output) 
+   Original
+
+ SYS 
+   echo " N: {%i3%[imgnum]} Scaled Unfiltered Image"
+
+ ; ----------------------------------- CE -- Stretch Single
+
+ [imgnum] = [imgnum] + 1     ; Increment stack pointer
+
+ [bot] = [fmin] + 0.1 * ([fmax] - [fmin])
+ [top] = [fmax] - 0.1 * ([fmax] - [fmin])
+
+ CE ST                         ; CE ST
+   _9                          ; Scaled image (input)
+   _8                          ; Image        (output)
+   Single                      ; Single, automatic or double mapping (S/A/D)
+   [bot]                       ; Bottom density value
+   [top]                       ; Top    density value
+
+ LA                            ; Label the image 
+   _8                          ; Image                 (input)
+   [stkout]@{****[imgnum]}     ; Image                 (output) 
+   N: {%i3%[imgnum]} CE ST   S 10..90%
+
+ SYS 
+   echo " N: {%i3%[imgnum]} CE ST   S 10..90%"
+
+ ; ----------------------------------- CE -- Histogram Equalization
+
+ [imgnum] = [imgnum] + 1       ; Increment stack pointer
+
+ CE HI                         ; CE HI
+   _9                          ; Scaled image (input)
+   _8                          ; Image        (output)
+   N                           ; No print
+
+ LA                            ; Label the image 
+   _8                          ; Image                 (input)
+   [stkout]@{****[imgnum]}     ; Image                 (output) 
+   N: {%i3%[imgnum]} CE HI
+
+ SYS 
+   echo " N: {%i3%[imgnum]} CE HI"
+
+ ; ----------------------------------- CE LAH -- Local Histogram Equal.
+
+ DO [s]=6,11
+   [imgnum] = [imgnum] + 1    ; Increment stack pointer
+
+   [size] = [s] * 2 + 1
+
+   CE LAH                     ; Local Histogram
+     _9                       ; Scaled image (input)
+     _8                       ; Image        (output)
+     [size]                   ; Local Area Size
+     64                       ; Bins
+
+   LA                         ; Label the image 
+     _8                       ; Image                 (input)
+     [stkout]@{****[imgnum]}  ; Image                 (output) 
+     N: {%i3%[imgnum]} CE LAH: Size: {%i2%[size]}
+
+   SYS
+     echo " N: {%i3%[imgnum]} CE LAH: Size: {%i2%[size]}"
+
+ ENDDO
+
+ ; ----------------------------------- ER EDM DIStance Map
+
+ [imgnum] = [imgnum] + 1     ; Increment stack pointer
+
+ ER EDM                      ; Distance Map
+   _9                        ; Stacked image (output)
+   _8                          ; Image        (output)
+   [thr]                     ; Threshold
+
+ LA                          ; Label the image 
+   _8                        ; Image                 (input)
+   [stkout]@{****[imgnum]}   ; Image                 (output) 
+   N: {%i3%[imgnum]} ER EDM  Thresh: {%i3%[thr]}
+
+ SYS
+   echo " N: {%i3%[imgnum]} ER EDM  Thresh: {%i3%[thr]}"
+
+
+ ; ----------------------------------- FC
+
+ [imgnum] = [imgnum] + 1     ; Increment stack pointer
+ FC                          ; FC
+   _9                        ; Scaled image (input)
+   _8                          ; Image        (output)
+   4                         ; Number of Contours
+   NO                        ; No overwrite
+
+ LA                          ; Label the image 
+   _8                        ; Image                 (input)
+   [stkout]@{****[imgnum]}   ; Image                 (output) 
+   N: {%i3%[imgnum]} FC      Contours: 4
+
+ SYS
+   echo " N: {%i3%[imgnum]} FC      Contours: 4"
+
+
+; ----------------------------------- FC E
+
+ [imgnum] = [imgnum] + 1     ; Increment stack pointer
+ FC E                        ; FC E
+   _9                        ; Scaled image (input)
+   _8                        ; Image        (output)
+   [thr]                     ; Bottom Contour
+   10                        ; Increment
+   NO                        ; No overwrite
+
+ LA                          ; Label the image 
+   _8                        ; Image                 (input)
+   [stkout]@{****[imgnum]}   ; Image                 (output) 
+   N: {%i3%[imgnum]} FC E    Thresh: {%i3%[thr]}
+
+ SYS
+   echo " N: {%i3%[imgnum]} FC E    Thresh: {%i3%[thr]}"
+
+
+; ----------------------------------- TH F
+
+ DO [t] = 10,180,30            ; Loop over threshold values
+
+   [imgnum] = [imgnum] + 1     ; Increment stack pointer
+
+   TH F                        ; Fixed level thresholding
+     _9                        ; Scaled image (input)
+     _8                        ; Image        (output)
+     B                         ; Below
+     [t]                       ; Threshold
+     [fmin]                    ; Min
+
+   LA                          ; Label the image 
+     _8                        ; Image                 (input)
+     [stkout]@{****[imgnum]}   ; Image                 (output) 
+     N: {%i3%[imgnum]} TH F    Thresh: {%i3%[t]} 
+
+   SYS
+     echo " N: {%i3%[imgnum]} TH F    Thresh: {%i3%[t]}"
+
+ ENDDO
+
+   ;------------------------------------ FINISHED -------------------------  
+
+ SYS
+   echo ; echo " Total Frames: {%i3%[imgnum]}"
+
+ MN S                         ; Montage the output images
+   [stkout]@****              ; Image template       (input)
+   1-[imgnum]                 ; File numbers
+   4,1                        ; Images / row, margin width
+   0                          ; Margin value
+   [montage]                  ; Montage file         (output)
+
+ FS
+   [montage]                  ; Output file
+
+ SYS
+   echo " Stack in:   [stkout]" 
+ SYS
+   echo " Montage in: [montage]" ; echo " "
+
+EN
+
+
