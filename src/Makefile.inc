@@ -151,7 +151,8 @@ ELEMENTS =  \
  $(LIB)(copyangles.o)  \
  $(LIB)(copyangles_1.o)\
  $(LIB)(copybrix.o)\
- $(LIB)(copyccp4.o)\
+ $(LIB)(copyfromccp4.o)\
+ $(LIB)(copytoccp4.o)\
  $(LIB)(copyemi.o) \
  $(LIB)(copyd.o)   \
  $(LIB)(copye.o)   \
@@ -545,6 +546,7 @@ ELEMENTS =  \
  $(LIB)(openstk.o) \
  $(LIB)(opfilec.o) \
  $(LIB)(opfiles.o) \
+ $(LIB)(opstreamfile.o) \
  $(LIB)(opsf3_p.o) \
  $(LIB)(opsf_p.o) \
  $(LIB)(oracfmsk.o) \
