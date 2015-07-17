@@ -9,11 +9,13 @@ C              PROMPT                             SEP 2009 ARDEAN LEITH
 C              TEXT FILE PROMPT                   NOV 2009 ARDEAN LEITH
 C              ! COMMENT DELIMITER                DEC 2011 ARDEAN LEITH
 C              'FR N' / INPUT BUG                 APR 2014 ARDEAN LEITH
+C              PARSESYMPAR REWRITE                JUN 2015 ARDEAN LEITH
+C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2014  Health Research Inc.,                         *
+C=* Copyright 1985-2015  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -46,7 +48,7 @@ C                |                     SETSYMPAR
 C                |                                     
 C       'FR L'   |-> LOCALSYMPAR   
 C                |     v            
-C          'FR'  |-> RDPRMC ----->  RDPR -> FRSYMPAR  -> PARSESYMPAR                    ^
+C       'FR'     |-> RDPRMC ----->  RDPR -> FRSYMPAR  -> PARSESYMPAR                    ^
 C                     ^                                  EVALSYMPAR
 C                     ^                                  SETSYMPAR
 C      ?..? [ID] -----' (FILERD)                              
@@ -60,11 +62,11 @@ C--*********************************************************************
         INCLUDE 'CMBLOCK.INC'
         INCLUDE 'CMLIMIT.INC'
 
-        CHARACTER (LEN=1)   :: NULL,FCVAL
         CHARACTER (LEN=160) :: PROMPTNID,SYMPARVAL
         LOGICAL             :: CLOSEIT,WANTSUB,BIND
 
-        NULL = CHAR (0)
+        CHARACTER (LEN=1)   :: FCVAL
+        CHARACTER (LEN=1)   :: NULL = CHAR(0)
 
         SELECT CASE (FCHAR(4:4))
 
@@ -75,24 +77,24 @@ C          GLOBAL VARIABLE & VALUE FROM  TEXT FILE --------------- FR F
         CASE('N') 
 C          NEXT GLOBAL VARIABLE & VALUE FROM  TEXT FILE ---------- FR N
 C          READS LINE_BY_LINE
-           CLOSEIT = (FCHAR(5:5) .EQ. 'E')
+           CLOSEIT = (FCHAR(5:5) == 'E')
            LUNTEXT = 103
            CALL SYMPARTEXT(CLOSEIT,LUNTEXT,IRTFLG)
 
         CASE('G')
 C          GLOBAL VARIABLE & VALUE FROM  INPUT ------------------- FR G
 C          GET GLOBAL  PARAMETER & ASSOCIATED VALUE FROM INPUT 
-           BIND = (FCHAR(5:5) .EQ. 'S')
+           BIND = (FCHAR(5:5) == 'S')
            CALL LOCALSYMPAR(.FALSE.,BIND,SYMPARVAL,IRTFLG)
 
         CASE('L')
 C          LOCAL VARIABLE & VALUE FROM  INPUT -------------------- FR L
 C          GET LOCAL  PARAMETER & ASSOCIATED VALUE FROM INPUT 
-           BIND = (FCHAR(5:5) .EQ. 'S')
+           BIND = (FCHAR(5:5) == 'S')
            CALL LOCALSYMPAR(.TRUE.,BIND,SYMPARVAL,IRTFLG)
 
         CASE DEFAULT
-C          FILE READ ----------------------------------------------- FR 
+C          FILE READ --------------------------------------------- FR 
 C          GET "?-----? PROMPT,PARAMETER NUMBER, AND ASSOCIATED VALUE
 C          FROM CALLER (CALLER CAN BE PROCEDURE OR INTERACTIVE RUN)
 
@@ -106,8 +108,7 @@ C          READ AND SET A SYMBOL
 
          END SELECT
 
-       RETURN
-        END
+       END
 
 
 C++*********************************************************************
@@ -138,32 +139,26 @@ C--*********************************************************************
       INCLUDE 'CMBLOCK.INC' 
       INCLUDE 'CMLIMIT.INC' 
  
-      CHARACTER (LEN=*) ::         SYMPAROUT,PROMPTNID
-      CHARACTER (LEN=2*MAXNAM) ::  SYMPARID,PROMPT,SYMPARIN,COMMENTSTR
-      CHARACTER (LEN=1) ::         NULL,CDUM
-      LOGICAL   ::                 CALLERRT
+      CHARACTER (LEN=*)        :: SYMPAROUT,PROMPTNID
+      CHARACTER (LEN=2*MAXNAM) :: SYMPARID,PROMPT,SYMPARIN,COMMENTSTR
+      CHARACTER (LEN=1)        :: CDUM
+      LOGICAL                  :: CALLERRT
+      CHARACTER(LEN=1)         :: NULL = CHAR(0)
 
 C     FOR VARIABLE  HANDLING 
       INTEGER, DIMENSION(MAXPRC) :: IPSTACK,IPNUMSTACK,IPARNUM
       COMMON /QSTR_STUFF1/ ISTOP,ITI,ITIN,IWHERE,IPSTACK,
      &                     IPNUMSTACK,IPARNUM
-#ifdef USE_MPI
-      include 'mpif.h'
-      icomm = MPI_COMM_WORLD
-      call MPI_COMM_RANK(icomm, mypid, ierr)
-#else
-      MYPID = -1
-#endif
 
-      NULL = CHAR(0)
+      CALL SET_MPI(ICOMM,MYPID,MPIERR)  ! SETS ICOMM AND MYPID
 
 C     EXTRACT PROMPT & ID  FROM PROMPTNID INPUT STRING
       CALLERRT = .TRUE.
       CALL PARSESYMPAR(PROMPTNID,NULL,PROMPT,NCHARP,
      &                 SYMPARID,NCHARI,CDUM,NDUM,CALLERRT,IRTFLG)
-      IF (PROMPT .EQ. NULL) RETURN
+      IF (PROMPT == NULL) RETURN
 
-      IF (SYMPARID .EQ. NULL .AND. CALLERRT) THEN
+      IF (SYMPARID == NULL .AND. CALLERRT) THEN
 C        MUST CREATE A NUMERICAL LABEL
          INUM           = IPARNUM(ISTOP) + 1
          IPARNUM(ISTOP) = INUM
@@ -190,7 +185,7 @@ C        INCREMENT BATCH LINE POINTER FOR FURTHER READS
 C        '?...?' FROM BATCH TO INTERACTIVE MODE
 
 C        WRITE  ?---? PROMPT TO TERMINAL 
-         IF (MYPID .LE. 0) THEN
+         IF (MYPID <= 0) THEN
             WRITE(ITI,991,ADVANCE='NO') PROMPT(1:NCHARP)
          ENDIF
 991      FORMAT( ' .',A,': ')
@@ -208,11 +203,11 @@ C     STRIP LEADING & TRAILING BLANKS IN SYMPARIN BEFORE COMMENT
 
       NLENBRAK = 1
 C     LOOP TO CHECK FOR ALL [] PAIRS
-      DO WHILE (NLENBRAK .GT. 0)
+      DO WHILE (NLENBRAK > 0)
          CALL CHARINSIDE(SYMPARIN(1:NCHAR),'[',']',.FALSE.,.FALSE.,
      &                   IGOBRAK,IENDBRAK,NLENBRAK)
 
-         IF (NLENBRAK .GT. 0) THEN      
+         IF (NLENBRAK > 0) THEN      
 C           CONVERT  [] VARIABLE DELIMITERS TO QSTRQ <> FORMAT
             SYMPARIN(IGOBRAK:IGOBRAK)   = '<'
             SYMPARIN(IENDBRAK:IENDBRAK) = '>'
@@ -225,18 +220,18 @@ C     SUBSTITUTE FOR VARIABLES & REGISTERS IN HIGHER LEVEL PROCEDURES
       IF (CALLERRT) THEN
 C        SET VARIABLE AT THIS LEVEL
          CALL SETSYMPAR(SYMPARID(1:NCHARI),SYMPAROUT(1:NCHARV),
-     &               .TRUE.,IRTFLG)
+     &                 .TRUE.,IRTFLG)
       ENDIF
 
 C     WRITE TO  RESULTS FILE
-      IF (MYPID .LE. 0) THEN
+      IF (MYPID <= 0) THEN
          WRITE(NOUT,*) ' ',SYMPAROUT(1:NCHARV)
       ENDIF 
 
 #ifdef USE_MPI
       call MPI_BARRIER(icomm,ierr)
 #endif
-      RETURN
+
       END
 
 
@@ -263,9 +258,9 @@ C--*********************************************************************
       INCLUDE 'CMBLOCK.INC' 
       INCLUDE 'CMLIMIT.INC' 
  
-      CHARACTER (LEN=MAXNAM) ::  FILNAM,RECLIN,SYMPARID,SYMPARVAL
-      CHARACTER (LEN=MAXNAM) ::  COMMENTSTR
-      CHARACTER (LEN=1)      ::  CDUM
+      CHARACTER (LEN=MAXNAM) :: FILNAM,RECLIN,SYMPARID,SYMPARVAL
+      CHARACTER (LEN=MAXNAM) :: COMMENTSTR
+      CHARACTER (LEN=1)      :: CDUM
 
       
       LENREC = 0
@@ -283,20 +278,20 @@ C     IGNORE COMMENT LINES
       NCHARR = lnblnkn(RECLIN)
       CALL PARSE_RESPONSE(RECLIN,NCHARR,.TRUE.,.TRUE.,
      &                    RECLIN,NCHAROUT,COMMENTSTR,NCHARC,IRTFLG)
-      IF (NCHAROUT .LE. 0) GOTO 10
+      IF (NCHAROUT <= 0) GOTO 10
 
 C     CONVERT OLD <> VARIABLE DELIMITER TO NEW: []
       IGOANG = INDEX(RECLIN(1:NCHAROUT),'<')
-      IF (IGOANG .GE. 1) THEN
+      IF (IGOANG >= 1) THEN
          RECLIN(IGOANG:IGOANG) = '['
          IENDANG = INDEX(RECLIN(1:NCHAROUT),'>')
-         IF (IENDANG .GE. 1) THEN
+         IF (IENDANG >= 1) THEN
             RECLIN(IENDANG:IENDANG) = ']'
          ENDIF
       ENDIF
  
       IEND = INDEX(RECLIN(1:NCHAROUT),']')
-      IF (IEND .LE. 1) THEN
+      IF (IEND <= 1) THEN
          WRITE(NDAT,*) '*** UNDECIPHERABLE LINE: ',RECLIN(1:NCHAROUT)
          CALL ERRT(101,'FILESYMPAR',NE)
          GOTO 10
@@ -306,7 +301,7 @@ C     EXTRACT VARIABLE ID & VALUES FROM RECLIN
       CALL PARSESYMPAR(CHAR(0),RECLIN(1:NCHAROUT),CDUM,NDUM,
      &                 SYMPARID,NCHARI,
      &                 SYMPARVAL,NCHARV,.TRUE.,IRTFLG)
-      IF (SYMPARID .EQ. CHAR(0)  .OR. IRTFLG .NE. 0) GOTO 999 
+      IF (SYMPARID == CHAR(0)  .OR. IRTFLG .NE. 0) GOTO 999 
 
 C     SET GLOBAL VARIABLE ID & VALUE
       CALL SETSYMPAR(SYMPARID(:NCHARI),SYMPARVAL(:NCHARV),
@@ -348,8 +343,9 @@ C--*********************************************************************
       CHARACTER (LEN=160)    :: RESPONSE
       CHARACTER (LEN=MAXNAM) :: SYMPARID
       LOGICAL                :: LOCAL,GETANS,STRIP,BIND
-      CHARACTER (LEN=1)      :: NULL,CDUM
+      CHARACTER (LEN=1)      :: CDUM
       LOGICAL                :: UPPER,WANTSUB,SAYPRMT,SAYANS,ENDATSEMI
+      CHARACTER(LEN=1)       :: NULL = CHAR(0)
 
       NULL = CHAR(0)
 
@@ -369,7 +365,7 @@ C     DO NOT UPPERCASE THE INPUT LINE, DO NOT SUBSTITUTE FOR REGS
 C     EXTRACT PROMPT (OLD STYLE) & ID FROM RESPONSE
       CALL PARSESYMPAR(RESPONSE(1:NCHAR),NULL,CDUM,NDUM,SYMPARID,NCHARI,
      &                 CDUM,NDUM,.FALSE.,IRTFLG)
-      IF (SYMPARID .EQ. CHAR(0)  .OR. IRTFLG .NE. 0) THEN
+      IF (SYMPARID == CHAR(0)  .OR. IRTFLG .NE. 0) THEN
          CALL ERRT(101,'SYMPAR',NE)
          RETURN
       ENDIF
@@ -378,7 +374,7 @@ C     EXTRACT  SYMBOL VALUE FROM RESPONSE(S)
       CALL PARSESYMPAR(NULL,RESPONSE(1:NCHAR),CDUM,NDUM,CDUM,NDUM,
      &                 SYMPARVAL,NCHARV,.FALSE.,IRTFLG)
 
-      IF (NCHARV .LE. 0) THEN
+      IF (NCHARV <= 0) THEN
 C        NO SYMBOL VALUE IN RESPONSE,  MUST GET SYMBOL VALUE NOW
          CALL RDPR(SYMPARID(1:NCHARI),NCHARV,SYMPARVAL,
      &       GETANS,UPPER,WANTSUB,SAYPRMT,SAYANS,ENDATSEMI,STRIP,IRTFLG)
@@ -399,56 +395,57 @@ C     SET LOCAL SYMBOL NAME & VALUE
 
 C      *********************** PARSE_RESPONSE ********************************
 
-       SUBROUTINE PARSE_RESPONSE(RESPONSE,NCHARR,ENDATSEMI,STRIP,
+       SUBROUTINE PARSE_RESPONSE(RESPONSE,NCHARR,ENDATSEMI,UNUSED,
      &                           ANSW,NCHAR,COMMENTSTR,NCHARC,IRTFLG)
 
-C      FINDS LOCATION OF COMMENT AND ANY TRAILING BLANKS BEFORE COMMENT
+C      FINDS LOCATION OF COMMENT AND STRIPS LEADING AND TRAILING
+C      BLANKS FROM ANSW STRING
 
+       IMPLICIT NONE
        CHARACTER(LEN=*) :: RESPONSE,ANSW,COMMENTSTR
-       LOGICAL          :: ENDATSEMI,STRIP
-       LOGICAL          :: KEEPGO
+       LOGICAL          :: ENDATSEMI,UNUSED
        CHARACTER(LEN=1) :: CTEMP,CTEMPJ
+       INTEGER          :: NCHARR,NCHAR,NCHARC,IRTFLG
+
+       INTEGER          :: N1,N2,I
 
        NCHAR  = 0
        NCHARC = 0
+
+       N1     = 0
+       N2     = 0
 
        DO I = 1,NCHARR
           CTEMP = RESPONSE(I:I)
 
           IF ((CTEMP == ';' .OR. CTEMP == '!') .AND. ENDATSEMI) THEN
+C            START OF COMMENT, SET COMMENT STRING AND LENGTH, EXIT
              COMMENTSTR = RESPONSE(I:)
              NCHARC     = NCHARR - I + 1
              EXIT
 
-          ELSEIF ((CTEMP .LT. '!' .OR. CTEMP .GT. '~') .AND.
-     &             .NOT. STRIP) THEN
-C            GOT NON PRINTING CHAR LIKE A BLANK
-             NCHAR = NCHAR + 1
-             ANSW(NCHAR:NCHAR) = CTEMP   ! DO NOT REPLACE WITH BLANK
+          ELSEIF (CTEMP >= '!' .AND. CTEMP <= '~' .AND. N1 == 0) THEN
+C            GOT PRINTING CHAR, KEEP IT, RECORD ANSW STRING START
+             N1 = I
 
-          ELSEIF ((CTEMP .GE. '!' .AND. CTEMP .LE. '~')) THEN
-C            GOT PRINTING CHAR
-             NCHAR             = NCHAR + 1
-             ANSW(NCHAR:NCHAR) = CTEMP
+          ELSEIF (CTEMP >= '!' .AND. CTEMP <= '~' .AND. N1 > 0) THEN
+C            GOT PRINTING CHAR, KEEP IT, RECORD ANSW STRING END
+             N2 = I
 
-          ELSEIF ((CTEMP .LT. '!' .OR. CTEMP .GT. '~') .AND.
-     &             NCHAR .GT. 0 .AND. I .LT. NCHARR) THEN
-C            GOT NON PRINTING CHAR LIKE A BLANK AFTER A PRINTING CHAR
-             KEEPGO = .FALSE.
-             DO J = I+1,NCHARR
-                CTEMPJ = RESPONSE(J:J)
-                IF ((CTEMP .GE. '!' .AND. CTEMP .LE. '~')) THEN
-C                  GOT PRINTING CHAR
-                   KEEPGO = .TRUE.
-                   EXIT
-                ENDIF
-             ENDDO
-             IF (.NOT. KEEPGO) EXIT
-             NCHAR             = NCHAR + 1
-             ANSW(NCHAR:NCHAR) = CTEMP
-           ENDIF
+          ELSEIF (CTEMP < '!' .OR. CTEMP > '~')   THEN
+C            GOT NON PRINTING CHAR LIKE A BLANK, IGNORE IT
+             CYCLE
+          ENDIF
        ENDDO
+
+       IF (N1 > 0)  THEN
+C          HAVE ANSW STRING
+           NCHAR        = N2 - N1 + 1
+           ANSW(:NCHAR) = RESPONSE(N1:N2)
+       ENDIF
+ 
        IRTFLG = 0
+
        END
   
 
@@ -475,7 +472,7 @@ C                 IRTFLG    ERROR RETURN FLAG                  (RET.)
 C
 C--*********************************************************************
 
-	SUBROUTINE SYMPARTEXT(CLOSEIT,LUNT,IRTFLG)
+        SUBROUTINE SYMPARTEXT(CLOSEIT,LUNT,IRTFLG)
 
         INCLUDE 'CMLIMIT.INC' 
         INCLUDE 'CMBLOCK.INC'
@@ -494,7 +491,7 @@ C--*********************************************************************
 
 C       GET VARIABLE LIST NAME
         IRTFLG = -999    ! CONVERT LEGACY REGISTERS x**
-	CALL FILERD(FRNAMET,NLET,NULL,'VARIABLE LIST',IRTFLG)
+        CALL FILERD(FRNAMET,NLET,NULL,'VARIABLE LIST',IRTFLG)
         IF (IRTFLG .NE. 0) THEN
             FIRTFLG = IRTFLG
             CALL REG_SET_NSEL(1,1,FIRTFLG,0.0,0.0,0.0,0.0,IRTFLG)
@@ -578,7 +575,7 @@ c     &             '  VALUE: ',SYMPARVAL(:LENVAR)
 
 C       DO NOT CLOSE FILE UNTIL 'FR NE' IS GIVEN!
 
-	END
+        END
 
 
 
