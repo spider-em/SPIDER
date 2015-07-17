@@ -1,17 +1,18 @@
 C++*********************************************************************
 C
 C  FOUR_FQ.F
-C                   OPFILEC                       FEB 03 ARDEAN LEITH    
-C                   COS                           JUL 12 G. KISHCHENKO    
-C                   FQ Q PARAMS                   OCT 12 ARDEAN LEITH    
-C                   RAISED SINC                   OCT 13 ARDEAN LEITH    
-C                   CREATED FROM FOUR1A           NOV 14 ARDEAN LEITH    
+C             OPFILEC                              FEB 03 ARDEAN LEITH    
+C             COS                                  JUL 12 G. KISHCHENKO    
+C             FQ Q PARAMS                          OCT 12 ARDEAN LEITH    
+C             RAISED SINC                          OCT 13 ARDEAN LEITH    
+C             CREATED FROM FOUR1A                  NOV 14 ARDEAN LEITH    
+C             VOLUME IOPT 12 & 13 TRAP for ifort   JUN 15 ARDEAN LEITH    
 C       
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2014  Health Research Inc.,                         *
+C=* Copyright 1985-2015  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -874,6 +875,14 @@ C--*******************************************************************
         PARM2SQ = PARM2**2
       
 
+        IF (IOPT == 11 .OR. IOPT == 12) THEN 
+C          BUTTERWORTH ELLIPTIC LOWPASS FILTER *********       
+C          BUTTERWORTH ELLIPTIC HIGHPASS FILTER *********      
+           CALL ERRT(101,
+     &        'OPTION NOT IMPLEMENTED FOR VOLUMES',IOPT)
+           RETURN
+        ENDIF
+
 C       KEEP ZERO TERM FOR HIGH PASS OPTIONS
         ZEROTERM = B(1,1,1)
 
@@ -1024,19 +1033,6 @@ C                   RAISED COSINE HIGHPASS FILTER ******************
                     B(I,  J,K) = B(I,  J,K) * F2
                     B(I+1,J,K) = B(I+1,J,K) * F2
 
-                 ELSEIF (IOPT == 11) THEN 
-C                   BUTTERWORTH ELLIPTIC LOWPASS FILTER *********       
-                    CALL ERRT(101,
-     &                 'OPTION NOT IMPLEMENTED FOR VOLUMES',IOPT)
-                    RETURN
-
-                 ELSEIF (IOPT == 12) THEN
-C                   BUTTERWORTH ELLIPTIC HIGHPASS FILTER *********      
-                    CALL ERRT(101,
-     &                 'OPTION NOT IMPLEMENTED FOR VOLUMES',IOPT)
-                    RETURN
-
- 
                  ELSEIF (IOPT == 13) THEN
 C                   RAISED SINC WINDOW **************************
 

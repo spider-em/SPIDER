@@ -1,12 +1,12 @@
 C ++********************************************************************
 C          
 C COPYFROMTIF      NEW                          MAR 2014 ARDEAN LEITH
-C
+C                  ALTERED FOR ifort            JUN 2015 ARDEAN LEITH
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2014  Health Research Inc.,                         *
+C=* Copyright 1985-2015  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -88,7 +88,7 @@ C *********************************************************************
         INTEGER(KIND=1),  ALLOCATABLE :: I1VALS(:)
         INTEGER(KIND=4),  ALLOCATABLE :: I4VALS(:)
 
-        CHARACTER(LEN=1), ALLOCATABLE :: CVAL(:)
+        CHARACTER(LEN=:), ALLOCATABLE :: CVAL
 
         CHARACTER(LEN=24)             :: CDATE
 
@@ -291,13 +291,7 @@ C             ASCII VALUES, SET LENGTH FOR CVAL BUFFER
                  IF (ALLOCATED(CVAL)) DEALLOCATE(CVAL)
                  ICVAL_LEN = ICOUNT
 
-C POSSIBLE CODE SYNTAX FOR ifort INTEL COMPILER
-c ifdef __INTEL_COMPILER 
-c                CHARACTER(LEN=:), ALLOCATABLE :: CVAL(:)
-c                ...
-c                ALLOCATE(CHARACTER(ICVAL_LEN) :: CVAL(1))
-c endif  
- 	         ALLOCATE(CVAL(1)(ICVAL_LEN), STAT=IRTFLG)
+ 	         ALLOCATE(CHARACTER(LEN=ICVAL_LEN) :: CVAL,STAT=IRTFLG)
                 
                  IF (IRTFLG .NE. 0) THEN
                    CALL ERRT(46,'COPYFROMTIF; CVAL...',ICVAL_LEN)
@@ -439,7 +433,7 @@ c                             'PLANAR CONFIG.:',IVAL
               GOTRESU = .TRUE.
 
            ELSEIF (ITAG == 306) THEN
-             CDATE = CVAL(1)(1:22)
+             CDATE = CVAL(1:22)
 c            IF (DEBUG) WRITE(NOUT,'(2X,A,1X,200A)')'DATE & TIME:',
 c     &                                    CVAL(1)(1:ICOUNT)
              GOTDATE = .TRUE.

@@ -38,6 +38,7 @@ C                LUNDOCREDLIN ; ERRT BUG          APR 2011 ARDEAN LEITH
 C                FORMAT(  1PG13.6)                APR 2011 ARDEAN LEITH
 C                LUNDOCWRTDATF FORMAT             APR 2012 ARDEAN LEITH
 C                LABEL 92 UNDEFINED IF NOT MPI    MAR 2015 ARDEAN LEITH
+C                ENDFILE --> EOF FOR ifort        JUN 2015 ARDEAN LEITH
 C
 C **********************************************************************
 C=*                                                                    *
@@ -1259,6 +1260,7 @@ C--*********************************************************************
         INTEGER             :: ICOMM,MYPID,MPIERR,NLET,IC,I
 
         INTEGER             :: lnblnk
+        LOGICAL             :: EOF
 
         CALL SET_MPI(ICOMM,MYPID,MPIERR) ! SETS ICOMM AND MYPID
 
@@ -1319,15 +1321,15 @@ C                COMMENT LINE
               BACKSPACE(NDOC)   ! REREAD LINE
               READ(NDOC,*,END=100,IOSTAT=IER) RECLIN
 
-              ENDFILE = .TRUE.    
+              EOF = .TRUE.    
               READ(NDOC,*,END=100,IOSTAT=IER) NKEY,NREGPLINE
-              ENDFILE = .FALSE.
+              EOF = .FALSE.
            ENDIF
 
             
- 100       CALL BCAST_MPI('LUNDOCINFO','ENDFILE',ENDFILE,1,'L',ICOMM)
+ 100       CALL BCAST_MPI('LUNDOCINFO','EOF',EOF,1,'L',ICOMM)
            CALL BCAST_MPI('LUNDOCINFO','IER',IER,1,'I',ICOMM)
-           IF (ENDFILE) GOTO 799
+           IF (EOF) GOTO 799
 
            CALL BCAST_MPI('LUNDOCINFO','NKEY',NKEY,1,'I',ICOMM)
            CALL BCAST_MPI('LUNDOCINFO','NREGPLINE',NREGPLINE,1,
@@ -1435,6 +1437,7 @@ C--*********************************************************************
         REAL               :: PLIST(*)
         CHARACTER(LEN=180) :: RECLIN
         LOGICAL            :: TILLEND
+        LOGICAL            :: ERRFILE, EOF
 
         CALL SET_MPI(ICOMM,MYPID,MPIERR) ! SETS ICOMM AND MYPID
 
@@ -1464,18 +1467,18 @@ C       READ NEXT LINE FROM DOC FILE
 10      CONTINUE   
         IF (MYPID == 0) THEN
            ERRFILE = .TRUE.
-           ENDFILE = .TRUE.
+           EOF     = .TRUE.
            READ (LUNDOC,81,ERR=100,END=200) RECLIN
 81         FORMAT(A120)
            ERRFILE = .FALSE.
-           ENDFILE = .FALSE. 
+           EOF     = .FALSE. 
         ENDIF
 
 100     CALL BCAST_MPI('LUNDOCGETCOM','ERRFILE',ERRFILE,1,'L',ICOMM)
         IF (ERRFILE) GOTO 998
 
-200     CALL BCAST_MPI('LUNDOCGETCOM','ENDFILE',ENDFILE,1,'L',ICOMM)
-        IF (ENDFILE) GOTO 997
+200     CALL BCAST_MPI('LUNDOCGETCOM','EOF',EOF,1,'L',ICOMM)
+        IF (EOF) GOTO 997
 
         CALL BCAST_MPI('LUNDOCGETCOM','RECLIN',RECLIN,180,'C',ICOMM)
 
@@ -1578,14 +1581,17 @@ C--*********************************************************************
       SUBROUTINE LUNDOCSAYHDR(LUNDOC,LUNPUT,IRTFLG)
 
         CHARACTER *120 RECLIN
+
 #ifdef USE_MPI
         include 'mpif.h'
-        LOGICAL ENDFILE, ERRFILE
+        LOGICAL  :: EOF, ERRFILE
+
         ICOMM   = MPI_COMM_WORLD
         CALL MPI_COMM_RANK(ICOMM, MYPID, MPIERR)
 #else
         MYPID = -1
 #endif
+
         IRTFLG = 1
         IF (LUNDOC <= 0) RETURN
 
@@ -1595,15 +1601,15 @@ C       READ NEXT LINE FROM DOC FILE
 #ifdef USE_MPI
 10      IF (MYPID == 0) THEN
            ERRFILE = .TRUE.
-           ENDFILE = .TRUE.
+           EOF     = .TRUE.
            READ (LUNDOC,81,ERR=100,END=100) RECLIN
            ERRFILE = .FALSE.
-           ENDFILE = .FALSE.
+           EOF     = .FALSE.
         ENDIF
 
-100     CALL BCAST_MPI('LUNDOCSAYHDR','ENDFILE',ENDFILE,1,'L',ICOMM)
+100     CALL BCAST_MPI('LUNDOCSAYHDR','EOF',EOF,1,'L',ICOMM)
         CALL BCAST_MPI('LUNDOCSAYHDR','ERRFILE',ERRFILE,1,'L',ICOMM)
-        IF (ENDFILE .OR. ERRFILE) GOTO 999
+        IF (EOF .OR. ERRFILE) GOTO 999
 
         CALL BCAST_MPI('LUNDOCSAYHDR','RECLIN',RECLIN,120,'C',ICOMM)
 #else

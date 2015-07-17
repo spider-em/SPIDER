@@ -128,7 +128,7 @@ C       MAKE SURE FIRST SIZING OF COMMUN IS LARGE
         INTEGER                    :: ITIME(8)
 
 C       RANDOM NUMBER GENERATOR SEED
-#if defined (SP_GFORTRAN)
+#if defined (SP_GFORTRAN)  || defined(__GFORTRAN__)
         INTEGER,ALLOCATABLE        :: ISEED(:)       
 #else
         INTEGER                    :: ISEED(2)       
@@ -157,7 +157,7 @@ C       @@@@@@@@@@@@@@@@@@@@@@@@@@ DATA STATEMENTS @@@@@@@@@@@@@@@@@@@@
 C       @@@@@@@@@@@@@@@@@@@@@@ VERSION INITIALIZATION @@@@@@@@@@@@@@@@@
 
 CHERE               123456789 123456789 123456789 1234567890 
-        DATA CVERS/'VERSION:  UNIX  22.11 ISSUED:  5/05/2015'/
+        DATA CVERS/'VERSION:  UNIX  22.12 ISSUED:  7/17/2015'/
 
         DATA RESULM/'results'/
         DATA LOGM/'LOG'/
@@ -195,11 +195,16 @@ C       NEEDED BY PGI 2013.10 COMPILER
 
 #ifndef USE_MPI
 #ifndef __APPLE__
-        isiz1 = omp_get_stack_size()
-        CALL omp_set_stack_size(65536)
-        isiz2 = omp_get_stack_size()
+#if defined(SP_IFC) || defined(__INTEL_COMPILER)
+        isiz1 = kmp_get_stacksize()
+        CALL kmp_set_stacksize(65536)
+        isiz2 = kmp_get_stacksize()
+#else
+	isiz1 = omp_get_stack_size()
+	CALL omp_set_stack_size(65536)
+	isiz2 = omp_get_stack_size()
+#endif
         !write(6,*) ' OMP Stack size: ',isiz1,' -->',isiz2
-
 #endif
 #endif
 #endif
@@ -237,7 +242,7 @@ C       INITIALIZE SOME COMMON BLOCK DATA ELEMENTS (SEE: SETMODE.F)
         NQ12           = CHAR(34) // CHAR(39)   ! QUOTES
 
 C       SET ISEED  TO INITIAL "RANDOM" VALUE USING CLOCK
-#if defined (SP_GFORTRAN)
+#if defined (SP_GFORTRAN)  || defined(__GFORTRAN__)
         CALL RANDOM_SEED(SIZE = N)
         ALLOCATE(ISEED(N))
         CALL SYSTEM_CLOCK(COUNT = ICLOCK)
@@ -395,7 +400,7 @@ C             SPIRE IN USE, OPEN SPIRE OUTPUT FILE
 #ifdef SP_NT
               CALL ERRT(101,'PROCESS ID NOT AVAILABLE IN WINDOWS',NE)
 #else
-#ifdef SP_GFORTRAN
+#if defined (SP_GFORTRAN)  || defined(__GFORTRAN__)
               IPID =  getpid()
 #else
               IPID =  getpid(IPID)

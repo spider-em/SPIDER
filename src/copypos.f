@@ -5,12 +5,13 @@ C  COPYPOS          ALTERED FOR SPIDER           FEB 90   ARDEAN LEITH
 C	            MODIFIED FOR F90             10/22/97 yl
 C                   MODIFIED FOR F90             FEB 99   ARDEAN LEITH     
 C                   MAXNAM                       JUL 14   ARDEAN LEITH
+C                   MAX FOR IFORT                JUN 15   ARDEAN LEITH
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2014  Health Research Inc.,                         *
+C=* Copyright 1985-2015  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -269,7 +270,7 @@ C      OUTPUT ONE LINE OF DATA
           ENDIF
 
 C         GREATER OF (0 AND (THE SMALLER OF RVAL AND 255))
-          IVAL = MAX(0,MIN(RVAL, 255.))
+          IVAL = MAX(0.0, MIN(RVAL, 255.))
 
           IF (FLIP)   THEN
              IVAL = 255 - IVAL

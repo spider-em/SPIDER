@@ -56,7 +56,7 @@ C--*********************************************************************
 
       INTEGER                  :: NVARHEAD,NVARSTAR,IHEAD,ISTAR
       INTEGER                  :: NVARSPI, NVARSTARNAME,NREGSTAR 
-      INTEGER                  :: NVARSPINAME,IGOT
+      INTEGER                  :: NVARSPINAME,IGOT,NSPI
 
       CHARACTER(LEN=MAXLENVAR) :: VARHEAD     (NVARSMAX)
       CHARACTER(LEN=MAXLENVAR) :: VARSTAR     (NVARSMAX)
