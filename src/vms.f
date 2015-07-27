@@ -37,13 +37,20 @@ C--*******************************************************************
 
 	SUBROUTINE VMS(MULTILINE)
 
+        IMPLICIT NONE
 	INCLUDE 'CMBLOCK.INC' 
+
+        LOGICAL             :: MULTILINE
 
 	CHARACTER(LEN=160)  :: COMLIN
 	CHARACTER(LEN=1600) :: COMMAN
         INTEGER             :: system,lnblnkn
-        LOGICAL             :: MULTILINE,GETANS,STRIP
+        LOGICAL             :: GETANS,STRIP
         LOGICAL             :: UPPER,WANTSUB,SAYPRMT,SAYANS,ENDATSEMI
+
+        INTEGER             :: NC,IRTFLG,NCM,NDUM,I,NCT,IRET
+
+        INTEGER             :: ICOMM,MYPID,MPIERR
 
         CALL SET_MPI(ICOMM,MYPID,MPIERR)  ! SETS ICOMM AND MYPID
 
@@ -81,7 +88,7 @@ C              CONCATENATE WITH COMMAN
            ENDIF
         ENDIF                
 
-cc        write(6,*) comman(:nc)
+cc      write(6,*) comman(:nc)
 
         IF (NC < 160) COMMAN(NC+1:NC+1) = CHAR(0)
         NC = LNBLNKN(COMMAN)
@@ -107,16 +114,20 @@ cc        write(6,*) comman(:nc)
            IRET = system(COMMAN(1:NC))
         ENDIF
 
-        RETURN
 	END
 
 C      *********************** DEBRAKXREG ********************************
 
        SUBROUTINE DEBRAKXREG(CINPUT,NCHAR)
 
+       IMPLICIT NONE
+
        CHARACTER(LEN=*)   :: CINPUT
+       INTEGER            :: NCHAR
+
        CHARACTER(LEN=161) :: CSUB
        LOGICAL            :: ISDIGI
+       INTEGER            :: I,J,NDIG,IRTFLG
 
 C        CONVERT NEW: [name] FORMAT to OLD x11 REGISTER FORMAT
          I     = 1
