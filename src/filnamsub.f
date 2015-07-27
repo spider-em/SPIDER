@@ -15,12 +15,13 @@ C                  %I% BUG (not %i%               APR 2013 ArDean Leith
 C                  aa**bb**[v1][v2] BUG           OCT 2013 ArDean Leith
 C                  ff***[r1]  [ss] BUG            OCT 2013 ArDean Leith
 C                  1-[r1]  [ss] BUG               NOV 2013 ArDean Leith
+C                  igo blank format BUG           JUL 2015 ArDean Leith
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2014  Health Research Inc.,                         *
+C=* Copyright 1985-2015  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -86,8 +87,10 @@ C--*********************************************************************
       INCLUDE 'CMLIMIT.INC'
 
       CHARACTER(LEN=*)      :: FILNAM
+      INTEGER               :: NLET,IBANK,IRTFLG
 
-      CHARACTER(LEN=1)      :: JCHAR,NULL,CTEMP
+      CHARACTER(LEN=1)      :: NULL = CHAR(0)
+      CHARACTER(LEN=1)      :: JCHAR,CTEMP
       CHARACTER(LEN=4)      :: NAME
       CHARACTER(LEN=12)     :: SUBPAT
       LOGICAL               :: ISCHAR,CHKMULTIPLE
@@ -96,7 +99,6 @@ C     CHARACTER(LEN=80)     :: SUBENV,CVAL,FMT,CSUB JULY 2014 al
 
       DATA SUBPAT/'{***********'/
 
-      NULL        = CHAR(0)
       IRTFLG      = 1
       CHKMULTIPLE = .TRUE.
 
@@ -383,7 +385,7 @@ C           EAT AWAY SUPPLIED FILENAME WHEN USING - TYPE SUBSTITUTION
             IGO = IGO - NSUB
 
 C           EAT AWAY ANY PRECEEDING ASTERICKS IN FILENAME ALSO
-            DO WHILE (IGO .GE. 2 .AND. FILNAM(IGO-1:IGO-1) == '*')
+            DO WHILE (IGO >= 2 .AND. FILNAM(IGO-1:IGO-1) == '*')
                IGO  = IGO - 1
                NSUB = NSUB + 1
             ENDDO
@@ -402,6 +404,8 @@ C           USING {%...%x?} SUBSTITUTION
             FMT = '(' // FILNAM(IGO+IGOPER-1:IGO+IENDPER-1) // 
      &                 ')' //CHAR(0)
 
+            !write(6,*) 'Fmt:',fmt(1:15),':'
+
             IF (FMT(2:2) == 'i' .OR. FMT(2:2) == 'I') THEN
 C              WRITE REG. CONTENT AS INTEGER
                IF (RVALT >= 0 ) THEN
@@ -410,13 +414,16 @@ C              WRITE REG. CONTENT AS INTEGER
                   IVALT = RVALT - 0.5
                ENDIF
                WRITE(CVAL,FMT) IVALT
+
             ELSE
 C              WRITE REG. CONTENT AS REAL
                WRITE(CVAL,FMT) RVALT
             ENDIF
+
+            CVAL = adjustl(CVAL)
             NSUB = lnblnkn(CVAL) 
          ENDIF
-           
+
          NLET  = IGO + NSUB + (NLET - IEND) - 1
          NLEN  = LEN(FILNAM)
 
@@ -431,6 +438,8 @@ C        PRESERVE END OF FILENAME AFTER SUBSTITUTION AREA
 C        WRITE SUBSTITUTION CONTENTS INTO THE  STRING
          IF (NPER > 0) THEN
             FILNAM(IGO:IGO+NSUB-1) = CVAL(1:NSUB)
+
+
          ELSE
 
             CALL INTTOCHAR(IVALT,FILNAM(IGO:IGO+NSUB-1),NNN,NSUB)
@@ -442,7 +451,7 @@ C        WRITE SUBSTITUTION CONTENTS INTO THE  STRING
             ENDIF
          ENDIF
 
-         !write(6,*) ' final: ',nper,':',filnam(1:25)
+        !write(6,*) ' final: ',nper,':',filnam(1:25)
 
 C        SEE IF ANY MORE SUBSTITUTIONS ARE NEEDED
          GOTO 10
@@ -480,7 +489,7 @@ C          SUBSTITUTE CURRENT PRJEXC FOR $PRJEXT
 C        SEE IF ANY MORE SUBSTITUTIONS ARE NEEDED
          GOTO 30
       ENDIF
-      !    write(6,*) ' return: ',filnam(1:25)
+      !    write(6,*) ' Return: ',filnam(1:25)
 
       IRTFLG = 0
 
