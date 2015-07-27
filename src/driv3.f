@@ -15,7 +15,7 @@ C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2013  Health Research Inc.,                         *
+C=* Copyright 1985-2015  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -85,7 +85,7 @@ C             TRANSFER COORDINATES FROM CLUSTER FILE TO DOCUMENT
            ELSEIF (FCHAR(4:4) == 'N') THEN
 C             SAVE DOC NONLINEAR MAPPING ----------------------- SD NLM
 C             TRANSFER COORDINATES FROM NLM 2D FILE TO DOCUMENT
-              CALL ERRT(101,'THIS OPERATION NO LONGER SUPPORTED',IDUM)
+              CALL ERRT(101,'OPERATION NO LONGER SUPPORTED',IDUM)
 
            ELSEIF (FCHAR(4:5) == 'IC') THEN
 C             SAVE TO INCORE DOC FILE -------------------------- SD IC *
@@ -117,7 +117,7 @@ C             UNSAVE DOCUMENT - IN CORE ------------------------ UD IC?
 	      CALL UDOCIC(NDOC2,ENDIT)
 
   	   ELSEIF (FCHAR(4:6) == 'F E'   .OR. 
-     &             FCHAR(4:4) == 'FE'    .OR.
+     &             FCHAR(4:5) == 'FE'    .OR.
      &             FCHAR(4:8) == 'FINDE'  .OR.
      &             FCHAR(4:9) == 'FIND E') THEN
 C             UNSAVE DOCUMENT FIND - END USE ---------------- UD FIND E
