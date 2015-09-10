@@ -14,7 +14,7 @@ C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2011  Health Research Inc.,                         *
+C=* Copyright 1985-2015  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -52,13 +52,13 @@ C       FCHAR IS PASSED BACK TO CALLER IN COMMON!
 
         LOGICAL  :: DONOLB
 
-        IF (COPT .EQ. 'I') THEN
+        IF (COPT == 'I') THEN
 C          READ FROM FILE OPENED ON NIN (FOR INTERACTIVE LOOP)
            REWIND(NIN) 
            NDOLINE = 0
         ENDIF
 
-        DONOLB = (LBNOWANT .LT. 0)
+        DONOLB = (LBNOWANT < 0)
 
 c       write(6,*) ' Searching for lb: ',lbnowant
 
@@ -66,7 +66,7 @@ C       READ INPUT STRING FROM PROCEDURE ----------------------------
 10      CONTINUE
 
 C       READ ANSWER STRING
-        IF (COPT .EQ. 'B') THEN
+        IF (COPT == 'B') THEN
 C          INCREMENT PROCEDURE READ POINTER
 	   IBCNT = IBCNT + 1       ! LOCATION IN PROCEDURE FILE
            ILINE = IBCNT 
@@ -87,7 +87,7 @@ C          READ FROM FILE OPENED ON NIN (FOR INTERACTIVE LOOP)
         ENDIF
         IF (IRTFLG .NE. 0) RETURN
 
-        IF (DONOLB .AND. ILINE .EQ. -LBNOWANT) THEN
+        IF (DONOLB .AND. ILINE == -LBNOWANT) THEN
 C          FOUND DESIRED DO-LOOP, CAN RETURN NOW
            CALL SSUPCAS(FCHAR(1:NCHAR1))
 
@@ -100,18 +100,18 @@ C          SEE IF INPUT LINE CONTAINS 'DO LB'
 C          FIND LENGTH OF LINE BEFOR END OR SEMICOLON (COMMENT)
            IGOSEMI = SCAN(FCHAR,';!')
            IEND    = NCHAR1
-           IF (IGOSEMI .GT. 0 .AND. IGOSEMI .LT. IEND) IEND = IGOSEMI
-           IF (IEND .LE. 0) GOTO 10   ! JUST A COMMENT
+           IF (IGOSEMI > 0 .AND. IGOSEMI < IEND) IEND = IGOSEMI
+           IF (IEND <= 0) GOTO 10   ! JUST A COMMENT
 
            CALL SSUPCAS(FCHAR(1:IEND))
 
            IGODO  = INDEX(FCHAR(1:IEND),'DO LB')
 
-           IF (IGODO .GT. 0) THEN
+           IF (IGODO > 0) THEN
 C             HAS 'DO LB', GET LABEL NUMBER FROM 'LB##'
 	      CALL GETLBNO(FCHAR(1:NCHAR1),LBNO,IRTFLG)
           
-              IF (LBNO .EQ. LBNOWANT) THEN
+              IF (LBNO == LBNOWANT) THEN
 C                FOUND DESIRED DO-LOOP, CAN RETURN NOW
                  IRTFLG = 0
                  RETURN
