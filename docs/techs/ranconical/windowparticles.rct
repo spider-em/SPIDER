@@ -1,8 +1,10 @@
-; WINDOWS PARTICLES FROM TILTED AND ULTILTED MICROGRAPHS
+; WINDOWS PARTICLES FROM TILTED AND UNTILTED MICROGRAPHS
 
 ; ----------------------- Parameters -----------------------
-[reduce-factor]  = 5                                        ; reduction factor applied to micrographs (in shrinkmics.rct or in display)
+[shrinkFactor]   = 5                                        ; reduction factor applied to micrographs (in shrinkmics.rct or in display)
+[noiseRefNum]    = 0                                        ; noise-reference to use (0==randomly selected image)
 [first-particle] = 1                                        ; first-particle number
+[ExcludeEdgesYN] = 1                                        ; exclude particles on micrograph edge (0==Keep)
 
 ; ------------------------- Inputs -------------------------
 fr l
@@ -10,20 +12,28 @@ fr l
 fr l 
 [mic_pair_doc]docmicpairs                                   ; micrograph-pairing list
 fr l
-[noise_ref]noise                                            ; noise reference
+[noise_ref_random]noise                                     ; noise reference (see [noiseRefNum])
 fr l
-[input_micros]Micrographs/mic****                           ; micrographs
+[noise_ref_stack]tmpnoise/noi@                              ; noise-reference stack (if manually selected, see [noiseRefNum])
 fr l
-[untilted_coords_doc]Micrographs/dcu***                     ; untilted coords template
+[mic_dir]Micrographs                                        ; directory with micrographs and coordinate files
 fr l
-[tilted_coords_doc]Micrographs/dct***                       ; tilted coords template
+[input_micros][mic_dir]/mic****                             ; micrographs
 fr l
-[tilt_params_doc]Micrographs/dcb***                         ; tilt-parameter doc file template
+[untilted_coords_doc][mic_dir]/dcu***                       ; untilted coords template
+;               PARTNUM     X_COORD      Y_COORD
+;                             used         used
+fr l
+[tilted_coords_doc][mic_dir]/dct***                         ; tilted coords template
+;                           X_COORD      Y_COORD
+;                             used         used
+fr l
+[tilt_params_doc][mic_dir]/dcb***                           ; tilt-parameter doc file template
+;             THETA        GAMMA         PHI
 
 ; ------------------------- Outputs -------------------------
 fr l
 [untilted_dir]Zerodegr                                      ; output untilted-image directory
-;[untilted_dir]Zerodegr/Winrot                               ; output untilted-image directory
 fr l
 [untilted_unrot_stack][untilted_dir]/stk0-unrot             ; untilted, unrotated image stack (w/o "@")
 fr l
@@ -44,6 +54,9 @@ fr l
 fr l
 [particle_list]listparticles                                ; particle list
 ;      PARTICLE_NUM  MICROGRAPH
+fr l
+[edge_particle_doc][mic_dir]/doc-edge-particles             ; list of particles off edge of micrograph
+;         MICPART       MIC_NUM
 
 ; (shouldn't need to modify below here -- only important for the number of digits allocated)
 fr l
@@ -57,15 +70,31 @@ fr l
 
 ; -------------------- END BATCH HEADER ---------------------
 
+; Temporary files
+fr l
+[temp_circle_mask]_16
+fr l
+[temp_inverted_mask]_18
+fr l
+[temp_noise_incore]_17
+fr l
+[temp_untilted_mic]_20
+fr l
+[temp_untilted_windowed]_21
+fr l
+[temp_untilted_ramped]_22
+fr l
+[temp_tilted_mic]_30
+fr l
+[temp_tilted_windowed]_31
+fr l
+[temp_tilted_ramped]_32
+
 ; prepare directories/files
 vm
 echo "if(! -d [untilted_dir]) mkdir -p [untilted_dir]"|csh
 vm
 echo "if(! -d [tilted_dir]) mkdir -p [tilted_dir]"|csh
-;vm
-;echo "if(! -d [untilted_unrot_dir]) mkdir -p [untilted_unrot_dir]"|csh
-;vm
-;echo "if(! -d [tilted_unrot_dir]) mkdir -p [tilted_unrot_dir]"|csh
 de
 [untilted_unrot_stack]
 de
@@ -80,9 +109,13 @@ SD /      UNTILTED    #PARTICLES    CUMTOTAL    FIRST_PART    LASTPART
 [mic2particle_table]
 @backup
 [particle_list]  ; INPUT (backed up)
+de
+[edge_particle_doc]
 
 ; initialize particle-counter
-[particle-counter] = [first-particle] - 1
+[ParticleNumber] = [first-particle] - 1
+[pair-counter]     = 0
+[OffEdgeCounter]   = 0
 
 ; get window dimension
 ud 17,[idim]
@@ -91,29 +124,42 @@ ud e
 
 vm m
 echo "Using window size {***[idim]} px" ; 
-echo "Multiplying coordinates by a factor of {**[reduce-factor]}" ;
-echo
+echo "Multiplying coordinates by a factor of {**[shrinkFactor]}" ;
 .
+
+if ([ExcludeEdgesYN] .eq. 1) then
+    vm
+    echo "Edge exclusion set to ON" ; echo
+else
+    vm
+    echo "Edge exclusion set to OFF" ; echo
+endif
 
 [half-dim] = [idim]/2
 [mask-radius] = [half-dim] - 1
 
 ; copy noise-reference into memory
-cp
-[noise_ref]
-_27
+IF ([noiseRefNum] .LE. 0) THEN
+    cp
+    [noise_ref_random]
+    [temp_noise_incore]
+ELSE
+    cp
+    [noise_ref_stack]{**[noiseRefNum]}
+    [temp_noise_incore]
+ENDIF
 
 ; create mask for normalization
 mo
-_26
+[temp_circle_mask]
 [idim],[idim]
 C  ; _C_ircle
 [mask-radius]
 
 ; invert mask
 ar
-_26
-_28
+[temp_circle_mask]
+[temp_inverted_mask]
 (P1-1)*(-1)
 
 [tilt-key] = 124
@@ -127,12 +173,10 @@ doc ren
 ud n [num-pairs]
 [mic_pair_doc]_renum
 
-[pair-counter] = 0
-
 ; loop through pairs
-do lb1 x10=1,[num-pairs]
+do lb1 [MicKey] = 1,[num-pairs]
     ; get untilted & tilted micrograph#
-    ud ic x10,[untilted-num],[tilted-num]
+    ud ic [MicKey],[untilted-num],[tilted-num]
     [mic_pair_doc]_renum
 
     ; check if tilted-coordinates doc exists
@@ -147,7 +191,7 @@ do lb1 x10=1,[num-pairs]
     endif
 
     vm
-    echo "Working on micrographs {****[tilted-num]} and {****[untilted-num]}, pair #{***x10} of {***[num-pairs]}"
+    echo "Working on micrographs {****[tilted-num]} and {****[untilted-num]}, pair #{***[MicKey]} of {***[num-pairs]}"
 
     ; get #untilted particles
     ud n [num-untilted]
@@ -170,10 +214,10 @@ do lb1 x10=1,[num-pairs]
     
     ; if empty, then skip
     if([num-untilted].eq.0) then
-		vm
-		echo "No particles found for pair {****[untilted-num]}. Skipping..."
-		
-		goto lb1
+        vm
+        echo "No particles found for pair {****[untilted-num]}. Skipping..."
+
+        goto lb1
     endif
 
     ; read new micrograph tilt parameters
@@ -186,97 +230,147 @@ do lb1 x10=1,[num-pairs]
     ; copy micrographs into memory
     cp
     [input_micros][untilted-num]
-    _2
+    [temp_untilted_mic]
     cp
     [input_micros][tilted-num]
-    _3
+    [temp_tilted_mic]
+    
+    ; get micrograph dimensions
+    fi h [UntiltedXDim],[UntiltedYDim]
+    [temp_untilted_mic]
+    NX, NY
+    
+    fi h [TiltedXDim],[TiltedYDim]
+    [temp_tilted_mic]
+    NX, NY
 
     ; loop through particles
-    do lb2 x20=1,[num-tilted]
-        ; get untilted particle-coords (x22,x23)
-        ud ic x20, x21, x22,x23, x26,x27
+    do lb2 [MicParticleKey] = 1,[num-tilted]
+        ; get untilted particle-coords
+        ud ic [MicParticleKey], x21, [UntiltedXCoord],[UntiltedYCoord]  ; , x26,x27
         [untilted_coords_doc][untilted-num]
 
-        ; get tilted particle-coords (x32,x33)
-        ud ic x20, x31, x32,x33, x36,x37
+        ; get tilted particle-coords
+        ud ic [MicParticleKey], x31, [TiltedXCoord],[TiltedYCoord]  ; , x36,x37
         [tilted_coords_doc][untilted-num]
 
         ; multiply by decimation-factor and subtract half-dimension
-        x24 = [reduce-factor]*x22 - [half-dim]
-        x25 = [reduce-factor]*x23 - [half-dim]
-        x34 = [reduce-factor]*x32 - [half-dim]
-        x35 = [reduce-factor]*x33 - [half-dim]
+        [UntiltedTopLeftX] = [shrinkFactor]*[UntiltedXCoord] - [half-dim]
+        [UntiltedTopLeftY] = [shrinkFactor]*[UntiltedYCoord] - [half-dim]
+        [TiltedTopLeftX]   = [shrinkFactor]*[TiltedXCoord]   - [half-dim]
+        [TiltedTopLeftY]   = [shrinkFactor]*[TiltedYCoord]   - [half-dim]
 
-        ; increment particle-counter
-        [particle-counter] = [particle-counter] + 1
-
-
-        ; UNTILTED PARTICLES
-
-        ; window untilted particles
-        wi
-        _2
-        _21
-        [idim],[idim]
-        x24,x25  ; x,y-coords
-
-        ; ramp-correction
-        ra
-        _21  ; INPUT: windowed, tilted particle
-        _22
-
-        ; normalize
-        ce fit
-        _27  ; INPUT: noise-reference
-        _22  ; INPUT: ramp-corrected image
-        _28  ; INPUT: inverted-mask
-        [untilted_unrot_stacked_images][particle-counter]  ; WAS [untilted_unrot][particle-counter]
+        ; calculate bottom-left coordinate
+        [UntiltedBottomRightX] = [shrinkFactor]*[UntiltedXCoord] + [half-dim]
+        [UntiltedBottomRightY] = [shrinkFactor]*[UntiltedYCoord] + [half-dim]
+        [TiltedBottomRightX]   = [shrinkFactor]*[TiltedXCoord]   + [half-dim]
+        [TiltedBottomRightY]   = [shrinkFactor]*[TiltedYCoord]   + [half-dim]
         
-        ; rotate the tilt axis to vertical
-        rt
-        [untilted_unrot_stacked_images][particle-counter]  ; WAS [untilted_unrot][particle-counter]  ; INPUT
-        [untilted_stacked_images][particle-counter]        ; WAS [untilted_images][particle-counter]
-        -[tilt-untilted]
-
-
-        ; TILTED PARTICLES
-
-        ; window tilted particles
-        wi
-        _3
-        _31
-        [idim],[idim]
-        x34,x35  ; x,y-coords
-
-        ; ramp-correction
-        ra
-        _31  ; INPUT: windowed, tilted particle
-        _32
-
-        ; normalize
-        ce fit
-        _27  ; INPUT: noise-reference
-        _32  ; INPUT: ramp-corrected image
-        _28  ; INPUT: inverted-mask
-        [tilted_unrot_stacked_images][particle-counter]  ; WAS [tilted_unrot][particle-counter]
+        ; check that coordinates are not off the edge
+        [OffMicYN] = 0  ; initialize
+        if ([UntiltedTopLeftX] .lt. 1) [OffMicYN]=1
+        if ([UntiltedTopLeftY] .lt. 1) [OffMicYN]=1
+        if ([TiltedTopLeftX]   .lt. 1) [OffMicYN]=1
+        if ([TiltedTopLeftY]   .lt. 1) [OffMicYN]=1
+        if ([UntiltedBottomRightX] .gt. [UntiltedXDim]) [OffMicYN]=1
+        if ([UntiltedBottomRightY] .gt. [UntiltedYDim]) [OffMicYN]=1
+        if ([TiltedBottomRightX]   .gt. [TiltedXDim])   [OffMicYN]=1
+        if ([TiltedBottomRightY]   .gt. [TiltedYDim])   [OffMicYN]=1
         
-        ; rotate the tilt axis to vertical
-        rt
-        [tilted_unrot_stacked_images][particle-counter]  ; WAS [tilted_unrot][particle-counter]
-        [tilted_stacked_images][particle-counter]        ; WAS [tilted_images][particle-counter]
-        -[tilt-tilted]
+        if ([OffMicYN] .eq. 1) then
+            [OffEdgeCounter] = [OffEdgeCounter] + 1
+            
+            x24 = [UntiltedTopLeftX]
+            x25 = [UntiltedTopLeftY]
+            x28 = [UntiltedBottomRightX]
+            x29 = [UntiltedBottomRightY]
+            x34 = [TiltedTopLeftX]
+            x35 = [TiltedTopLeftY]
+            x38 = [TiltedBottomRightX]
+            x39 = [TiltedBottomRightY]
+            ; (The expanded variables exceed SPIDER's column limit.)
+            
+           ;sd [OffEdgeCounter], [MicParticleKey],[untilted-num],[UntiltedTopLeftX],[UntiltedTopLeftY],[UntiltedBottomRightX],[UntiltedBottomRightY],[TiltedTopLeftX],[TiltedTopLeftY],[TiltedBottomRightX],[TiltedBottomRightY]
+           ;sd [OffEdgeCounter], [MicParticleKey],[untilted-num],[UntiltedTopLeftX],[UntiltedTopLeftY],[UntiltedBottomRightX],[UntiltedBottomRightY],[TiltedTopL  ; where it gets cut off
+            sd [OffEdgeCounter], [MicParticleKey],[untilted-num], x24,x25,x28,x29, x34,x35,x38,x39
+            [edge_particle_doc]
+        endif
+        
+        [ExcludeParticleYN] = [ExcludeEdgesYN]*[OffMicYN]
+        ; (The only condition where the value is 1 is if [ExcludeEdgesYN] AND [OffMicYN] are 1.)
 
-        ; save to particle list
-        sd [particle-counter],[particle-counter],[untilted-num]
-        [particle_list]
+        if ([ExcludeParticleYN]. eq. 0) then
+            ; increment particle-counter
+            [ParticleNumber] = [ParticleNumber] + 1
+
+            
+            ; UNTILTED PARTICLES
+
+            ; window untilted particles
+            wi
+            [temp_untilted_mic]
+            [temp_untilted_windowed]
+            [idim],[idim]
+            [UntiltedTopLeftX],[UntiltedTopLeftY]  ; x,y-coords
+
+            ; ramp-correction
+            ra
+            [temp_untilted_windowed]  ; INPUT
+            [temp_untilted_ramped]
+
+            ; normalize
+            ce fit
+            [temp_noise_incore]     ; INPUT
+            [temp_untilted_ramped]  ; INPUT
+            [temp_inverted_mask]    ; INPUT
+            [untilted_unrot_stacked_images][ParticleNumber]  ; WAS [untilted_unrot][ParticleNumber]
+            
+            ; rotate the tilt axis to vertical
+            rt
+            [untilted_unrot_stacked_images][ParticleNumber]  ; WAS [untilted_unrot][ParticleNumber]  ; INPUT
+            [untilted_stacked_images][ParticleNumber]        ; WAS [untilted_images][ParticleNumber]
+            -[tilt-untilted]
+
+
+            ; TILTED PARTICLES
+
+            ; window tilted particles
+            wi
+            [temp_tilted_mic]
+            [temp_tilted_windowed]
+            [idim],[idim]
+            [TiltedTopLeftX],[TiltedTopLeftY]  ; x,y-coords
+
+            ; ramp-correction
+            ra
+            [temp_tilted_windowed]  ; INPUT
+            [temp_tilted_ramped]
+
+            ; normalize
+            ce fit
+            [temp_noise_incore]   ; INPUT
+            [temp_tilted_ramped]  ; INPUT
+            [temp_inverted_mask]  ; INPUT
+            [tilted_unrot_stacked_images][ParticleNumber]  ; WAS [tilted_unrot][ParticleNumber]
+            
+            ; rotate the tilt axis to vertical
+            rt
+            [tilted_unrot_stacked_images][ParticleNumber]  ; WAS [tilted_unrot][ParticleNumber]
+            [tilted_stacked_images][ParticleNumber]        ; WAS [tilted_images][ParticleNumber]
+            -[tilt-tilted]
+
+            ; save to particle list
+            sd [ParticleNumber],[ParticleNumber],[untilted-num]
+            [particle_list]
+        endif
     lb2
     ; end particle-loop
 
-    [first-particle] = [particle-counter] - [num-tilted] + 1
+    [first-particle] = [ParticleNumber] - [num-tilted] + 1
     [pair-counter] = [pair-counter] + 1
 
     ; write to MIC2PARTICLE_TABLE
-    sd [pair-counter], [untilted-num],[num-tilted],[particle-counter],[first-particle],[particle-counter]
+    sd [pair-counter], [untilted-num],[num-tilted],[ParticleNumber],[first-particle],[ParticleNumber]
     [mic2particle_table]
 
     ; close docs
@@ -299,6 +393,22 @@ SD /    PARTICLE_NUM  MICROGRAPH
 sd e
 [particle_list]
 
+; if any particles were off the edge...
+if ([OffEdgeCounter] .gt. 0) then
+    if ([ExcludeEdgesYN] .ge. 1) then
+        vm
+        echo ; echo "Found {****[OffEdgeCounter]} particles off the edge of the micrograph and were not windowed" ; echo
+    else
+        vm
+        echo ; echo "Found {****[OffEdgeCounter]} particles off the edge of the micrograph and were windowed anyway" ; echo
+    endif
+
+    SD /               MICPART       MIC_NUM      XI_UNTILT     YI_UNTILT     XF_UNTILT     YF_UNTILT      XI_TILT       YI_TILT       XF_TILT       YF_TILT
+    [edge_particle_doc]
+    sd e
+    [edge_particle_doc]
+endif
+
 ; make second copy (in case of high-pass filtering), which will be used downstream
 cp
 [untilted_backup]@
@@ -312,7 +422,9 @@ echo "Done"; date
 
 en d
 
-; Modified 2014-03-12
+; Modified 2015-07-29
+;    2014-07-29 (trs) -- can choose another of the noise references from makesomenoise.rct  
+;    2014-11-06 (trs & ms) -- added option to exclude particles on edge of micrograph
 ;    2014-03-12 (trs) -- will skip pairs with no particles picked
 ;    2014-03-05 (trs) -- makes backup copy of particle stacks
 ;    2014-03-05 (trs) -- writing particles in stacks

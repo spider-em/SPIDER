@@ -1,0 +1,236 @@
+; RUNS PROJECTIONS ONTO CONVEX SETS
+;
+; Adapted from Michael Radermacher's pocscs.rec
+
+; ---------------------- Parameters ----------------------
+
+[classNum]          = 1      ; volume number
+[numIter]           = 98     ; number of iterations of POCS
+[tilt-angle]        = 49     ; tilt angle
+[yprj-phi]          = 150    ; angle phi for y-projections (Euler angles will be (PHI,90,0))
+[docfileValuesYN]   = 1      ; override parameters below with (optional) filter docfile? (1==docfile, 0==header values)
+[header-type]       = 7      ; filter type (7==Butterworth, 5==Fermi, 3==Gaussian, 1==Tophat)
+[headerParam1]      = 40     ; Butterworth filter pass-band (Angstroms)
+[headerParam2]      = 30     ; Butterworth filter stop-band (Angstroms)
+[progress-interval] = 10     ; progress message written to screen every Nth iteration
+
+; ------------------------ Inputs ------------------------
+fr l
+[parameter_doc]params                       ; parameter doc file
+fr l
+[vol_dir]Volumes                            ; volume I/O directory
+fr l
+[filter_doc][vol_dir]/docvolfilt            ; (optional) doc file with filter parameters
+fr l
+[class_vol][vol_dir]/vcla{***[classNum]}    ; unaligned experimental volume template
+fr l
+[mask][vol_dir]/vcla{***[classNum]}-mask    ; mask
+
+; ----------------------- Outputs -----------------------
+fr l
+[pocs_dir]Pocs                                          ; output directory
+fr l
+[y_projections][pocs_dir]/yprj_{***[classNum]}          ; projection stack
+fr l
+[pocs_stats_doc][pocs_dir]/docpocsstats                 ; volume statistcs for each iteration
+fr l
+[pocs_vol][vol_dir]/volpocs{***[classNum]}              ; POCS volume
+fr l
+[filt_pocs_vol][vol_dir]/volpocs{***[classNum]}-filt    ; filtered POCS volume
+
+; ------------------- END BATCH HEADER -------------------
+
+; Temporary files
+fr l
+[temp_vol_incore]_10
+fr l
+[temp_vol_ft]_11
+fr l
+[temp_masked_vol]_12
+fr l
+[temp_masked_ft]_13
+fr l
+[temp_filtered_ft]_14
+fr l
+[temp_filtered_vol]_15
+
+; get pixel-size
+ud 5, [pixel-size]
+[parameter_doc]
+ud e
+
+; check if filter docfile exists
+iq fi [filterdoc-exists]
+[filter_doc]
+
+if([filterdoc-exists].eq.1) then
+    vm
+    echo "[filter_doc].$DATEXT exists"
+    
+    if([docfileValuesYN].eq.0) then
+        vm
+        echo "Will use filter parameters specified in batch file"
+    else
+        vm
+        echo "Will use filter parameters specified in [filter_doc].$DATEXT"
+    endif
+endif
+
+VM
+echo
+
+; (The only condition where we use the docfile parameters is if the docfile exists AND override=1)
+if([docfileValuesYN]*[filterdoc-exists].ne.0) then
+    ud find [docfileKey], [docfile-classnum],[docfile-filtertype],[docfile-param1],[docfile-param2]
+    [filter_doc]
+    (1,[classNum])   ; column# to search, value to search for
+    ud find e
+    [filter_doc]
+    
+    ; if parameters found, use those
+    if([docfileKey].eq.0) then
+        vm
+        echo "Couldn't find info for class #{***[classNum]} in [filter_doc].$DATEXT -- using values in batchfile header..."
+        
+        [filter-type]  = [header-type]
+        [filterParam1] = [headerParam1]
+        [filterParam2] = [headerParam2]
+    else
+        [filter-type]  = [docfile-filtertype]
+        [filterParam1] = [docfile-param1]
+        [filterParam2] = [docfile-param2]
+    endif
+
+; use filter parameters in header
+else
+    [filter-type]  = [header-type]
+    [filterParam1] = [headerParam1]
+    [filterParam2] = [headerParam2]
+endif
+
+vm
+echo "Class #{***[classNum]} -- Filter type: {*[filter-type]}, Parameter1: {%f6.2%[filterParam1]}, Parameter2: {%f6.2%[filterParam2]}" ; echo
+
+; convert filter radii from Angstroms to px^-1
+[filterParam1] = [pixel-size]/[filterParam1]
+[filterParam2] = [pixel-size]/[filterParam2]
+
+vm
+echo "Running [class_vol].$DATEXT through {***[numIter]} iterations of POCS" ; date ; echo
+
+cp
+[class_vol]
+[temp_vol_incore]
+
+; get volume dimension
+fi x [ydim]
+[temp_vol_incore]
+(2)   ; header position for NROW
+
+[mid-y] = ([ydim]/2) + 1
+
+vm
+echo "if(! -d [pocs_dir]) mkdir [pocs_dir]"|csh
+
+[sliceNum] = 1   ; WAS [iter]  = 0
+
+DE
+[y_projections]@
+
+; project in y
+pj 3
+[temp_vol_incore]
+[ydim],[ydim]
+[y_projections]@{***[sliceNum]}
+([yprj-phi],90,0)
+
+; Fourier transform
+ft
+[temp_vol_incore]
+[temp_vol_ft]
+
+de
+[pocs_stats_doc]
+
+; loop through iterations
+do lb1 [iter] = 1,[numIter]
+    if (int([iter]/[progress-interval]).eq.[iter]/[progress-interval]) then
+        vm
+        echo "Working on iteration #{***[iter]} out of {***[numIter]}"
+    endif
+    
+    ; multiply by mask
+    mu
+    [temp_vol_incore]   ; initially input volume, will be overwritten by CV REPL
+    [mask]
+    [temp_masked_vol]   ; OUTPUT
+    *                   ; no more files to multiply
+
+    ; Fourier transform
+    ft
+    [temp_masked_vol]
+    [temp_masked_ft]
+    
+    ; Fourier filter
+    ff
+    [temp_masked_ft]
+    [temp_filtered_ft]
+    (7)   ; Butterworth low-pass
+    [filterParam1],[filterParam2]
+
+    ; convex sets, projector replace
+    cv repl
+    [temp_filtered_ft]   ; INPUT (overwritten)
+    [temp_vol_ft]        ; INPUT
+    C                    ; _C_onical tilting
+    [tilt-angle]
+
+    ; inverse Fourier
+    ft
+    [temp_filtered_ft]
+    [temp_vol_incore]
+
+    ; find statistics
+    fs [fmax],[fmin],[favg],[stdev]
+    [temp_vol_incore]
+
+    [sliceNum] = [iter] + 1
+    
+    ; write to doc file
+    sd [iter], [fmax],[fmin],[favg],[stdev], [sliceNum]
+    [pocs_stats_doc]
+
+    ; project in y
+    pj 3
+    [temp_vol_incore]
+    [ydim],[ydim]
+    [y_projections]@{***[sliceNum]}
+    ([yprj-phi],90,0)
+lb1
+; end iteration-loop
+
+; close doc
+SD /        FMAX          FMIN          FAVG          S.D.
+[pocs_stats_doc]
+sd e
+[pocs_stats_doc]
+; copy to final
+cp
+[temp_vol_incore]
+[pocs_vol]
+
+; filter
+fq np
+[pocs_vol]
+[filt_pocs_vol]
+[filter-type]
+[filterParam1],[filterParam2]
+
+vm
+echo ; echo "Done" ; date
+
+en d
+
+; Modified 2015-08-13
+;    TO DO: read filter parameters using subroutine
+;    2015-08-06 (trs) -- diagnostic y-projections written as stack (numbered from 2 to [numIters]+1)

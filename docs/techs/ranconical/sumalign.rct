@@ -4,7 +4,8 @@
 ;----------------------------------------------------------------------------------!
 
 ; ----------------- Parameter -----------------
-X10 = 3                                        ; solution number 1-4 for final orientation of particles
+
+[solutionNum] = 1                              ; solution number 1-4 for final orientation of particles
 
 ; ---------------- Input files ----------------
 fr l
@@ -14,21 +15,22 @@ fr l
 fr l
 [align_dir]Zerodegr/Pairwise                   ; alignment input-output directory
 fr l
-[untilted_images]Zerodegr/stk2-winrot*****     ; unaligned-image template
-;;[untilted_images]Zerodegr/Winrot/unt*****      ; unaligned-image template (check number of digits)
+[untilted_images]Zerodegr/stk2-winrot@*****    ; unaligned-image template
 fr l
 [align_solution_doc][align_dir]/dsolalign      ; doc file with the two solutions
 ;      INPLANEANGLE    XSHIFT       YSHIFT
+;fr l
+;[old_align_doc][align_dir]/docalign            ; untilted-alignment doc
+;   KEY       PSI,    THE,    PHI,   REF#,    EXP#,  CUM.{ROT,   SX,    SY},  NPROJ,   DIFF,      CCROT,    ROT,     SX,     SY,   MIR-CC
+;;;       MIRRORFLAG     CC_ROT    INPLANEANGLE    XSHIFT       YSHIFT    PARTICLE_NUM
 fr l
-[old_align_doc][align_dir]/docpairalign        ; untilted-alignment doc
-;       MIRRORFLAG     CC_ROT    INPLANEANGLE    XSHIFT       YSHIFT    PARTICLE_NUM
+[old_align_copy][align_dir]/docalign-copy      ; untilted-alignment doc
 
 ; ---------------- Output files ----------------
 fr l
-[new_align_doc][align_dir]/dalu001             ; untilted alignment doc file
-;       MIRRORFLAG     CC_ROT    INPLANEANGLE    XSHIFT       YSHIFT    PARTICLE_NUM
-;;fr l
-;;[realigned_dir]Zerodegr/Aligned                ; output realigned-images directory
+[new_align_doc][align_dir]/docalign            ; untilted alignment doc file
+;   KEY       PSI,    THE,    PHI,   REF#,    EXP#,  CUM.{ROT,   SX,    SY},  NPROJ,   DIFF,      CCROT,    ROT,     SX,     SY,   MIR-CC
+;;;;       MIRRORFLAG     CC_ROT    INPLANEANGLE    XSHIFT       YSHIFT    PARTICLE_NUM
 fr l
 [aligned_stack][align_dir]/sumaligned          ; aligned-image stack (w/o "@")
 fr l
@@ -49,16 +51,15 @@ ud e
 
 ;x51=(x50/2)+1  ; image-center coordinates
 
-; get rotation (x11) and shifts (x12 & x13) from the designated solution:
-ud x10,x11,x12,x13
+; get rotation and shifts from the designated solution:
+ud [solutionNum] ,[solnAngle],[solnXShift],[solnYShift]
 [align_solution_doc]
+UD E
 
 ; clean up pre-existing files
 de a
 [new_align_doc]
 
-;;vm
-;;echo "if(! -d [realigned_dir]) mkdir [realigned_dir]"|csh
 de
 [aligned_stack]@
 
@@ -66,87 +67,62 @@ vm
 echo "Realigning images" ; date
 
 ; get #particles
-ud n,x62
+ud n [numParts]
 [selection_list]
 
 ; loop through images
-do lb5 X91=1,x62
-    ; get particle# (x90)
-    ud ic,x91,x90
+do lb5 [partKey] = 1,[numParts]
+    ; get particle#
+    ud ic [partKey], [partNum]
     [selection_list]
 
-    ; get mirror-flag (x81), ccrot (x83), angle (x82), x-shift (x84), y-shift (x85)
-    ud ic x90, x31,x32,x33,x34,x35,x82,x84,x85,x39,x40,x83,x42,x43,x44,x81
-    [old_align_doc]
-;    ud ic x91, x81,x83,x82,x84,x85,x90
-;    [old_align_doc]
-;    ud ic X90,X82,X84,X85
-;    [apsr_doc]
+    ; get mirror-flag ([mirrorFlag]), angle, x-shift, y-shift
+    ud ic [partNum], x31,x32,x33,x34,x35,[oldAngle],[oldXShift],[oldYShift],x39,x40,x83,x42,x43,x44,[mirrorFlag]
+    [old_align_copy]
 
     ; if mirroring not required, simply sum alignments & apply
-    if(x81.eq.1) then
+    if([mirrorFlag].eq.1) then
         ; sum alignment
-        sa p,X82,X84,X85,X11,X12,X13,X52,X54,X55
-        ; x52==combined-angle, x54==combined-shift, x55==combined y-shift
+        sa p,[oldAngle],[oldXShift],[oldYShift], [solnAngle],[solnXShift],[solnYShift], [newAngle],[newXShift],[newYShift]
+        ; (New SA P syntax calls for input parameters to not be entered on the command line, but this syntax still works.)
 
         ; rotation & centering of raw untilted images
         rt sq
-        [untilted_images]X90
-        [aligned_untilt]X90  ; OUTPUT
-        X52      ; combined angle
-        X54,X55  ; combined x,y-shifts
+        [untilted_images][partNum]
+        [aligned_untilt][partNum]  ; OUTPUT
+        [newAngle]                 ; combined angle
+        [newXShift],[newYShift]    ; combined x,y-shifts
 
-;        ; Apply a circular mask on the aligned and centered images
-;        ma
-;        _4  ; aligned image
-;        [aligned_untilt]X90
-;        (46.)    ; mask radius
-;        G        ; _G_aussian cutoff
-;        C        ; background set to _C_ircumference average
-;        x51,x51  ; mask center
-;        (2.5)    ; Gaussian falloff
-    
     ; else invert shifts and then apply+mirror
     else
         mr
-        [untilted_images]X90
+        [untilted_images][partNum]
         _3   ; OUTPUT
-        Y   ; y-axis mirror
+        Y    ; y-axis mirror
 
-        x84=-x84  ; x-shift
-        x82=-x82  ; angle   ; WAS x85=-x85  ; y-shift
+        [oldXShift] = -[oldXShift]
+        [oldAngle]  = -[oldAngle]   ; WAS [oldYShift] = -[oldYShift]
 
         ; sum alignment
-        sa p,X82,X84,X85,X11,X12,X13,X52,X54,X55
-        ; x52==combined-angle, x54==combined-shift, x55==combined y-shift
+        sa p,[oldAngle],[oldXShift],[oldYShift], [solnAngle],[solnXShift],[solnYShift],[newAngle],[newXShift],[newYShift]
 
         ; rotation & centering of raw untilted images
         rt sq
         _3
-        [aligned_untilt]X90   ; OUTPUT (temp)
-        X52      ; combined angle
-        X54,X55  ; combined x,y-shifts
-
-;        ; Apply a circular mask on the aligned and centered images
-;        ma
-;        _4  ; aligned image
-;        [aligned_untilt]X90
-;        (46.)    ; mask radius
-;        G        ; _G_aussian cutoff
-;        C        ; background set to _C_ircumference average
-;        x51,x51  ; mask center
-;        (2.5)    ; Gaussian falloff
+        [aligned_untilt][partNum]   ; OUTPUT (temp)
+        [newAngle]                  ; combined angle
+        [newXShift],[newYShift]     ; combined x,y-shifts
     endif
 
     ; save new rotation and shifts in an additional alignment doc file
-    sd X91,x81,x83,X52,X54,X55,x90
+;;;    sd [partKey], [mirrorFlag],x83,[newAngle],[newXShift],[newYShift],[partNum]
+    sd [partNum], x31,x32,x33,x34,x35,[newAngle],[newXShift],[newYShift],x39,x40,x83,x42,x43,x44,[mirrorFlag]
     [new_align_doc]
 lb5
 
 ; close doc files
 ud ice  
-[old_align_doc]
-;SD /     MIRRORFLAG  INPLANEANGLE    XSHIFT       YSHIFT    PARTICLE_NUM
+[old_align_copy]
 SD /     MIRRORFLAG     CC_ROT    INPLANEANGLE    XSHIFT       YSHIFT    PARTICLE_NUM
 [new_align_doc]
 sd e
@@ -170,7 +146,9 @@ echo "Done" ; date
 
 en d
 
-; Modified 2014-03-07
+; Modified 2015-07-30
+;    2015-07-30 (trs) -- writes AP SH format alignment doc
+;    2015-07-29 (trs) -- operates on backup copy of alignment doc
 ;    2014-03-05 (trs) -- making master copy of aligned stack
 ;    2012-09-10 (trs) -- replaced AP MQ (obsolete) with AP SH
 ;    2009-07-26 (trs) -- alignment doc now has same format as from alignpairwise.spi

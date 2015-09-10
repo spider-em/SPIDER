@@ -2,12 +2,13 @@
 
 ; ------------------- Parameters -------------------
 
-[single-class]   = 0      ; class number to calculate reconstruction (0==all)
-[multiref-iter] = -1      ; iteration of multireference alignment to use as input (<0 == last)
-[override-yn]    = 1      ; override parameters below with (optional) filter docfile? (1==docfile, 0==header values)
-[header-type]    = 7      ; filter type (7==Butterworth, 5==Fermi, 3==Gaussian, 1==Tophat)
-[header-param1]  = 37.6   ; pass band for Butterworth, else filter radius (Angstroms)
-[header-param2]  = 28.2   ; stop band for Butterworth, temperature for Fermi, else unused (Angstroms)
+[single-class]    = 2      ; class number to calculate reconstruction (0==all)
+[multiref-iter]   = -1     ; iteration of multireference alignment to use as input (<0 == last)
+[docfileValuesYN] = 1      ; override parameters below with (optional) filter docfile? (1==docfile, 0==header values)
+[header-type]     = 7      ; filter type (7==Butterworth, 5==Fermi, 3==Gaussian, 1==Tophat)
+[header-param1]   = 37.6   ; pass band for Butterworth, else filter radius (Angstroms)
+[header-param2]   = 28.2   ; stop band for Butterworth, temperature for Fermi, else unused (Angstroms)
+[numProcs]        = 0      ; number of CPUs to use (0==ALL)
 
 ; ------------------ Input files ------------------
 fr l
@@ -19,31 +20,25 @@ fr l
 fr l
 [volume_dir]Volumes                               ; output reconstruction directory
 fr l
-[class_vol][volume_dir]/vcla{***[class-num]}      ; class volume filename template
+[class_vol][volume_dir]/vcla{***[classNum]}       ; class volume filename template
 
 ; ------------------ Output files -----------------
 fr l
-[filt_vol]vflt{***[class-num]}        ; class volume filename template, in VOLUME_DIR
+[filt_vol]vflt{***[classNum]}         ; class volume filename template, in VOLUME_DIR
 fr l
 [filter_doc][volume_dir]/docvolfilt   ; editable doc file with filter parameters
 
 ; ---------------- END BATCH HEADER ---------------
 
+FR L
+[temp_filter_copy]tmpdoccopy
 fr l
-[temp_filter_doc]tmpdocvolfilt
+[temp_sorted_doc]tmpdocsorted
 
 ; get pixel-size
 ud 5, [pixel-size]
 [parameter_doc]
 ud e
-
-;; change filter radii to reciprocal pixels
-;[filt-param1] = [pixel-size]/[filt-param1]  ; pass-band
-;[filt-param2] = [pixel-size]/[filt-param2]  ; stop-band
-
-md
-set mp
-(0)
 
 ; check if all classes or single class specified
 if([single-class].eq.0) then
@@ -70,13 +65,13 @@ if([single-class].eq.0) then
     [class_list]
     
     vm
-    echo "Filtering all {***[num-classes]} classes listed in [class_list]" ; echo
+    echo "Filtering all {***[num-classes]} classes listed in [class_list]"
 else
     vm
-    echo "Filtering only class #{***[single-class]}" ; echo
+    echo "Filtering only class #{***[single-class]}"
     
     [num-classes] = 1
-    [class-num]   = [single-class]
+    [classNum]    = [single-class]
 endif
 
 ; check if filter docfile exists
@@ -87,27 +82,36 @@ if([filterdoc-exists].eq.1) then
     vm
     echo "[filter_doc].$DATEXT exists"
     
-    if([override-yn].eq.0) then
+    if([docfileValuesYN].eq.0) then
         vm
         echo "Will use filter parameters specified in batch file"
     else
         vm
         echo "Will use filter parameters specified in [filter_doc].$DATEXT"
+        
+        VM
+        cp -f [filter_doc].$DATEXT [temp_filter_copy].$DATEXT
     endif
 else
     vm
     echo "Will write filter parameters to [filter_doc].$DATEXT"
 endif
 
+VM
+echo
+
+md
+set mp
+[numProcs]
+
 ; loop through classes
-;;do lb1 [class-num] = 1,[num-classes]
 do lb1 [class-key] = 1,[num-classes]
     ; get class# if not a single class
     if([single-class].eq.0) then
-        ud ic [class-key], [class-num]
+        ud ic [class-key], [classNum]
         [class_list]
     endif
-    ; (If single class, [class-num] will have been set above.)
+    ; (If single class, [classNum] will have been set above.)
     
     ; check if volume exists
     iq fi, [vol-exists]
@@ -116,27 +120,25 @@ do lb1 [class-key] = 1,[num-classes]
     ; skip if no volume
     if([vol-exists].eq.0) then 
         vm
-        echo ; echo "Did not find [class_vol].$DATEXT -- Continuing..."
+        echo "Did not find [class_vol].$DATEXT -- Continuing..." ; echo
 
         goto lb1
     endif
     
     ; (The only condition where we use the docfile parameters is if the docfile exists AND override=1)
-    if([override-yn]*[filterdoc-exists].ne.0) then
-        ud find [docfile-key], [docfile-classnum],[docfile-filtertype],[docfile-param1],[docfile-param2]
-        [filter_doc]
-        (1,[class-num])   ; column# to search, value to search for
-        ud find e
-        [filter_doc]
+    if([docfileValuesYN]*[filterdoc-exists].ne.0) then
+        ud find [docfileKey], [docfile-classnum],[docfile-filtertype],[docfile-param1],[docfile-param2]
+        [temp_filter_copy]   ; WAS [filter_doc]
+        (1,[classNum])   ; column# to search, value to search for
+;        ud find e
+;        [temp_filter_copy]   ; WAS [filter_doc]
+        
+        [docfileKey]   ; diagnostic
         
         ; if parameters found, use those
-        if([docfile-key].ne.0) then
-            [filter-type] = [docfile-filtertype]
-            [filt-param1] = [pixel-size]/[docfile-param1]
-            [filt-param2] = [pixel-size]/[docfile-param2]
-        else
+        if([docfileKey].eq.0) then
             vm
-            echo ; echo "Couldn't find info for class #{***[class-num]} in [filter_doc].$DATEXT -- using values in batchfile header..."
+            echo "Couldn't find info for class #{***[classNum]} in [filter_doc].$DATEXT -- using values in batchfile header..."
             
             [filter-type] = [header-type]
             [filt-param1] = [pixel-size]/[header-param1]
@@ -145,6 +147,10 @@ do lb1 [class-key] = 1,[num-classes]
             ; The following will be written to the filter docfile
             [docfile-param1] = [header-param1]
             [docfile-param2] = [header-param2]
+        else
+            [filter-type] = [docfile-filtertype]
+            [filt-param1] = [pixel-size]/[docfile-param1]
+            [filt-param2] = [pixel-size]/[docfile-param2]
         endif
     
     ; use filter parameters in header
@@ -159,11 +165,13 @@ do lb1 [class-key] = 1,[num-classes]
     endif
     
     ; write to docfile
-    sd [class-num], [class-num],[filter-type],[docfile-param1],[docfile-param2]
+    sd [classNum], [classNum],[filter-type],[docfile-param1],[docfile-param2]
     [filter_doc]
+;    sd e
+;    [filter_doc]
     
     vm
-    echo ; echo "Class #{***[class-num]} -- Filter type: {*[filter-type]}, Parameter1: {%f6.2%[docfile-param1]}, Parameter2: {%f6.2%[docfile-param2]}"
+    echo "Class #{***[classNum]} -- Filter type: {*[filter-type]}, Parameter1: {%f6.2%[docfile-param1]}, Parameter2: {%f6.2%[docfile-param2]}" ; echo
 
     ; filter volume
     fq np
@@ -178,33 +186,40 @@ do lb1 [class-key] = 1,[num-classes]
 lb1
 ; end class-loop
 
+; close docs
+ud find e
+[temp_filter_copy]
+de
+[temp_filter_copy]
 sd e
 [filter_doc]
 
 ; update
 doc sort
 [filter_doc]
-[temp_filter_doc]
+[temp_sorted_doc]
 (1)   ; column# to sort: class#
 Y,Y   ; renumber keys?, remove duplicates?
 
 doc ren
-[temp_filter_doc]
+[temp_sorted_doc]
 [filter_doc]
 
 ; close docs
 de
-[temp_filter_doc]
+[temp_sorted_doc]
 SD /      CLASS_NUM     FILT_TYPE    FILT_PARAM1   FILT_PARAM2
 [filter_doc]
 sd e
 [filter_doc]
 
 vm
-echo ; echo "Done"
+echo "Done"
 
 en d
 
-; Modified 2014-03-09
+; Modified 2015-08-13
+;    2015-07-16 (trs) -- UD FIND doesn't like sharing with SD
+;    2015-07-16 (trs) -- number of CPUs now user-defined
 ;    2014-03-04 (trs) -- looks for last iteration of multireference alignment
 

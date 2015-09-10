@@ -4,17 +4,14 @@
 
 ; --------------- Parameters ---------------
 
-[exp-num]     = 3     ; volume number to align to reference
-[ref-num]     = 4     ; volume number of reference
+[exp-num]     = 2     ; volume number to align to reference
+[ref-num]     = 3     ; volume number of reference
 [num-solns]   = 2     ; number of alignment solutions to compare (starting from highest CC)
 
 [dtheta]      = 15    ; angular increment for re-projections (15==83 projections)
 [shift-range] = 8     ; alignment shift range, pixels
 [shift-step]  = 2     ; alignment step size, pixels
 [first-ring]  = 5     ; inner alignment radius, pixels
-
-;;[part-diam]   = 75    ; particle dimension, pixels
-;;[img-dim]     = 100   ; image dimension, pixels
 
 ; ---------------- Inputs -----------------
 fr l
@@ -53,17 +50,19 @@ fr l
 fr l
 [temp_align_doc]tmpapsh
 fr l
-[temp_refvol_aligned]_11   ; WAS [volalign_dir]/tmprefaligned{***[ref-num]}
+[temp_refvol_aligned]_11
 fr l
-[temp_expvol_aligned]_12   ; WAS [volalign_dir]/tmpexpaligned{***[exp-num]}
+[temp_expvol_aligned]_12
 fr l
-[temp_expvol_refined]_13   ; WAS [volalign_dir]/tmpexprefined{***[exp-num]}
+[temp_expvol_refined]_13
 fr l
 [temp_mask]_20
 fr l
 [temp_initial_reproj]tmp_init_projs{***[soln-num]}
 fr l
 [temp_refined_reproj]tmp_refi_projs{***[soln-num]}
+fr l
+[temp_comparison_stack]_21
 
 ; get image, particle dimensions
 ud ic 17,[img-dim]
@@ -101,7 +100,7 @@ doc create
 
 ; generate class list
 doc create
-[temp_class_list]   ; WAS [class_list]
+[temp_class_list]
 (1)           ; column# to fill
 [ref-num],[exp-num]
 
@@ -138,9 +137,9 @@ vm
 echo "Accumulated {***[num-classes]} classes total in [class_list].$DATEXT" ; echo
 
 ; loop through classes
-do lb3 [class-key] = 1,2   ; WAS [num-classes]
+do lb3 [class-key] = 1,2
     ud ic [class-key], [class-num]
-    [temp_class_list]   ; WAS [class_list]
+    [temp_class_list]
     
     de
     [prj_stack][class-num]@
@@ -160,7 +159,7 @@ lb3
 
 ; close doc
 ud ice
-[temp_class_list]   ; WAS [class_list]
+[temp_class_list]
 de
 [temp_class_list]
 
@@ -215,10 +214,13 @@ sd e
 
 ; COMPARING ALIGNMENTS
 
+; delete pre-existing files
 de
 [vol_align_doc][exp-num]
 de
 [vol_align_doc][ref-num]
+de
+[proj_montage][exp-num]@
 
 [prj-radius] = ([img-dim]/2) - 1
 [vol-center] = ([img-dim]/2) + 1
@@ -233,6 +235,15 @@ N         ; coordinates from doc file?
 [prj-radius]
 [vol-center],[vol-center],[vol-center]
 (0,0,0)   ; don't continue
+
+[ydim]                = [img-dim] + 36  ; label is 36 pixels tall
+[numComparisonSlices] = 2*([num-solns]+1)*[numang]
+
+; make empty stack for labelled re-projections
+ms
+[temp_comparison_stack]@
+[img-dim],[ydim]  ; dimensions
+[numComparisonSlices]
 
 vm
 echo "Aligning [class_vol][exp-num] to [class_vol][ref-num]"
@@ -255,15 +266,6 @@ do lb1 [soln-num] = 1,[num-solns]
     [ref_angles]
     ; (May differ from angles in ALIGN_DOC if mirroring was required.)
 
-    ;; rotate reference
-    ;rt 3d
-    ;[class_vol][ref-num]
-    ;[temp_refvol_aligned]   ; OUTPUT
-    ;[ref-phi],[ref-theta],[ref-psi]
-    ;
-    ;vm
-    ;echo "Rotating [class_vol][ref-num] by ({%f7.2%[ref-phi]},{%f7.2%[ref-theta]},{%f7.2%[ref-psi]})"
-
     ; get experimental angles
     ud ic [exp-proj], [exp-psi],[exp-theta],[exp-phi]
     [ref_angles]
@@ -275,12 +277,6 @@ do lb1 [soln-num] = 1,[num-solns]
         (0,0,0)     ; x,y,z-shifts
         (0,180,0)   ; 2nd rotation
         (0,0,0)     ; x,y,z-shifts
-
-;        ; rotate experimental volume (to best projection's frame of reference)
-;        rt 3d
-;        [class_vol][exp-num]
-;        [temp_expvol_aligned]   ; OUTPUT
-;        [mir-phi],[mir-theta],[mir-psi]
 
         ; combine angles to get reference's frame of reference
         sa 3 [ali-phi],[ali-theta],[ali-psi],[xsh],[ysh],[zsh]
@@ -316,12 +312,6 @@ do lb1 [soln-num] = 1,[num-solns]
         echo "Solution #{*[soln-num]}, refined alignment: ({%f7.2%[or3q-phi]},{%f7.2%[or3q-theta]},{%f7.2%[or3q-psi]})" ; echo
     ; if mirror not required
     else
-;        ; rotate experimental volume (to best projection's frame of reference)
-;        rt 3d
-;        [class_vol][exp-num]
-;        [temp_expvol_aligned]   ; OUTPUT
-;        [exp-phi],[exp-theta],[inplane]
-
         ; combine angles to get reference's frame of reference
         sa 3 [ali-phi],[ali-theta],[ali-psi],[xsh],[ysh],[zsh]
         [exp-phi],[exp-theta],[inplane]      ; 1st set of angles
@@ -371,12 +361,6 @@ do lb1 [soln-num] = 1,[num-solns]
     
     ; WRITE TO ALIGNMENT DOC
     
-;    ud n [num-alignments]
-;    [vol_align_doc]
-;    
-;    [next-alignment] = [num-alignments] + 1
-;    
-;    sd [next-alignment], [exp-num], [ref-num],[ali-phi],[ali-theta],[ali-psi],[initial-cc],[or3q-phi],[or3q-theta],[or3q-psi],[refined-cc]
     sd [soln-num], [ref-proj],[ali-phi],[ali-theta],[ali-psi],[initial-cc],[or3q-phi],[or3q-theta],[or3q-psi],[refined-cc]
     [vol_align_doc][exp-num]
     
@@ -400,7 +384,20 @@ do lb1 [soln-num] = 1,[num-solns]
     [ref_angles]       ; Proj. angles doc file           (input)
     [temp_refined_reproj]@****
     
-    ; if best solution, write to disk
+    ; loop through projections
+    do lb2 [prj-num] = 1,[num-proj]
+        @montageprj
+        [prj-num]                                ; PARAMETER: projection#
+        [soln-num]                               ; PARAMETER: solution#
+        [num-solns]                              ; PARAMETER: #solutions
+        [prj_stack][ref-num]                     ; INPUT: reference-projections
+        [temp_initial_reproj]                    ; INPUT: initial aligned projections
+        [temp_refined_reproj]                    ; INPUT: refined aligned projections
+        [temp_comparison_stack]                  ; INPUT/OUTPUT: re-projection stack
+    lb2
+    ; end projection-loop
+    
+    ; if best solution, write volume to disk
     if([soln-num].eq.1) then
         cp
         [temp_expvol_refined]
@@ -441,15 +438,21 @@ de
 [proj_montage][exp-num]@
 
 ; loop through projections
-do lb2 [prj-num] = 1,[num-proj]
-    @montageprj
-    [prj-num]                                ; PARAMETER: projection#
-    [num-solns]                              ; PARAMETER: #solutions
-    [prj_stack][ref-num]                     ; INPUT: reference-projections
-    [temp_initial_reproj]                    ; INPUT: initial aligned projections
-    [temp_refined_reproj]                    ; INPUT: refined aligned projections
-    [proj_montage][exp-num]@{***[prj-num]}   ; OUTPUT: compared reprojections
-lb2
+do lb5 [prj-num] = 1,[num-proj]
+    [firstSlice] = ([prj-num]-1)*([num-solns]+1)*2 + 1
+    [firstSlice]
+    
+    [lastSlice]  = ([prj-num])*([num-solns]+1)*2
+    [lastSlice]
+    
+    ; create montage
+    mn s
+    [temp_comparison_stack]@****             ; INPUT
+    [firstSlice]-[lastSlice]                 ; range of images
+    (2,1)                                    ; images/row, margin width
+    (0,5)                                    ; margin value
+    [proj_montage][exp-num]@{****[prj-num]}  ; OUTPUT
+lb5
 ; end projection-loop
 
 
@@ -464,6 +467,6 @@ lb4
 
 en d
 
-; Modified 2012-12-18
-;     TO DO: incorporate shifts in volume alignment
-
+; Modified 2015-03-17
+;    TO DO: incorporate shifts in volume alignment
+;    2015-03-17 (trs & qw) -- bug fix: in output montage, wrote the same solution's re-projections

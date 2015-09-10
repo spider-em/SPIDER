@@ -1,0 +1,94 @@
+; MAKE MASK TO ENVELOPE VOLUME
+
+; --------------------- Parameters ---------------------
+x11 = 85   ; Fourier-filter radius (Angstroms, used multiple times)
+x12 = 0.0001   ; threshold for input volume (check volume stats)
+x13 = 0.02   ; threshold for final mask (range 0..1)
+
+; ----------------------- Input -----------------------
+fr l
+[parameter_doc]params        ; parameter doc file
+fr l
+[input_vol]Volumes/vcla001   ; volume to mask
+
+; ---------------------- Outputs ----------------------
+fr l
+[unthresholded_mask]Volumes/mask-prethresh   ; unthresholded mask
+fr l
+[final_mask][input_vol]-mask                 ; mask
+fr l
+[masked_vol][input_vol]-masked               ; masked volume
+
+; ------------------ END BATCH HEADER ------------------
+
+; Temporary files
+fr l
+[temp_filtered_vol]_1   ; WAS tmpmask1_vol-filt  ; WAS
+fr l
+[thresholded_vol]_2  ; WAS tmpmask2_vol-thresh  ; WAS _2
+
+; get pixel-size
+ud 5, [pixel-size]
+[parameter_doc]
+ud e
+
+; compute radius in px^-1
+x11 = [pixel-size]/x11
+
+; get initial statistics
+fs
+[input_vol]  ; INPUT
+fi x [fmin],[fmax],[favg]
+[input_vol]  ; INPUT
+8,7,9        ; header positions for min, max, avg
+
+vm
+echo "Volume statistics -- FMIN:{%f8.5%[fmin]}, AVG:{%f8.5%[favg]}, FMAX:{%f8.5%[fmax]}"
+
+fq np
+[input_vol]  ; INPUT
+[temp_filtered_vol]
+(3)  ; Gaussian filter
+x11  ; filter radius
+
+th m
+[temp_filtered_vol]
+[thresholded_vol]
+B
+x12  ; first threshold for input volume
+
+fq np
+[thresholded_vol]
+[unthresholded_mask]
+(3)  ; Gaussian filter
+x11  ; Fourier-filter radius
+
+th m
+[unthresholded_mask]
+[final_mask]  ; OUTPUT
+B
+x13  ; threshold
+
+; get #voxels in mask
+fs
+[final_mask]
+fi x [mavg],[xdim],[ydim],[zdim]
+[final_mask]
+9,12,2,1   ; header positions for avg,nsam,nrow,nslice
+
+[num-voxels] = [mavg]*[xdim]*[ydim]*[zdim]
+
+vm
+echo "Number of voxels in mask: {*******[num-voxels]}" ; echo
+
+cp
+[input_vol]
+[masked_vol]
+
+mm c
+[final_mask]
+[masked_vol]  ; OUTPUT
+
+en d
+
+; Modified 2015-08-06
