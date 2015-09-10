@@ -19,15 +19,12 @@ C=* License, or (at your option) any later version.                    *
 C=*                                                                    *
 C=* SPIDER is distributed in the hope that it will be useful,          *
 C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
-C=* merchantability or fitness for a particular purpose.  See the GNU  *
-C=* General Public License for more details.                           *
-C=* You should have received a copy of the GNU General Public License  *
-C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=* merchantability or fitness for a particular purpose.  See the      *
+C=* GNU General Public License (www.gnu.org/licenses) for details.     *
 C=*                                                                    *
 C **********************************************************************
 C                                                                      *
-C  MAIN SUBROUTINE OF SPIDER IMAGE PROCESSING SYSTEM.                  *
-C  UPDATE VERSION STATEMENT (MARKED BY CHERE) WHEN VERSION IS CHANGED! *
+C  PURPOSE: MAIN SUBROUTINE OF SPIDER IMAGE PROCESSING SYSTEM.                  *
 C                                                                      *
 C  LUN ASSIGNMENTS: LUN     INTERACTIVE   IN PROC.         CONNECTS    *
 C                   NLOGP        1           1                LOG      *
@@ -43,6 +40,8 @@ C                                                                      *
 C                   LUNTEXT    103                         SYMPAR TXT  *
 C                   LUNDO      301                         LUNDO FILE  *
 C                              200...200+MAXICDOCS          SAVDOCQ    *
+C                                                                      *
+C  UPDATE VERSION STATEMENT (MARKED BY CHERE) WHEN VERSION IS CHANGED! *
 C                                                                      *
 C23456789012345678901234567890123456789012345678901234567890123456789012
 C***********************************************************************
@@ -80,7 +79,7 @@ C       WE USUALLY HAVE > 2 GB RAM AVAILABLE ON ALBANY MACHINES
         INTEGER, PARAMETER  :: MAXDI = 5000000
         INTEGER             :: PLINEGO(MAXDI/5)
         CHARACTER           :: PDATA(4*4*MAXDI/5)
-        COMMON   PLINEGO,PDATA
+        COMMON                 PLINEGO,PDATA
 
 C       @@@@@@@@@@@@@@@@@@@  DECLARATIONS @@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 
@@ -157,7 +156,7 @@ C       @@@@@@@@@@@@@@@@@@@@@@@@@@ DATA STATEMENTS @@@@@@@@@@@@@@@@@@@@
 C       @@@@@@@@@@@@@@@@@@@@@@ VERSION INITIALIZATION @@@@@@@@@@@@@@@@@
 
 CHERE               123456789 123456789 123456789 1234567890 
-        DATA CVERS/'VERSION:  UNIX  22.12 ISSUED:  7/17/2015'/
+        DATA CVERS/'VERSION:  UNIX  22.13 ISSUED:  9/8/2015'/
 
         DATA RESULM/'results'/
         DATA LOGM/'LOG'/
@@ -1392,7 +1391,7 @@ C       PROCESS THE 'ENDDO' OPERATION RETURNED FROM FINDLBQ
 C LOGICAL ELSE -------------------------------------------------- ELSE
 10798   CONTINUE
         IF (IFLEVEL <= 0) THEN
-           CALL ERRT(101,' IN PROGRAM IFLEVEL <= 0',NE)
+           CALL ERRT(102,' IN PROGRAM IFLEVEL <= 0',IFLEVEL)
         ELSEIF (.NOT. USEELSE(ISTOP,IFLEVEL)) THEN
 C          DO NOT NEED TO PROCESS THESE OPERATIONS, SKIP THEM
 C          KEEP READING INPUT LINES TILL CORRESPONDING ENDIF FOUND
@@ -1445,7 +1444,6 @@ C          PUT BLANKS AT END OF OUTSTR
            OUTSTR(LENOUT+1:LENMAX) = ' '
         ENDIF
 
-        RETURN
         END
 
 C **************************************************************************
@@ -1646,7 +1644,7 @@ C            THE *.spi FILE DOES NOT EXIST. NOTIFY USER
 
 #ifdef MPI_DEBUG
 
-        SUBROUTINE PI3F
+        SUBROUTINE PI3F   ! CAN BE USED FOR TESTING MPI WITHIN SPIDER 
 
         DOUBLE PRECISION, PARAMETER ::
      &                    PI25DT = 3.141592653589793238462643D0
@@ -1669,8 +1667,8 @@ C            THE *.spi FILE DOES NOT EXIST. NOTIFY USER
         DO j= 35,-1,-7
             IF ( MYPID == 0 ) THEN
                N = j
-c              CALL RDPRI1S( N,notused,
-c     &           'ENTER THE NUMBER OF INTERVALS: (0 QUITS)',irtflg)
+c              CALL RDPRI1S( N,NOTUSED,
+c     &           'ENTER THE NUMBER OF INTERVALS: (0 QUITS)',IRTFLG)
 c 99           FORMAT(I10)
 
               WRITE(6,*) 'INTERVALS: ',N
