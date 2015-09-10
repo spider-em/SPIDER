@@ -8,7 +8,7 @@ C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Copyright 1985-2015  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -26,14 +26,15 @@ C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
 C **********************************************************************
 C
-C    GETLBNO(STRING,LBNO,IRTFLG)
+C  GETLBNO(STRING,LBNO,IRTFLG)
 C
-C    PURPOSE:         GET LABEL NUMBER FROM STING
+C  PURPOSE:      GET LABEL NUMBER FROM STRING
 C        
-c    PARAMETERS:      STRING  STRING CONTAINING LB NUMBER (ONLY)   (SENT)
-C                     LBNO    LABEL NUMBER                     (RETURNED)
+c  PARAMETERS:   STRING  STRING CONTAINING LB NUMBER (ONLY)     (SENT)
+C                LBNO    LABEL NUMBER                       (RETURNED)
+C                IRTFLG  ERROR FLAG (UNUSED)                (RETURNED)
 C
-C--*******************************************************************
+C--*********************************************************************
 
 	SUBROUTINE GETLBNO(STRING,LBNO,IRTFLG)
 
@@ -52,18 +53,17 @@ C       FIND LAST NON-BLANK
         CALL SSUPCAS(TEMP1)
 
         IGO = INDEX(TEMP1,'LB')
-        IF (IGO .LE. 0) RETURN
+        IF (IGO <= 0) RETURN
 
         NCHAR = 1
         IF (ISDIGI(TEMP1(IGO+3:IGO+3))) NCHAR = 2
-        IF ((IGO+4) .LT. NCHAR1 .AND. ISDIGI(TEMP1(IGO+4:IGO+4))) THEN
+        IF ((IGO+4) < NCHAR1 .AND. ISDIGI(TEMP1(IGO+4:IGO+4))) THEN
            NCHAR = 3
         ENDIF 
 
         READ(TEMP1(IGO+2:IGO+2+NCHAR-1),8000) LBNO
 8000    FORMAT(I6)
 
-        RETURN
 	END
 
 
