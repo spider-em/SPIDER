@@ -1,21 +1,22 @@
 
 C ++********************************************************************
 C
-C COPYFROMCCP4             MODIFIED FROM COPYMRC   FEB 02 ArDean Leith         
-C                          ISSWAB ADDED            JUL 02 ArDean Leith
-C                          FLIP QUESTION           MAR 03 ArDean Leith
-C                          BAD IRECMRC4 & FLIP     SEP 03 ArDean Leith
-C                          SCALING                 JAN 05 ArDean Leith
-C                          I*8                     SEP 08 ArDean Leith
-C                          NPIX8                   DEC 08 ArDean Leith
-C                          BOTLEFT OPTION          MAY 12 ArDean Leith
-C                          STREAM IO               FEB 13 ArDean Leith
-C                          VOL BUG                 JUN 13 ArDean Leith
-C                          VOL BUG FIXED           JUL 13 ArDean Leith
-C                          MODE 6 STACK SUPPORT    SEP 14 ArDean Leith
-C                          IPOSMRC INTEGER *8      JAN 15 ArDean Leith
-C                          BOTLEFT DEFAULT         JUL 15 ArDean Leith
-C                          2015 STACK SUPPORT      JUL 15 ArDean Leith
+C COPYFROMCCP4   MODIFIED FROM COPYMRC             FEB 02 ArDean Leith         
+C                ISSWAB ADDED                      JUL 02 ArDean Leith
+C                FLIP QUESTION                     MAR 03 ArDean Leith
+C                BAD IRECMRC4 & FLIP               SEP 03 ArDean Leith
+C                SCALING                           JAN 05 ArDean Leith
+C                I*8                               SEP 08 ArDean Leith
+C                NPIX8                             DEC 08 ArDean Leith
+C                BOTLEFT OPTION                    MAY 12 ArDean Leith
+C                STREAM IO                         FEB 13 ArDean Leith
+C                VOL BUG                           JUN 13 ArDean Leith
+C                VOL BUG FIXED                     JUL 13 ArDean Leith
+C                MODE 6 STACK SUPPORT              SEP 14 ArDean Leith
+C                IPOSMRC INTEGER *8                JAN 15 ArDean Leith
+C                BOTLEFT DEFAULT                   JUL 15 ArDean Leith
+C                2015 STACK SUPPORT                JUL 15 ArDean Leith
+C                2015 STACK SUPPORT                JUL 15 ArDean Leith
 C
 C **********************************************************************
 C=*                                                                    *
@@ -155,8 +156,16 @@ C       CLOSE MRC FILE
 
         WANTSTACK = .FALSE. 
 
-        IF    ((ISPG ==   0 .AND. MZ == 1) .OR.
-     &         (ISPG ==   1 .AND. MZ == 1)) THEN
+        IF     (ISPG == 0 .AND. MZ == 1 .AND.  NZ > 1) THEN
+C          SPIDER IMAGE STACK OUTPUT FILE (SOME PRE 2015 STACKS)
+           WANTSTACK = .TRUE. 
+           NIMG      = NZ
+           NZ        = 1
+           ITYPE     = 1
+           MAXIM     = 1
+
+        ELSEIF ((ISPG ==   0 .AND. MZ == 1) .OR.
+     &          (ISPG ==   1 .AND. MZ == 1)) THEN
 C          SPIDER IMAGE OUTPUT         
            NIMG   = 1
            NZ     = MZ
@@ -168,8 +177,16 @@ C          OPEN SPIDER IMAGE OUTPUT FILE
      &                  MAXIM,'SPIDER OUTPUT',.FALSE.,IRTFLG)
            IF (IRTFLG .NE. 0) GOTO 9999
 
+        ELSEIF (ISPG ==   0 .AND. MZ >  1) THEN
+C          SPIDER IMAGE STACK OUTPUT (FOLLOWS MRC-2015 CONVENTION)
+           WANTSTACK = .TRUE. 
+           NIMG      = MZ
+           NZ        = 1
+           ITYPE     = 1
+           MAXIM     = 1
+
         ELSEIF (ISPG ==   1 .AND. MZ > 1) THEN
-C          VOLUME (VOLUME STACK POSSIBLE IN PRE-2015)
+C          VOLUME (MAY BE VOLUME STACK IN PRE-2015)
            NIMG   = 1
            NZ     = MZ
 
@@ -180,21 +197,13 @@ C          OPEN SPIDER VOLUME OUTPUT FILE
      &                  MAXIM,'SPIDER OUTPUT',.FALSE.,IRTFLG)
            IF (IRTFLG .NE. 0) GOTO 9999
 
-        ELSEIF (ISPG ==   0 .AND. MZ >  1) THEN
-C          SPIDER IMAGE STACK
-           WANTSTACK = .TRUE. 
-           NIMG   = MZ
-           NZ     = 1
-           ITYPE  = 1
-           MAXIM  = 1
-
         ELSEIF (ISPG == 401 .AND. MZ >  1) THEN
 C          POST 2015 FORMAT VOLUME STACK 
            WANTSTACK = .TRUE. 
-           NIMG   = NZ / MZ
-           NZ     = MZ
-           ITYPE  = 3
-           MAXIM  = 1
+           NIMG      = NZ / MZ
+           NZ        = MZ
+           ITYPE     = 3
+           MAXIM     = 1
 
         ELSE 
            CALL ERRT(102,'BAD STACK OR VOLUME PARAMETERS',ISPG)
