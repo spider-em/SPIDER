@@ -2,10 +2,11 @@
 C **********************************************************************
 C 
 C  GETHEDCCP4                                                  
-C                INTEL BYTE_ORDER                  JUL 09 ARDEAN LEITH
-C                FORMATTING                        SEP 14 ARDEAN LEITH
-C                FORMATTING                        JAN 15 ARDEAN LEITH
-C                ISPG PASSED                       JUL 15 ARDEAN LEITH
+C             INTEL BYTE_ORDER                  JUL 09 ARDEAN LEITH
+C             FORMATTING                        SEP 14 ARDEAN LEITH
+C             FORMATTING                        JAN 15 ARDEAN LEITH
+C             ISPG PASSED                       JUL 15 ARDEAN LEITH
+C             ISPG=0, NX>1  FOR STACK NOW       SEP 14 ARDEAN LEITH
 C                                                                      
 C **********************************************************************
 C=*                                                                    *
@@ -45,7 +46,7 @@ C  1    NX              # OF COLUMNS    (FASTEST CHANGING IN MAP)
 C  2    NY              # OF ROWS
 C  3    NZ              # OF SECTIONS   (SLOWEST CHANGING IN MAP)
 C  4    MODE            DATA TYPE
-C                       0   IMAGE: SIGNED 8-BIT BYTES RANGE -128 -->127                          
+C                       0   IMAGE:  8-BIT BYTES RANGE -128 -->127 (SIGNED)                         
 C                       1   IMAGE: 16-BIT HALFWORDS                
 C                       2   IMAGE: 32-BIT REALS                    
 C                       3   TRANSFORM: COMPLEX 16-BIT INTEGERS     
@@ -84,9 +85,9 @@ C
 C DATA RECORDS FOLLOW.
 C
 C NOTES:
-C        DMAX < DMIN                         MAX & MIN UNDETERMINED
+C        DMAX   < DMIN                       MAX & MIN UNDETERMINED
 C        DMEAN < (SMALLER OF DMIN and DMAX)  DMEAN     UNDETERMINED
-C        RMS < 0.0                           RMS       UNDETERMINED
+C        RMS   < 0.0                         RMS       UNDETERMINED
 C
 C23456789012345678901234567890123456789012345678901234567890123456789012
 CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
@@ -268,7 +269,7 @@ C          WRITE OUT HEADER INFORMATION
 
         ENDIF
 
-         END
+      END
 
 C --------------------------- MVNREV -------------------------------
 
@@ -321,4 +322,19 @@ C     ASSIGNS I1IN TO I1OUT AND FLIPS BYTES WITHIN WORDS IF REQUESTED
 
       END
 
+C ------------------------ CCPMVI -------------------------------
+
+      SUBROUTINE CCPMVI (ARR1,ARR2,NUM)
+
+C     PURPOSE:  ASSIGNS THE FIRST NUM WORDS OF ARR2 TO ARR1
+
+      INTEGER  :: NUM
+      REAL     :: ARR1(*),ARR2(*)
+      INTEGER  :: J
+
+      DO J=1,NUM
+         ARR1(J) = ARR2(J)
+      ENDDO
+
+      END
  
