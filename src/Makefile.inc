@@ -661,7 +661,6 @@ ELEMENTS =  \
  $(LIB)(readrq.o) \
  $(LIB)(reads.o) \
  $(LIB)(readv.o) \
- $(LIB)(redhedmrc.o) \
  $(LIB)(regparse.o) \
  $(LIB)(reg_set.o) \
  $(LIB)(redlin.o) \
@@ -902,7 +901,6 @@ ELEMENTS =  \
  $(LIB)(writev.o)    \
  $(LIB)(writpro_n.o) \
  $(LIB)(wrsl_p.o)    \
- $(LIB)(wrthedmrc.o) \
  $(LIB)(wrtlin.o)    \
  $(LIB)(wrtlin8.o)   \
  $(LIB)(wrtseq8.o)   \
