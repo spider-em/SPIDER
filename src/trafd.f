@@ -26,7 +26,7 @@ C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
 C **********************************************************************
 C
-C   TRAFD(LUN)
+C TRAFD(LUN)
 C
 C23456789012345678901234567890123456789012345678901234567890123456789012
 C--*********************************************************************
@@ -50,22 +50,29 @@ C--*********************************************************************
          CALL FILERD(FILNAM,NLET,NULL,'OUTPUT',IRTFLG)
          IF (IRTFLG .NE. 0) RETURN
 
-	CALL RDPRM(CS,NOT_USED,'SPHERICAL ABERRATION CS[MM]')
-           IF (CS < 0.0001)    CS = 0.0001
+         CALL RDPRM(CS,NOT_USED,'SPHERICAL ABERRATION CS [MM]')
+         IF (CS < 0.0001)    CS = 0.0001
+
          CALL RDPRM2(DZ,LAMBDA,NOT_USED,
-     &      'DEFOCUS(ANGSTROEMS), LAMBDA(ANGSTROEMS)')
-         CALL RDPRMI(NSAM,NDUM,NOT_USED,'NUMBER OF SP.FREQ.PTS')
-         CALL RDPRM(KM,NOT_USED,'MAXIMUM SPATIAL FREQUENCY[A-1]')
+     &                   'DEFOCUS [A], LAMBDA [A]')
+
+         CALL RDPRMI(NSAM,NDUM,NOT_USED,
+     &               'NUMBER OF SPATIAL FREQ. POINTS')
+
+         CALL RDPRM(KM,NOT_USED,'MAXIMUM SPATIAL FREQUENCY [1/A]')
+
          CALL RDPRM2(Q,DS,NOT_USED,
-     &      'SOURCE SIZE[A-1], DEFOCUS SPREAD[A]')
-         CALL RDPRM2(DZA,AZZ,NOT_USED,'ASTIGMATISM[A], AZIMUTH[DEG]')
+     &      'SOURCE SIZE[A-1], DEFOCUS SPREAD [A]')
+
+         CALL RDPRM2(DZA,AZZ,NOT_USED,'ASTIGMATISM [A], AZIMUTH [DEG]')
+
          CALL RDPRM2(WGH,ENV,NOT_USED,
-     &      'AMPL CONTRAST RATIO [0-1], GAUSSIAN ENV HALFW [FOU UNITS]')
-         ENV    = 1./ENV**2
+     &    'AMPL CONTRAST RATIO [0-1], GAUSSIAN ENV. HALFW. [1/A]')
+         ENV    = 1. / ENV**2
 
          IFORM  = 1
          NROW   = NSAM
-	 NSLICE = 1
+         NSLICE = 1
          MAXIM  = 0
          CALL OPFILEC(0,.FALSE.,FILNAM,LUN,'U',IFORM,NSAM,NROW,NSLICE,
      &                   MAXIM,' ',.TRUE.,IRTFLG)
@@ -73,12 +80,12 @@ C--*********************************************************************
 
          SC=KM/FLOAT(NSAM/2)
          CALL RDPRMC(ANS,NCHAR,.TRUE.,
-     &       '(D)IFFRACTOGRAM / (E)NVELOPE / (S)TRAIGHT',NULL,IRTFLG)
+     &       'DIFFRACTOGRAM / ENVELOPE / STRAIGHT (D/E/S)',NULL,IRTFLG)
          IE = 0
          IF (ANS.EQ.E) IE=1
 
-	 WGH = ATAN(WGH/(1.0-WGH))
-	 CS = CS*1.E7
+         WGH = ATAN(WGH/(1.0-WGH))
+         CS = CS*1.E7
 
          NS1 = (NSAM/2+1)
          DO  I=1,NROW
@@ -95,5 +102,5 @@ C               IF (K.EQ.NS1) GOTO 5
                IF (ANS .NE. S) B(K)=B(K)*B(K)
             ENDDO
             CALL WRTLIN(LUN,B,NSAM,I)
-	 ENDDO
+         ENDDO
          END
