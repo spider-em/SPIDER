@@ -7,6 +7,7 @@ C             FORMATTING                        SEP 14 ARDEAN LEITH
 C             FORMATTING                        JAN 15 ARDEAN LEITH
 C             ISPG PASSED                       JUL 15 ARDEAN LEITH
 C             ISPG=0, NX>1  FOR STACK NOW       SEP 14 ARDEAN LEITH
+C             DATA TYPE REPORTED                OCT 15 ARDEAN LEITH
 C                                                                      
 C **********************************************************************
 C=*                                                                    *
@@ -231,7 +232,32 @@ C          GET LABELS
            ENDDO
         ENDIF
 
-        IF (VERBOSE) THEN       
+        IF (VERBOSE) THEN 
+           WRITE(NOUT,*) ' '
+
+           IF     (IMODE == 0) THEN
+              WRITE(NOUT,*) ' Input data: ' //
+     &                      ' 8-bit signed integers, Range -128 --> 127'
+           ELSEIF (IMODE == 1) THEN
+              WRITE(NOUT,*) ' Input data: ' //
+     &                      ' 16-bit signed integers'
+           ELSEIF (IMODE == 2) THEN
+              WRITE(NOUT,*) ' Input data: ' //
+     &                      ' 32-bit reals '
+           ELSEIF (IMODE == 3) THEN
+              WRITE(NOUT,*) ' Input data: ' //
+     &                      ' Complex 16-bit integers'
+           ELSEIF (IMODE == 4) THEN
+              WRITE(NOUT,*) ' Input data: ' //
+     &                      ' Complex 16-bit reals'
+           ELSEIF (IMODE == 6) THEN
+              WRITE(NOUT,*) ' Input data: ' //
+     &                      ' 8-bit unsigned integers, Range 0 --> 255'
+           ENDIF
+
+           IEND = lnblnkn(CLABLS)
+           IF (IEND <= 0) NLABL = 0
+      
 C          WRITE OUT HEADER INFORMATION
            WRITE(NOUT,1000) NX,NY,NZ,IMODE,
      &       NXSTART,NYSTART,NZSTART, MX,MY,MZ,
@@ -240,7 +266,7 @@ C          WRITE OUT HEADER INFORMATION
      &       DMIN,DMAX,DMEAN,RMS,ORX,ORY,ORZ,ISPG,NSYMBT,
      &       MACHST,MAP,NLABL
 
-1000       FORMAT(/
+1000       FORMAT(
      &     2X,'Columns, rows, sections .................. ',3(I7,1X)/
      &     2X,'Mode ..................................... ',I6/
      &     2X,'Start points on columns, rows, sections .. ',3I7/
@@ -256,12 +282,12 @@ C          WRITE OUT HEADER INFORMATION
      &     2X,'Space group, # bytes symmetry ............ ',2I7/
      &     2X,'Machine stamp ............................ ',I12/
      &     2X,'Map ......................................      ',A/
+
      &     2X,'Number of labels ......................... ',I7)
 
            IF (NLABL > 0) THEN
               WRITE(NOUT,1001)
 1001          FORMAT('  Labels:')
-              IEND = lnblnkn(CLABLS)
               WRITE(NOUT,1002) CLABLS(1:IEND)
 1002          FORMAT(3X,100(A80))
            ENDIF
