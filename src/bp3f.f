@@ -19,11 +19,12 @@ C              RTSF SUPPORT                        JAN 12 ArDean Leith
 C              NSAM --> NX, RTSQ PARAM.            JAN 12 ArDean Leith
 C              ILIST ALLOC                         JAN 13 ArDean Leith
 C              HALT ADDED                          FEB 13 ArDean Leith
+C              NILMAXT NEEDED = NOT ASK FOR LIST   OCT 15 ArDean Leith
 C
 C=**********************************************************************
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright (C)2002,2014 P. A. Penczek & ArDean Leith                *
+C=* Copyright (C)2002,2015 P. A. Penczek & ArDean Leith                *
 C=* University of Texas - Houston Medical School                       *
 C=* Email:  pawel.a.penczek@uth.tmc.edu                                *
 C=*                                                                    *
@@ -584,11 +585,12 @@ C       OPEN FIRST INPUT VOLUME FILE
 
 C       OPEN FIRST INPUT WEIGHT FILE 
         FILNAMW = FILPATW
+        NILMAXT = -1   ! NEEDED SO IT DOES NOT ASK FOR LIST
         CALL OPFILES(0,LUNINW,LUNDOC,LUNXMW, 
      &             .FALSE.,FILPATW,NLETW, 'O',
      &             ITYPEW,NXW,NYW,NZW,MAXIMW,
      &             FILNAMW,
-     &             .TRUE., INUMBR,NILMAX, 
+     &             .TRUE., INUMBR,NILMAXT, 
      &             IDUM,NVOLW,IMGNUMW, IRTFLG) 
         IF (IRTFLG .NE. 0) GOTO 999
 
