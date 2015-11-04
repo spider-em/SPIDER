@@ -25,25 +25,26 @@ C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
 C **********************************************************************
 C
+C TRAFC3(LUN)
 C
-C changed 9/5/94 to include complete sign reversal and intelligible
-C Gaussian parameter jf
+C  CHANGED 9/5/94 TO INCLUDE COMPLETE SIGN REVERSAL AND INTELLIGIBLE
+C  GAUSSIAN PARAMETER jf
 C  FIXED, PP 3/2/95
 C
 C23456789012345678901234567890123456789012345678901234567890123456789012
-C--*********************************************************************
+C***********************************************************************
 
          SUBROUTINE TRAFC3(LUN)
 
          INCLUDE 'CMBLOCK.INC'
-	 INCLUDE 'CMLIMIT.INC'
+         INCLUDE 'CMLIMIT.INC'
 
-	 COMPLEX                :: B
          COMMON        B(1)
+         COMPLEX                :: B
 
-         CHARACTER(LEN=MAXNAM)  ::  FILNAM
+         CHARACTER(LEN=MAXNAM)  :: FILNAM
          REAL                   :: LAMBDA,KM,SIGN
-      	 CHARACTER(LEN=1)       :: NULL = CHAR(0)  
+         CHARACTER(LEN=1)       :: NULL = CHAR(0)  
 
          DATA PI/3.1415926/
 
@@ -51,7 +52,7 @@ C--*********************************************************************
          CALL FILERD(FILNAM,NLET,NULL,'OUTPUT',IRTFLG)
          IF (IRTFLG .EQ. -1) RETURN
 
-	CALL RDPRM(CS,NOT_USED,'SPHERICAL ABERRATION CS[MM]')
+        CALL RDPRM(CS,NOT_USED,'SPHERICAL ABERRATION CS [MM]')
            IF (CS < 0.0001)    CS = 0.0001
 
          CALL RDPRM2(DZ,LAMBDA,NOT_USED, 'DEFOCUS [A], LAMBDA [A]')
@@ -67,7 +68,7 @@ C--*********************************************************************
          CALL RDPRM2(DZA,AZZ,NOT_USED,'ASTIGMATISM [A], AZIMUTH [DEG]')
 
          CALL RDPRM2(WGH,ENV,NOT_USED,
-     &      'AMPL CONTRAST RATIO [0-1], GAUSSIAN ENV HALFW [1/A]')
+     &       'AMPL CONTRAST RATIO [0-1], GAUSSIAN ENV HALFW [1/A]')
  
          ENV = 1. / ENV**2
 
@@ -76,13 +77,13 @@ C--*********************************************************************
          IFORM  = -7
          NROW   = NSAM
          NSLICE = NROW
-	 IF (MOD(NSAM,2) .EQ. 0)  THEN
+         IF (MOD(NSAM,2) .EQ. 0)  THEN
             IFORM = -22
-	    LSM   = NSAM+2
-	 ELSE
-	    IFORM = -21
-	    LSM   = NSAM+1
-	 ENDIF
+            LSM   = NSAM+2
+         ELSE
+            IFORM = -21
+            LSM   = NSAM+1
+         ENDIF
 
          MAXIM = 0
          CALL OPFILEC(0,.FALSE.,FILNAM,LUN,'U',IFORM,LSM,NROW,NSLICE,
@@ -92,22 +93,22 @@ C--*********************************************************************
          SC = KM / FLOAT(NSAM/2)
 
 C        IE=0 SELECTS TRANSFER FUNCTION OPTION IN SUBROUTINE TFD
-	 IE  = 0
-	 WGH = ATAN(WGH / (1.0-WGH))
-	 CS  = CS * 1.E7
+         IE  = 0
+         WGH = ATAN(WGH / (1.0-WGH))
+         CS  = CS * 1.E7
 
          NS2 = NSAM/2
          NR2 = NROW/2
          NL2 = NSLICE/2
 C
-	DO K=1,NSLICE
-	   IZ = K-1
-	   IF (IZ .GT. NL2) IZ = IZ-NSLICE
-	   DO J=1,NROW
-	      IY = J-1
-	      IF (IY .GT. NR2) IY = IY-NROW
-	      DO I=1,LSM
-	         IX = (I-1)/2
+        DO K=1,NSLICE
+           IZ = K-1
+           IF (IZ .GT. NL2) IZ = IZ-NSLICE
+           DO J=1,NROW
+              IY = J-1
+              IF (IY .GT. NR2) IY = IY-NROW
+              DO I=1,LSM
+                 IX = (I-1)/2
 
                  AK = SQRT(FLOAT(IX*IX)+FLOAT(IY*IY)+FLOAT(IZ*IZ))*SC
                  IF (AK .NE. 0.0) THEN
@@ -125,6 +126,6 @@ C                AZ  = ATAN2(0.0,AK)
               ENDDO
               CALL WRTLIN(LUN,B,LSM,J+(K-1)*NROW)
            ENDDO
-	 ENDDO
+         ENDDO
 
          END
