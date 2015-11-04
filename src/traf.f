@@ -33,62 +33,62 @@ C   TRAF(LUN)
 C
 C   LUN    LOGICAL UNIT NUMBER OF FILE
 C
-C--*******************************************************************
+C***********************************************************************
 
         SUBROUTINE TRAF(LUN)
 
         INCLUDE 'CMBLOCK.INC'
         INCLUDE 'CMLIMIT.INC' 
  
-        CHARACTER(LEN=MAXNAM) ::  FILNAM
+        CHARACTER(LEN=MAXNAM) :: FILNAM
  
-	REAL          B(512)
+        REAL          B(512)
         COMMON        B
 
         CHARACTER     NULL,ANS,E,S,OPTC
-	REAL          LAMBDA,KM
+        REAL          LAMBDA,KM
 
         NULL = CHAR(0)
 
-	CALL FILERD(FILNAM,NLET,NULL,'OUTPUT',IRTFLG)
+        CALL FILERD(FILNAM,NLET,NULL,'OUTPUT',IRTFLG)
         IF (IRTFLG .NE. 0) RETURN
 
-	CALL RDPRM(CS,NOT_USED,'CS')
+        CALL RDPRM(CS,NOT_USED,'CS [MM]')
 
-	CALL RDPRM(LAMBDA,NOT_USED,'LAMBDA')
+        CALL RDPRM(LAMBDA,NOT_USED,'LAMBDA [A]')
 
-	CALL RDPRM(DZ1,NOT_USED,'LOWER DEFOCUS LIMIT')
+        CALL RDPRM(DZ1,NOT_USED,'LOWER DEFOCUS LIMIT [A]')
 
-	CALL RDPRM(DZ2,NOT_USED,'UPPER DEFOCUS LIMIT')
+        CALL RDPRM(DZ2,NOT_USED,'UPPER DEFOCUS LIMIT [A]')
 
-	CALL RDPRMI(NSAM,NROW,NOT_USED,
-     &	           'NUMBER OF SP. FREQ. PTS & DEFOCUS GRID POINTS')
+        CALL RDPRMI(NSAM,NROW,NOT_USED,
+     &       'NUMBER OF SPATIAL FREQ. POINTS and DEFOCUS GRID POINTS')
 
-	CALL RDPRM(KM,NOT_USED,'MAXIMUM SPATIAL FREQUENCY[A-1]')
+        CALL RDPRM(KM,NOT_USED,'MAXIMUM SPATIAL FREQUENCY [1/A]')
 
-	CALL RDPRM(Q,NOT_USED,'SOURCE SIZE[A-1]')
+        CALL RDPRM(Q,NOT_USED,'SOURCE SIZE [1/A]')
 
-	CALL RDPRM(DS,NOT_USED,'DEFOCUS SPREAD[A]')
+        CALL RDPRM(DS,NOT_USED,'DEFOCUS SPREAD [A]')
 
         CALL RDPRM2(WGH,ENV,NOT_USED,
-     &   'AMPL. CONTRAST RATIO [0-1], GAUSSIAN ENV. HALFW [FOU. UNITS]')
+     &   'AMPLITUDE CONTRAST RATIO [0-1], GAUSSIAN ENV. HALFW [1/A]')
         IF (WGH .LT. 0.0 .OR. WGH .GT. 1.0) THEN
            CALL ERRT(31,'TRAF',NE)
            RETURN
         ENDIF
 
-	ENV = 1.0 / ENV**2
-	CALL RDPRMC(ANS,NCHAR,.TRUE.,
-     &     '(D)IFFRACTOGRAM / (E)NVELOPE / (S)TRAIGHT',NULL,IRTFLG)
-	IF (ANS .EQ. 'E') IE = 1
+        ENV = 1.0 / ENV**2
+        CALL RDPRMC(ANS,NCHAR,.TRUE.,
+     &     'DIFFRACTOGRAM, ENVELOPE or STRAIGHT (D/E/S)',NULL,IRTFLG)
+        IF (ANS == 'E') IE = 1
 
-        CALL RDPRMC(OPTC,NCHAR,.TRUE.,'FRAME? (Y/N)',NULL,IRTFLG)
+        CALL RDPRMC(OPTC,NCHAR,.TRUE.,'FRAME WANTED? (Y/N)',NULL,IRTFLG)
 
-	DZ  = DZ1
-	DDZ = (DZ2-DZ1) / FLOAT(NROW)
+        DZ  = DZ1
+        DDZ = (DZ2-DZ1) / FLOAT(NROW)
 
 C       FRAME OPTION
-        IF (OPTC .EQ. 'Y') THEN
+        IF (OPTC == 'Y') THEN
 c          copied next two lines from above ml 2/2/95
            NSAMT    = NSAM + 2
            NROWT    = NROW + 2
@@ -104,7 +104,7 @@ c          copied next two lines from above ml 2/2/95
         ENDIF
 
 C       OPEN CONVERTED TO OPEN3 JUNE 88 al
-	MAXIM  = 0
+        MAXIM  = 0
         IFORM  = 1
         NSLICE = 1
         CALL OPFILEC(0,.FALSE.,FILNAM,LUN,'U',IFORM,NSAMT,NROWT,NSLICE,
@@ -112,12 +112,17 @@ C       OPEN CONVERTED TO OPEN3 JUNE 88 al
         IF (IRTFLG .NE. 0) RETURN
 
         IDONE = 0
-	DO  I=1,NROW
-	  CALL TF(B(2),CS,DZ,LAMBDA,KM,NSAM,Q,DS,IE,WGH,ENV)
-          IF (OPTC .EQ. 'Y') B(NSAMT)=1
+        DO  I=1,NROW
+
+          CALL TF(B(2),CS,DZ,LAMBDA,KM,NSAM,Q,DS,IE,WGH,ENV)
+
+          IF (OPTC == 'Y') B(NSAMT) = 1
 
 C         ZERO DEFOCUS LINE AS PART OF FRAME
-          IF (OPTC.EQ.'Y' .AND. ABS(DZ) .LT. DDZ .AND.I DONE.EQ.0) THEN
+          IF (OPTC == 'Y'    .AND. 
+     &        ABS(DZ) <  DDZ .AND.
+     &        IDONE   == 0) THEN
+
             DO  K=1,NSAMT
                B(K) = 1
             END DO
@@ -125,23 +130,24 @@ C         ZERO DEFOCUS LINE AS PART OF FRAME
           ENDIF
 C
           IF (ANS .NE. 'S') THEN
-	      DO  IA=2,NSAM+1
-	         B(IA) = B(IA)*B(IA)
-	      ENDDO
+              DO  IA=2,NSAM+1
+                 B(IA) = B(IA)*B(IA)
+              ENDDO
            ENDIF
 
            CALL WRTLIN(LUN,B(IOFF),NSAMT,I+IFRAME)
            DZ = DZ + DDZ
-	ENDDO
+        ENDDO
 
-        IF (OPTC .EQ. 'Y') THEN
+        IF (OPTC == 'Y') THEN
            DO  K=1,NSAMT
              B(K) = 1
-	   ENDDO
+           ENDDO
+
            CALL WRTLIN(LUN,B(IOFF),NSAMT,1)
            CALL WRTLIN(LUN,B(IOFF),NSAMT,NROWT)
         ENDIF
 
-	CALL SETPRMB(LUN, 0.,0. ,0.,0.)
-        RETURN
-	END
+        CALL SETPRMB(LUN, 0.,0. ,0.,0.)
+
+        END
