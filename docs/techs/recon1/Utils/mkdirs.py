@@ -3,6 +3,12 @@
 # mkdirs.py
 # Creates directories, and loads batch files into subdirectories.
 
+# Usage:   mkdirs.py project_dir       Creates directories, loads batch files
+#          mkdirs.py -n project_dir    Don't ask for confirmation
+#          mkdirs.py -d                Prints out directory tree
+#          mkdirs.py -b                Print out batch files and directories
+#          mkdirs.py -h                Help message
+ 
 import string
 import os,sys
 import shutil

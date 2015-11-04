@@ -166,12 +166,14 @@ def readSPRpage(filename=None, dirobj=None):
             subs = newsubs
             procs = []
 
-        # Look for procedures
+        # Look for procedures 
         elif string.find(s,batdir) > -1:
-            proc = get_batfile(s)
-            fname,ext = os.path.splitext(proc)
-            if ext in batext and proc not in procs:
-                procs.append(proc)
+
+	    if string.find(s, 'class="project"') > -1:  # Added al Oct 2015
+            	proc = get_batfile(s)
+            	fname,ext = os.path.splitext(proc)
+            	if ext in batext and proc not in procs:
+			procs.append(proc)
                 
         i = i + 1
         s = B[i]
