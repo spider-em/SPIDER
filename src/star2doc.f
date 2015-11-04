@@ -5,12 +5,14 @@ C  STAR2DOC.F  XMIPP STAR FILE SUPPORT           APR 2013 ARDEAN LEITH
 C              LINE END BUG                      FEB 2014 ARDEAN LEITH 
 C              REWRITE WITH VAR NAMES            FEB 2014 ARDEAN LEITH 
 C              NREGSTAR = MIN(NVARSTARNAME BUG   MAY 2014 ARDEAN LEITH
+C              MAXLENVAR = 40 --> 120            OCT 2015 ARDEAN LEITH
+C              NVARSTAR BUG                      OCT 2015 ARDEAN LEITH
 C                                                                 
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2014  Health Research Inc.,                         *
+C=* Copyright 1985-2015  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -51,7 +53,7 @@ C--*********************************************************************
 
       CHARACTER(LEN=MAXNAM)    :: FILXM,DOCNAM 
 
-      INTEGER, PARAMETER       :: MAXLENVAR = 40
+      INTEGER, PARAMETER       :: MAXLENVAR = 120
       INTEGER, PARAMETER       :: NVARSMAX  = 50
 
       INTEGER                  :: NVARHEAD,NVARSTAR,IHEAD,ISTAR
@@ -75,7 +77,7 @@ C--*********************************************************************
       INTEGER                  :: ILABEL(NVARSMAX) 
 
       INTEGER                  :: IENDVAR,IGO,IEND,NCHAR2        
-      INTEGER                  :: IFIRST,NCHAR,NGOT         
+      INTEGER                  :: IFIRST,NCHAR,NGOT,IPUT,IWHICH       
       INTEGER                  :: NLET,ICOMM,MYPID,MPIERR
        
       CHARACTER(LEN=1)         :: NULL = CHAR(0)  
@@ -123,7 +125,8 @@ C           GOT A STAR REGISTER VARIABLE NAME
             NCHAR             = lnblnkn(VARTMP(1))
             NCHAR2            = lnblnkn(VARTMP(2))
             VARHEAD(NVARHEAD) = VARTMP(1)(1:NCHAR)
-            WRITE(NOUT,90) '  ',VARHEAD(NVARHEAD),VARTMP(2)(1:NCHAR2)
+            WRITE(NOUT,90) '  ',VARHEAD(NVARHEAD)(1:NCHAR),
+     &                          VARTMP(2)(1:NCHAR2)
 90          FORMAT(A,A,1X,A,I0)
 
          ELSE
@@ -188,7 +191,7 @@ C     GET LIST OF STAR FILENAME VARIABLES WANTED -----------------
      &  CDUM,IRTFLG)
       IF (IRTFLG .NE. 0) GOTO 9999
 
-      NVARSPINAME = 0
+      NVARSPINAME  = 0
       NVARSTARNAME = 0
       IF (NLET > 0 .AND. RECLIN(1:1) .NE. '*') THEN
 C        PARSE STAR NAME VARIABLES LINE INTO ARRAY
@@ -203,10 +206,10 @@ C        ASSOCIATE STAR FILENAME VARIABLES WITH COLS IN STAR FILE ----
             DO IHEAD = 1,NVARHEAD
                IF (VARSTARNAME(ISTAR) == VARHEAD(IHEAD)) THEN
                   NCOLSTARNAME(ISTAR) = IHEAD
-                  NCHAR = lnblnkn(VARSTARNAME(ISTAR))
+                  NCHAR               = lnblnkn(VARSTARNAME(ISTAR))
                   WRITE(NOUT,91) '  ',VARSTARNAME(ISTAR)(1:NCHAR),
      &                        ' From Col: ',NCOLSTARNAME(ISTAR)
-               ENDIF
+              ENDIF
             ENDDO
          ENDDO
          WRITE(NOUT,*) ' '
@@ -236,8 +239,6 @@ C     OPEN SPIDER OUTPUT DOC FILE
       IF (IRTFLG == -1) RETURN
 
 
-      !CALL LUNDOCPUTCOM(NICDOC,' PSI, THETA, AND PHI',IRTFLG)
-
       REWIND(LUNXM)           ! RETURN TO BEGINNING
 
       NREGSTAR = 0
@@ -249,21 +250,22 @@ C     OPEN SPIDER OUTPUT DOC FILE
 
       ILABEL = 0  ! ARRAY ZERO
       DO I = 1,NVARSPI
-         ILOC = NCOLSPI(I)
+         ILOC         = NCOLSPI(I)
          ILABEL(ILOC) = NCOLSTAR(I)
-         !write(6,*) ' Col:',ILOC,' label:',ilabel(ILOC),ncolspi(i)
+         !write(6,*) ' Col:',iloc,' Label#:',ilabel(iloc)
       ENDDO
-      DO I = 1,NVARSPINAME
-         ILOC = NCOLSPINAME(I)
 
-         IF (NCOLSTARNAME(I) < 1 .OR. 
-     &       NCOLSTARNAME(I) > NLIST) THEN
-            ILABEL(ILOC) = ILAST
-         ELSE
-            ILABEL(ILOC) = NCOLSTARNAME(I)
-         ENDIF
-         ILAST = ILABEL(ILOC)
+      !write(6,*) 'Nvarspi:',    Nvarspi 
+      !write(6,*) 'Nvarspiname:',Nvarspiname
+      !write(6,*) 'Ncolstarname(1):', ncolstarname(1) 
+
+      DO I = 1,NVARSPINAME             !  1:3
+         ILOC         = NCOLSPINAME(I) !  1,2,3
+         ILABEL(ILOC) = NCOLSTARNAME(1)  ! WRONG IF > 1 namevar!!!
+         !write(6,*) 'Ncolstarname:',i, ncolstarname(i) 
       ENDDO
+
+      !write(6,'("star col:",100(i5,9x))') ilabel(1:nlist)
 
       WRITE(RECLIN,'("STAR COL:",100(I5,9X))') ILABEL(1:NLIST)
       NCHAR = lnblnkn(RECLIN)
@@ -293,12 +295,12 @@ C        PARSE STAR FILE REGISTER LINE INTO TOKENS
 C        INTERPRET TOKENS AS FLOATS, PLACE IN DLIST
          DO ITOK = 1,NVARSPI
             ILOC   = NCOLSPI(ITOK)
+
             !write(6,*) ' ncolstar:',ncolstar(1:20)
             !write(6,*) ' itok,iloc:',itok,iloc,ncolstar(itok)
             CTOKEN = TRIM(VARTMP(NCOLSTAR(ITOK)))
 
             !write(6,*) ' Token:',ctoken
-
             READ(CTOKEN,'(f10.0)') DLIST(ILOC) 
             !write(6,*) ' Token:',ctoken,' dlist:',dlist(ITOK)
          ENDDO
@@ -308,40 +310,51 @@ C        EXTRACT ALL INTEGERS FIELDS FROM FILENAME TOKENS
          ! NOTE: NVARSTARNAME MAY BE ZERO
          IT = 1
 
+         ! write(6,*) ' nvarstarname:',nvarstarname
          DO ITOK = 1,NVARSTARNAME
             IGO    = 0
-            RECNAM = TRIM(VARTMP(NCOLSTARNAME(ITOK)))
+            RECNAM = ADJUSTL(TRIM(VARTMP(NCOLSTARNAME(ITOK))))
             NCHAR  = lnblnkn(RECNAM)
+            !write(6,*) ' recnam:',recnam(1:nchar)
 
 C           PARSE STAR FILE TOKEN INTO SUB-TOKENS
             CALL GET_TOKENS(RECNAM,NCHAR,MAXLENVAR,NVARSMAX,
      &                     .TRUE.,VALID, VARTMP, NREGSTAR, IRTFLG)
             IF (IRTFLG .NE. 0) EXIT
             IF (NREGSTAR < 1)  EXIT        ! SKIP 
-            !write(6,*) ' vartmp(1):',vartmp(1)
-            !write(6,*) ' vartmp(2):',vartmp(2)
+            !write(6,*) ' vartmp(1):', adjustl(trim(vartmp(1)))
+            !write(6,*) ' nregstar:',nregstar,'  it:',it
 
 C           INTERPRET TOKENS AS FLOATS, PLACE IN DLIST
-            NREGSTAR = MIN(NREGSTAR,NVARSTARNAME)
+            NREGSTAR = MIN(NREGSTAR,(NVARSPINAME - IT +1))
+            !write(6,*)' nregstar,nvarstarname:',nregstar,nvarstarname
+
+            IPUT = 0
             DO I = IT,IT+NREGSTAR-1
+               IWHICH = I - IT + 1
                ILOC   = NCOLSPINAME(I)
-               CTOKEN = TRIM(VARTMP(I))
-               !write(6,*) ' Token:',ctoken,I,ncolstarname(i)
+               CTOKEN = ADJUSTL(VARTMP(IWHICH))
+               NCHAR  = lnblnkn(CTOKEN)
+               !write(6,*)' Token:',ctoken(1:nchar),i,iloc
 
-               READ(CTOKEN,'(F10.0)') DLIST(ILOC) 
-               !write(6,*) ' Token:',ctoken,' dlist:',iloc,dlist(iloc)
-
+               READ(CTOKEN(1:NCHAR),'(F10.0)') DLIST(ILOC) 
+               !write(6,*)' Token:',ctoken(1:NCHAR),' dlist:',iloc,dlist(iloc)
+               IPUT = IPUT + 1
             ENDDO
+            IT = IT + IPUT
+
          ENDDO       ! END OF: DO I = 1,NVARSTARNAME
 
 C        WRITE OUTPUT LINE IN DOC FILE
          IKEY = IKEY + 1
-
          CALL LUNDOCWRTDAT(LUNDOCT,IKEY,DLIST,NLIST,IRTFLG)
+
       ENDDO          ! END OF: DO 
+
 
 9999  CLOSE(LUNDOC)
 
+C     PUT NUMBER OF KEYS IN OPERATION LINE REGISTER
       CALL REG_SET_NSEL(1,1,FLOAT(IKEY),0,0,0,0,IRTFLG)
 
       IRTFLG =  0
