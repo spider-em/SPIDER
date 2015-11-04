@@ -16,7 +16,7 @@ C                MODE 6 STACK SUPPORT              SEP 14 ArDean Leith
 C                IPOSMRC INTEGER *8                JAN 15 ArDean Leith
 C                BOTLEFT DEFAULT                   JUL 15 ArDean Leith
 C                2015 STACK SUPPORT                JUL 15 ArDean Leith
-C                2015 STACK SUPPORT                JUL 15 ArDean Leith
+C                STACK END BUG                     OCT 15 ArDean Leith
 C
 C **********************************************************************
 C=*                                                                    *
@@ -445,8 +445,9 @@ c               IPOSMRC = IOFFSET + (IREC-1) * NX * 4 + 1
                 IPOSMRC = IOFFSET + IPOSMRC + 1
 
                 READ(LUNMRC, POS=IPOSMRC,IOSTAT=IERR) STREAMBUF
-                !if (irec ==1) write(6,*) ' Val:',iposmrc, streambuf(1)
-                !write(6,*) ' irec,iposmrc:',irec,iposmrc
+                IF (IERR .NE. 0) THEN
+                   CALL ERRT(102,'READ ERROR ',IERR)
+                ENDIF
 
                 IF (FLIP) THEN
 C                  INVERT BYTE ORDER
@@ -460,6 +461,10 @@ C                  INVERT BYTE ORDER
                    ENDDO
                 ENDIF
 
+                !if (irec ==1) write(6,*) ' Val:',iposmrc, streambuf(1)
+                !if (iz==1 .and. iy==1)
+     &          !        write(6,*) ' Val:',iposmrc, streambuf(1)
+
 C               PUT OUT COMPLETED RECORD
                 IRECSPI = IRECSPI + IRECINC
                 CALL WRTLIN(LUNSPI,STREAMBUF,NX,IRECSPI)
@@ -472,6 +477,7 @@ C               PUT OUT COMPLETED RECORD
         ENDIF
 
         IF (.NOT. WANTSTACK) EXIT    ! FINISHED IF NOT A MRC STACK
+        IF (NINDX >= NIMG)   EXIT    ! ALREADY FINISHED WITH STACK
 
 C       OPEN NEXT STACKED OUTPUT FILE 
         CALL NEXTFILE(NINDX, ILIST, 
@@ -481,11 +487,7 @@ C       OPEN NEXT STACKED OUTPUT FILE
      &                FILOUT,'N',
      &                IMGNUMOUT, IRTFLG) 
         
-c       write(6,*)' nindx,nimg,imgnumout,irtflg:',
-c     &             nindx,nimg,imgnumout,irtflg
-
-        IF (NINDX > NIMG) EXIT    ! FINISHED 
-        IF (IRTFLG == -99) THEN
+       IF (IRTFLG == -99) THEN
            CALL ERRT(102,'INSUFFICIENT OUTPUT FILE NAMES',NINDX)
            EXIT         
         ELSEIF (IRTFLG .NE. 0) THEN
@@ -493,6 +495,9 @@ c     &             nindx,nimg,imgnumout,irtflg
         ENDIF
 
        ENDDO   ! END OF STACK LOOP --------------------------
+
+      !iposmrc = iposmrc + nx  
+      !write(6,*) ' Last iposmrc:',iposmrc, streambuf(1)
         
 9999   CLOSE(LUNSPI)
        CLOSE(LUNMRC)
