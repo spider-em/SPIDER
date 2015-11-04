@@ -3,7 +3,7 @@ C  TFLM4.F
 C
 C*****************************************************************************
 C=* From: SPIDER - MODULAR IMAGE PROCESSING SYSTEM                     *
-C=* Copyright (C)2003, 2014, P. A. Penczek                             *
+C=* Copyright (C)2003, 2015, P. A. Penczek                             *
 C=* University of Texas - Houston Medical School                       *
 C=* Email:  pawel.a.penczek@uth.tmc.edu                                *
 C=*                                           *
@@ -41,20 +41,19 @@ C ****************************************************************************
 	COMMON /CTF1/ PS,XLAMBDA,CS,CONTRAST,DEFOCUS,QUADPI,
      &	     XALF1,XBETA1,ALF1,ALF2,BETA1,BETA2,V_RATIO,ISWI
 
-      	!CHARACTER*80	DOCNAM1
         CHARACTER(LEN=MAXNAM) :: DOCNAM1
 
 	PARAMETER  (NLIST=7)
       	REAL	DLIST(NLIST)  
 	REAL, DIMENSION(:,:), POINTER   :: DOCBUF1
-      	real, DIMENSION(:), ALLOCATABLE :: PLOT
+      	REAL, DIMENSION(:), ALLOCATABLE :: PLOT
 
 	DATA LUN1/78/
 	DATA LUN2/89/
-      	DATA  NDOC/87/	
+      	DATA NDOC/87/	
 
-	QUADPI=3.14159265
-	ISWI=4
+	QUADPI = 3.14159265
+	ISWI   = 4
 
         CALL RDPRM2S(PS,CS,NOT_USED,
      &      'PIXEL SIZE[A] & SPHERICAL ABERRATION CS[MM]',IRTFLG)
@@ -64,21 +63,21 @@ C     	CONVERT CS TO [A]
       	CS = CS*1.0E07
 
       	CALL RDPRM1S(XLAMBDA,NOT_USED,
-     &          'WAVELENGTH LAMBDA [A]',IRTFLG)
+     &          'ELECTRON WAVELENGTH - LAMBDA [A]',IRTFLG)
 
       	CALL RDPRM1S(CONTRAST,NOT_USED,
-     &              'AMPL. CONTRAST RATIO [0-1]',IRTFLG)
+     &              'AMPLITUDE CONTRAST RATIO [0-1]',IRTFLG)
 
 	CALL RDPRM1S(DEFOCUS,NOT_USED,
      &               'ESTIMATED DEFOCUS',IRTFLG)
 	
-
 	MAXX1=0 
 	MAXY1=0
 	
-	CALL GETDOCDAT("1-D PW OF MICROGRAPH", .TRUE.,DOCNAM1,
+	CALL GETDOCDAT("MICROGRAPH 1-D POWER SPECTUM DOC FILE", 
+     &                 .TRUE.,DOCNAM1,
      &                 LUN1,.TRUE.,MAXX1, MAXY1,DOCBUF1,IRTFLG)
-	IF (IRTFLG.NE.0) RETURN	
+	IF (IRTFLG .NE. 0) RETURN	
 
 	ALLOCATE(PLOT(MAXY1),STAT=IRTFLG)
 	IF (IRTFLG .NE. 0) THEN
