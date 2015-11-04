@@ -36,7 +36,7 @@ C--*********************************************************************
          INCLUDE 'CMBLOCK.INC'
          INCLUDE 'CMLIMIT.INC' 
  
-         CHARACTER(LEN=MAXNAM)   ::  FILNAM
+         CHARACTER(LEN=MAXNAM) ::  FILNAM
 
          COMMON        B(1)
          COMPLEX       B
@@ -51,33 +51,40 @@ C
          CALL FILERD(FILNAM,NLET,NULL,'OUTPUT',IRTFLG)
          IF (IRTFLG .EQ. -1) RETURN
 
-         CALL RDPRM(CS,NOT_USED,'CS(MM)')
+         CALL RDPRM(CS,NOT_USED,'CS [MM]')
+
          CALL RDPRM2(DZ,LAMBDA,NOT_USED,
-     &   'DEFOCUS(ANGSTROEMS), LAMBDA(ANGSTROEMS)')
-         CALL RDPRMI(NSAM,NDUM,NOT_USED,'NUMBER OF SP.FREQ.PTS')
-         CALL RDPRM(KM,NOT_USED,'MAXIMUM SPATIAL FREQUENCY[A-1]')
+     &               'DEFOCUS [A], WAVELENGTH LAMBDA [A]')
+
+         CALL RDPRMI(NSAM,NDUM,NOT_USED,
+     &               'NUMBER OF SPATIAL FREQ. POINTS')
+
+         CALL RDPRM(KM,NOT_USED,'MAXIMUM SPATIAL FREQUENCY [1/A]')
+
          CALL RDPRM2(Q,DS,NOT_USED,
-     &             'SOURCE SIZE[A-1], DEFOCUS SPREAD[A]')
+     &               'SOURCE SIZE[1/A], DEFOCUS SPREAD [A]')
 
 C        IGNORE SOURCE SIZE AND DEFOCUS SPREAD
-         Q=0.0
-         DS=0.0
-         CALL RDPRM2(DZA,AZZ,NOT_USED,'ASTIGMATISM[A], AZIMUTH[DEG]')
+         Q  = 0.0
+         DS = 0.0
+         CALL RDPRM2(DZA,AZZ,NOT_USED,
+     &               'ASTIGMATISM [A], AZIMUTH [DEG]')
+
          CALL RDPRM(WGH,NOT_USED,
-     &                 'AMPL CONTRAST RATIO [0-1]')
+     &                 'AMPLITUDE CONTRAST RATIO [0-1]')
 
 C        IGNORE THE GAUSSIAN ENVELOPE FUNCTION
          ENV = 0.0
          CALL  RDPRM(SIGN,NOT_USED,'SIGN (+1 OR -1.)')
-         IFORM = -7
-         NROW=NSAM
-         NSLICE=NROW
-         IF (MOD(NSAM,2).EQ.0)  THEN
+         IFORM  = -7
+         NROW   = NSAM
+         NSLICE = NROW
+         IF (MOD(NSAM,2) .EQ. 0)  THEN
             IFORM = -22
-            LSM=NSAM+2
+            LSM   = NSAM+2
          ELSE
-            IFORM=-21
-            LSM=NSAM+1
+            IFORM = -21
+            LSM   = NSAM+1
          ENDIF
 
          MAXIM = 0
@@ -85,43 +92,47 @@ C        IGNORE THE GAUSSIAN ENVELOPE FUNCTION
      &               MAXIM,' ',.TRUE.,IRTFLG)
          IF (IRTFLG .NE. 0) RETURN
 
-         SC=KM/FLOAT(NSAM/2)
+         SC = KM/FLOAT(NSAM/2)
 
-	 WGH = ATAN(WGH/(1.0-WGH))
-	 CS = CS*1.E7
+         WGH = ATAN(WGH/(1.0-WGH))
+         CS  = CS*1.E7
 
-         NS2=NSAM/2
-         NR2=NROW/2
-         NL2=NSLICE/2
+         NS2 = NSAM/2
+         NR2 = NROW/2
+         NL2 = NSLICE/2
 
          DO    K=1,NSLICE
-            IZ=K-1
-            IF(IZ.GT.NL2)  IZ=IZ-NSLICE
+            IZ = K-1
+            IF (IZ .GT. NL2)  IZ=IZ-NSLICE
             DO    J=1,NROW
-               IY=J-1
-               IF(IY.GT.NR2)  IY=IY-NROW
+               IY = J-1
+               IF (IY .GT. NR2)  IY=IY-NROW
                DO    I=1,LSM
                  IX=(I-1)/2
 
                   AK=SQRT(FLOAT(IX*IX)+FLOAT(IY*IY)+FLOAT(IZ*IZ))*SC
-                  IF(AK.NE.0.0) THEN
+                  IF (AK.NE.0.0) THEN
                      AZ=0.0
                   ELSE
                      AZ = PI/2.
                   ENDIF
+
 C                 AZ=ATAN2(0.0,AK)
                   AZR=AZZ*(PI/180.)
                   DZZ=DZ+DZA/2*SIN(2*(AZ-AZR))
+
                   CALL TFD(TF,CS,DZZ,LAMBDA,Q,DS,IE,AK,WGH,ENV)
 
 C                 CREATE A BINARY FILE
-                  IF(TF .GE. 0.0) THEN
+                  IF (TF .GE. 0.0) THEN
                      B(IX+1)=CMPLX(1.0,0.0)*SIGN
                   ELSE
                      B(IX+1)=CMPLX(-1.0,0.0)*SIGN
                   ENDIF
                ENDDO
+
                CALL  WRTLIN(LUN,B,LSM,J+(K-1)*NROW)
             ENDDO
          ENDDO
+
          END
