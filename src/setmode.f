@@ -26,11 +26,13 @@ C                          USE_FBP_INTERP          APR 12 ARDEAN LEITH
 C                          VERBOSE                 APR 12 ARDEAN LEITH
 C                          UNUSED DELAY REMOVED    APR 13 ARDEAN LEITH
 C                          OUTPUT FORMATTING       AUG 13 ARDEAN LEITH
+C                          IN_PARALLEL             DEC 15 ARDEAN LEITH
+C                          SET MP FAILS ON GYAN    MAR 16 ARDEAN LEITH
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2013  Health Research Inc.,                         *
+C=* Copyright 1985-2016  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -52,28 +54,61 @@ C   SETMODE(RES_TO_TERM)
 C
 C   PURPOSE:   CONTAINS CODE FOR SETTING VARIOUS OPTIONAL MODES 
 C
+C   NOTE:   ON AN OLDER SYSTEM (valcour)
+C      OMP_GET_MAX_THREADS() = 1  in a serial   region (compiled with OMP)
+C      OMP_GET_MAX_THREADS() = 1  in a parallel region (compiled with OMP)
+C      OMP_GET_NUM_PROCS()   = 8
+C           ON AN 2016 INTEL SYSTEM (gyan)
+C      OMP_GET_MAX_THREADS() = 20  in a serial   region (compiled with OMP)
+C      OMP_GET_MAX_THREADS() = 20  in a parallel region (compiled with OMP)
+C      OMP_GET_NUM_PROCS()   = 40
+C      
+C      I FOUND THIS VIA GOOGLE BUT ANOTHER SITE CONTRADICTS IT??
+C      Function omp_get_max_threads 
+C      should be called *before* you enter a parallel region to 
+C      determine the number of threads available and omp_get_num_threads 
+C      should be called *inside* a parallel region to determine the 
+C      number of threads you have. When you call omp_get_max_threads 
+C      inside a parallel region or omp_get_num_threads outside a 
+C      parallel region, the results are undefined. 
+C      THUS I HAVE ADDED A TRAP TO LIMIT 
+C
 C23456789 123456789 123456789 123456789 123456789 123456789 123456789 12
 C--*********************************************************************
 
         SUBROUTINE SETMODE(RES_TO_TERM)
 
+        IMPLICIT NONE
+
         INCLUDE 'CMBLOCK.INC'
         INCLUDE 'CMLIMIT.INC'
  
+        LOGICAL               :: RES_TO_TERM
+
 C       RANDOM NUMBER GENERATOR SEED
         INTEGER, ALLOCATABLE  :: ISEEDVAL(:)
-        INTEGER               :: OMP_GET_NUM_PROCS 
 
+        INTEGER               :: OMP_GET_NUM_PROCS 
+        INTEGER               :: OMP_GET_NUM_THREADS 
+        INTEGER               :: OMP_GET_MAX_THREADS 
+        INTEGER               :: NP,NMAXTH
 
 C       NUMBER OF OPERATIONS IN MODE MENU
-        PARAMETER (IMOFNC = 27)
+        INTEGER, PARAMETER    :: IMOFNC = 29
         CHARACTER(LEN=12)     :: MOMENU(IMOFNC)
         CHARACTER(LEN=12)     :: MODE
 
         CHARACTER(LEN=MAXNAM) :: PIPENAME,FILOPENED
         CHARACTER(LEN=1)      :: NULL = CHAR(0)
-        LOGICAL               :: RESULTS,REGPIPE,TORESULTS,ISOPEN
-        LOGICAL               :: RES_TO_TERM
+        LOGICAL               :: ISOPEN
+        INTEGER               :: MPINUSE   = 0 
+        INTEGER               :: NUM_OMP_THREADS,NUM_OMP_PROCS 
+        LOGICAL               :: RESULTS   = .TRUE. 
+        LOGICAL               :: REGPIPE   = .FALSE. 
+
+        INTEGER               :: ISEED,NLET
+        INTEGER               :: IRTFLG,IREGS,NCHAR,ICVARS,NOT_USED
+        INTEGER               :: IDUM,NUMBITS,I,IER
 
         SAVE    FILOPENED,ISEED
 
@@ -90,18 +125,13 @@ C       NUMBER OF OPERATIONS IN MODE MENU
      &              '() ON       ','() OFF     ',
      &              'FBS ON      ','FBS OFF    ',
      &              'LONGCOL ON  ','LONGCOL OFF',
+     &              'PARALLEL    ','NO PARALLEL',
      &              'SET THREADS '/
-
-        DATA MPINUSE/0/ 
-        DATA RESULTS/.TRUE./
-        DATA REGPIPE/.FALSE./
-        DATA TORESULTS/.FALSE./
-        DATA USE_LONGCOL/.FALSE./
 
 C       MODE SWITCH OPERATION
 C       READ IN THE MODE.  IF NOTHING TYPED IN, GET NEXT OPERATION
 9400    CALL RDPRMC(MODE,NLET,.TRUE.,'MODE',NULL,IRTFLG)
-        IF (MODE(1:1) .EQ. ' ') RETURN
+        IF (MODE(1:1)  ==  ' ') RETURN
 
         SELECT CASE(MODE)
 
@@ -129,13 +159,15 @@ C       MENU ------------------------------------------------------ ME
      &  '  () OFF      ',T19, ' () NOT NEEDED FOR SIMPLE LIST IN LOOP '/
      &  '  FBS ON      ',T19, ' FBS INTERPOLATION USED '/
      &  '  FBS OFF     ',T19, ' FBS INTERPOLATION NOT USED '/
-     &  '  LONGCOL ON  ',T19, ' LONG ALIGNMENT DOC FILE COLS '/
-     &  '  LONGCOL OFF ',T19, ' SHORT ALIGNMENT DOC FILE COLS ')
+     &  '  LONGCOL ON  ',T19, ' LONG  ALIGNMENT DOC FILE COLS '/
+     &  '  LONGCOL OFF ',T19, ' SHORT ALIGNMENT DOC FILE COLS '/
+     &  '  SET THREADS ',T19, ' SET NUMBER OF FFTW3 THREADS'/
+     &  '  PARALLEL ON ',T19, ' RUNNING SPIDERS IN PARALLEL '/
+     &  '  PARALLEL OFF',T19, ' NOT RUNNING SPIDERS IN PARALLEL ')
 
 #ifdef SP_MP
         WRITE(NOUT,9611)
 9611    FORMAT(
-     &  '  SET THREADS ',T19, ' SET NUMBER OF FFTW3 THREADS'/
      &  '  SET MP      ',T19, ' SET MAX. NO. OF PROCESSORS USED ')
 #endif
 
@@ -144,16 +176,16 @@ C       MENU ------------------------------------------------------ ME
 
       CASE("STA")
 C       DETERMINE STATUS ------------------------------------------ STA
-        IF (NTRACE.EQ.1)      WRITE(NOUT,9630) MOMENU(3)(:10)
-        IF (NTRACE.EQ.0)      WRITE(NOUT,9630) MOMENU(4)(:10)
-        IF (NTRACE.LT.0)      WRITE(NOUT,9630) MOMENU(6)(:10)
-        IF (NTRACE.EQ.0)      WRITE(NOUT,9630) MOMENU(5)(:10)
+        IF (NTRACE == 1)      WRITE(NOUT,9630) MOMENU(3)(:10)
+        IF (NTRACE == 0)      WRITE(NOUT,9630) MOMENU(4)(:10)
+        IF (NTRACE < 0)       WRITE(NOUT,9630) MOMENU(6)(:10)
+        IF (NTRACE == 0)      WRITE(NOUT,9630) MOMENU(5)(:10)
         IF (VERBOSE)          WRITE(NOUT,9630) MOMENU(7)(:10)
         IF (.NOT. VERBOSE)    WRITE(NOUT,9630) MOMENU(8)(:10)
-        IF (LEGACYPAR)        WRITE(NOUT,9630) MOMENU(22)(:10)
-        IF (.NOT. LEGACYPAR)  WRITE(NOUT,9630) MOMENU(23)(:10)
+        IF (LEGACYPAR)        WRITE(NOUT,9630) MOMENU(21)(:10)
+        IF (.NOT. LEGACYPAR)  WRITE(NOUT,9630) MOMENU(22)(:10)
         IF (RESULTS)          WRITE(NOUT,*)' HAS RESULTS FILE'
-        IF (.NOT. RESULTS)    WRITE(NOUT,*)' NO RESULTS FILE'
+        IF (.NOT. RESULTS)    WRITE(NOUT,*)' NO  RESULTS FILE'
                               WRITE(NOUT,*)' RANDOM NUMBER SEED: ',ISEED
         IF (REGPIPE)          WRITE(NOUT,*)' REGISTER PIPE OPEN'
         IF (RES_TO_TERM)      WRITE(NOUT,*)' RESULTS OUTPUT TO TERMINAL'
@@ -162,21 +194,43 @@ C       DETERMINE STATUS ------------------------------------------ STA
      &                        WRITE(NOUT,*)' FBS INTERPOLATION NOT USED'
         IF (USE_LONGCOL)      WRITE(NOUT,*)' LONG  ALIGN DOC FILE COLS'
         IF (.NOT. USE_LONGCOL)WRITE(NOUT,*)' SHORT ALIGN DOC FILE COLS'
+        IF (IN_PARALLEL)      WRITE(NOUT,*)
+     &                                    ' RUNNING SPIDERS IN PARALLEL'
+        IF (.NOT. IN_PARALLEL)WRITE(NOUT,*)
+     &                                ' NOT RUNNING SPIDERS IN PARALLEL'
 
         CALL REG_GET_NUMS(IREGS,NCHAR)
-                       WRITE(NOUT,*)' NUMBER OF REGISTERS: ',     IREGS
-                       WRITE(NOUT,*)' NUMBER OF REGISTER CHAR.: ',NCHAR
+                       WRITE(NOUT,*)' NUMBER OF REGISTERS:      ',IREGS
+                       WRITE(NOUT,*)' NUMBER OF REGISTER CHARS: ',NCHAR
 
         CALL SYMPAR_GET_NUMS(ICVARS,NCHAR)
-                       WRITE(NOUT,*)' NUMBER OF VARIABLES: ',    ICVARS
-                       WRITE(NOUT,*)' NUMBER OF VARIABLE CHAR.: ',NCHAR
+                       WRITE(NOUT,*)' NUMBER OF VARIABLES:      ',ICVARS
+                       WRITE(NOUT,*)' NUMBER OF VARIABLE CHARS: ',NCHAR
+9630    FORMAT(2X,A)
 
 #ifdef SP_MP
-        WRITE(NOUT,*) ' NUMBER OF PROCESSORS USED:',MPINUSE
-        WRITE(NOUT,*) ' NUMBER OF FFTW THREADS: ',NUMFFTWTH
+        WRITE(NOUT,*) ' NUMBER OF OMP PROCESSORS USED:',MPINUSE
+        WRITE(NOUT,*) ' NUMBER OF FFTW THREADS:       ',NUMFFTWTH
+
+        NP = OMP_GET_MAX_THREADS()
+        WRITE(NOUT,*) ' MAX NUMBER OF OMP THREADS:    ',NP
+        NP = OMP_GET_NUM_PROCS()
+        WRITE(NOUT,*) ' NUMBER OF OMP PROCESSORS:     ',NP
+
+!c$omp   parallel 
+!c$omp   master
+!        NP = OMP_GET_MAX_THREADS()
+!c$omp   end master
+!c$omp   end parallel
+!         WRITE(NOUT,*) ' MAX NUMBER OF OMP THREADS: ',NP
+!c$omp   parallel private(np)
+!        NP = OMP_GET_MAX_THREADS()
+!c$omp   single
+!c$omp   end single
+!c$omp   end parallel
+!        WRITE(NOUT,*) ' MAX NUMBER OF OMP THREADS: ',NP
 #endif
 
-9630    FORMAT(2X,A)
         GOTO 9400
 
 
@@ -186,7 +240,7 @@ C       TRACE ON --------------------------------------------- TRACE ON
 
       CASE("TR OFF")
 C       TRACE OFF ------------------------------------------- TRACE OFF
-        NTRACE =  0
+        NTRACE = 0
 
       CASE("OP ON")
 C       SET OP ON ----------------------------------------------- OP ON
@@ -203,12 +257,10 @@ C       SET NON-VERBOSE FILE DATA ------------------------- VERBOSE OFF
       CASE("SET REGS")
 C       SET NUMBER OF REGISTER VARIABLES  -------------------- SET REGS
         CALL REG_REINIT(IRTFLG)
-        RETURN
 
       CASE("SET VARS")
 C       SET NUMBER OF REGISTER VARIABLES  -------------------- SET VARS
         CALL SYMPAR_REINIT(IRTFLG)
-        RETURN
 
       CASE("PIPE")
 C       SEND REGISTER SETTINGS DOWN PIPE ------------------------ PIPE
@@ -224,16 +276,22 @@ C       SET NUMBER OF PROCESSORS WANTED ------------------------ SET MP
         IF (IRTFLG .NE. 0) RETURN
 
 #ifdef SP_MP
-        IF (MPINUSE .LE. 0) THEN
+        IF (MPINUSE <= 0) THEN
+C          USE ALL AVAILABLE PROCESSORS
 C          GET NUMBER OF PROCESSORS WITH SYSTEM CALL
            MPINUSE = OMP_GET_NUM_PROCS()
-           WRITE(NOUT,*) ' OMP PROCESSORS IN USE: ',MPINUSE 
+
+C          HACK FOR INCONSISTENT OMP_GET_NUM_PROCS VALUES ON GYAN 2016
+           NMAXTH = OMP_GET_MAX_THREADS()
+           IF (MPINUSE >  NMAXTH .AND. NMAXTH > 1) MPINUSE = NMAXTH
         ENDIF
 
-C       SET NUMBER OF PROCESSORS WITH SYSTEM CALL
-        CALL  SETTHREADS(MPINUSE)
+C       SET NUMBER OF PROCESSORS 
+        CALL SETTHREADS(MPINUSE)
+        WRITE(NOUT,*) ' OMP PROCESSORS IN USE: ',MPINUSE 
+
 #else
-        WRITE(NOUT,*) '*** NOT COMPILED FOR MULTIPLE PROCESSORS' 
+        WRITE(NOUT,*) ' *** NOT COMPILED FOR MULTIPLE PROCESSORS' 
 #endif
 
 
@@ -244,13 +302,13 @@ C       SET NUMBER OF FFTW THREADS ------------------------ SET THREADS
         IF (IRTFLG .NE. 0) RETURN
 
 #ifdef SP_MP
-        IF (NUMFFTWTH .LE. 0) THEN
+        IF (NUMFFTWTH <= 0) THEN
 C          GET NUMBER OF PROCESSORS WITH SYSTEM CALL
            NUMFFTWTH = OMP_GET_NUM_PROCS()
-           WRITE(NOUT,*) ' FFTW3 THREADS REQUESTED: ',NUMFFTWTH 
+           WRITE(NOUT,*) '  FFTW3 THREADS REQUESTED: ',NUMFFTWTH 
         ENDIF
 #else
-        WRITE(NOUT,*) '*** NOT COMPILED FOR MULTIPLE PROCESSORS' 
+        WRITE(NOUT,*) ' *** NOT COMPILED FOR MULTIPLE PROCESSORS' 
         WRITE(NOUT,*) ' FFTW3 THREADS ALLOWED: ',NUMFFTWTH 
 #endif
 
@@ -281,7 +339,7 @@ C       DESTROY RESULTS FILE ------------------------------- NO RESULTS
 C       DESTROY RESULTS FILE ------------------------------- RESULTS OFF
         RESULTS = .FALSE.
         INQUIRE(UNIT=NDAT,OPENED=ISOPEN,NAME=FILOPENED)
-        WRITE(NDAT,*) ' RESULTS FILE TERMINATED AT USERS REQUEST' 
+        WRITE(NDAT,*) '  RESULTS FILE TERMINATED AT USERS REQUEST' 
         WRITE(NDAT,*) '  ' 
         CLOSE(NDAT)
         OPEN(NDAT,FILE='/dev/null',IOSTAT=IER)
@@ -296,7 +354,7 @@ C       RESTART RESULTS FILE ------------------------------- RESULTS ON
         CLOSE(NDAT)
         OPEN(NDAT,FILE=FILOPENED,STATUS='OLD',POSITION='APPEND',
      &          IOSTAT=IER)
-        IF (IER .EQ. 0) THEN
+        IF (IER  ==  0) THEN
            WRITE(NOUT,*) ' RESULTS FILE REOPENED: ',FILOPENED 
         ENDIF
 
@@ -353,9 +411,21 @@ C       LONGCOL OFF --------------------------------------- LONGCOL OFF
         WRITE(NOUT,*) ' SHORT ALIGNMENT DOC FILE COLUMNS'
         WRITE(NOUT,*) ' '
 
+      CASE("IN_PARALLEL OFF","PARALLEL OFF","NO PARALLEL")
+C       IN_PARALLEL OFF --------------------------------------- IN_PARALLEL OFF
+        IN_PARALLEL = .FALSE.
+        WRITE(NOUT,*) ' NOT RUNNING SPIDERS IN PARALLEL'
+        WRITE(NOUT,*) ' '
+
+      CASE("IN_PARALLEL ON","PARALLEL ON","PARALLEL" )
+C       IN_PARALLEL ON ---------------------------------------- IN_PARALLEL ON
+        IN_PARALLEL = .TRUE.
+        WRITE(NOUT,*) ' RUNNING SPIDERS IN PARALLEL'
+        WRITE(NOUT,*) ' '
+
 
       CASE DEFAULT
-        WRITE(NOUT,*) '*** UNKNOWN MODE'
+        WRITE(NOUT,*) '  *** UNKNOWN MODE'
 
       END SELECT
 
