@@ -46,11 +46,12 @@ C                         'SPH'                          FEB 13 al
 C                         'HIS'                          AUG 13 al
 C                         'DIS'                          JAN 15 al
 C                         'ML'                           JAN 15 al
+C                         'RI'                           APR 16 al
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2015  Health Research Inc.,                         *
+C=* Copyright 1985-2016  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -95,7 +96,7 @@ C                     OPERATION SENT TO THE SUBROUTINE WILL BE THE 2
 C                     CHAR. SHORT OPERATION AT ALL TIMES!  THE LONG
 C                     OPERATION IS AVAILABLE IN COMMON /SP_OPER/
 C
-C     CODE      CALLER               OPERATIONS HANDLED
+C     CODE      CALLER          OPERATIONS HANDLED
 C	1	UTIL1		DE DU FI HI HD LI MO PK RA RN
 C				TT ST TF FS CA GR CG CV CL CTF HIS
 C	2	UTIL2		AD BL CP IN IP MU PA PD SQ SU DIV
@@ -116,7 +117,7 @@ C	12	VTIL2		PS SK PJ BP DC DR MF RB
 C	13	VTIL3		SF SC PH TA SI CR SP ML
 C	14	CONF1		CI EP RS PT
 C       15      DRIV1           NC VM ME CK TM SR RR PO SA VO AA FR DV
-C                               EV PDB
+C                               EV PDB   RI
 C       16      DRIV2           TV SE WA TS
 C       17      DRIV3           UD LD SD SY      
 C       18      SPIDER          EN DO LB EX RE IF GO MD OF
@@ -140,7 +141,7 @@ C--*********************************************************************
       COMMON /SP_OPER/      FCHARS
 
 C     NUMBER OF OPERATIONS IN MENU 
-      INTEGER, PARAMETER :: NMENU = 171 ! HIGHEST 2 CHAR NUMBER=30
+      INTEGER, PARAMETER :: NMENU = 172 ! HIGHEST 2 CHAR NUMBER=30
 
       CHARACTER(LEN=2)   :: MENU(NMENU)
       CHARACTER(LEN=12)  :: MENUL(NMENU)
@@ -273,6 +274,7 @@ C     NUMBER OF OPERATIONS IN MENU
       DATA MENU(162), MENUL(162), IW(162) /'14','ROT',3/
       DATA MENU(82),  MENUL(82),  IW(82)  /'RO','  ',3/
       DATA MENU(135), MENUL(135), IW(135) /'RP','  ',2/
+      DATA MENU(172), MENUL(172), IW(172) /'RI','  ',15/
       DATA MENU(83),  MENUL(83),  IW(83)  /'RR','  ',15/
       DATA MENU(84),  MENUL(84),  IW(84)  /'RS','  ',14/
       DATA MENU(85),  MENUL(85),  IW(85)  /'RT','  ',3/
