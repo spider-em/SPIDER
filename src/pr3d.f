@@ -9,12 +9,13 @@ C                  FSC                             FEB 12 ARDEAN LEITH
 C                  MASK                            SEP 12 ARDEAN LEITH
 C                  FSCCUT                          SEP 12 ARDEAN LEITH
 C                  WANTSQRTS                       MAY 14 ARDEAN LEITH
+C                  MASK WRITOUT                    FEB 16 ARDEAN LEITH
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2014  Health Research Inc.,                         *
+C=* Copyright 1985-2016  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -43,14 +44,15 @@ C--*********************************************************************
 
         SUBROUTINE PR3D(FSCOP)
 
+        IMPLICIT NONE
         INCLUDE 'CMBLOCK.INC'
         INCLUDE 'CMLIMIT.INC' 
  
         LOGICAL               :: FSCOP
 
-        CHARACTER(LEN=MAXNAM) :: FILNAM1,FILNAM2 
+        CHARACTER(LEN=MAXNAM) :: FILNAM1,FILNAM2 ,FILNAMM
 
-        REAL, ALLOCATABLE     :: AIMG(:,:,:),BIMG(:,:,:)
+        REAL, ALLOCATABLE     :: AIMG(:,:,:),BIMG(:,:,:),EIMG(:,:,:)
         REAL, ALLOCATABLE     :: CSUM1(:), CSUM(:)
         REAL, ALLOCATABLE     :: PR(:,:), AMP(:,:), AVSUM(:,:)
         REAL, ALLOCATABLE     :: CSUM2(:)
@@ -66,12 +68,20 @@ C--*********************************************************************
 
         INTEGER               :: ICOMM,MYPID,MPIERR
 
+        INTEGER               :: ITYPE1,NX1,NY1,NZ1,IRTFLG,NE,LSD1,INC 
+        INTEGER               :: NX,ITYPE2,NX2,NY2,NZ2,LSD2 
+        REAL                  :: UNUSED,SCALE1,SCALE2,FACT,DSCALE,Y1  
+        INTEGER               :: LSD, NY, NZ, NOT_USED, NUMC 
+        INTEGER               :: MWANT,ITYPE3,K,J,I,INV 
+        REAL                  :: XCEN, YCEN, ZCEN, TNM, RADMASKSQI,EEE 
+  
         INTEGER               :: MAXIM
-        INTEGER, PARAMETER    :: NSCALE = 20
-        INTEGER, PARAMETER    :: LUN1   = 21
-        INTEGER, PARAMETER    :: LUN2   = 22
-        INTEGER, PARAMETER    :: LUNGP  = 23
-        INTEGER, PARAMETER    :: LUNDOC = 89
+        INTEGER, PARAMETER    :: NSCALE  = 20
+        INTEGER, PARAMETER    :: LUN1    = 21
+        INTEGER, PARAMETER    :: LUN2    = 22
+        INTEGER, PARAMETER    :: LUNGP   = 23
+        INTEGER, PARAMETER    :: LUNDOC  = 89
+        INTEGER, PARAMETER    :: LUNMASK = 24
 
         CALL SET_MPI(ICOMM,MYPID,MPIERR)
 
@@ -206,6 +216,23 @@ C          SUPERGAUSSIAN MASKING WANTED
 	   TNM        = ALOG(1.0 / TINY(TNM))
            RADMASKSQI = 1.0 / (RADMASK**2)
 
+           IF ( FCHAR(4:5) == 'MA' ) THEN
+C            WANT MASK IMAGE OUTPUT
+             MAXIM  = 0
+             ITYPE3 = 3
+             CALL OPFILEC(0,.TRUE.,FILNAMM,LUNMASK,'U',ITYPE3,
+     &               NX,NY,NZ,MAXIM,
+     &               'OUTPUT MASK VOLUME~',.FALSE.,IRTFLG)
+             IF (IRTFLG .NE. 0) GOTO 9999
+
+             ALLOCATE (EIMG(NX,NY,NZ), STAT=IRTFLG)
+             IF (IRTFLG .NE. 0) THEN
+                 MWANT = NX*NY*NZ  
+                 CALL ERRT(46,'PR3D; EIMG',MWANT)
+                 GOTO 9999
+             ENDIF
+           ENDIF
+
            DO K = 1,NZ
               DO J = 1,NY
                  DO I = 1,NX
@@ -216,14 +243,21 @@ C          SUPERGAUSSIAN MASKING WANTED
 	           IF (EEE  >= TNM) THEN
 	              AIMG(I,J,K) = 0.0
 	              BIMG(I,J,K) = 0.0
+                      IF ( FCHAR(4:5) == 'MA' ) EIMG(I,J,K) = 0.0
 	           ELSE  
 	              EEE         = -0.5 * (2*EEE)**2
                       AIMG(I,J,K) = EXP(EEE) * AIMG(I,J,K)
                       BIMG(I,J,K) = EXP(EEE) * BIMG(I,J,K)
+                      IF ( FCHAR(4:5) == 'MA' ) EIMG(I,J,K) = EXP(EEE)
 	           ENDIF
                 ENDDO
              ENDDO
-          ENDDO
+           ENDDO
+           IF ( FCHAR(4:5) == 'MA' ) THEN
+C             WANT MASK IMAGE OUTPUT
+              CALL WRTVOL(LUNMASK,NX,NY,1,NZ,EIMG,IRTFLG)
+	      CLOSE(LUNMASK)
+           ENDIF
         ENDIF
 
         IF (ITYPE1 > 0) THEN
@@ -262,6 +296,34 @@ C       CALCULATIONS
      &      AVSUM,LSD,NX,NY,NZ,DSCALE,NSCALE,SCALE1,
      &      SSANG,INC,Y1,WI,SER)
 
+C       WRITE RESULT INTO DOC FILE AND RESULT FILE
+        CALL  RFACTSD2(PR,AMP,CSUM1,LR,CSUM,CSUM2,AVSUM,
+     &                 NSCALE,INC,WI,FACT,.FALSE.,
+     &                 LUNDOC,FSCOP,FMAXSPFREQ,LUNGP,FSCCUT,
+     &                 WANTSQRTS)
+
+
+       
+9999	IF (ALLOCATED(AIMG))  DEALLOCATE (AIMG)
+        IF (ALLOCATED(BIMG))  DEALLOCATE (BIMG)
+        IF (ALLOCATED(EIMG))  DEALLOCATE (EIMG)
+        IF (ALLOCATED(PR))    DEALLOCATE (PR)
+        IF (ALLOCATED(AMP))   DEALLOCATE (AMP)
+        IF (ALLOCATED(CSUM1)) DEALLOCATE (CSUM1)
+        IF (ALLOCATED(LR))    DEALLOCATE (LR)
+        IF (ALLOCATED(CSUM))  DEALLOCATE (CSUM)
+        IF (ALLOCATED(CSUM2)) DEALLOCATE (CSUM2)
+        IF (ALLOCATED(AVSUM)) DEALLOCATE (AVSUM)
+
+9998    CLOSE(LUN1)
+        CLOSE(LUN2)
+        CLOSE(LUNDOC)
+        CLOSE(LUNGP)
+        CLOSE(LUNMASK)
+
+        END
+
+
 #ifdef NEVER
 c*************
         INV = -1
@@ -275,25 +337,3 @@ c*************
 c*********************
 #endif
 
-C       WRITE RESULT INTO DOC FILE AND RESULT FILE
-        CALL  RFACTSD2(PR,AMP,CSUM1,LR,CSUM,CSUM2,AVSUM,
-     &                 NSCALE,INC,WI,FACT,.FALSE.,
-     &                 LUNDOC,FSCOP,FMAXSPFREQ,LUNGP,FSCCUT,
-     &                 WANTSQRTS)
-       
-9999	IF (ALLOCATED(AIMG))  DEALLOCATE (AIMG)
-        IF (ALLOCATED(BIMG))  DEALLOCATE (BIMG)
-        IF (ALLOCATED(PR))    DEALLOCATE (PR)
-        IF (ALLOCATED(AMP))   DEALLOCATE (AMP)
-        IF (ALLOCATED(CSUM1)) DEALLOCATE (CSUM1)
-        IF (ALLOCATED(LR))    DEALLOCATE (LR)
-        IF (ALLOCATED(CSUM))  DEALLOCATE (CSUM)
-        IF (ALLOCATED(CSUM2)) DEALLOCATE (CSUM2)
-        IF (ALLOCATED(AVSUM)) DEALLOCATE (AVSUM)
-
-9998    CLOSE(LUN1)
-        CLOSE(LUN2)
-        CLOSE(LUNDOC)
-        CLOSE(LUNGP)
-
-        END
