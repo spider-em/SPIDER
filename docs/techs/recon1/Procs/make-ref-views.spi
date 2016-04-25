@@ -1,45 +1,24 @@
- ; <html><head><title>Multiplies reference volume by CTF & creates ref projections</title></head><body><pre>
+ ; <html><head><title>Creates ref projections</title></head><body><pre>
  ;
- ; SOURCE: spider/docs/techs/recon1/Procs/make-ref-views.spi
+ ; SOURCE:   spider/docs/techs/recon1/Procs/make-ref-views.spi
  ;
- ; PURPOSE:  Creates reference projections from a reference volume.
+ ; PURPOSE:  Sets angles for reference projections.
+ ;           Creates reference projections from a reference volume.
  ;
- ; The following values are retrieved from the params file
- ;   [numgrp]   = Number of defocus groups
- ;   [pix_size] = Pixel size, Angstroms
- ;   [pixels]   = Array dimension, pixels
- ;   [ee]       = Electron energy
- ;   [spab]     = Spherical aberration
- ;   [ss]       = Source size
- ;   [defspr]   = Defocus spread
- ;   [acr]      = Amplitude contrast ratio
- ;   [geh]      = Gaussian envelope halfwidth
  ;
- ; USAGE:        clean ; ./spider spi/dat @make-ref-views
-
+ ; USAGE:    clean ; ./spider spi/dat @make-ref-views
+ ;
  ; <b> ------------ Parameters ---------------------------------------
-
- [dtheta] = 15     ; Delta theta: 15 gives 83 projections
-
- [radius] = -1     ; Radius: use -1 for default value
-
- ;    ------------ Input files ---------------------------------------
-
- [params]        = '../params'            ; Parameter doc file     (one)
-
- [refvol]        = '../reference_volume'  ; Reference volume       (one)
-
- [sel_group]     = 'sel_group'            ; Group selection file   (one)
-
- ; --------------- Output files  -------------------------------------
-
- [refangles]     = 'refangles'            ; Projection angles doc file  (one)
-
- [prj]           = 'prj_01'               ; Projection image stack file (one)
-
- [ref_view_list] = '../Averages/sel_proj' ; List of reference views     (one)
-
-; -------------- END BATCH HEADER ---------------------------------</b>
+ ;
+ ; INPUT FILES: ([win_dir] denotes input directory)
+ ;   [ref_vol]        ../ref_vol              Current reference volume    (one) 
+ ;
+ ; OUTPUT FILES: ('[rec_dir] denotes output directory)
+ ;   [iter_refangs]   [rec_dir]/ref_angs_01   Reference angles doc file   (one)                  
+ ;   [ref_projs]      [rec_dir]/ref_projs_01  Reference projection stack  (one) 
+ ;   [ref_view_list]  [rec_dir]/sel_proj      View list doc file          (one)
+ ; 
+ ; -------------- END BATCH HEADER ---------------------------------</b>
 
  MD
    TR OFF                  ; Decrease results file output
@@ -49,50 +28,49 @@
    SET MP 
    0                       ; Use all available processors  
  
+ ; Get reconstruction parameters & file names
+ @recon-settings([num-grps],[pixsiz],[ang-step],[r2],[alignsh],[prj-radius],[winsiz],[incore-yn],[bp-type],[qsub])
+
+ [iter] = 0
+
+ DE                        ; Delete 
+   [iter_refangs]          ; Reference projection angles doc file   (deleted)
+ DE                        ; Delete 
+   [ref_view_list]         ; Selection doc file                     (deleted)
+
+ ; List angles for reference projections in doc file.
+ VO EA [num-angs]          ; Sets [num-ang] to number of reference projections
+   [ang-step]              ; Theta angular step            (varies with iteration)
+   0, 90                   ; Theta range, 90 is for use with 'Check Mirrored Positions'
+   0, 359.9                ; Phi range
+   [iter_refangs]          ; Reference projection angles doc file   (output)
+
+ ![num-angs] = [num-angs] -1 ; Skip duplicated angle
+ [num-angs]  
+
+ ; Create ('PJ 3F') stack holding reference projections. 
+
+ SYS
+   echo  '  Creating: {%I0%[num-angs]} reference projections with radius: {%I0%[prj-radius]}' ; echo
+
+ PJ 3F                     ; Projection operation
+   [ref_vol]               ; Current reference volume             (input) 
+   [prj-radius]            ; Radius of projection
+   1-[num-angs]            ; Reference angles used    
+   [iter_refangs]          ; Reference angles doc file            (input)
+   [ref_projs]@*****       ; Reference projection stack template  (output) 
+
+ ; Generate view-list
  SYS
    mkdir -p ../Averages
 
- DE                        ; Delete 
-   [refangles]             ; Doc file of angles       (removed)
- DE                        ; Delete 
-   [ref_view_list]         ; Selection doc file       (removed)
-
- ; Get parameters
- IF ( [radius] < 0 ) THEN  ; Get actual size and compute radius
-   UD 18, [sp_partsiz]
-    [params] 
-    [radius] = 0.69 * [sp_partsiz]
- ENDIF
-
- ; Create the reference angles document file
- VO EA [numang]            ; Create equally dispersed angles
-   [dtheta]                ; Delta theta
-   0,90                    ; Range of theta
-   0,359.99                ; Range of phi
-   [refangles]             ; Doc file of angles       (output)
-
- [numang] = [numang] - 1   ; Skip duplicate angle
- [numang]  
-
- ; Generate view-list
  DOC CREATE
    [ref_view_list]         ; View list doc file    (output)
    1                       ; Column to be filled
-   1-[numang]              ; Numbers to put in column
+   1-[num-angs]            ; Numbers to put in column
 
  SYS
-     echo  ' 'Creating: {%I0%[numang]} reference projections
-
- ; Create projections of the ref volume
- PJ 3Q                     ; Generate projections 
-   [refvol]                ; Volume to be projected     (input)
-   [radius]                ; Radius
-   1-[numang]              ; List of file numbers
-   [refangles]             ; Proj. angles doc file      (input)
-   [prj]@****              ; Projection stack           (output)
-
- SYS
-   echo ' '   
+   echo  '  Created view list doc file: [ref_view_list]' ; echo
 
  EN 
  ; </pre></body></html>

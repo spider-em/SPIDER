@@ -198,8 +198,7 @@ def readSPRpage(filename=None, dirobj=None):
 
 def getproject(webpages=None):
     if webpages == None:
-        webpages = [os.path.join(source_dir,"Docs/mr1.html"),
-                    os.path.join(source_dir,"Docs/refine.html")]
+        webpages = [os.path.join(source_dir,"Docs/mr1.html")]
     elif type(webpages) == type("string"):
         webpages = [webpages]
 

@@ -1,3 +1,5 @@
+([numPeaksDoc],[peakCounter])
+
  ; <html><head><title>Picks particles from a micrograph </title></head><body><pre>
  ;
  ; SOURCE:  spider/docs/techs/recon1/Procs/pick-lfc-p.spi     BIMAL RATH : FEB 2003
@@ -36,65 +38,38 @@
  RR [useSelFileYN]
    ? DO YOU WANT TO USE A SELECTION FILE (NO = 0, YES = 1) ?
 
- ; If selection file is not used
- IF ( [useSelFileYN] .NE. 1 ) THEN
+ ; Ask for selection doc file with eulerian angles
+ FR 
+   ?SELECTION DOC_FILE ?[sel_doc]
 
-   ; Eulerian angles begining and endvalues 
-   ; PHI ([phiStart]-[phiEnd]), THETA([thetaStart]-[thetaEnd]), PSI([psiStart]-[psiEnd])
-   ; NOTE: Keep endvalues always +ve
+ ; Ask if an average of the projections is to be used as search template.
+ RR [useAvgYN]
+   ? USE AVERAGE OF THE PROJECTIONS AS SEARCH TEMPLATE (NO = 0, YES = 1) ?
+      
+ ; Eulerian angles begining and endvalues 
+ ; PHI ([phiStart]-[phiEnd]), THETA([thetaStart]-[thetaEnd]), PSI([psiStart]-[psiEnd])
+ ; NOTE: Keep endvalues always +ve
  
-   RR [phiStart]
-      ?PHI, START ANGLE ?
-   RR [phiEnd]
-      ?PHI, END ANGLE (+VE) ?
-   RR [phiStep]
-      ?PHI, SEARCH STEP SIZE (+VE) ?
+ RR [phiStart]
+   ?PHI, START ANGLE ?
+ RR [phiEnd]
+   ?PHI, END ANGLE (+VE) ?
+ RR [phiStep]
+   ?PHI, SEARCH STEP SIZE (+VE) ?
 
-   ; Avoid division by zero
-   IF ( [phiStep] .EQ. 0) THEN
-      [phiStep] = 1
-   ENDIF
+ RR [thetaStart]
+   ?THETA, START ANGLE ?
+ RR [thetaEnd]
+   ?THETA, END ANGLE (+VE) ?
+ RR [thetaStep]
+   ?THETA, SEARCH STEP SIZE (+VE) ?
 
-   RR [thetaStart]
-      ?THETA, START ANGLE ?
-   RR [thetaEnd]
-      ?THETA, END ANGLE (+VE) ?
-   RR [thetaStep]
-      ?THETA, SEARCH STEP SIZE (+VE) ?
-
-   ; AVOID DIVISION BY ZERO
-   IF ([thetaStep].EQ.0) THEN
-      [thetaStep] = 1
-   ENDIF
-
-   RR [psiStart]
-      ?PSI, START ANGLE ?
-   RR [psiEnd]
-      ?PSI, END ANGLE (+VE) ?
-   RR [psiStep]
-      ?PSI, SEARCH STEP SIZE (+VE) ?
-
-   ; AVOID DIVISION BY ZERO
-   IF ([psiStep].EQ.0) THEN
-      [psiStep] = 1
-   ENDIF
-
- ELSE
-   ; Ask for selection doc file with eulerian angles
-   FR 
-     ?SELECTION DOC_FILE ?[sel_doc]
- ENDIF
-
- ; If selection doc file is used then  average of the projections can be used
- ; as search template. default value of [useAvgYN] = 0 
- IF ([useSelFileYN] .EQ. 1) THEN
-   ; Ask if an average of the projections is to be used as search template.
-   RR [useAvgYN]
-      ? USE AVERAGE OF THE PROJECTIONS AS SEARCH TEMPLATE (NO = 0, YES = 1) ?
- ELSE
-   [useAvgYN] = 0
-   ; (If averaging is not selected, then the last projection is used.)
- ENDIF
+ RR [psiStart]
+   ?PSI, START ANGLE ?
+ RR [psiEnd]
+   ?PSI, END ANGLE (+VE) ?
+ RR [psiStep]
+   ?PSI, SEARCH STEP SIZE (+VE) ?
 
  ; Interpolation factor 
  RR [shrinkFactor] 
@@ -112,11 +87,13 @@
  RR [symmetricYN]
    ? DO YOU WANT TO USE A SYMMETRIC MASK FOR LCCC CALCULATION (NO = 0, YES = 1) ?
 
- IF ([symmetricYN] .LE. 0) THEN
-   ; Pixel value for masking 
-   RR [threshold]
-     ? PIXEL VALUE FOR MASKING (VALUES < ENTERED VALUE = 0, REST = 1) ?
- ENDIF
+ ; Pixel value for masking 
+ RR [refThresh]
+   ? PIXEL VALUE FOR MASKING (VALUES < ENTERED VALUE = 0, REST = 1) ?
+ 
+ ; Pixel value for masking 
+ RR [ccThresh]
+   ? CROSS-CORRELATION THRESHOLD FOR PARTICLES TO BE WINDOWED ?
  
 ; ------------------------- END BATCH HEADER -------------------------
 
@@ -163,6 +140,23 @@
 [temp_win_unramp]         = '_29'
 [temp_win_ramped]         = '_22'
 
+
+; Sanity checks
+
+; Avoid division by zero
+IF ( [phiStep] .EQ. 0) THEN
+    [phiStep] = 1
+ENDIF
+IF ([thetaStep].EQ.0) THEN
+    [thetaStep] = 1
+ENDIF
+IF ([psiStep].EQ.0) THEN
+    [psiStep] = 1
+ENDIF
+
+IF ([ccThresh] .GT. 1) [ccThresh]=1
+; (Peaks can be negative.)
+
  ; Find nsam and nrow of the micrograph
  FI [micXDim],[micYDim]
    [micfile]
@@ -172,9 +166,6 @@
  FI [volXDim],[volYDim],[zdim]
    [partvol]
    12,2,1
-
- MD
-   VB OFF
 
  ; Copy images into memory so that it can be accessed quickly a number of times
  ; in the following loops 
@@ -213,8 +204,8 @@ IF ([shrinkFactor] .EQ. 1) THEN
    ; (DC S is probably better)
  ENDIF
 
- DE
-   [temp_refproj]
+ DE A
+   [temp_refproj]001
  DE
    [posdoc]
  DE
@@ -257,11 +248,19 @@ IF ([shrinkFactor] .EQ. 1) THEN
  ;[temp_vol_incore]
  ;0,100
         
- IF ([useSelFileYN] .LE. 0) THEN
+ IF ([useSelFileYN] .LT. 0.5) THEN
    ; END VALUES FOR LOOPS         
    [numPhi]   = (([phiEnd]-[phiStart])/[phiStep])+1
    [numTheta] = (([thetaEnd]-[thetaStart])/[thetaStep])+1
    [numPsi]   = (([psiEnd]-[psiStart])/[psiStep])+1  
+   
+   IF ([useAvgYN] .GE. 0.5) THEN
+     SYS
+       echo " WARNING: Need selection file to average references.  Continuing..." ; echo
+     
+     [useAvgYN] = 0
+     ; (Doesn't make sense to average the references if no selection file is used)
+   ENDIF
    
  ELSE   ; If using selfile 
    UD N [numRefs]
@@ -280,11 +279,14 @@ IF ([shrinkFactor] .EQ. 1) THEN
    [psiStep]   = 1
    
    ; If average of projections is used for template
-   IF ([useAvgYN] .EQ. 1) THEN   
+   IF ([useAvgYN] .GE. 0.5) THEN   
       [numPhi] = 1
    ENDIF     
    
  ENDIF
+
+ MD
+   VB OFF
 
  [counter] = 0
  
@@ -297,7 +299,7 @@ IF ([shrinkFactor] .EQ. 1) THEN
       DO [keyPhi] = 1, [numPhi]  
          [phi] = [phiStart] + ([keyPhi]-1)*[phiStep]   
                  
-         IF  ([useSelFileYN]. EQ. 1) THEN
+         IF  ([useSelFileYN]. GE. 0.5) THEN
             UD IC, [keyPhi],[phi],[theta],[psi]
               [sel_doc]
          ENDIF
@@ -307,7 +309,7 @@ IF ([shrinkFactor] .EQ. 1) THEN
          ;;;[counter] = ([keyPsi]-1)*[numPhi]*[numTheta] + ([keyTheta]-1)*[numPhi] + [keyPhi]        
 
          ; Average of projections is not used as template
-         IF ([useAvgYN] .NE. 1) THEN 
+         IF ([useAvgYN] .LT. 0.5) THEN 
          
             ; MAKE A PROJECTION
             PJ 3
@@ -337,17 +339,17 @@ IF ([shrinkFactor] .EQ. 1) THEN
              
          ENDIF
 
-         IF ([symmetricYN] .EQ. 0) THEN
+         IF ([symmetricYN] .LT. 0.5) THEN
             ; Asymmetric mask
             
             ; If average of projections is used as template
-            IF ([useAvgYN] .EQ. 1) THEN  
-               ; Make sure that [threshold] is the correct masking value for the average of the projections
+            IF ([useAvgYN] .GE. 0.5) THEN  
+               ; Make sure that [refThresh] is the correct masking value for the average of the projections
                TH M
                  [temp_ref]          ; INPUT (overwritten): 2D reference
                  [temp_ref_thresh]   ; INPUT: mask
                  B                   ; threshold _B_elow
-                 [threshold]          
+                 [refThresh]          
             ELSE             
             
                ; Can't just use thresholding since the pixel values change for each projection.
@@ -359,13 +361,13 @@ IF ([shrinkFactor] .EQ. 1) THEN
                ; (no need to create the binary mask and get a projection from it 
                ; and then do thresholding using standard deviation value) 
                
-              IF ([counter] .EQ. 1) THEN
+               IF ([counter] .EQ. 1) THEN
                   ; Do only once
                   TH M
                     [temp_vol_incore]   ; INPUT
                     [temp_vol_thresh]
                     B
-                    [threshold]
+                    [refThresh]
                ENDIF   
             
                PJ 3
@@ -599,10 +601,6 @@ IF ([shrinkFactor] .EQ. 1) THEN
            B
            (0)
 
-;;         [v36] = INT(([micXDim]-[volXDim])/2)+1
-;;         [v37] = INT(([micYDim]-[volYDim])/2)+1 
-         ; (Not used)
-         
          IN
            [temp_ref_norm]
            [temp_ref_norm_pad]
@@ -612,18 +610,16 @@ IF ([shrinkFactor] .EQ. 1) THEN
          ; with the large image
                           
          FT
-        [temp_ref_norm_pad]
-        [temp_ref_norm_pad_ft]
+         [temp_ref_norm_pad]
+         [temp_ref_norm_pad_ft]
         
         
-        ; Set F(0,0) element = zero. Done to do similar normalization
-            ; as done in real space 
-        
+        ; Set F(0,0) element = zero. 
+        ; Done in order to perform similar normalization as done in real space 
         RP
         [temp_ref_norm_pad_ft]
         (1,1)
         (0)
-
         RP
         [temp_ref_norm_pad_ft]
         (2,1)
@@ -635,7 +631,6 @@ IF ([shrinkFactor] .EQ. 1) THEN
         ; (Already did it before)
         
         ; Don't change order of input in the following operation
-
         MU M
         [temp_mic_ft]
         [temp_ref_norm_pad_ft]
@@ -710,24 +705,31 @@ IF ([shrinkFactor] .EQ. 1) THEN
  SD /         X           Y       PARTICLE NO.   PEAK HT
    [posdoc]
 
+ [peakCounter] = 0
+ 
  ; Write xy positions and peak height value to file [posdoc]
  DO [keyPeak] = 1,[numPeaksDoc]
-   UD IC [keyPeak],[xcoordShrunkWin],[ycoordShrunkWin],[peakHeight]
+   UD IC [keyPeak], [xcoordShrunkWin],[ycoordShrunkWin],[peakHeight]
      [temp_peak_doc]
             
-   ; Correct for the center of the peak with respect to large image.
-   ; The peak height determined in peak search step is
-   ; with respect to the image created by
-   ; subtracting the dimension of reference image from the large image.
-   ; Factor of NSAM/2+1, NROW/2+1 and NSLICE/2+1 are addded
-   [xcoordShrunk] = [xcoordShrunkWin] + [volXCenter]
-   [ycoordShrunk] = [ycoordShrunkWin] + [volYCenter]
-   [xcoord] = [xcoordShrunk]*[shrinkFactor] + 1
-   [ycoord] = [ycoordShrunk]*[shrinkFactor] + 1           
+   IF ([peakHeight] .GE. [ccThresh]) THEN
+   
+     [peakCounter] = [peakCounter] + 1
+     
+     ; Correct for the center of the peak with respect to large image.
+     ; The peak height determined in peak search step is
+     ; with respect to the image created by
+     ; subtracting the dimension of reference image from the large image.
+     ; Factor of NSAM/2+1, NROW/2+1 and NSLICE/2+1 are addded
+     [xcoordShrunk] = [xcoordShrunkWin] + [volXCenter]
+     [ycoordShrunk] = [ycoordShrunkWin] + [volYCenter]
+     [xcoord] = [xcoordShrunk]*[shrinkFactor] + 1
+     [ycoord] = [ycoordShrunk]*[shrinkFactor] + 1           
             
-   [partNum] = ([firstPartNum]-1) + [keyPeak]      
-   SD [keyPeak],[xcoord],[ycoord],[partNum],[peakHeight]
-     [posdoc] 
+     [partNum] = ([firstPartNum]-1) + [keyPeak]      
+     SD [peakCounter], [xcoord],[ycoord],[partNum],[peakHeight]
+       [posdoc] 
+   ENDIF
      
  ENDDO
         
@@ -785,7 +787,7 @@ IF ([shrinkFactor] .EQ. 1) THEN
 
  DO [keyPart] = 1,[numParts]
 
-   UD IC [keyPart], [xcenter],[ycenter],[v94],[v97]
+   UD IC [keyPart], [xcenter],[ycenter],[partNum],[v97]
      [posdoc]
 
    [xtopleft] = [xcenter] - [volXCenter]
@@ -806,7 +808,7 @@ IF ([shrinkFactor] .EQ. 1) THEN
      [temp_noise_incore]
      [temp_win_ramped]
      [temp_circular_mask_inv]
-     [winpart]{******[v94]}
+     [winpart]{******[partNum]}
 
  ENDDO
 
@@ -818,12 +820,15 @@ IF ([shrinkFactor] .EQ. 1) THEN
 
 ; CP
 ; [temp_ref]
-; tstref
+; test/tstref
  
  RE
  
  ; Modified 2016-02-05
+ ;    2016-02-05 (trs) -- added peak CC threshold
+ ;    2016-02-05 (trs) -- removed conditionals from parameter/filename input
  ;    2016-02-05 (trs) -- added annotation
  
  ; </pre></body></html>
+
 

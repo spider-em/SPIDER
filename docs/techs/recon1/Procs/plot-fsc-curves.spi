@@ -1,89 +1,94 @@
  ; <html><head><title>Creates gnuplot file of refinement resolution curves</title></head><body><pre>
  ;
  ; SOURCE: spider/docs/techs/recon1/Procs/plot-fsc-curves.spi 
- ;             Previously named: plotref.spi        Jan 2010  ArDean Leith
- ;             Previously named: plotrefres.spi     Oct 2013  ArDean Leith
  ;
  ; PURPOSE: Plots FSC resolution curves for each iteration of refinement 
  ;   
- ; I/O PARAMETERS AND FILES ARE SET HERE:
+ ; PROCEDURE CALLED which sets filenames:
+ ;    refine-settings      <a href="refine-settings.spi"> refine-settings.spi</a>
+ ;
+ ; INPUT FILES: ('##' denotes iteration)
+ ;    [params]     ../params'                Parameter doc file     (one -- optional)  
+ ;    [m_fsc]      [out_dir]/fscdoc_m_##'    Iteration FSC curves   (one / iteration)
+ ;
+ ; OUTPUT FILES:  
+ ;    [fscplots]   fsc_iter.gnu              Text file of gnuplot commands 
  ;
  ; <b> ------------ Parameters ----------------------------------------
 
- [wantplot-yn]   = 1     ; Set == 0  if you do not want to open Gnuplot automatically
+ [cut]     = 0.143                  ; Resolution cutoff (Usually: 0.5 or 0.143) 
 
- ; ------------ Input files ----------------------------------------
-
- [resolution]   = 'final/resolutions'         ; File with number of iterations
-
- [fsc]          = 'final/fscdoc_m_{**[iter]}' ; Iteration FSC curves
-
- ; --------------- Output files  -------------------------------------
-
- [gnuplot_iter] = 'fsc_iter.gnu'              ; Text file of gnuplot commands 
+ [niter]   = 20                     ; Highest iteration to be plotted
 
  ; -------------- END BATCH HEADER ---------------------------------- </b>
 
- UD N [niter]                       ; Find last iteration number
-   [resolution]                     ; Resolution file   (input)
+ ; Input file names and pixsiz
+ @refine-settings([pixsiz],[r2],[alignsh],[prj-radius],[iter1],[iter-end],[sphdecon],[smallang-yn],[qsub],[incore-yn],[gold-std],[bp-type])
 
- SYS                                ; Remove gnuplot text file
-   \rm -f [gnuplot_iter]            
+ [maxspfreq] = 0.5 / [pixsiz]
+ ![t]         = 0.25 / [maxspfreq]
+ ! echo "f(x) = (x{*{%f5.1%[t]}) notitle" 
  
  SYS 
-   echo set title \"$DATEXT FSC  for Iterations \" >> [gnuplot_iter]
+   echo "  Pixel Size: {%f6.1%[pixsiz]}  Max Spatial Freq: {%f6.2%[maxspfreq]}"
+
+ SYS                                ; Remove gnuplot text file
+   \rm -f [fscplots]            
+ 
  SYS 
-   echo set xlabel \"Frequency\"                   >> [gnuplot_iter]
+   echo set title \"$DATEXT FSC  for Iterations \" >> [fscplots]
+
  SYS 
-   echo set style data lines                       >> [gnuplot_iter]
+   echo set xlabel \"Frequency\" >> [fscplots]
+
+ SYS 
+   echo set style data lines     >> [fscplots]
 
  ; Use a black line (color = -1) for the final curve
  SYS 
-   echo set style line 32 lt -1                   >> [gnuplot_iter]
+   echo set style line 32 lt -1  >> [fscplots]
+
+ ; Define line at resolution cut-off 
+ SYS 
+   echo "f(x) = {%f4.3%[cut]}"   >> [fscplots]
 
  SYS 
-   echo "f(x) = 0.5"                              >> [gnuplot_iter]
+   echo plot \\                  >> [fscplots]
 
- SYS 
-   echo plot \\                                   >> [gnuplot_iter]
+ DO [iter] = 1,[niter]
 
- DO [iter] = 2,[niter]
+   IQ FI [exists]
+     [m_fsc]
+   IF ( [exists] == 0 ) CYCLE
 
    IF ( [iter] == [niter] ) THEN   ; Last curve gets a thick black line (ls 32)
       SYS
-        echo \"[fsc].$DATEXT\" using 3:5 title \"[fsc]\" ls 32, \\ >> [gnuplot_iter]
+        echo \"[m_fsc].$DATEXT\" using 3:5 title \"[m_fsc]\" ls 32, \\ >> [fscplots]
    ELSE
-      IQ FI [exists]
-        [fsc]
-      IF ( [exists] > 0 ) THEN
-        SYS
-          echo \"[fsc].$DATEXT\" using 3:5 title \"[fsc]\" , \\   >> [gnuplot_iter]
-      ENDIF
+      SYS
+        echo \"[m_fsc].$DATEXT\" using 3:5 title \"[m_fsc]\" , \\      >> [fscplots]
    ENDIF
  ENDDO
 
+ ; Put line at resolution cut-off 
  SYS
-   echo "f(x) notitle"                          >> [gnuplot_iter]
+   echo "f(x) notitle"            >> [fscplots]
 
- IF ( [wantplot-yn] == 1 ) THEN
-    SYS                                 
-      echo  ' 'Displaying plot using: gnuplot -persist [gnuplot_iter]; echo   
-    SYS                          ; Plot the file                       
-      gnuplot -persist [gnuplot_iter]  
- ELSE    
-    SYS                          ; Tell how to plot the file                       
-      echo " Plot by typing: ' gnuplot -persist [gnuplot_iter]  '" ; echo
- ENDIF
+
+ SYS                                 
+   echo  '  'Displaying plot using: gnuplot -persist [fscplots]; echo   
+ SYS                          ; Plot the file                       
+   gnuplot -persist [fscplots]  
 
  EN
  
- ; Modified 2013-12-02
+ ; Modified 2016-03-21
  ;    TO DO: change/add Angstroms to horizontal axis
+ ;    2016-03-21 (agl) -- Plots all fsc files up to niter
+ ;    2016-01-14 (agl) -- Gold standard file names
  ;    2014-05-14 (agl) -- No longer has group plots
  ;    2013-12-03 (trs) -- Updated deprecated Gnuplot syntax
  ;    2013-12-02 (trs) -- Reporting masked FSC 
  ;    2013-11-28 (trs) -- Plot didn't substitute group numbers
 
  ; </pre></body></html>
-
-

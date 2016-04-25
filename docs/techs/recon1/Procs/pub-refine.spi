@@ -1,4 +1,4 @@
- ; <html><head><title>Controls and synchronizes refinement</title></head><body><pre>
+ ; <html><head><title>Controls parallel refinement</title></head><body><pre>
  ;
  ; SOURCE: spider/docs/techs/recon1/Procs/pub-refine.spi
  ;
@@ -12,71 +12,68 @@
  ;         Dala files removed                   ArDean Leith  Jan 2012
  ;         pixsiz, resol headers,...            ArDean Leith  Aug 2012
  ;         For CTF corrected images             ArDean Leith  Oct 2013
- ;         Reference projections parallelized   ArDean Leith  Oct 2013
+ ;         For gold standard reconstruction     ArDean Leith  May 2014
+ ;         Reference projections parallelized   ArDean Leith  Oct 2015
+ ;         PBS support                          ArDean Leith  Feb 2016
  ;
- ; PURPOSE: Runs on master node to control PubSub refinement.  Master procedure for
- ;          multiple iteration refinement on parallel cluster using: PubSub to control
- ;          distribution of parallel jobs. Each data group uses one parallel process.
+ ; PURPOSE: Runs on master node to control parallel refinement using cluster. 
+ ;          Each data group creates one parallel process.
  ;
- ; I/O Registers & files are set in: <a href="./refine-settings.spi">refine-settings.spi</a>
+ ; I/O Registers & files are set in: <a href="refine-settings.spi">refine-settings.spi</a>
  ;
- ; INPUT REGISTERS:
- ;   [r2]                     Radius of object 
- ;   [alignsh]                Translation shift allowed is +-[alignsh]
- ;   [iter-end]               Ending iteration
- ;
- ; 
  ; INPUT FILES: ('***' denotes group here)
- ;   [params]                ../params                                Params file           (one)
- ;   [vol_orig]              ../Reconstruction/vol_01                 Initial volume file   (one)
- ;   [sel_group_orig]        ../Reconstruction/input/bp_sel_group     Group selection file  (one)
+ ;   [vol_orig]              ../Reconstruction/vol01                  Initial reference volume       (one)
+ ;   [sel_group_orig]        ../Reconstruction/input/sel_group        Group selection file           (one)
  ;   [sel_parts_orig]        ../Reconstruction/input/bp_sel_part_***  Group particle selection files (one/group)
  ;   [unaligned_images_orig] ../Reconstruction/input/bp_data_ctfd_*** Unaligned image stacks         (one/group)
  ;
  ; PROCEDURES CALLED:
- ;    refine-settings          <a href="./refine-settings.spi">    refine-settings.spi</a>
- ;    refine-prepare           <a href="./refine-prepare.spi">     refine-prepare.spi</a>
- ;    refine-refangles         <a href="./refine-refangles.spi">   refine-refangles.spi</a>
+ ;    refine-settings         <a href="refine-settings.spi">  refine-settings.spi</a>
+ ;    show-r2                 <a href="show-r2.spi">          show-r2.spi</a>
+ ;    pub-prjrefs             <a href="pub-prjrefs.spi">      pub-prjrefs.spi</a>            
+ ;    .. pub-submit           <a href="pub-submit.spi">       pub-submit.spi</a>
+ ;    .. publish/qsub         <a href="publish.perl">         publish.perl</a>
+ ;    .... pub-refine-start   <a href="pub-refine-start.spi"> pub-refine-start</a>          
+ ;    ...... refine-settings  <a href="refine-settings.spi">  refine-settings.spi</a>            
+ ;    ...... refine-prjloop   <a href="refine-prjloop.spi">   refine-prjloop.spi</a>            
+ ;    pub-submit              <a href="pub-submit.spi">       pub-submit.spi</a>
+ ;       publish/qsub         <a href="publish.perl">         publish.perl</a>
+ ;    .. pub-refine-start     <a href="pub-refine-start.spi"> pub-refine-start</a>          
+ ;    .... refine-settings    <a href="refine-settings.spi">  refine-settings.spi</a>            
+ ;    .... refine-loop OR     <a href="refine-prjloop.spi">   refine-prjloop.spi</a>            
+ ;    .... refine-smangloop   <a href="refine-smangloop.spi"> refine-smangloop.spi</a>            
+ ;    ...... refine-bp        <a href="refine-bp.spi">        refine-bp.spi</a>            
+ ;    merge-fsc-filt          <a href="merge-fsc-filt.spi">   merge-fsc-filt.spi</a>
+ ;    .. pub-submit (optional)<a href="pub-submit.spi">       pub-submit.spi</a>
+ ;    .. publish/qsub         <a href="publish.perl">         publish.perl</a>
+ ;    .... pub-refine-start   <a href="pub-refine-start.spi"> pub-refine-start</a>          
+ ;    ...... refine-settings  <a href="refine-settings.spi">  refine-settings.spi</a>            
+ ;    ...... sphdecon         <a href="sphdecon.spi">         sphdecon.spi</a>            
+ ;    .. enhance (optional)   <a href="enhance.spi">          enhance.spi</a>
  ;
- ;    publish                  <a href="./publish.perl">           publish.perl</a>
- ;    ... pub-refine-start     <a href="./pub-refine-start.spi">   pub-refine-start</a>          
- ;    ....... refine-settings  <a href="./refine-settings.spi">    refine-settings.spi</a>            
- ;    ....... refine-prjloop   <a href="./refine-prjloop.spi">     refine-prjloop.spi</a>            
- ;    ....... refine-loop      <a href="./refine-loop.spi">        refine-loop.spi</a>            
- ;    ....... refine-smangloop <a href="./refine-smangloop.spi">   refine-smangloop.spi</a>            
- ;    ....... refine-bp        <a href="./refine-bp.spi">          refine-bp.spi</a>            
- ;
- ;    refine-merge             <a href="./refine-merge.spi">       refine-merge.spi</a>
- ;    ... enhance (optional)   <a href="./enhance.spi">            enhance.spi</a>
- ;
- ; ---------------------------------------------------------------------
- ; -- END BATCH HEADER --
+ ; -------------------------------- END BATCH HEADER ----------------------------
 
  MD
    TR OFF                    ; Loop info turned off
  MD
    VB OFF                    ; File info turned off
  MD
-   SET MP                    ; Use only one or two processors on master node!!
-  2 
-
- SYS
-   echo -n "  Refining the reconstruction   "  ;  date '+ TIME: %x  %X' 
+   SET MP                    ; Use only one or two processors if using master node!!
+   1 
 
  ; Input initial parameters & file names but not angular steps
- @refine-settings([pixsiz],[r2],[alignsh],[prj-radius],[iter1],[iter-end],[lambda],[smallang-yn],[winsiz],[incore-yn],[prepare-yn],[bp-type])
+ @refine-settings([pixsiz],[r2],[alignsh],[prj-radius],[iter1],[iter-end],[sphdecon],[smallang-yn],[qsub],[incore-yn],[gold-std],[bp-type])
 
- IF ( [prepare-yn] > 0 ) THEN 
-    ; Prepare input files (only needs to be done once)  
-    @refine-prepare([iter1]) 
- ENDIF
+ 
  SYS
-   echo -e '  Alignment shift:   {%I0%[alignsh]}   Alignment radius: {%I0%[r2]}'
+   echo ; echo -e "  Alignment shift:   {%I0%[alignsh]}   Alignment radius: {%I0%[r2]}"
  SYS
    echo    "  Projection radius: {%I0%[prj-radius]}" ; echo
 
+ SYS                          ; Create output directories if not present
+   mkdir -p [out_dir] [work_dir]
 
- SD / ITERATION        MASKED-RES    RESOLUTION
+ SD /     ITERATION     MASKED-RES    RESOLUTION
    [iter_resol]               ; Resolution doc file              (output)
  SD E     
    [iter_resol]               ; Resolution doc file              (finished)
@@ -84,101 +81,77 @@
  UD N [num-grps]              ; Find number of groups
    [sel_group]                ; Group selection file      (input)
 
+ IF ( [iter1] == 1 ) THEN
+   ; Create subset volumes from initial model if not already created
+   [iter] = 1
+   [s]    = 1
+   IQ FI [r-exists]
+     [vol_s]                  ; Reference volume
+
+   IF ( [r-exists] <= 0) THEN
+     ; Must create current starting volume from initial model/reference volume
+     CP 
+       [vol_orig]             ; Starting initial model == reference volume
+       [vol_s]                ; Starting subset reference volume  
+   ENDIF   
+ 
+   [s] = 2
+   IF ( [r-exists] <= 0) THEN
+     ; Must create current starting volume from initial model/reference volume
+     CP 
+       [vol_orig]             ; Starting initial model == reference volume
+       [vol_s]                ; Starting subset reference volume   
+   ENDIF   
+ ENDIF
+
+ ; Show alignment and projection radii on center slice of a reference volume
+ ![s] = 1
+ !@show-r2([r2],[alignsh],[prj-radius])
+ !  [vol_s]                  ; Reference volume
+
+
+ IF ( [smallang-yn] == 1 ) THEN
+   ; List desired offset angles for reference projections in a doc file.
+   @refine-setrefangles([iter],[smallang-yn],[ampenhance],[ang-step],[ang-limit],[num-angs])      
+ ENDIF
 
  DO [iter]=[iter1],[iter-end] ; Loop over all iterations ----------------------------------
 
-   ; Set angles used for making reference projections. Creates: [iter_refangs] doc file for angles
-   @refine-refangles([iter],[smallang-yn],[ampenhance],[ang-step],[ang-limit],[num-angs])      
 
-   !SYS
-     !echo "  Projecting: [current_vol]  Iteration: {%I0%[iter]}  Groups:{%I0%[num-grps]}  Angles:{%I0%[num-angs]} " 
+   IF ( [smallang-yn] == 0 ) THEN
+     ; List desired angles ('VO EA') for reference projections in a doc file.
+     @refine-setrefangles([iter],[smallang-yn],[ampenhance],[ang-step],[ang-limit],[num-angs])      
 
-    ; Generate 4 digit random number for semi-unique SYNC file numbering
-   [rn]   = int(ran(0.0)*9999)
+     ; Create reference projection ('PJ 3F') stacks from both subset reference volumes 
+     ; in parallel. Waits for all nodes to finish their projections. 
 
-   [task] = 2                    ; pub-refine-start will start: refine-pjloop 
+     @pub-prjrefs([iter],[num-grps],[prj-radius])
 
-   DO [grp] = 1,[num-grps]       ; Loop over all projection groups 
+   ENDIF
 
-      ; Use pub-refine-start to run: refine-pjloop  for each group
-      SYS
-         publish './spider $PRJEXT/$DATEXT @pub-refine-start {%I3%[grp]} task={*[task]} iter={**[iter]} grp={***[grp]} rn={****[rn]}' 
-     
-   ENDDO                         ; End of: Loop over all projection groups 
+   ; Process experimental images in parallel by groups of images using Pubsub.
+   ; Find alignment parameters ('AP SHC' or 'AP REF') which align experimental images  
+   ; with the most similar projection image. This is done for the two subsets of images. 
+   ; Then align ('RT SF') the images and backproject ('BP 3F') to create two subset volumes.
 
-   ; Wait for all subscribers to finish projection loop
-   @pub-refine-wait([num-grps],[iter],[rn])
-      [finished_file]            ; File created when finished (one/group)
+   [task]   = [smallang-yn]    ; pub-refine-start starts: refine-loop or refine-loop-smang
+   [script] = './spider $PRJEXT/$DATEXT @pub-refine-start '  ; Script that runs refinement
+   @pub-submit([iter],[num-grps],[task],[qsub])
+      [script]                 ; Script that runs refinement
 
+   ; Consolidate ('AS S') all parallel group volumes for both subsets into two subset
+   ; output volumes, find resolution ('FSC') by comparing FSC of the two subsets, and
+   ; filter ('FD C') the combined volumes to limit resolution. 
 
-   SYS
-     echo "  Merging reference projection files into single stack "
-
-   DO [grp] = 1,[num-grps]       ; Loop over all projection groups ----------------
-
-      MD                           
-        RESULTS OFF              ; Discard further results file info
-      DO                         ; Loop over all projections in group 
-        UD NEXT [in],[psi],[theta],[phi],[out],[igo],[iend]
-          [iter_refangs_grp]     ; Reference projection angles doc file   (input)
-        IF ( [in] == 0 ) EXIT
-
-        !  echo "  Copy: [ref_projs_grp][in] -->  [ref_projs]@{*****[out]}"
-        CP
-          [ref_projs_grp][in]    ; Template for ref. projections          (input) 
-          [ref_projs]@*****[out] ; Template for ref. projections          (output)
+   @merge-fsc-filt([pixsiz],[iter],[ampenhance],[r2],[sphdecon],[gold-std],[qsub])
  
-      ENDDO                      ; End of:  DO     Loop over all projections 
-      MD                           
-        RESULTS ON               ; Save further results file info
-
-      UD NEXT END                ; Close doc file
-        [iter_refangs_grp]       ; Reference projection angles doc file   (input)
-
-   ENDDO                         ; End of: DO [grp] = 1 ---------------------------
-
-   ; Process all groups in parallel refinement
-
-   [task] = [smallang-yn]       ; pub-refine-start starts: refine-loop or refine-smangloop
-
-   ; Generate 4 digit random number for semi-unique SYNC file numbering
-   [rn] = int(ran(0.0)*9999)
-
-   DO [i]=1,[num-grps]          ; Loop over all groups -----------------------------
-
-      UD IC [i],[grp]           ; Get group number
-        [sel_group]             ; Group selection file     (input)
-
-      ; Use pub-refine-start to create parallel main loop for each group
-      ; Finds alignment (AP SHC), aligns (RT SF), backprojects (BP 32F)
-      SYS
-        publish './spider $PRJEXT/$DATEXT @pub-refine-start {%I3%[grp]} task={*[task]} iter={**[iter]} grp={***[grp]} rn={****[rn]}' 
-     
-   ENDDO                       ; End of: Loop over all groups ---------------------
-
-
-   UD ICE                      ; End doc file usage
-     [sel_group]               ; Group selection file     (closed)
-
-   ; Wait for all subscribers to finish main loop
-
-   @pub-refine-wait([num-grps],[iter],[rn])
-     [finished_file]           ; File created when finished (one/group)
-
-   ; Consolidate group volumes (AS S) into output volumes, find resolution (FSC),
-   ; filter to limit resolution (FQ), and center the filtered volumes 
-
-   @refine-merge([pixsiz],[iter],[ampenhance],[r2])
-
    SYS
      echo "  Iteration: {%I0%[iter]} Finished" ; echo
-
    MY FL                      ; Flush results
- ENDDO                        ; End of loop over all iterations -------------------------
-
+ ENDDO                        ; End of loop over all iterations ----------------------------
 
  SYS                          ; Echo current time 
-   echo -n "  Refinement finished after iteration: {%I0%[iter]}   " ; date '+ TIME: %x  %X' ; echo " " 
+   echo -n "  Refinement finished after iteration: {**[iter]}   " ; date '+ TIME: %x  %X' ; echo  
 
  EN
  ; </pre></body></html>

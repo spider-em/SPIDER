@@ -13,6 +13,7 @@
 #            AL Mar-10-09  Added echo of file sources
 #            AL Mar-10-09  Migrate to usr8
 #            AL Aug-05-14  Altered for no defocus groups
+#            AL Apr-25-16  Removed refine.html 
 
 setenv ROOTDIR /usr8/spider/docs/techs/recon1
 setenv DOCSDIR $ROOTDIR/Docs
@@ -37,7 +38,6 @@ echo ; echo " Copy other useful files to project "Docs" directory -------"
 # Copy useful files to project "Docs" directory
 cp -vu $DOCSDIR/mr1.html      $PROJDIR/Docs
 cp -vu $DOCSDIR/mrstyle2.css  $PROJDIR/Docs
-cp -vu $DOCSDIR/refine.html   $PROJDIR/Docs
 
 echo ; echo " Run SPIDER session and write version to info file -------- "
 # Create file "info". "info" contains infomation about the spider executable  
