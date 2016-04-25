@@ -99,6 +99,12 @@ C          STANDARD COPY WITH FLIPPED ENDEDNESS
 C          SPIDER IMAGE(S) FILE INTO VOLUME FILES '
            CALL COPYTOVOL()
            GOTO 9000
+
+        ELSEIF (FCHAR(4:8) == 'TO ST') THEN !-------------- 'CP TO STK'
+C          SPIDER STACK(S) INTO A SINGLE STACK '
+           CALL COPYTOSTK()
+           GOTO 9000
+
         ENDIF
 
 C                                    12345678     1234567890
@@ -149,6 +155,7 @@ C          OPEN INPUT IMAGE(S), (NOT FOURIER)
            LOCAST  = INDEX(FILOLD,'*')
            ISSTACK = (MAXIM > 0)                    ! USING A STACK
            BARE    = (LOCAT > 0 .AND. LOCAT == NLET)  ! BARESTACK
+
 
            IF (FCHAR(7:9) .NE. 'MRC') THEN
               IF (BARE) THEN
@@ -286,3 +293,15 @@ C             NO SUCH COPY FUNCTION
         IF (ALLOCATED(ILIST)) DEALLOCATE(ILIST)
 
         END
+
+#ifdef NEVER
+        write(6,*) '  filold:',filold(1:nlet)
+        write(6,*) '  locat:',locat
+        write(6,*) '  locast:',locast
+        write(6,*) '  nlet:',nlet
+        write(6,*) '  isstack:',isstack
+        write(6,*) '  maxim:',maxim
+        write(6,*) '  nimg: ',nimg
+        write(6,*) '  bare: ',bare
+        stop
+#endif
