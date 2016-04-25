@@ -25,8 +25,8 @@
  ;   [prj-radius]          Radius of object for projection
  ;   [iter1]               Starting iteration
  ;   [iter-end]            Ending   iteration
- ;   [lambda]              Lambda (A)            (Used in prepare)
- ;   [smallang-yn]         Small angle refinement flag (1 == true) 
+ ;   [sphdecon]            Spherical deconvolutin sigma (0 == none)
+ ;   [smallang-yn]         Small angle refinement flag  (1 == true) 
  ;
  ; INPUT FILES: ('***' denotes group here)
  ;   [params]                ../params                                Params file           (one)
@@ -57,56 +57,48 @@
    SET MP                    ; Use all available OMP processors
    0
 
- ; Set initial parameters & file names
- @refine-settings([pixsiz],[r2],[alignsh],[prj-radius],[iter1],[iter-end],[lambda],[smallang-yn],[winsize],[incore-yn],[prepare-yn],[bp-type])
+ ; Input initial parameters & file names but not angular steps
+ @refine-settings([pixsiz],[r2],[alignsh],[prj-radius],[iter1],[iter-end],[sphdecon],[smallang-yn],[winsiz],[incore-yn],[prepare-yn],[bp-type])
 
  ; Redefine [temp_local_dir] location to current work directory for non-PubSub run
  GLO [temp_local_dir] = '[temp_work_dir]'
 
  IF ( [prepare-yn]  == 1 ) THEN
-   ; Prepare input files  (only needs to be done once) 
-   @refine-prepare([pixsiz],[lambda],[iter1])
-
-   DE
-     [iter_resol]             ; Resolution doc file           (removed)
+   ; Prepare input files (only needs to be done once)  
+   @refine-prepare([pixsiz],[iter1]) 
  ENDIF
+
+ SYS
+   echo -e "  Alignment shift:   {%I0%[alignsh]}   Alignment radius: {%I0%[r2]}"
+ SYS
+   echo    "  Projection radius: {%I0%[prj-radius]}" ; echo
+
+ SD /     ITERATION     MASKED-RES    RESOLUTION
+   [iter_resol]               ; Resolution doc file              (output)
+ SD E     
+   [iter_resol]               ; Resolution doc file              (finished)
+
+ UD N [num-grps]              ; Find number of groups
+   [sel_group]                ; Group selection file      (input)
 
  MY FL
 
- SD /      ITERATION       GROUP     MASKED-RES    RESOLUTION
-   [iter_resol]               ; Resolution doc file              (output)
-
- UD N [num-grps]              ; Get number of  groups
-   [sel_group]                ; Group selection doc file         (input)
-
-
  DO [iter]=[iter1],[iter-end] ; Loop over all iterations -----------------------------
 
-   ; Set angles used for making reference projections. Creates: [iter_refangs] doc file for angles
-   @refine-refangles([iter],[smallang-yn],[ang-step-sm],[theta-sm],[ampenhance],[ang-step],[ang-limit],[num-ang])      
+   ; List desired angles for reference projections in a doc file.
+   @refine-refangles([iter],[smallang-yn],[ampenhance],[ang-step],[ang-limit],[num-angs])      
 
-   DO [s] = 1,2             ; Loop over resolution subsets ------------------
-
-     SYS
-       echo  " Iteration: {%I0%[iter]}  Projecting: [vol_s]   From: {%I0%[num-ang]} angles" 
-
-     ; Create stacks holding angular reference projections from both current reference volumes.
-     PJ 3F                    ; Projection operation
-       [vol_s]                ; Vol from previous iteration      (input) 
-       [prj-radius]           ; Radius of object
-       1-[num-ang]            ; Number of ref. angles used    
-       [iter_refangs]         ; Ref. angles doc file             (input)
-       [ref_projs_s]@*****    ; Template for ref. projections    (output) 
-   ENDDO
+   ; Create stacks holding reference projections 'PJ 3F' from both subset reference volumes 
+   ; in series.
+   [num-parallel] = 1  
+   @pub-prjrefs([iter],[num-parallel],[prj-radius])
 
    ; Process all groups serially one-by-one
 
-   DO [i]=1,[num-grps]        ; Loop over all groups --------------------------
-      UD S [i],[grp]          ; Get group number from list  
-        [sel_group]           ; Group selection file            (input)
+   DO [grp]=1,[num-grps]        ; Loop over all groups --------------------------
 
       SYS
-        echo ; echo -n " Iteration: {%I0%[iter]}  Refining group: {%I4%[grp]}   " ; date  '+ TIME: %x  %X' ; echo
+        echo ; echo -n " Iteration: {%I0%[iter]}  Group: {%I4%[grp]}   " ; date  '+ TIME: %x  %X' ; echo
 
       [bp-typet] = [bp-type]     
       IF ( [iter] == [iter-end] ) THEN
@@ -115,10 +107,10 @@
 
       MY FL                   ; Flush results file
  
-      IF ( [smallang-yn] == 0 ) THEN  ; Runs main refinement loop tasks
-         @refine-loop([ang-step],[ang-limit],[r2],[alignsh],[prj-radius],[iter],[grp],[pixsiz],[incore-yn],[bp-typet])
-      ELSE
-         @refine-smangloop([ang-step-sm],[r2],[alignsh],[prj-radius],[iter],[grp],[pixsiz],[bp-typet])
+      IF ( [smallang-yn] == 0 ) THEN  ; Runs main refinement  tasks
+        @refine-loop([ang-step],[ang-limit],[r2],[alignsh],[prj-radius],[iter],[grp],[pixsiz],[incore-yn],[bp-typet])
+      ELSE                            ; Runs small angle refinement  tasks
+        @refine-smangloop([ang-step-sm],[r2],[alignsh],[prj-radius],[iter],[grp],[pixsiz],[bp-typet])
       ENDIF
 
       MY FL                   ; Flush results file
@@ -127,10 +119,11 @@
 
    UD E                       ; Finished with incore doc file
 
-   ; Consolidate group volumes (using: AS S) into output volumes, find resolution (using: FSC),
-   ; filter to limit resolution (using: FQ), and center the filtered volumes 
+   ; Consolidate all parallel group volumes for both subsets ('AS S') into two subset output volumes, 
+   ; find resolution ('FSC') using the two subsets and
+   ; filter the combined volumes to limit resolution ('FD C') 
 
-   @refine-merge([pixsiz],[iter],[ampenhance],[r2])
+   @refine-merge([pixsiz],[iter],[ampenhance],[r2],[sphdecon])
 
    SYS
      echo " Iteration: {%I0%[iter]} Finished" ; echo
@@ -139,7 +132,7 @@
  ENDDO                        ; End of loop over all iterations ------------------------
 
  SYS                          ; Echo current time 
-   echo -n " Refinement finished after iteration: {**[iter]}   " ; date '+ TIME: %x  %X' ; echo " " 
+   echo -n " Refinement finished after iteration: {%I0%[iter]}   " ; date '+ TIME: %x  %X' ; echo " " 
 
  EN
  ; </pre></body></html>

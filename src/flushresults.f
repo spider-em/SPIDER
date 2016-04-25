@@ -45,7 +45,7 @@ C***********************************************************************
 
         CALL SET_MPI(ICOMM,MYPID,MPIERR) ! SETS ICOMM AND MYPID
 
-#if defined (SP_NT) || defined(SP_GFORTRAN) 
+#if defined(SP_GFORTRAN) 
         IF (NOUT .NE. NDAT) CALL flush(NOUT)
         CALL flush(NDAT)
 #else
@@ -60,5 +60,36 @@ C***********************************************************************
 
         IF (MYPID <= 0) 
      &     CALL PDATES(' RESULTS FILE FLUSHED: ',-1)
+
+        END
+
+
+
+        SUBROUTINE FLUSHRESULTS_Q(SAYIT)
+
+        IMPLICIT NONE
+        INCLUDE 'CMBLOCK.INC'
+
+        LOGICAL  :: SAYIT
+
+        INTEGER  :: ICOMM,MYPID,MPIERR,IRET
+
+        CALL SET_MPI(ICOMM,MYPID,MPIERR) ! SETS ICOMM AND MYPID
+
+#if defined(SP_GFORTRAN) 
+        IF (NOUT .NE. NDAT) CALL flush(NOUT)
+        CALL flush(NDAT)
+#else
+#if defined (SP_IBMSP3) 
+        IF (NOUT .NE. NDAT) CALL flush_(NOUT)
+        CALL flush_(NDAT)
+#else
+        IF (NOUT .NE. NDAT) CALL flush(NOUT,IRET)
+        CALL flush(NDAT,IRET)
+#endif
+#endif
+
+        IF (SAYIT .AND. MYPID <= 0) 
+     &     CALL PDATES(' Results file flushed: ',-1)
 
         END

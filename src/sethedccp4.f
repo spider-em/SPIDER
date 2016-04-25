@@ -6,11 +6,12 @@ C               ANGSTROMS/PIXEL                  JAN  05 ARDEAN LEITH
 C               STARTING                         FEB  06 ARDEAN LEITH 
 C               MRC PROMPTS                      MAY  12 ARDEAN LEITH 
 C               NSYMBYT,ISPG                     JUN  15 ARDEAN LEITH 
+C               ISSWAB RENAMED ISSWABT           JAN  16 ARDEAN LEITH
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2015  Health Research Inc.,                         *
+C=* Copyright 1985-2016  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -28,7 +29,7 @@ C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
 C **********************************************************************
 C SETHEDCCP4(HEADBUF, NX, NY, NZ,
-C            DMIN,DMAX,DMEAN,DSIG, IMODE,ISSWAB,NSYMBYT,ISPG,IRTFLG)
+C            DMIN,DMAX,DMEAN,DSIG, IMODE,ISSWABT,NSYMBYT,ISPG,IRTFLG)
 C
 C PURPOSE: CREATE NEW CCP4 HEADER. ALL OF THE STANDARD IMAGE 
 C          DEFAULTS ARE SET UP GIVEN THE REQUESTED INFORMATION. 
@@ -68,7 +69,7 @@ C***********************************************************************
         SUBROUTINE SETHEDCCP4(HEADBUF, NX, NY, NZ,
      &                        DMIN,DMAX,DMEAN,DSIG, 
      &                        SCALEX,SCALEY,SCALEZ, IMODE,
-     &                        ISSWAB,NSYMBYT,NIMG,MZ,IRTFLG)
+     &                        ISSWABT,NSYMBYT,NIMG,MZ,IRTFLG)
 
         IMPLICIT NONE
 
@@ -77,7 +78,7 @@ C***********************************************************************
         REAL               :: HEADBUF(*)
         INTEGER            :: NX,NY,NZ, IMODE
         REAL               :: DMIN,DMAX,DMEAN,DSIG,SCALE
-        LOGICAL            :: ISSWAB
+        LOGICAL            :: ISSWABT
         INTEGER            :: NSYMBYT,NIMG,MZ,IRTFLG
 
         INTEGER            :: ISTARTX,ISTARTY,ISTARTZ,NOT_USED
@@ -222,7 +223,7 @@ C       ZERO THE EXTRA POSITIONS
 
 C       PUT IN 'MRCO'
         CVAL = 'MRCO'
-        CALL CCPMVC(HEADBUF(27),CVAL,ISSWAB)
+        CALL CCPMVC(HEADBUF(27),CVAL,ISSWABT)
 
 C       VERSION NUMBER 
         IVERSION = 20140
@@ -257,10 +258,10 @@ C       ORIGIN ON X,Y & Z AXIS
 
 C       PUT IN 'MAP'
         CVAL = 'MAP '
-        CALL CCPMVC(HEADBUF(53),CVAL,ISSWAB)
+        CALL CCPMVC(HEADBUF(53),CVAL,ISSWABT)
 
 C       SET MACHINE STAMP
-        CALL SETSTAMP(MACHST,ISSWAB)
+        CALL SETSTAMP(MACHST,ISSWABT)
         CALL CCPMVI(HEADBUF(54),MACHST,1)
 
 c        write(nout,*) ' map:',cval,headbuf(53)
@@ -276,7 +277,7 @@ C       SET NUMBER OF LABELS
 C       ZERO ALL LABELS WITH BLANKS
         CVAL = BLANK // BLANK // BLANK // BLANK
         DO I = 57,256
-           CALL CCPMVC(HEADBUF(I),CVAL,ISSWAB)
+           CALL CCPMVC(HEADBUF(I),CVAL,ISSWABT)
         ENDDO
 
 C       NOW GO BACK AND ADD IN ONE LABEL
@@ -285,7 +286,7 @@ C       NOW GO BACK AND ADD IN ONE LABEL
         DO I = 1,44,4
            CVAL = LABEL1(I:I+3)
            INOW = INOW + 1
-           CALL CCPMVC(HEADBUF(INOW),CVAL,ISSWAB)
+           CALL CCPMVC(HEADBUF(INOW),CVAL,ISSWABT)
         ENDDO
         
         IRTFLG = 0
@@ -321,7 +322,7 @@ C     REVERSE      FLAG TO INVERT STRING                       SENT
 
 C ---------------------- SETSTAMP -----------------------------------
  
-      SUBROUTINE SETSTAMP(MACHSTMP,ISSWAB)
+      SUBROUTINE SETSTAMP(MACHSTMP,ISSWABT)
 
 C     PURPOSE: SETS MACHINE STAMP FOR THIS ARCHITECTURE
 
@@ -329,7 +330,7 @@ C     NOTE: I HAVE EXTRACTED THIS FROM THE MRC 2000 CODE AND
 C           CONVERTED TO FORTRAN. BUT I MAY HAVE BOTCHED IT? al
 
       INTEGER * 4 :: MACHSTMP
-      LOGICAL     :: ISSWAB
+      LOGICAL     :: ISSWABT
 
       INCLUDE 'CMBLOCK.INC'
 
@@ -386,7 +387,7 @@ C       Little-endian AMD OPTERON,
       NATIVEFTT = NATIVEFT
       NATIVEITT = NATIVEIT
 
-      IF (ISSWAB) THEN
+      IF (ISSWABT) THEN
 C        RUNNING WITH NON-NATIVE BYTE-SWAPPING
          IF (NATIVEFTT == 1) THEN
             MACHSTMP = 4369

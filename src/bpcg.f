@@ -1,5 +1,5 @@
 
-C++*********************************************************************
+C **********************************************************************
 C                                                                      *
 C  BPCG.F    CORRECTIONS APPLIED ON VOLUME SIDE  11/09/98              *
 C            COMPRESSION OF ANGLES               08/14/96              *
@@ -19,13 +19,13 @@ C            RENAMED SUBROUTINES                 DEC 2011 ARDEAN LEITH *
 C            FBS2 FOR ALL THREE                  JAN 2012 ARDEAN LEITH *
 C            LIN RI TRAP BUG                     APR 2012 ARDEAN LEITH *
 C            KLP_8                               APR 2012 ARDEAN LEITH *
-C            D_KLP,D_KLS                           JAN 2013 ARDEAN LEITH *
+C            D_KLP,D_KLS                         JAN 2013 ARDEAN LEITH *
 C            gfort COMPILER BUG?                 MAY 2013 ARDEAN LEITH *                                                            *
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2013  Health Research Inc.,                         *
+C=* Copyright 1985-2015  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -65,7 +65,7 @@ C                  --->     BPCG_3_LIN --> BCKPJ_LIN
 C                  --->     BPCG_3_FBS --> BCKPJ_FBS
 C          
 C23456789012345678901234567890123456789012345678901234567890123456789012
-C--*********************************************************************
+C **********************************************************************
 
         SUBROUTINE BPCG
 
@@ -90,6 +90,9 @@ C--*********************************************************************
         CHARACTER(LEN=1)      :: NULL = CHAR(0)
         LOGICAL               :: ASKNAM = .TRUE.
         LOGICAL               :: FOUROK = .FALSE.
+
+        !INTEGER, PARAMETER    :: ISTAR8 = selected_int_kind(16)
+        !INTEGER(ISTAR8)       :: MWANT
 
         INTEGER, PARAMETER    :: LUNPROJ = 20 
         INTEGER, PARAMETER    :: LUNDOC  = 80 
@@ -122,7 +125,7 @@ C       OPEN FIRST OVERALL INPUT FILE
      &             NDUM,NANG,IMG1, IRTFLG) 
         IF (IRTFLG .NE. 0) RETURN
         
-        IF (FILPAT(NLET:NLET) .EQ. '@') THEN
+        IF (FILPAT(NLET:NLET) == '@') THEN
            CALL ERRT(101,'OPERATION DOES NOT WORK ON WHOLE STACKS',NE)
            GOTO 9999
         ENDIF  
@@ -133,8 +136,8 @@ C       NANG - TOTAL NUMBER OF IMAGES
         IF (MYPID <= 0) WRITE(NOUT,90) NANG
 90      FORMAT('  NUMBER OF IMAGES:',I8)
         
-        WANT3    = (FCHAR(4:7) .EQ. 'CG 3')   ! WANT THREE VOLUMES
-        USELISTS = (FCHAR(4:8) .EQ. 'CG 3L')  ! WANT THREE LISTS
+        WANT3    = (FCHAR(4:7) == 'CG 3')   ! WANT THREE VOLUMES
+        USELISTS = (FCHAR(4:8) == 'CG 3L')  ! WANT THREE LISTS
 
         !write(6,*)want3,uselists,fchar(4:8)
         IF (WANT3 .AND. USELISTS) THEN 
@@ -192,13 +195,13 @@ C       BCKE - WORKING VOLUME
 C       BCKN - CURRENT RECONSTRUCTION
         ALLOCATE (ICUBE(5,NN), 
      &            CB(N,N,N), 
+     &            BCKN(N*N*N), 
      &            ANG(3,NANG),
      &            DM(9,NANG),
      &            LB(NANG), 
-     &            BCKN(N*N*N), 
      &            STAT=IRTFLG)
         IF (IRTFLG .NE. 0) THEN 
-           MWANT = 5*NN + N*N*N + 3*NANG + 9*NANG + NANG + N*N*N 
+           MWANT = 5*NN + 2*N*N*N + 12*NANG_ISTAR8 
            CALL ERRT(46,'BPCG, ICUBE...',MWANT)
            GOTO 9999
         ENDIF
@@ -247,6 +250,7 @@ C       FIND NUMBER OF OMP THREADS
 
         WRITE(NOUT,92)'  CREATING VOLUME ------------------------------'
 92      FORMAT(/,A)
+        CALL FLUSHRESULTS()
 
 C       BACK-PROJECTION AND BACKGROUND CORRECTION, RETURNS: CHI2
         CALL BPCG_2(N,NANG,CB,ANG,ILIST,ICUBE,NN,DM,RI,PANG,
@@ -302,6 +306,7 @@ C       SAVE OVERALL OUTPUT VOLUME
      &          ' CREATING FIRST SAMPLED VOLUME ------------------'
            WRITE(NOUT,*) ' '
            !write(6,*) 'Creating  first output sampled volume -----'
+           CALL FLUSHRESULTS()
 
 C          OPEN NEXT INPUT PROJECTION
            K = 1
@@ -346,6 +351,7 @@ C          SAVE FIRST OUTPUT SAMPLED VOLUME
      &         ' CREATING SECOND SAMPLED VOLUME ------------------'
            WRITE(NOUT,*) ' '
            !write(6,*) 'Creating second output sampled volume -----'
+           CALL FLUSHRESULTS()
 
 C          OPEN NEXT INPUT PROJECTION
            K = 1
@@ -437,6 +443,9 @@ C  *********************************************************************
         REAL                  :: BNORM,CHI2
         INTEGER               :: LUNPROJ,LDP,LDPNM,IRTFLG
         LOGICAL               :: FBS_WANTED
+
+        !INTEGER, PARAMETER    :: ISTAR8 = selected_int_kind(16)
+        !INTEGER(ISTAR8)       :: MWANT
 
         REAL                  :: PROJ(N*N)
         DOUBLE PRECISION      :: D_ABA,D_SUS,D_SSQ
@@ -570,7 +579,7 @@ C          DISTRIBUTE IMAGES
                  CALL SEND_MPI('BPCG_2','PRJBUF', PRJBUF, N*N*NLOC, 
      &                         'R',IPROC-1,IPROC-1, ICOMM)
 
-              ELSE IF (MYPID .EQ. IPROC-1) THEN
+              ELSE IF (MYPID == IPROC-1) THEN
 
                  !write(6,*) ' recv_mpi; iproc,mypid:',iproc,mypid,nloc
                  CALL RECV_MPI('BPCG_2','PRJLOC', PRJLOC, N*N*NLOC, 
@@ -582,7 +591,7 @@ c     &                         mpistat, mpierr)
                  !write(6,*) ' recv_mpi; ok:         ',iproc,mypid,nloc
               ENDIF
 
-           ELSE IF (MYPID .EQ. 0) THEN
+           ELSE IF (MYPID == 0) THEN
               CALL SCOPY(N*N*NLOC,PRJBUF,1,PRJLOC,1)
            ENDIF
         ENDDO
@@ -637,7 +646,7 @@ C       GATHER ANG_LOC INTO ANG
      &               ' THETA:',F6.1,
      &               ' PHI:',  F6.1)
            ENDIF
-        END DO
+        ENDDO
 
         NNN  = N*N*N
         IERR = 0
@@ -689,7 +698,7 @@ C             MISSING KEY
            ANG(3,K) = ANGBUF(2,ITMP)  ! NOTE ORDER REVERSAL!
            ANG(2,K) = ANGBUF(3,ITMP)
            ANG(1,K) = ANGBUF(4,ITMP)
-           IF (VERBOSE) THEN
+           IF (VERBOSE .AND. K == 1 ) THEN
               WRITE(NOUT,3331) K,(ANG(J,K),J=3,1,-1)
 3331          FORMAT('  IMAGE #:',I7,
      &               '  PSI:',    F6.1,
@@ -902,7 +911,7 @@ C       DISTRIBUTE LB AND DM
         LBTAG   = 2
         MASTER  = 0
 
-        IF (MYPID .EQ. 0) THEN
+        IF (MYPID == 0) THEN
 C          PROCESS 0 DISTRIBUTES DM() AND LB() TO OTHER PROCESSORS
 
            DO IP = 2, NPROCS
@@ -993,7 +1002,7 @@ C             PROJECT
 C             HERE BCKPJ ITSELF IS MP  
               DO  L_TH=1,L_NUM
 C                MULTIPLY PROJECTIONS BY THEIR WEIGHTS
-                 IF (LBLOC(K+L_TH-1) .GT. 1)  THEN
+                 IF (LBLOC(K+L_TH-1) > 1)  THEN
 c$omp               parallel do private(i)
                     DO  I=1,N*N
                        PROJ(I,L_TH) = PROJ(I,L_TH) * LBLOC(K+L_TH-1)
@@ -1025,16 +1034,16 @@ C
 
 C          === IGNORE MODE > 0 FOR THE TIME BEING ===
 
-           IF (MODE .EQ. 1)  THEN
+           IF (MODE == 1)  THEN
               CALL FIXEDGE1(BCKP,NNN,BCKP,N,IPCUBE,NN)      
 c             CALL BFIRSTS(BCKE,BCKP,N,ANOISE,IPCUBE,NN,RI) sep 01 al
               CALL BFIRSTS(BCKE_SUM,BCKP,N,ANOISE,IPCUBE,NN)
 
-           ELSEIF(MODE.EQ.2)  THEN
+           ELSEIF(MODE==2)  THEN
               CALL FIXEDGE2(BCKP,NNN,BCKP,N,IPCUBE,NN)      
               CALL BSECOND(BCKE_SUM,BCKP,N,ANOISE,IPCUBE,NN)
 
-           ELSEIF(MODE.EQ.3)  THEN
+           ELSEIF(MODE==3)  THEN
               CALL FIXEDGE3(BCKP,NNN,BCKP,N,IPCUBE,NN)      
               CALL BTHIRD(BCKE_SUM,BCKP,N,ANOISE,IPCUBE,NN)
            ENDIF
@@ -1066,10 +1075,11 @@ c$omp      parallel do private(kn,j,k,i)
  
            ERR  = DELSQ / BNORM
            CHI2 = CHI2 - P * DELSQ
-           IF (MYPID .EQ. 0) WRITE(NOUT,2041) ITER,ERR,CHI2
+           IF (MYPID == 0) WRITE(NOUT,2041) ITER,ERR,CHI2
 2041       FORMAT('  ITERATION:', I3,
      &            '  DIFFERENCE:',1PE12.4,
      &            '  CHISQ:',1PE12.4)
+              CALL FLUSHRESULTS()
 
 C          CHECK STOPPING CRITERIA
            IF (ABS(ERR) <= ERRM .OR. ABS(CHI2) <= CHIM) GOTO 9999            
@@ -1204,6 +1214,7 @@ c$omp      parallel do private(kn,j,k,i)
 2041       FORMAT('  ITERATION: 'I3,
      &            '  DIFFERENCE:',1PE12.4,
      &            '  CHISQ:',1PE12.4)
+           CALL FLUSHRESULTS()
 
 C          CHECK STOPPING CRITERIA
            IF (ABS(ERR) <= ERRM .OR. ABS(CHI2) <= CHIM) THEN  
@@ -1347,11 +1358,11 @@ C       PUT ZEROS OUTSIDE
 
         NT = 1
         DO    I=1,NNN
-           IF (NT .GT. NN)  THEN
+           IF (NT > NN)  THEN
               BCKP(I) = 0.0
-           ELSEIF (I .LT. IPCUBE(1,NT))  THEN
+           ELSEIF (I < IPCUBE(1,NT))  THEN
               BCKP(I) = 0.0
-           ELSEIF (I .EQ. IPCUBE(2,NT))  THEN
+           ELSEIF (I == IPCUBE(2,NT))  THEN
               NT = NT+1
            ENDIF
         ENDDO
@@ -1428,11 +1439,11 @@ C       PUT ZEROS OUTSIDE
 
         NT = 1
         DO I=1,NNN
-           IF (NT.GT.NN)  THEN
+           IF (NT>NN)  THEN
               BCKP(I) = 0.0
-           ELSEIF (I .LT. IPCUBE(1,NT))  THEN
+           ELSEIF (I < IPCUBE(1,NT))  THEN
               BCKP(I) = 0.0
-           ELSEIF (I .EQ. IPCUBE(2,NT))  THEN
+           ELSEIF (I == IPCUBE(2,NT))  THEN
               N T= NT+1
            ENDIF
         ENDDO
@@ -1647,16 +1658,18 @@ C          ( MP - MULTIPLE PROCESSING )
         REAL               :: ANOISE
         INTEGER            :: LDP,LDPNM,IRTFLG
 
+        INTEGER, PARAMETER :: ISTAR8 = selected_int_kind(16)
+        INTEGER(ISTAR8)    :: MWANT
+
         INTEGER            :: KN, ICYCLE
         REAL               :: DELSQ
         REAL               :: PROJ(N*N,NUMTH)
-        INTEGER            :: K,J,I,L_TH,IY,ILOC,IX,MYPID,NE,MWANT
+        INTEGER            :: K,J,I,L_TH,IY,ILOC,IX,MYPID,NE
         REAL               :: AKDEN,ERR,Q,P
         INTEGER            :: NNN,ITER,L_EN,L_NUM
 
-        REAL, ALLOCATABLE  :: BCKE_SUM(:,:,:)
-        REAL, ALLOCATABLE  :: BCKE    (:,:,:)
-        REAL, ALLOCATABLE  :: BCKP    (:,:,:)
+        REAL, ALLOCATABLE  :: BCKE (:,:,:)
+        REAL, ALLOCATABLE  :: BCKP (:,:,:)
 
         REAL, ALLOCATABLE  :: XYZ  (:,:,:)
         REAL, ALLOCATABLE  :: X1   (:,:,:)
@@ -1693,9 +1706,13 @@ C          ( MP - MULTIPLE PROCESSING )
      &            STAT=IRTFLG)
 
         IF (IRTFLG .NE. 0) THEN
-           MWANT = 4 * NXLD*N + 2 * N*N*N + 7*NXLD*N*N
-           CALL ERRT(46,'BPCG_3_FBS; PROJPAD,...',MWANT)
+           MWANT = 4*NXLD*N + 2*N*N*N + 7*NXLD*N*N / 1000
+           CALL ERRT(46,'BPCG_3_FBS; PROJPAD,./1000.',MWANT)
            GOTO 9999
+        ENDIF
+        IF (VERBOSE) THEN
+            WRITE(NOUT,*)'  BPCG_3_FBS ALLOCATED:',MWANT
+            CALL FLUSHRESULTS()
         ENDIF
 
 
@@ -1706,9 +1723,6 @@ c$omp   parallel do private(k,j,i)
               DO I=1,N
                  BCKN(I,J,K)     = 0.0
                  BCKP(I,J,K)     = 0.0
-#ifdef USE_MPI
-                 BCKE_SUM(I,J,K) = 0.0
-#endif
               ENDDO
            ENDDO
         ENDDO
@@ -1760,8 +1774,10 @@ C          CALCULATION OF PROJECTIONS DERIVATIVES USING 3D FFT
            CALL FBS3_PREP(XYZ, NXLD,N,N,N,
      &                    X1,Y1,Z1,XY2,XZ2, YZ2)
 
-           !WRITE(6,*), 'Iteration cycle:', ICYCLE
-           ICYCLE = ICYCLE + 1
+           !IF (VERBOSE) THEN
+           !   WRITE(NOUT,*)'  FBS3_PREP completed, cycle:',ICYCLE
+           !   CALL FLUSHRESULTS()
+           !ENDIF
 
            DO K=1,NANG,NUMTH
               L_EN  = MIN(NANG,K+NUMTH-1)
@@ -1783,12 +1799,16 @@ C                PROJECTS BCKP INTO PROJ  (FROM VOLUME TO PLANE)
      &                X1, Y1, Z1,
      &                XY2,XZ2,YZ2)
               ENDDO
+              !IF (VERBOSE) THEN
+              !WRITE(NOUT,*)'  PRJCQ_FBS3 completed, cycle,k:',icycle,k
+              !CALL FLUSHRESULTS()
+              !ENDIF
 
 C             HERE BCKPJ ITSELF IS MP  (MULTIPLE PROCESSING)
 
               DO  L_TH=1,L_NUM
 C                MULTIPLY PROJECTIONS BY THEIR WEIGHTS
-                 IF (LB(K+L_TH-1) .GT. 1)  THEN
+                 IF (LB(K+L_TH-1) > 1)  THEN
 c$omp               parallel do private(i)
                     DO  I=1,N*N
                        PROJ(I,L_TH) = PROJ(I,L_TH) * LB(K+L_TH-1)
@@ -1817,15 +1837,15 @@ C                BACKPROJECT FROM PLANE: PROJ TO VOLUME: BCKE
               ENDDO
            ENDDO
 
-           IF (MODE .EQ. 1) THEN
+           IF (MODE == 1) THEN
               CALL FIXEDGE1(BCKP,NNN,BCKP,N,IPCUBE,NN)      
               CALL BFIRSTS(BCKE,BCKP,N,ANOISE,IPCUBE,NN)
 
-           ELSEIF(MODE .EQ. 2) THEN
+           ELSEIF(MODE == 2) THEN
               CALL FIXEDGE2(BCKP,NNN,BCKP,N,IPCUBE,NN)      
               CALL BSECOND(BCKE,BCKP,N,ANOISE,IPCUBE,NN)
 
-           ELSEIF (MODE .EQ. 3) THEN
+           ELSEIF (MODE == 3) THEN
               CALL FIXEDGE3(BCKP,NNN,BCKP,N,IPCUBE,NN)      
               CALL BTHIRD(BCKE,BCKP,N,ANOISE,IPCUBE,NN)
            ENDIF
@@ -1858,20 +1878,26 @@ c$omp      parallel do private(kn,j,k,i)
            ERR  = DELSQ / BNORM
            CHI2 = CHI2 - P * DELSQ
 
-C         SKIP THIS IF NOT VERBOSE
-          WRITE(NOUT,2041) ITER,ERR,CHI2
-2041      FORMAT('  ITERATION: 'I3,
-     &           '   DIFFERENCE:',1PE12.4,
-     &           '   CHISQ:',1PE12.4)
+           IF (VERBOSE) THEN
+C             SKIP THIS IF NOT VERBOSE
+              WRITE(NOUT,2041) ITER,ERR,CHI2
+2041          FORMAT('  ITERATION: 'I3,
+     &               '   DIFFERENCE:',1PE12.4,
+     &               '   CHISQ:',1PE12.4)
+              CALL FLUSHRESULTS()
+           ENDIF
 
 C          CHECK STOPPING CRITERIA
-           IF (ABS(ERR)  .LE. ERRM .OR. 
-     &         ABS(CHI2) .LE. CHIM) THEN  
-C             WRITE FINAL ERROR 
-              IF (.NOT. VERBOSE)  WRITE(NOUT,2041) ITER,ERR,CHI2
+           IF (ABS(ERR)  <= ERRM .OR. ABS(CHI2) <= CHIM) THEN  
+C             WRITE FINAL ERROR ALWAYS
+              IF (.NOT. VERBOSE) WRITE(NOUT,2041) ITER,ERR,CHI2
               WRITE(NOUT,*) '  '  
+              CALL FLUSHRESULTS()
               GOTO 9999            
            ENDIF
+
+           ICYCLE = ICYCLE + 1
+
        ENDDO
 
 9999   IF (ALLOCATED(BCKE))    DEALLOCATE (BCKE)

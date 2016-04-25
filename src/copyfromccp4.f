@@ -17,12 +17,13 @@ C                IPOSMRC INTEGER *8                JAN 15 ArDean Leith
 C                BOTLEFT DEFAULT                   JUL 15 ArDean Leith
 C                2015 STACK SUPPORT                JUL 15 ArDean Leith
 C                STACK END BUG                     OCT 15 ArDean Leith
+C                'MRCV'                            DEC 15 ArDean Leith
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2015  Health Research Inc.,                         *
+C=* Copyright 1985-2016  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -82,7 +83,8 @@ C       COPY FROM MRC TO SPIDER FILE FORMAT --------------- FROM MRC
 
         CHARACTER(LEN=MAXNAM)   :: MRCFILE,FILOUT
         CHARACTER(LEN=8)        :: ANS
-        LOGICAL                 :: FLIP,ISSWABT,ISSWAB,BOTLEFT
+        LOGICAL                 :: FLIP,ISSWABT,BOTLEFT
+        LOGICAL                 :: isswab
         INTEGER                 :: IVAL
         INTEGER *1              :: I1VAL
         INTEGER *2              :: I2VAL
@@ -164,17 +166,34 @@ C          SPIDER IMAGE STACK OUTPUT FILE (SOME PRE 2015 STACKS)
            ITYPE     = 1
            MAXIM     = 1
 
-        ELSEIF ((ISPG ==   0 .AND. MZ == 1) .OR.
-     &          (ISPG ==   1 .AND. MZ == 1)) THEN
-C          SPIDER IMAGE OUTPUT         
+        ELSEIF ((ISPG ==  0 .AND. MZ == 1) .OR.
+     &          (ISPG ==  1 .AND. MZ == 1)) THEN
+C          SPIDER IMAGE OUTPUT
+
+C          OPEN NEW SPIDER IMAGE OUTPUT FILE     
            NIMG   = 1
            NZ     = MZ
-
-C          OPEN SPIDER IMAGE OUTPUT FILE     
            ITYPE  = 1
            MAXIM  = 0
+
            CALL OPFILEC(0,.TRUE.,FILOUT,LUNSPI,'U',ITYPE,NX,NY,NZ,
-     &                  MAXIM,'SPIDER OUTPUT',.FALSE.,IRTFLG)
+     &                  MAXIM,'SPIDER IMAGE OUTPUT',.FALSE.,IRTFLG)
+           IF (IRTFLG .NE. 0) GOTO 9999
+
+        ELSEIF ((ISPG ==  1 .AND. MZ > 1) .OR.
+     &          (ISPG ==  0 .AND. MZ > 1 .AND. FCHAR(9:12) == 'MRCV'))
+     &          THEN
+C          VOLUME (MAY BE VOLUME STACK IN PRE-2015)
+C          MRCV = VOLUME OUTPUT (ABERRENT PRE MRC-2015 CONVENTION)
+
+C          OPEN NEW SPIDER VOLUME OUTPUT FILE     
+           NIMG   = 1
+           NZ     = MZ
+           ITYPE  = 3
+           MAXIM  = 0
+
+           CALL OPFILEC(0,.TRUE.,FILOUT,LUNSPI,'U',ITYPE,NX,NY,NZ,
+     &                  MAXIM,'SPIDER VOLUME OUTPUT',.FALSE.,IRTFLG)
            IF (IRTFLG .NE. 0) GOTO 9999
 
         ELSEIF (ISPG ==   0 .AND. MZ >  1) THEN
@@ -184,18 +203,6 @@ C          SPIDER IMAGE STACK OUTPUT (FOLLOWS MRC-2015 CONVENTION)
            NZ        = 1
            ITYPE     = 1
            MAXIM     = 1
-
-        ELSEIF (ISPG ==   1 .AND. MZ > 1) THEN
-C          VOLUME (MAY BE VOLUME STACK IN PRE-2015)
-           NIMG   = 1
-           NZ     = MZ
-
-C          OPEN SPIDER VOLUME OUTPUT FILE     
-           ITYPE  = 3
-           MAXIM  = 0
-           CALL OPFILEC(0,.TRUE.,FILOUT,LUNSPI,'U',ITYPE,NX,NY,NZ,
-     &                  MAXIM,'SPIDER OUTPUT',.FALSE.,IRTFLG)
-           IF (IRTFLG .NE. 0) GOTO 9999
 
         ELSEIF (ISPG == 401 .AND. MZ >  1) THEN
 C          POST 2015 FORMAT VOLUME STACK 
@@ -230,7 +237,7 @@ C          HACK TO USE OPFILES
 
            IGO = 1
            CALL RDPRI1S(IGO,NOT_USED,
-     &              'FIRST IMAGE NUMBER IN SPIDER STACK',IRTFLG)
+     &                  'FIRST IMAGE NUMBER IN SPIDER STACK',IRTFLG)
            IF (IRTFLG .NE. 0) GOTO 9999
 
 
@@ -292,8 +299,11 @@ C       OPEN MRC FILE FOR STREAM ACCESS
 
         ! BOTLEFT IS USUAL MRC BOTTOM IN CURRENT FORMAT !!!!!
         BOTLEFT = .TRUE.
-        IF (NCHAR > 2 .AND. (INDEX(ANS(3:NCHAR),'N')) > 0) 
-     &     BOTLEFT = .FALSE.
+        IF (NCHAR > 1 .AND. (INDEX(ANS(2:NCHAR),'I')) > 0) THEN
+           BOTLEFT = .FALSE.
+           WRITE(NOUT,*) '  **** ERROR?? NON-STANDARD CORNER ACTIVE'
+           WRITE(6,*)    '  **** ERROR?? NON-STANDARD CORNER ACTIVE' 
+        ENDIF
  
         NINDX  = 1
 
@@ -513,14 +523,14 @@ C       -------------- ISSWAB ----------------------------------------
         INCLUDE 'CMBLOCK.INC'
         INCLUDE 'CMLIMIT.INC'
  
-        INTEGER,DIMENSION(3) ::  IVAL
-        CHARACTER(LEN=12) ::     CVAL,CVALIN
+        INTEGER               :: IVAL(3)
+        CHARACTER(LEN=12)     :: CVAL,CVALIN
         EQUIVALENCE(IVAL,CVAL)
 
         CHARACTER(LEN=MAXNAM) :: FILNAM
-        LOGICAL ::               VERBOSE_SAVE
+        LOGICAL               :: VERBOSE_SAVE
 
-        CHARACTER(LEN=1) ::      NULL = CHAR(0)
+        CHARACTER(LEN=1)      :: NULL = CHAR(0)
 
 C       DO NOT ECHO FILE OPENING
         VERBOSE_SAVE = VERBOSE
@@ -555,11 +565,11 @@ c       WRITE(NOUT,*) 'CVALIN: ',CVALIN,' == ',CVAL
  
         ISSWAB   = (CVALIN(8:8) .NE. CVAL(8:8))
 
-c        IF (ISSWAB) THEN
+c       IF (ISSWAB) THEN
 c           WRITE(NOUT,*) 'NON-NATIVE BYTE ORDER '
-c        ELSE
+c       ELSE
 c           WRITE(NOUT,*) 'NATIVE BYTE ORDER'
-c        ENDIF
+c       ENDIF
 
         VERBOSE = VERBOSE_SAVE
 

@@ -78,7 +78,8 @@ C***********************************************************************
         CHARACTER(LEN=MAXNAM)   :: MRCFILE,FILPAT,FILOUT
         CHARACTER(LEN=8)        :: ANS
         CHARACTER(LEN=80)       :: PROMPT
-        LOGICAL                 :: FLIP,ISSWABT,ISSWAB,BOTLEFT
+        LOGICAL                 :: FLIP,ISSWABT,BOTLEFT
+        LOGICAL                 :: isswab
         INTEGER                 :: IVAL
         INTEGER *1              :: I1VAL
         INTEGER *2              :: I2VAL
@@ -112,12 +113,6 @@ C       OPEN NEW MRC FILE FOR DIRECT ACCESS, RECORD LENGTH 1024 BYTES
         LENOPENF = LENOPENB / 4
         CALL OPAUXFILE(.TRUE.,MRCFILE,DATEXC,LUNMRC,LENOPENB,'U',
      &                 'MRC OUTPUT',.TRUE.,IRTFLG)
-
-C       FLIP BYTES DURING MRC FILE OUTPUT
-        IF (ISSWABT) THEN
-           CALL LUNSETFLIP(LUNMRC,1,IRTFLG)
-           ISSWABT = .FALSE.
-        ENDIF
 
         IVAL    = 8
         IBOTLEF = 1
@@ -157,6 +152,12 @@ C       TRY TO GET SCALE VALUE (MAY NOT BE USED)
 C       FIND IF CURRENTLY SWAPPING BYTES DURING FILE OUTPUT
 C       THIS MAY BE DONE BY COMPILER, SO HAVE TO ACTUALLY TEST OUTPUT
         ISSWABT = ISSWAB(99)
+
+C       FLIP BYTES DURING MRC FILE OUTPUT
+        IF (ISSWABT) THEN
+           CALL LUNSETFLIP(LUNMRC,1,IRTFLG)
+           ISSWABT = .FALSE.
+        ENDIF
 
 C       CREATE HEADER. (NOTE: FMIN, FMAX, AV ARE SAME AS SPIDER IMAGE)
         NIMG    = 1
@@ -311,7 +312,8 @@ C       COPY STACKS FROM SPIDER TO MRC FILE FORMAT
         REAL                    :: FIXLENBUF(256)
 
         CHARACTER(LEN=MAXNAM)   :: MRCFILE
-        LOGICAL                 :: ISSWABT,ISSWAB
+        LOGICAL                 :: ISSWABT
+        LOGICAL                 :: isswab
 
         INTEGER                 :: LENOPENB,LENOPENF,IRTFLG,MODE
         INTEGER                 :: NSYMBT,MACHST,NE,IOFFSET 

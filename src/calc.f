@@ -50,7 +50,7 @@ C       <0          BVAL POINTER
 C  
 C--*********************************************************************
 
-	SUBROUTINE CALC(IRPNIN,NRPN,VAL,PIXVAL,RETVAL,IRTFLG)
+        SUBROUTINE CALC(IRPNIN,NRPN,VAL,PIXVAL,RETVAL,IRTFLG)
 
         COMMON /UNITS/    LUNC,NIN,NOUT,NECHO,IFOUND,NPROC,NDAT
 
@@ -58,7 +58,7 @@ C--*********************************************************************
         PARAMETER         (IRPNLEN = 80)
         PARAMETER         (NFUNCT  = 16)
 
-	DIMENSION         VAL(IVALEN)
+        DIMENSION         VAL(IVALEN)
 C       BVAL IS USED TO AVOID OVERWRITING VAL EACH TIME CALC IS CALLED
         DIMENSION         BVAL(IVALEN)
         INTEGER           IRPNIN(IRPNLEN)
@@ -70,7 +70,7 @@ C       SET DEFAULT ERROR RETURN FLAG
         NOOP   = NRPN .EQ. 1
 
 C       IRPN WILL BE DAMAGED SO THE INPUT MUST BE COPIED
-	DO  N=1,NRPN
+        DO  N=1,NRPN
            IRPN(N) = IRPNIN(N)
         ENDDO
 
@@ -104,7 +104,7 @@ C             CONTENT OF VAL POSITION IS THE REGISTER NUMBER
               IRPN(N)    = -LOC1
               GOTO 2400
 
-	   ELSEIF ((IRPNNOW .GT. 40 .AND. IRPNNOW .LT. 48) .OR.
+           ELSEIF ((IRPNNOW .GT. 40 .AND. IRPNNOW .LT. 48) .OR.
      &              IRPNNOW  .EQ. 94) THEN
 C             IRPNNOW IS AN OPERATOR (+-/^*), THAT USES TWO OPERANDS
 C             WHICH ARE KEPT IN VAL ARRAY.
@@ -113,21 +113,21 @@ C             WERE ENCOUNTERED.
 
               IF (IRPN(LOC2) .LT. 0) THEN
 C                IRPNNOW POINTS TO BVAL
-	         ITEMP1 = -IRPN(LOC2)
+                 ITEMP1 = -IRPN(LOC2)
                  VALUE1 = BVAL(ITEMP1)
               ELSE
 C                IRPNNOW POINTS TO VAL
-	         ITEMP1 = IRPN(LOC2) - 48
+                 ITEMP1 = IRPN(LOC2) - 48
                  VALUE1 = VAL(ITEMP1)
               ENDIF
 
               IF (IRPN(LOC1) .LT. 0) THEN
 C                IRPNNOW POINTS TO BVAL
-	         ITEMP2 = -IRPN(LOC1)
+                 ITEMP2 = -IRPN(LOC1)
                  VALUE2 = BVAL(ITEMP2)
               ELSE
 C                IRPNNOW POINTS TO VAL
-	         ITEMP2 = IRPN(LOC1) - 48
+                 ITEMP2 = IRPN(LOC1) - 48
                  VALUE2 = VAL(ITEMP2)
               ENDIF
 
@@ -182,11 +182,11 @@ C             ALREADY SET WHEN PREVIOUS VAL POINTER ENCOUNTERED
 
               IF (IRPN(LOC1) .LT. 0) THEN
 C                IRPNNOW POINTS TO BVAL
-	         ITEMP2 = -IRPN(LOC1) 
+                 ITEMP2 = -IRPN(LOC1) 
                  VALUE2 = BVAL(ITEMP2)
               ELSE
 C                IRPNNOW POINTS TO VAL
-	         ITEMP2 = IRPN(LOC1) - 48
+                 ITEMP2 = IRPN(LOC1) - 48
                  VALUE2 = VAL(ITEMP2)
               ENDIF
 
@@ -203,12 +203,12 @@ C             EVALUATE THE SINGLE OPERAND FUNCTION
               GOTO (1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16),IFUNC
 
 C             PAD
-1   	         NPOW  = INT(ALOG(VALUE2) / ALOG(2.0))
-	         VALUE = 2**NPOW
+1                NPOW  = INT(ALOG(VALUE2) / ALOG(2.0))
+                 VALUE = 2**NPOW
                  IF (VALUE .GE. VALUE2)  THEN
-	            BVAL(ITEMP2) = VALUE
+                    BVAL(ITEMP2) = VALUE
                  ELSE
-	            BVAL(ITEMP2) = 2 * VALUE
+                    BVAL(ITEMP2) = 2 * VALUE
                  ENDIF
                  GOTO 1900
 
@@ -217,29 +217,29 @@ C             SINE
                  GOTO 1900
 
 C             EXPONENTIATION
-3	        BVAL(ITEMP2) = EXP(VALUE2)
+3               BVAL(ITEMP2) = EXP(VALUE2)
                 GOTO 1900
-		
+                
 C             LOG10
 4                IF (VALUE2 .LE. 0.) THEN
                     CALL ERRT(43,
      &                 'CAN NOT GET LOG OF NEGATIVE NUMBER)',NE)
                     RETURN
-	         ENDIF
-	         BVAL(ITEMP2) = ALOG10(VALUE2)
+                 ENDIF
+                 BVAL(ITEMP2) = ALOG10(VALUE2)
                  GOTO 1900
 
 C             COSINE
 5                BVAL(ITEMP2) = COS(VALUE2*0.017453293)
                  GOTO 1900
 
-C             SQRT  	  
+C             SQRT        
 6                IF (VALUE2 .LT. 0.) THEN
                     CALL ERRT(43,
      &                 'CAN NOT GET SQRT OF NEGATIVE NUMBER)',NE)
                     RETURN
-	         ENDIF
-	         BVAL(ITEMP2) = SQRT(VALUE2)
+                 ENDIF
+                 BVAL(ITEMP2) = SQRT(VALUE2)
                  GOTO 1900
 
 C             NATURAL LOG
@@ -247,42 +247,42 @@ C             NATURAL LOG
                     CALL ERRT(43,
      &                 'CAN NOT GET LOG OF NEGATIVE NUMBER)',NE)
                     RETURN
-	         ENDIF
-	         BVAL(ITEMP2) = ALOG(VALUE2)
+                 ENDIF
+                 BVAL(ITEMP2) = ALOG(VALUE2)
                  GOTO 1900
 
 C             INT
-8	         BVAL(ITEMP2) = INT(VALUE2)
+8                BVAL(ITEMP2) = INT(VALUE2)
                  GOTO 1900
 
 C             ABS
-9	         BVAL(ITEMP2) = ABS(VALUE2)
+9                BVAL(ITEMP2) = ABS(VALUE2)
                  GOTO 1900
 
 C             ATAN
-10	         BVAL(ITEMP2) = ATAN(VALUE2)*57.29578
+10               BVAL(ITEMP2) = ATAN(VALUE2)*57.29578
                  GOTO 1900
-	
+        
 C             ARC SIN
-11	         IF (ABS(VALUE2) .GT. 1.0) THEN
-	            CALL ERRT(43,
+11               IF (ABS(VALUE2) .GT. 1.0) THEN
+                    CALL ERRT(43,
      &                 'CAN NOT GET ASIN OF NUMBER > 1.0)',NE)
                     RETURN
-	         ENDIF
-	         BVAL(ITEMP2) = ASIN(VALUE2) * 57.29578
+                 ENDIF
+                 BVAL(ITEMP2) = ASIN(VALUE2) * 57.29578
                  GOTO 1900
 
 C             ARC COS
-12	         IF (ABS(VALUE2) .GT. 1.0) THEN
-	            CALL ERRT(43,
+12               IF (ABS(VALUE2) .GT. 1.0) THEN
+                    CALL ERRT(43,
      &                 'CAN NOT GET ACOS OF NUMBER > 1.0)',NE)
                     RETURN
-	         ENDIF
-	         BVAL(ITEMP2) = ACOS(VALUE2) * 57.29578
+                 ENDIF
+                 BVAL(ITEMP2) = ACOS(VALUE2) * 57.29578
                  GOTO 1900
 
 C             TANGENT
-13	         BVAL(ITEMP2) = TAN(VALUE2 * 0.017453293)
+13               BVAL(ITEMP2) = TAN(VALUE2 * 0.017453293)
                  GOTO 1900
  
 C             RANDOM NUMBER UNIFORM [0,1]
@@ -297,7 +297,7 @@ C             RANDOM NUMBER NORMAL(0,1)
                  GOTO 1900
 
 C             UNITARY SIGN CHANGE (NEGATION)
-16	         BVAL(ITEMP2) = -VALUE2
+16               BVAL(ITEMP2) = -VALUE2
 C                GOTO 1900
 
 1900          CONTINUE
@@ -319,4 +319,4 @@ C          END OF EVALUATION LOOP -----------------------------------
         RETVAL = BVAL(1)
         IF (NOOP) RETVAL = VAL(1)
 
-	END
+        END

@@ -8,7 +8,7 @@ C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2015  Health Research Inc.,                         *
+C=* Copyright 1985-2016  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -24,7 +24,7 @@ C=* GNU General Public License (www.gnu.org/licenses) for details.     *
 C=*                                                                    *
 C **********************************************************************
 C                                                                      *
-C  PURPOSE: MAIN SUBROUTINE OF SPIDER IMAGE PROCESSING SYSTEM.                  *
+C  PURPOSE: MAIN ROUTINE FOR SPIDER IMAGE PROCESSING SYSTEM.           *
 C                                                                      *
 C  LUN ASSIGNMENTS: LUN     INTERACTIVE   IN PROC.         CONNECTS    *
 C                   NLOGP        1           1                LOG      *
@@ -92,14 +92,14 @@ C       @@@@@@@@@@@@@@@@@@@  DECLARATIONS @@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 
         LOGICAL   :: USEELSE(MAXIF,MAXPRC)
         LOGICAL   :: JUMP,EX,ISDIGI,ISCHAR,DELETIT,LISTIT
-        LOGICAL   :: RES_TO_TERM,GLOBAL,ISATAT
+        LOGICAL   :: GLOBAL,ISATAT,SAYIT
 
         CHARACTER(LEN=MAXNAM) :: PNAME
         CHARACTER(LEN=MAXNAM) :: PROCFL(MAXPRCNAM)
         CHARACTER(LEN=MAXNAM) :: RESULT,LOG,SPIRE_FILE
 
         CHARACTER(LEN=160)    :: MESG,PLINE,ARG4,ARGNOW,FCHARNOBLANK
-        CHARACTER(LEN=40)     :: CVERS
+        CHARACTER(LEN=39)     :: CVERS
         CHARACTER(LEN=12)     :: CDATT
         CHARACTER(LEN=8)      :: ZEIT
         CHARACTER(LEN=7)      :: RESULM
@@ -141,13 +141,16 @@ C       FOR LOCAL VARIABLE HANDLING
         COMMON /PROC_STUFF/ NUMPROCNOW
 
 C       SIZING OF GOTLAB FOR CHECKING DUPLICATE LABELS
-        INTEGER, PARAMETER       :: MAXNUMLAB = 50
-        INTEGER                  :: LABGOT(MAXNUMLAB)
+        INTEGER, PARAMETER   :: MAXNUMLAB = 50
+        INTEGER              :: LABGOT(MAXNUMLAB)
 
 C       LOGICAL UNIT NUMBERS DEFINED HERE
-        INTEGER, PARAMETER       :: LUNDO    = 300   
-        INTEGER, PARAMETER       :: LUNSPIRE = 2   
-        INTEGER, PARAMETER       :: LUNTEXT  = 103   
+        INTEGER, PARAMETER   :: LUNDO    = 300   
+        INTEGER, PARAMETER   :: LUNSPIRE = 2   
+        INTEGER, PARAMETER   :: LUNTEXT  = 103 
+  
+        LOGICAL              :: RES_TO_TERM = .FALSE. ! UNUSED?
+        LOGICAL              :: USEPUBSUB    ! HAS COSMETIC EFFECTS
 
         INTEGER  :: omp_get_stack_size
         INTEGER  :: isiz1,isiz2
@@ -156,11 +159,10 @@ C       @@@@@@@@@@@@@@@@@@@@@@@@@@ DATA STATEMENTS @@@@@@@@@@@@@@@@@@@@
 C       @@@@@@@@@@@@@@@@@@@@@@ VERSION INITIALIZATION @@@@@@@@@@@@@@@@@
 
 CHERE               123456789 123456789 123456789 1234567890 
-        DATA CVERS/'VERSION:  UNIX  22.14 ISSUED: 11/4/2015'/
+        DATA CVERS/'VERSION:  UNIX  23.01 Issued: 4/18/2016 '/
 
         DATA RESULM/'results'/
         DATA LOGM/'LOG'/
-        DATA RES_TO_TERM/.FALSE./
 
 C       SOME DO LOOP PARAMETERS
         DATA IDOTOP,IFLEVEL/1,0/
@@ -173,6 +175,7 @@ C       SOME DO LOOP PARAMETERS
 
 C       @@@@@@@@@@@@@@@@@@@@@@@@@@@  CODE @@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 
+        IN_PARALLEL = .FALSE.
         ONLYONE_RED = .TRUE.
         ONLYONE_WRT = .TRUE.
 
@@ -210,9 +213,9 @@ C       NEEDED BY PGI 2013.10 COMPILER
 
 C       INITIALIZE COMMON BLOCK LUNS
 C       NLOGP IS FOR LOG FILE,  NLOG = NLOGP WHEN LOG IS IN USE
-        NLOGP    = 1  
-        NLOG     = NLOGP
-        NECHO    = 0        ! COUNTER FOR LOG FILE OUTPUT
+        NLOGP     = 1  
+        NLOG      = NLOGP
+        NECHO     = 0        ! COUNTER FOR LOG FILE OUTPUT
 
 C       NDAT IS FOR RESULTS FILE,  NOUT=NDAT=3 WHEN RESULTS FILE IN USE
         NDAT      = 3
@@ -222,7 +225,7 @@ C       NDAT IS FOR RESULTS FILE,  NOUT=NDAT=3 WHEN RESULTS FILE IN USE
         NSTDOUTP  = 6
         NOUT      = NSTDOUTP
 
-C       INITIALIZE SOME COMMON BLOCK DATA ELEMENTS (SEE: SETMODE.F)
+C       INITIALIZE SOME COMMON BLOCK DATA ELEMENTS (SEE: setmode.f)
         ISTOP          = 1
         ISTOPR         = 1
         IBCNT          = 0
@@ -232,6 +235,7 @@ C       INITIALIZE SOME COMMON BLOCK DATA ELEMENTS (SEE: SETMODE.F)
         NTRACE         = 0
         VERBOSE        = .TRUE.
         SILENT         = .FALSE.
+        USE_LONGCOL    = .FALSE. 
         LEGACYPAR      = .FALSE. ! () IN DO NO LONGER! DEC 2010
         USE_FBS_INTERP = .FALSE. ! NEW JUL 2011
         NECHO          = 0       ! COUNTER FOR LOG FILE OUTPUT
@@ -303,16 +307,17 @@ C       GET THE DATE AND TIME
 
 C       GET DATEXC, RESULTS FILE VERSION, FIRST OP & REGISTER SETTING
 C       AND USE_SPIRE SETTING
-        CALL INITUNIX(NUMARG,FCHAR,NALPH,CXNUM,MESG)
+        CALL INITUNIX(NUMARG,FCHAR,NALPH,CXNUM,MESG,USEPUBSUB)
 
-        IF (MYPID <= 0) THEN
-C       PRINT OUT HEADING WITH VERSION AND RELEASE DATES
-        WRITE(NOUT,*)' '
-        WRITE(NOUT,9090)
-        WRITE(NOUT,9091)
-        WRITE(NOUT,9092)
-        WRITE(NOUT,9093)CVERS
-        WRITE(NOUT,9094)CDATT(1:11),CTIM
+        IF (MYPID <= 0) THEN 
+          IF (.NOT. USEPUBSUB) THEN
+C           PRINT OUT HEADING WITH VERSION AND RELEASE DATES
+            WRITE(NOUT,*)' '
+            WRITE(NOUT,9090)
+            WRITE(NOUT,9091)
+            WRITE(NOUT,9092)
+            WRITE(NOUT,9093)CVERS
+            WRITE(NOUT,9094)CDATT(1:11),CTIM
 
  9090   FORMAT('  \\__`O O''__/        SPIDER -- COPYRIGHT')
  9091   FORMAT('  ,__xXXXx___        HEALTH RESEARCH INC., ALBANY, NY.') 
@@ -320,16 +325,21 @@ C       PRINT OUT HEADING WITH VERSION AND RELEASE DATES
  9093   FORMAT('  /  /xxx\\  \\        ',A)
  9094   FORMAT('    /     \\          DATE:     ',A,'    AT  ',A,/)
 
-        WRITE(NOUT,9097)
- 9097   FORMAT('  If SPIDER is useful, please cite:',/,
+            WRITE(NOUT,9097)
+ 9097       FORMAT('  If SPIDER is useful, please cite:',/,
      &        '  Frank J, Radermacher M, Penczek P, Zhu J, Li Y,',
      &         ' Ladjadj M,  Leith A.',/,
      &       '  SPIDER and WEB: Processing and visualization of images',
      &         ' in 3D electron ',/,
      &        '  microscopy and related fields.  J. Struct. Biol.',
      &         ' 1996; 116: 190-199.')
-        WRITE(NOUT,*) ' '
 
+            WRITE(NOUT,*) ' '
+            NCT = lnblnk(MESG)
+            WRITE(NOUT,9095) MESG(1:NCT)    
+9095        FORMAT('  Running:     ',A)
+            WRITE(NOUT,*) ' '    
+          ENDIF
         ENDIF
 
         IF (NUMARG <= 0) THEN
@@ -356,10 +366,13 @@ C       CREATE NAME FOR THE RESULTS FILE
 
 C       INCREMENT THE RESULTS FILE VERSION IF EXISTING
         IF (MYPID <= 0) THEN
+
 #ifndef SP_NO_VERSION
-           CALL NEXTVERSION(RESULT(1:11),RESULT,NDAT,CXNUM)
+           SAYIT = .NOT. USEPUBSUB
+           CALL NEXTVERSION(RESULT(1:11),RESULT,NDAT,CXNUM,SAYIT)
 #endif
 
+C          APPEND TO EXISTING RESULTS FILE
            INQUIRE(FILE=RESULT,EXIST=EX)
            IF (EX) THEN
               OPEN(NDAT,FILE=RESULT,STATUS='OLD',POSITION='APPEND',
@@ -369,21 +382,33 @@ C       INCREMENT THE RESULTS FILE VERSION IF EXISTING
            ENDIF
            IF (IER .NE. 0) STOP '*** UNABLE TO OPEN RESULTS FILE ***'
 
-C          PRINT OUT HEADING WITH VERSION AND RELEASE DATES
-           WRITE(NDAT,9090)
-           WRITE(NDAT,9091)
-           WRITE(NDAT,9092)
-           WRITE(NDAT,9093)CVERS
-           WRITE(NDAT,9094)CDATT(1:11),CTIM
+           IF (USEPUBSUB) THEN
+             LENT = lnblnkn(RESULT)
+             WRITE(NOUT,9089) CVERS(17:),CDATT(1:11),CTIM,RESULT(:LENT) 
+ 9089        FORMAT('  SPIDER: ',A,2X,'In parallel:',2X,
+     &              A,2X,A,' Results: ',A)
 
-           WRITE(NDAT,9096) PRJEXC(1:3),DATEXC(1:3)
-9096       FORMAT(/'  PROJECT EXTENSION: ',A3,
-     &             '   DATA EXTENSION: ',A3,/)
+             WRITE(NDAT,9089) CVERS(17:),CDATT(1:11),CTIM ,RESULT(:LENT)
+             WRITE(NDAT,9086) PRJEXC(1:3),DATEXC(1:3)
+9086         FORMAT('  Project extension: ',A,3X,'Data extension: ',A)
 
-           WRITE(NOUT,9095)MESG
-9095       FORMAT('  Running: ',A)
+           ELSE
+
+C            PRINT OUT HEADING WITH VERSION AND RELEASE DATES
+             WRITE(NDAT,9090)
+             WRITE(NDAT,9091)
+             WRITE(NDAT,9092)
+             WRITE(NDAT,9093) CVERS
+             WRITE(NDAT,9094) CDATT(1:11),CTIM
+             WRITE(NDAT,9096) PRJEXC(1:3),DATEXC(1:3)
+9096         FORMAT('  Project extension: ',A,3X,'Data extension: ',A)
+             NCT = lnblnk(MESG)
+             WRITE(NDAT,9095) MESG    
+
+           ENDIF
+
 C          FLUSH RESULTS FILE TO ENSURE THAT IT IS CREATED NOW
-           CALL FLUSHRESULTS
+           CALL FLUSHRESULTS_Q(.FALSE.)
 
            IF (USE_SPIRE) THEN
 C             SPIRE IN USE, OPEN SPIRE OUTPUT FILE
@@ -396,9 +421,6 @@ C             SPIRE IN USE, OPEN SPIRE OUTPUT FILE
               MESG = 'DATE:    ' // CDATT(1:11) // '    AT  ' // CTIM  
               CALL SPIREOUT(MESG,IRTFLG)     ! Date and time
               CALL SPIREOUT(RESULT,IRTFLG)   ! Results file name
-#ifdef SP_NT
-              CALL ERRT(101,'PROCESS ID NOT AVAILABLE IN WINDOWS',NE)
-#else
 #if defined (SP_GFORTRAN)  || defined(__GFORTRAN__)
               IPID =  getpid()
 #else
@@ -407,7 +429,6 @@ C             SPIRE IN USE, OPEN SPIRE OUTPUT FILE
               WRITE(MESG,9098) IPID
 9098          FORMAT('  Current process id: ',I9)
               CALL SPIREOUT(MESG,IRTFLG)     ! Process id
-#endif
               CALL FLUSHFILE(LUNSPIRE)
            ENDIF
 
@@ -999,7 +1020,7 @@ C@@@@@@@@@@@@@@@@@@@ OTHER LOCAL OPERATIONS @@@@@@@@@@@@@@@@@@@@@@@@@@@
 
 C     IQ VAR      ------------------------------------------------- IQ
 C            123456789 123456789 123456789 1234567890 
-C     CVERS/'VERSION:  UNIX  20.07 ISSUED:  1/30/2012'/ 
+C     CVERS/'VERSION:  UNIX  20.07 ISSUED: 1/30/2012'/ 
 8300  READ(CVERS(17:21),*) FVERS
       WRITE(NOUT,8301) FVERS
 8301  FORMAT('  SPIDER VERSION: ',F5.2,/)
@@ -1039,8 +1060,11 @@ C     DO NOT REPORT IEEE INEXACT ....
 #endif
 #endif
 #endif
+      IF (.NOT. USEPUBSUB) THEN
+         STOP '  **** SPIDER NORMAL STOP ****'
+      ENDIF
+      STOP ' ' 
 
-      STOP ' **** SPIDER NORMAL STOP ****'
 
 
 C START OF DO LOOP ------------------------------------------------ DO
@@ -1461,23 +1485,39 @@ C *************************************************************************
 
       SUBROUTINE EQU_SYMPAR(LINE,GLOBAL,IRTFLG)
 
+      IMPLICIT NONE
+
       INCLUDE 'CMBLOCK.INC'
       INCLUDE 'CMLIMIT.INC'
 
       CHARACTER (LEN=*)   :: LINE
+      LOGICAL             :: GLOBAL
+      INTEGER             :: IRTFLG
+
       CHARACTER (LEN=160) :: SYMPARID,SYMPARVAL,MSG
-      CHARACTER(LEN=1)    :: NQ1,NQ2,CIGO,CEND
-      LOGICAL             :: GLOBAL,LOCAL,ISREGVAR
+      CHARACTER(LEN=1)    :: CIGO,CEND
+      LOGICAL             :: LOCAL,ISREGVAR
+      REAL                :: VALDUM
+      INTEGER             :: ICOMM,MYPID,MPIERR
+      INTEGER             :: lnblnkn
+      INTEGER             :: LENT,IP1,IP2,NCHARID,NE,NCHARI,IREG,NEQ
+      INTEGER             :: NCHARV,IFIRST,IGO,IEND,ICVAR,NCHARS
+
+      CHARACTER(LEN=1)    :: NQ1 = CHAR(39)                  ! '
+      CHARACTER(LEN=1)    :: NQ2 = CHAR(34)                  ! "
+      CHARACTER(LEN=2)    :: NQ1NQ2                          ! '"
 
 C     FOR ISTOP 
-      INTEGER, DIMENSION(MAXPRC) :: IPSTACK,IPNUMSTACK,IPARNUM
+      INTEGER             :: IPSTACK(MAXPRC)
+      INTEGER             :: IPNUMSTACK(MAXPRC)
+      INTEGER             :: IPARNUM(MAXPRC)
+      INTEGER             :: ISTOP,ITI,ITIN,IWHERE
       COMMON /QSTR_STUFF1/ ISTOP,ITI,ITIN,IWHERE,IPSTACK,
      &                     IPNUMSTACK,IPARNUM
 
       CALL SET_MPI(ICOMM,MYPID,MPIERR)
 
-      NQ1       = CHAR(39)   ! '
-      NQ2       = CHAR(34)   ! "
+      NQ1NQ2 = NQ1 // NQ2   ! '"
 
       IRTFLG    = 1
       LENT      = lnblnkn(LINE)
@@ -1487,7 +1527,7 @@ C     LOCATE FIRST VARIABLE NAME IN LINE (SHOULD'VE ALEADY BEEN TESTED)
       CALL CHARINSIDE(LINE,'[',']',.TRUE.,.FALSE.,IP1,IP2,NCHARID)
       IF (NCHARID <= 0) THEN
          LENT = lnblnkn(LINE)
-         MSG = 'NO VARIABLE NAME ([NAME]) IN: ' // LINE(1:LENT)
+         MSG  = 'NO VARIABLE NAME ([NAME]) IN: ' // LINE(1:LENT)
          CALL ERRT(101,MSG,NE)
          RETURN
       ENDIF
@@ -1497,11 +1537,20 @@ C     GET  VARIABLE NAME FROM LINE
       NCHARI   =  IP2 - IP1 + 3    
       !write(6,*) ' Got symparid:',symparid(:nchari),':',nchari
 
+      CALL REG_FIND(1,SYMPARID(:NCHARI),VALDUM,IREG,IRTFLG) ! 3/7/16al
+      !write(6,*) ' Queried reg var:', symparid(1:nchari),ireg,valdum,irtflg
+
+      IF (IREG > 0 .OR. SYMPARID(2:2) == '_' ) THEN
+C        TRYING TO EVALUATE IF EXPRESSION OR SET REGISTER VARIABLE
+         IRTFLG = 2
+         RETURN
+      ENDIF 
+      
       CALL REG_FIND(0,SYMPARID(:NCHARI),VALDUM,IREG,IRTFLG)
       !write(6,*) ' Queried reg var:', SYMPARID(1:NCHARI), ireg,valdum
 
-C     SEE IF TRYING TO SET A REGISTER VARIABLE
       IF (IREG > 0 .OR. SYMPARID(2:2) == '_' ) THEN
+C        TRYING TO EVALUATE IF EXPRESSION OR SET REGISTER VARIABLE
          IRTFLG = 2
          RETURN
       ENDIF 
@@ -1510,6 +1559,9 @@ C     GET ASSIGNED VARIABLE VALUE FROM LINE, MAY BE AN EXPRESSION
       NEQ    = 0         ! = SIGN COUNTER
       NCHARV = 0         ! = CHARACTER COUNTER
       IFIRST = IP2 + 2   ! = STARTING LOCATION
+
+      !write(6,*) ' ifirst:',ifirst,':',line(ifirst:lent),':'
+
       DO 
          CALL GETNEXTTOKEN2(LINE,IFIRST,IGO,IEND) 
          IF (IEND <= 0) EXIT     ! NO MORE TOKENS
@@ -1518,6 +1570,9 @@ C        FOUND A TOKEN, IT SHOULD BE A: =, SYM. VARIABLE, OR QUOTED STRING
          IFIRST = IEND + 1         ! NEXT START FOR TOKEN SEARCH
          CIGO   = LINE(IGO:IGO)
          CEND   = LINE(IEND:IEND)
+         !write(6,*) ' igo:iend:',igo,iend
+         !write(6,*) ' token(igo:iend):',line(igo:iend)
+         !write(6,*) ' cgo:cend:',cigo,':',cend,':'
 
          IF (CIGO == '=' ) THEN
 C           TOKEN IS AN EQUAL SIGN             
@@ -1528,11 +1583,17 @@ C           TOKEN IS AN EQUAL SIGN
             ENDIF
             NEQ = NEQ + 1 
 
-         ELSEIF ((CIGO == NQ1 .AND. CEND == NQ1) .OR.
-     &           (CIGO == NQ2 .AND. CEND == NQ2)) THEN
-C           TOKEN IS QUOTED TEXT STRING             
+         ELSEIF (CIGO == NQ1 .OR. CIGO == NQ2 ) THEN
+C           TOKEN IS START OF A QUOTED TEXT STRING
+            IEND = SCAN(LINE(IGO+1:),NQ1NQ2, .TRUE.)  ! FROMBACK
+            IEND = IGO + IEND
+            !!write(6,*) ' igo:iend:',igo,iend,ncharv
+            !1write(6,*)' quoted:',line(igo+1:iend-1),':'
+
             SYMPARVAL(NCHARV+1:) = LINE(IGO+1:IEND-1)
             NCHARV               = NCHARV + (IEND - IGO - 1)
+            !write(6,*) ' igo:iend:',igo,iend,ncharv
+            !write(6,*)' symparval:',symparval(:ncharv),':'
 
          ELSEIF (CIGO == '[' .AND.CEND == ']') THEN
 

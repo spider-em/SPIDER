@@ -10,12 +10,14 @@ C                  MINIMUM WARNING               JUN 2011 ARDEAN LEITH
 C                  FSC                           FEB 2012 ARDEAN LEITH 
 C                  FSCCUT                        SEP 2012 ARDEAN LEITH
 C                  WANTSQRTS                     MAY 2014 ARDEAN LEITH
+C                  REPORTS MIN FSC NOT LAST      MAY 2014 ARDEAN LEITH
+C                  RESOLUTION FOR GPL            APR 2016 ARDEAN LEITH
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2014  Health Research Inc.,                         *
+C=* Copyright 1985-2016  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -41,7 +43,7 @@ C
 C23456789012345678901234567890123456789012345678901234567890123456789012
 C***********************************************************************
 
-         SUBROUTINE RFACTSD2(PR,AMP,CSUM1,LR,CSUM,CSUM2,AVSUM,
+        SUBROUTINE RFACTSD2(PR,AMP,CSUM1,LR,CSUM,CSUM2,AVSUM,
      &                       NSCALE,INC,WI,FACT,TWOD,
      &                       LUNDOC,FSCOP,FMAXSPFREQ,LUNGP,FSCCUT,
      &                       WANTSQRTS)
@@ -60,8 +62,8 @@ C***********************************************************************
          INTEGER  :: LUNDOC
          LOGICAL  :: FSCOP
          REAL     :: FMAXSPFREQ,PIXSIZ
-         INTEGER  :: LUNGP
-         REAL     :: FSCCUT
+         INTEGER  :: LUNGP,ILOCMIN
+         REAL     :: FSCCUT,FSCMIN
          LOGICAL  :: WANTSQRTS
 
          CHARACTER (LEN=MAXNAM)   :: DOCNAM,GPLOTFILE,PROMPT
@@ -78,11 +80,10 @@ C***********************************************************************
          CALL SET_MPI(ICOMM,MYPID,MPIERR)
 
          CALL REG_GET_USED(NSEL_USED)
-         IF (NSEL_USED .GT. 0) THEN
-C           OUTPUT TO SPIDER'S REGISTERS NEEDED LATER
-            XPREV  = 0
-            DLIST  = HUGE(FSCLAST)
-         ENDIF
+
+         XPREV  = 0
+         DLIST  = HUGE(FSCLAST)
+
          WIP    = 1.0 / WI  ! TO PIXELS
          PIXLEN = 0.5 / FMAXSPFREQ
 
@@ -199,13 +200,15 @@ C                    1234567890123456789012345678901234567890
             IF (NVOX .NE. 0) THEN
                DLIST(1) = L         ! NUMBER
 
+               FSCMIN   = HUGE(FSCMIN)      ! MIN OF FSC CURVE
                SPFLAST  = DLIST(2)  ! WAS HUGE
                DLIST(2) = FLOAT(L-1) / FLOAT(INC-1)*0.5  ! NORM FREQ
+
                IF (FSCOP) THEN
                   DLIST(3) = 0.5 / (FMAXSPFREQ * DLIST(2)) ! RESOL
                   RVAL(L)  = DLIST(3) 
                ENDIF
-               DLIST(5) = AMIN1(1.0, FACT/SQRT(FLOAT(NVOX))) ! FSCCRIT
+               DLIST(5) = MIN(1.0, FACT/SQRT(FLOAT(NVOX))) ! FSCCRIT
                DLIST(6) = NVOX                           ! # VOXELS
 
                RFMIN    = -HUGE(RFMIN)
@@ -279,22 +282,24 @@ C              WRITE TO DOC FILE
                   ENDIF
                ENDIF
 
-               IF (NSEL_USED > 0) THEN
-C                 OUTPUT TO SPIDER'S REGISTERS NEEDED LATER
+               IF (DLIST(4) < FSCMIN) THEN
+C                 MIN VALUE ON FSC CURVE
+                  FSCMIN = DLIST(4)
+                  ILOCMIN = L
+               ENDIF
 
-                  IF (L  >=  3 .AND. 
-     &                FSCLAST  >= FSCCUT .AND.
-     &                DLIST(4) <  FSCCUT) THEN
+               IF (L  >=  3 .AND. 
+     &            FSCLAST  >= FSCCUT .AND.
+     &            DLIST(4) <  FSCCUT) THEN
 
-C                     CROSSED FSCCUT GOING DOWN
-                      XPREV   = L - 1     ! LAST INDEX ABOVE CUTOFF
+C                 CROSSED FSCCUT GOING DOWN
+                  XPREV   = L - 1     ! LAST INDEX ABOVE CUTOFF
 
-                      FSCPREV = FSCLAST
-                      FSCNOW  = DLIST(4)
+                  FSCPREV = FSCLAST
+                  FSCNOW  = DLIST(4)
 
-                      SPFPREV = SPFLAST
-                      SPFNOW  = DLIST(2)
-                  ENDIF
+                  SPFPREV = SPFLAST
+                  SPFNOW  = DLIST(2)
                ENDIF
             ENDIF
          ENDDO
@@ -309,8 +314,8 @@ C           RESOLUTION NEEDED
                XINTERP   = XPREV   + FINTERP * (1)
                SPFINTERP = SPFPREV + FINTERP * (SPFNOW - SPFPREV)          
             ELSE
-               XINTERP   = INC
-               SPFINTERP = DLIST(4)    ! NOT INTERPOLATED?
+               XINTERP   = ILOCMIN
+               SPFINTERP = FSCMIN    ! NOT INTERPOLATED?
             ENDIF
 
             RESOL = 0.0

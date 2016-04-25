@@ -1,14 +1,14 @@
 C++*********************************************************************
 C
-C TRAFD.F
-C                                   USED OPFILE NOV 00 ARDEAN LEITH
-C                                   OPFILEC     FEB  03 ARDEAN LEITH
+C TRAFD.F   USED OPFILE                           NOV 00 ArDean Leith
+C           OPFILEC                               FEB 03 ArDean Leith
+C           REWORKED 'TF L FLIP'                  NOV 15 ArDean Leith                           
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Copyright 1985-2015  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -28,79 +28,100 @@ C **********************************************************************
 C
 C TRAFD(LUN)
 C
+C  PURPOSE: GENERATE THE PHASE CONTRAST TRANSFER FUNCTION  FOR
+C           BRIGHT-FIELD ELECTRON MICROSCOPY. THIS OPERATION SHOWS
+C            CTF IN REAL, DISPLAYABLE FORM TO AN IMAGE FILE.
+C
 C23456789012345678901234567890123456789012345678901234567890123456789012
 C--*********************************************************************
 
          SUBROUTINE TRAFD(LUN)
 
+         IMPLICIT NONE
          INCLUDE 'CMBLOCK.INC'
          INCLUDE 'CMLIMIT.INC' 
  
-         CHARACTER(LEN=MAXNAM)   ::  FILNAM
+         INTEGER               :: LUN
 
-         COMMON          B
-         COMMON /COMMUN/ FILNAM
-         CHARACTER       NULL,ANS,Y,D,E,S
-         REAL            B(512),LAMBDA,KM
+         REAL                  :: B(NBUFSIZ)  ! From: cmlimit.inc
 
-         DATA Y/'Y'/,D/'D'/,E/'E'/,S/'S'/,PI/3.14159/
+         CHARACTER(LEN=MAXNAM) :: FILNAM
+         CHARACTER             :: NULL = CHAR(0)
+         CHARACTER             :: ANS
 
-         NULL = CHAR(0)
+         INTEGER               :: NDIM,NX,NY,NZ,IRTFLG   
+         LOGICAL               :: WANT_AST,WANT_GEH,WANT_SIGN
+         LOGICAL               :: WANT_SPFREQ,WANT_PIXSIZ
 
-         CALL FILERD(FILNAM,NLET,NULL,'OUTPUT',IRTFLG)
+         INTEGER               :: NLET,MAXIM,NCHAR,IE,NS1,I,K
+   
+         REAL                  :: LAMBDA,FMAXSPFREQ,CS,DZ,Q,DS,DZA,AZZ
+         REAL                  :: ACR,GEH,SIGN,SC,AK,AZ,PI,AZR,DZZ
+         REAL                  :: FDUM
+
+         CALL FILERD(FILNAM,NLET,NULL,'CTF OUTPUT',IRTFLG)
          IF (IRTFLG .NE. 0) RETURN
 
-         CALL RDPRM(CS,NOT_USED,'SPHERICAL ABERRATION CS [MM]')
-         IF (CS < 0.0001)    CS = 0.0001
+C        GET COMMON TF INPUTS
+         NDIM        =  1
+         WANT_AST    = .TRUE.
+         WANT_GEH    = .TRUE.   
+         WANT_SIGN   = .FALSE.
+         WANT_SPFREQ = .TRUE.     ! ASK FOR SPFREQ
+         WANT_PIXSIZ = .FALSE.    ! DO NOT ASK FOR PIXEL SIZE
 
-         CALL RDPRM2(DZ,LAMBDA,NOT_USED,
-     &                   'DEFOCUS [A], LAMBDA [A]')
+         CALL GET_TF_INPUT(CS,DZ,LAMBDA,
+     &                NDIM, NX, NY,
+     &                WANT_SPFREQ,FMAXSPFREQ,
+     &                WANT_PIXSIZ,FDUM,
+     &                Q, DS,
+     &                WANT_AST, DZA, AZZ,
+     &                WANT_GEH, ACR, GEH,
+     &                WANT_SIGN, SIGN,
+     &                IRTFLG) 
+         IF (IRTFLG .NE. 0) RETURN
 
-         CALL RDPRMI(NSAM,NDUM,NOT_USED,
-     &               'NUMBER OF SPATIAL FREQ. POINTS')
-
-         CALL RDPRM(KM,NOT_USED,'MAXIMUM SPATIAL FREQUENCY [1/A]')
-
-         CALL RDPRM2(Q,DS,NOT_USED,
-     &      'SOURCE SIZE[A-1], DEFOCUS SPREAD [A]')
-
-         CALL RDPRM2(DZA,AZZ,NOT_USED,'ASTIGMATISM [A], AZIMUTH [DEG]')
-
-         CALL RDPRM2(WGH,ENV,NOT_USED,
-     &    'AMPL CONTRAST RATIO [0-1], GAUSSIAN ENV. HALFW. [1/A]')
-         ENV    = 1. / ENV**2
-
-         IFORM  = 1
-         NROW   = NSAM
-         NSLICE = 1
-         MAXIM  = 0
-         CALL OPFILEC(0,.FALSE.,FILNAM,LUN,'U',IFORM,NSAM,NROW,NSLICE,
+         IFORM = 1
+         NY    = NX
+         NZ    = 1
+         MAXIM = 0
+         CALL OPFILEC(0,.FALSE.,FILNAM,LUN,'U',IFORM,NX,NY,NZ,
      &                   MAXIM,' ',.TRUE.,IRTFLG)
          IF (IRTFLG .NE. 0) RETURN
 
-         SC=KM/FLOAT(NSAM/2)
          CALL RDPRMC(ANS,NCHAR,.TRUE.,
      &       'DIFFRACTOGRAM / ENVELOPE / STRAIGHT (D/E/S)',NULL,IRTFLG)
+
          IE = 0
-         IF (ANS.EQ.E) IE=1
+         IF (ANS == 'E') IE = 1
 
-         WGH = ATAN(WGH/(1.0-WGH))
-         CS = CS*1.E7
+         IF (GEH .NE. 0.0) GEH = 1. / GEH**2
 
-         NS1 = (NSAM/2+1)
-         DO  I=1,NROW
-            DO  K=1,NSAM
+         SC  = FMAXSPFREQ / FLOAT(NX / 2)
+         ACR = ATAN(ACR / (1.0 - ACR))
+         CS  = CS * 1.E7
 
-               AK = SQRT(FLOAT(K-NS1)**2 + FLOAT(I-NS1)**2)*SC
-               AZ = PI/2.
-C               IF (K.EQ.NS1) GOTO 5
-               AZ  = ATAN2(FLOAT(I-NS1),FLOAT(K-NS1)) + PI/2.
-5              AZR = AZZ*(PI/180.)
-               DZZ = DZ+DZA/2*SIN(2*(AZ-AZR))
+         NS1 = NX / 2 + 1
 
-               CALL TFD(B(K),CS,DZZ,LAMBDA,Q,DS,IE,AK,WGH,ENV)
-               IF (ANS .NE. S) B(K)=B(K)*B(K)
+         DO  I=1,NY
+
+            DO  K=1,NX
+
+               AK = SQRT(FLOAT(K-NS1)**2 + FLOAT(I-NS1)**2) * SC
+               AZ = PI / 2.0
+
+               AZ  = ATAN2(FLOAT(I-NS1), FLOAT(K-NS1)) + PI / 2.0
+               AZR = AZZ * (PI / 180.)
+               DZZ = DZ + DZA / 2 * SIN(2 * (AZ-AZR))
+
+               CALL TFD(B(K),CS,DZZ,LAMBDA,Q,DS,IE,AK,ACR,GEH)
+
+               IF (ANS .NE. 'S') B(K) = B(K) * B(K)
+
             ENDDO
-            CALL WRTLIN(LUN,B,NSAM,I)
+
+            CALL WRTLIN(LUN,B,NX,I)
+
          ENDDO
+
          END

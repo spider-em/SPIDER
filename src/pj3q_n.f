@@ -1,16 +1,17 @@
 C++*********************************************************************
 C                                                                      *
-C PJ3Q_N.F      SPEEDED UP                       FEB 2000 ARDEAN LEITH *
-C               LUNDOCREDANG PARAMETERS CHANGED  DEC 2000 ARDEAN LEITH *
-C               OPENDOC PARAMETERS               DEC 2000 ARDEAN LEITH *
-C               REWRITTEN                        SEP 2003 PAWEL        *
-C               REFRINGS OPTION                  FEB 2005 ARDEAN LEITH *
-C               FBS_WANTED                       JAN 2012 ARDEAN LEITH *                                                      *
+C PJ3Q_N.F  SPEEDED UP                           FEB 2000 ARDEAN LEITH *
+C           LUNDOCREDANG PARAMETERS CHANGED      DEC 2000 ARDEAN LEITH *
+C           OPENDOC PARAMETERS                   DEC 2000 ARDEAN LEITH *
+C           REWRITTEN                            SEP 2003 PAWEL        *
+C           REFRINGS OPTION                      FEB 2005 ARDEAN LEITH *
+C           FBS_WANTED                           JAN 2012 ARDEAN LEITH *                                                      *
+C           CONSECUTIVE OUTPUT NUMBERING FLAG    DEC 2015 ARDEAN LEITH *
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2012  Health Research Inc.,                         *
+C=* Copyright 1985-2015  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -44,9 +45,9 @@ C--*********************************************************************
 
          LOGICAL                  :: FBS_WANTED,REFRINGS
  
-         CHARACTER(LEN=MAXNAM)    :: FINPAT,FINPIC
+         CHARACTER(LEN=MAXNAM)    :: FINPAT,FINPIC,ANS
          CHARACTER(LEN=1)         :: MODE
-         LOGICAL                  :: MD
+         LOGICAL                  :: MD,WANT_CONSEQ
 
          REAL, ALLOCATABLE        :: BCKE(:)
          INTEGER, ALLOCATABLE     :: IPCUBE(:,:)
@@ -54,6 +55,7 @@ C--*********************************************************************
          REAL, ALLOCATABLE        :: ANGBUF(:,:)
 
          INTEGER                  :: ICOMM,MYPID,MPIERR,MAXIM,IRTFLG
+         INTEGER                  :: NCHAR,FIRSTBL
          REAL                     :: R1
 
          INTEGER, PARAMETER       :: INVOL     = 98
@@ -78,19 +80,40 @@ C        OPEN INPUT VOLUME
          ENDIF
 
          RI   = (MIN(NX,NY,NZ)/2) - 2
-         CALL RDPRM1S(RI,NOT_USED,'OBJECT RADIUS',IRTFLG)
+         IRTFLG = -999            ! DO NOT UPPERCASE
+         CALL RDPRMC(ANS,NCHAR,.TRUE.,
+     &       'OBJECT RADIUS, CONSECUTIVE OUTPUT FILE NUMBERS (Y/N)',
+     &        CDUM,IRTFLG)
          IF (IRTFLG .NE. 0)  RETURN
 
+         WANT_CONSEQ = .FALSE. 
+         FIRSTBL = INDEX(ANS(1:NCHAR),' ')
+         IF (FIRSTBL == 0) FIRSTBL = INDEX(ANS(1:NCHAR),',')
+         IF (FIRSTBL > 0 .AND. FIRSTBL < NCHAR) THEN
+            ICOMMA = INDEX(ANS(1:FIRSTBL),',')  ! comma before blank
+            IF (ICOMMA < FIRSTBL) FIRSTBL = ICOMMA
+
+C           FIND 2'ND RESPONSE
+            CALL SSUPCAS(ANS(FIRSTBL:NCHAR))
+            WANT_CONSEQ = (INDEX(ANS(FIRSTBL:NCHAR),'Y') > 0)
+            NCHAR = FIRSTBL -1
+         ENDIF
+
+         ANS(1:NCHAR+1) = '~' // ANS(1:NCHAR)
+         CALL RDPRM1S(RI,NOT_USED,ANS(1:NCHAR+1),IRTFLG)
+ 
+         !write(6,*)' ri:',ri,' Want_conseq:',want_conseq
+ 
 C        FIND NUMBER OF OMP THREADS
          CALL GETTHREADS(NUMTH)
 
-         NVOX = NX*NY*NZ
+         NVOX = NX * NY * NZ
 
 C        INITIALIZE NN  AND FIND NN 
 
-         LDPX = NX  /2+1
-         LDPY = NY  /2+1
-         LDPZ = NZ/2+1
+         LDPX = NX / 2 + 1
+         LDPY = NY / 2 + 1
+         LDPZ = NZ / 2 + 1
 
          NN   = 1
          MD   = .FALSE.
@@ -109,7 +132,7 @@ C        USE NVOX TO ALLOCATE (BCKE)
          ENDIF
 
 C        READ BCKE
-	 CALL READV(INVOL,BCKE,NX,NY,NX,NY,NZ)
+         CALL READV(INVOL,BCKE,NX,NY,NX,NY,NZ)
          CLOSE(INVOL)
 
 C        PREPARE IPCUBE
@@ -141,12 +164,12 @@ C        IN DEGREES!
 
          CALL LUNDOCREDANG(INDOCA,ANGBUF,MAXKEY,NGOTY,MAXGOTY,IRTFLG)
          IF (IRTFLG .NE. 0) GOTO 9999
-         IF (NGOTY .LT. NANG) THEN 
+         IF (NGOTY < NANG) THEN 
             CALL ERRT(102,'ONLY GOT ANGLES FOR IMAGES',NGOTY)
             GOTO 9999   
          ENDIF
 
-         REFRINGS =  (FCHAR(7:7) .EQ. 'R') 
+         REFRINGS = (FCHAR(7:7) == 'R') 
          LUNRINGS = 0
          IF (REFRINGS) THEN
 C           WANT TO CREATE REFERENCE RINGS FILE
@@ -166,7 +189,7 @@ C        PROJECT NOW
          CALL WRITPRO_N(PROJ,INPRJ,NX,NY,NZ,NUMTH,BCKE,NVOX,
      &                 IPCUBE,NN,RI,INUMBR,NANG,MAXKEY,ANGBUF,
      &                 LUNRINGS,MODE,MR,NR,ISKIP,LDPX,LDPY,LDPZ,
-     &                 FBS_WANTED,IRTFLG)
+     &                 FBS_WANTED,WANT_CONSEQ,IRTFLG)
 
          IF (MYPID .LE. 0) THEN
             IF (FBS_WANTED) THEN
@@ -189,6 +212,5 @@ C        PROJECT NOW
          CLOSE(INDOCS)
          IF (REFRINGS) CLOSE(LUNRINGS)
 
-         RETURN
          END
 

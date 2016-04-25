@@ -162,6 +162,7 @@ ELEMENTS =  \
  $(LIB)(copyfromxplo.o)\
  $(LIB)(copypos.o)     \
  $(LIB)(copytojpg.o)   \
+ $(LIB)(copytostk.o)   \
  $(LIB)(copytoxplor.o) \
  $(LIB)(copytovol.o)   \
  $(LIB)(copyr.o) \
@@ -174,28 +175,28 @@ ELEMENTS =  \
  $(LIB)(cr180_2.o) \
  $(LIB)(crcse1.o)  \
  $(LIB)(crcse2.o)  \
- $(LIB)(crcse3.o)         \
+ $(LIB)(crcse3.o)  \
  $(LIB)(crosrmg.o) \
  $(LIB)(crosrng.o) \
  $(LIB)(crosrng_2.o) \
  $(LIB)(crosrng_trans.o) \
- $(LIB)(crosrng_ds.o) \
+ $(LIB)(crosrng_ds.o)  \
  $(LIB)(crosrng_com.o) \
- $(LIB)(crosrng_ms.o) \
- $(LIB)(crosrng_q.o) \
+ $(LIB)(crosrng_ms.o)  \
+ $(LIB)(crosrng_q.o)   \
  $(LIB)(crsm_2.o) \
  $(LIB)(cslice.o) \
- $(LIB)(csvms.o) \
+ $(LIB)(csvms.o)  \
  $(LIB)(ctffind3.o) \
  $(LIB)(cutxslice.o) \
  $(LIB)(cutyslice.o) \
  $(LIB)(cutzslice.o) \
- $(LIB)(date.o) \
+ $(LIB)(date.o)    \
  $(LIB)(date_2k.o) \
- $(LIB)(d3dplt.o) \
- $(LIB)(dchist.o) \
+ $(LIB)(d3dplt.o)  \
+ $(LIB)(dchist.o)  \
  $(LIB)(decimate.o) \
- $(LIB)(dee.o) \
+ $(LIB)(dee.o)     \
  $(LIB)(defo001.o) \
  $(LIB)(defo003.o) \
  $(LIB)(defo1001.o) \
@@ -292,6 +293,7 @@ ELEMENTS =  \
  $(LIB)(findmx.o)   \
  $(LIB)(findmx_f.o) \
  $(LIB)(findmx_q.o) \
+ $(LIB)(findridges.o) \
  $(LIB)(fint.o)  \
  $(LIB)(fint3.o) \
  $(LIB)(fitt.o)  \
@@ -339,23 +341,24 @@ ELEMENTS =  \
  $(LIB)(getcoo.o) \
  $(LIB)(getcoot.o) \
  $(LIB)(getdefocus.o) \
- $(LIB)(getdocdat.o) \
+ $(LIB)(getdocdat.o)  \
  $(LIB)(getdoclist.o) \
  $(LIB)(getfilenum.o) \
  $(LIB)(gethedccp4.o) \
  $(LIB)(getima_q.o) \
- $(LIB)(getlbno.o) \
- $(LIB)(getlab.o) \
- $(LIB)(getnewstack.o) \
+ $(LIB)(getlbno.o)  \
+ $(LIB)(getlab.o)   \
+ $(LIB)(get_tf_input.o) \
+ $(LIB)(getnewstack.o)  \
  $(LIB)(getnexttoken.o) \
- $(LIB)(getoldstack.o) \
+ $(LIB)(getoldstack.o)  \
  $(LIB)(getstack.o) \
- $(LIB)(getsym.o) \
+ $(LIB)(getsym.o)   \
  $(LIB)(getthreads.o) \
- $(LIB)(gnc.o) \
+ $(LIB)(gnc.o)   \
  $(LIB)(gnc2s.o) \
  $(LIB)(gotbranch.o) \
- $(LIB)(gp.o) \
+ $(LIB)(gp.o)   \
  $(LIB)(gprp.o) \
  $(LIB)(graphp.o) \
  $(LIB)(graphs.o) \
@@ -587,6 +590,7 @@ ELEMENTS =  \
  $(LIB)(postrt.o) \
  $(LIB)(proc_set.o) \
  $(LIB)(pr3d.o) \
+ $(LIB)(pr3d_new.o) \
  $(LIB)(pr3db.o) \
  $(LIB)(prb1d.o) \
  $(LIB)(prb1.o) \
@@ -829,7 +833,6 @@ ELEMENTS =  \
  $(LIB)(traf.o)    \
  $(LIB)(trafc.o)   \
  $(LIB)(trafc3.o)  \
- $(LIB)(trafct3.o) \
  $(LIB)(trafd.o)   \
  $(LIB)(trafl.o)   \
  $(LIB)(trafsim.o) \

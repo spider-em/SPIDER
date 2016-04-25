@@ -185,7 +185,7 @@ C             WANT X OR Y SLICE
             ENDIF
             IF (FCHAR(5:5) == 'N') THEN
 C              KEEP FMIN AND FMAX SAME FOR ALL SLICES
-               IF (MYPID .LE. 0) WRITE(NOUT,*) 
+               IF (MYPID <= 0) WRITE(NOUT,*) 
      &            ' SETTING FMIN & FMAX:',FMIN1,FMAX1
                SIG = SIG1
                CALL SETPRM(LUN2,NX,IDUM,FMAX1,FMIN1,AV1,'U')
@@ -257,22 +257,7 @@ C            OPEN FIRST INPUT FILE
           CASE ('C','CY','CYL')
 
 C            CYLINDRICAL PROJECTION
-             MAXLEN = MAXDIM - MAXSAM
-             IF ((NZ1 * NX1) .GE. MAXLEN) THEN
-                IF (MYPID .LE. 0) WRITE(NOUT,1999) MAXLEN
-1999            FORMAT(' *** NX * NZ1 > ',I6,' NOT ALLOWED')
-                CALL ERRT(31,'VTIL2',IER)
-                GOTO 9999
-             ENDIF
-
-             CALL OPFILEC(0,.TRUE.,FILNAM,LUN1,'O',IFORM,
-     &                    NX1,NY1,NZ1,
-     &                    MAXIM,'INPUT',.FALSE.,IRTFLG)
-             IF (IRTFLG .NE. 0) GOTO 9999
-
-             CALL MRCP(NX1,NY1,NZ1,
-     &                 LUN1,LUN2,LUN3,BUF(1),
-     &                 BUF(MAXSAM + 1),MAXSAM)
+             CALL MRCP(LUN1,LUN2,LUN3)
 
           CASE DEFAULT
               CALL ERRT(101,'UNKNOWN/OBSOLETE OPERATION',NDUM)

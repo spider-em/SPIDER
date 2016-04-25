@@ -3,6 +3,7 @@ C++*********************************************************************
 C
 C TRAFL.F
 C           ADDED 'TF L FLIP'                      OCT 15 ArDean Leith                           
+C           REWORKED 'TF L FLIP'                   NOV 15 ArDean Leith                           
 C
 C **********************************************************************
 C=*                                                                    *
@@ -34,23 +35,31 @@ C           THE 1-DIMENSIONAL TRANSFER FUNCTION (OR ITS SQUARE,
 C           THE ENVELOPE FUNCTION) IN REAL, DISPLAYABLE FORM TO 
 C           A DOCUMENT FILE.
 C
-C           ADDED 'TF L FLIP' WHICH CREATES PHASE FLIPPING DOC
-C           FILE FOR USE BY 'FD' 
-C
-C                          
+C  TRAFL_LIS
+C  PURPOSE:  'TF LIS' WHICH CREATES A DOC FILE CONTAINING: 
+C             RADII, STRAIGHT CTF, NEGATIVE STRAIGHT CTF,
+C             PHASE FLIPPING CTF, TRAPPED-CTF, CTF ENVELOPE FUNCTION, 
+C             AND DIFFRACTOGRAM  COLUMNS.
+C             THE DOC FILE CAN BE USED BY 'FD C'  FOR CTF CORRECTION
+C             DO NOT USE FLIPPED CTF WITH 'FD C'
+C                 
 C23456789012345678901234567890123456789012345678901234567890123456789012
 C***********************************************************************
 
        SUBROUTINE TRAFL
 
+       IMPLICIT NONE
        INCLUDE 'CMBLOCK.INC'
        INCLUDE 'CMLIMIT.INC'
 
        CHARACTER             :: ANS
-       REAL                  :: LAMBDA,KM
+       REAL                  :: LAMBDA,FMAXSPFREQ
 
-       INTEGER               :: NOT_USED,NX
-       REAL                  :: CS
+       INTEGER               :: NOT_USED,NX,NY
+       REAL                  :: CS,FVAL,PIXSIZ
+       REAL                  :: DZ,Q,DS,FDUM,ACR,GEH,SIGN,SC,AK,B
+       INTEGER               :: NDIM,IRTFLG,NCHAR,NLET,LUNDOCNO,IE,NS1
+       INTEGER               :: K,IKEY
 
        CHARACTER(LEN=MAXNAM) :: DOCNAM
        REAL                  :: DLIST(3)
@@ -58,45 +67,41 @@ C***********************************************************************
           
        LOGICAL               :: ADDEXT,GETNAME,ISOLD
        LOGICAL               :: APPEND,MESSAGE,NEWFILE
+       LOGICAL               :: WANT_AST,WANT_GEH,WANT_SIGN
+       LOGICAL               :: WANT_SPFREQ,WANT_PIXSIZ
 
        CHARACTER             :: NULL = CHAR(0)
 
-       INTEGER,PARAMETER     :: LUNDOC = 81
+       INTEGER, PARAMETER    :: LUNDOC = 81
 
 
-       IF (FCHAR(6:6) == 'F') THEN    
-          CALL TRAFL_FLIP
+       IF (FCHAR(5:5) == 'I') THEN    
+          CALL TRAFL_LIS
           RETURN
        ENDIF
 
+C      GET COMMON TF INPUTS
+       NDIM        =  1         ! SQUARE ONLY
+       WANT_AST    = .FALSE.    ! DO NOT ASK FOR ASTIG
+       WANT_GEH    = .TRUE.     ! ASK FOR GEH
+       WANT_SIGN   = .FALSE.    ! DO NOT ASK FOR SIGN
+       WANT_SPFREQ = .TRUE.     ! ASK FOR SPFREQ
+       WANT_PIXSIZ = .FALSE.    ! DO NOT ASK FOR PIXEL SIZE
 
-       CALL RDPRM1S(CS,NOT_USED,
-     &                  'SPHERICAL ABERRATION CS [MM]',IRTFLG)
-
-       IF (CS < 0.0001) CS = 0.0001
-
-       CALL RDPRM2S(DZ,LAMBDA,NOT_USED,
-     &              'DEFOCUS [A], WAVELENGTH LAMBDA [A]',IRTFLG)
-
-       CALL RDPRI1S(NX,NOT_USED,
-     &              'NUMBER OF SPATIAL FREQUENCY POINTS',IRTFLG)
-
-       CALL RDPRM1S(KM,NOT_USED,
-     &              'MAX SPATIAL FREQUENCY [1/A]',IRTFLG)
-
-       CALL RDPRM2S(Q,DS,NOT_USED,
-     &              'SOURCE SIZE [1/A], DEFOCUS SPREAD [A]',IRTFLG)
-
-       CALL RDPRM2S(WGH,ENV,NOT_USED,
-     &'AMPL. CONTRAST RATIO [0-1], GAUSSIAN ENV. HALFW. [1/A]',
-     &   IRTFLG)
+       CALL GET_TF_INPUT(CS,DZ,LAMBDA,
+     &                   NDIM, NX,NY,
+     &                   WANT_SPFREQ,FMAXSPFREQ,
+     &                   WANT_PIXSIZ,PIXSIZ,
+     &                   Q,DS,
+     &                   WANT_AST,  FDUM,FDUM,
+     &                   WANT_GEH,  ACR,GEH,   
+     &                   WANT_SIGN, FDUM,
+     &                   IRTFLG)   
 
        CALL RDPRMC(ANS,NCHAR,.TRUE.,
      &       'DIFFRACTOGRAM, ENVELOPE, OR STRAIGHT (D/E/S)',
      &        NULL,IRTFLG)
-
-       ENV = 1.0 / ENV**2
-       SC  = KM / FLOAT(NX / 2)
+       IF (IRTFLG .NE. 0) RETURN
 
 C      OPEN OUTPUT DOC FILE
        ADDEXT  = .TRUE.
@@ -110,23 +115,36 @@ C      OPEN OUTPUT DOC FILE
      &           'OUTPUT DOC FILE',ISOLD,APPEND,MESSAGE,
      &            NEWFILE,IRTFLG)
 
-C                123456789 123456789 123456789 123456789 123456789 123456789 
-       COMMENT ='KEY=RAD. TRANSFER   RAD(PIX^-1}'    
+C                   123456789 123456789 123456789 123456789 123456789 123456789 
+       COMMENT =   '      TRANSFER'    
+
+       CALL LUNDOCPUTCOM(LUNDOCNO,COMMENT(1:38),IRTFLG)
+
+       IF (ANS == 'D') THEN
+          COMMENT ='    DIFFRACTOGRAM    RAD(1/PIX}'
+       ELSEIF  (ANS == 'C') THEN    
+          COMMENT ='        ENVELOPE     RAD(1/PIX}'    
+       ELSEIF  (ANS == 'S') THEN    
+          COMMENT ='      STRAIGHT       RAD(1/PIX}'
+       ENDIF    
        CALL LUNDOCPUTCOM(LUNDOCNO,COMMENT(1:34),IRTFLG)
 
-       IE = 0
+       IE  = 0
        IF (ANS == 'E') IE = 1
 
-       WGH = ATAN(WGH / (1.0 - WGH))
+       GEH = 1.0 / GEH**2
+       SC  = FMAXSPFREQ / FLOAT(NX / 2)
+
+       ACR = ATAN(ACR / (1.0 - ACR))
        CS  = CS * 1.E7
        NS1 = NX / 2 + 1
 
        DO K=NS1,NX+1
 
           AK = (NS1 - K) * SC
-          CALL TFD(B,CS,DZ,LAMBDA,Q,DS,IE,AK,WGH,ENV)
+          CALL TFD(B,CS,DZ,LAMBDA,Q,DS,IE,AK,ACR,GEH)
 
-          IF (ANS .NE. 'S') B = B * B
+          IF (ANS .NE. 'S') B = B * B   ! ENVELOPE OR DIFFRACTOGRAM
 
           IKEY     = K - NS1 + 1
           DLIST(1) = B
@@ -141,12 +159,10 @@ C         WRITE TO CTF DOC
        END
 
 
-
-cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-
+C      ------------------- TRAFL_LIS -----------------------------
 
 
-       SUBROUTINE TRAFL_FLIP
+       SUBROUTINE TRAFL_LIS
 
        IMPLICIT NONE
        INCLUDE 'CMBLOCK.INC'
@@ -154,8 +170,8 @@ cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 
        CHARACTER(LEN=1)      :: ANS
        CHARACTER(LEN=1)      :: NULL = CHAR(0)
-       CHARACTER(LEN=100)    :: COMMENT
-       REAL                  :: LAMBDA,KM
+       CHARACTER(LEN=130)    :: COMMENT
+       REAL                  :: LAMBDA,FMAXSPFREQ
 
        REAL, ALLOCATABLE     :: DLIST(:,:)
        REAL                  :: DLIST1(3)
@@ -165,120 +181,20 @@ cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 
        LOGICAL               :: ADDEXT,GETNAME,ISOLD
        LOGICAL               :: APPEND,MESSAGE,NEWFILE
+       LOGICAL               :: WANT_AST,WANT_GEH,WANT_SIGN
+       LOGICAL               :: WANT_SPFREQ,WANT_PIXSIZ
  
-       INTEGER               :: NOT_USED,IRTFLG,NCHAR,NX,IE,NS1,IKEY
-       INTEGER               :: NUM_BINS,K,IRAD,NLET,LUNDOCNO
-       REAL                  :: CS,DZ,Q,DS,WGH
-       REAL                  :: ENV,SP_PIXSIZ,SC,AK,B,RAD_PX,RAD_ANGST
-       REAL                  :: PREV_CTF,FIRST_MIN
+       INTEGER               :: NOT_USED,IRTFLG,NCHAR,NX,NS1,IKEY
+       INTEGER               :: NUM_BINS,K,IRAD,NLET,LUNDOCNO,NDIM,NY
+       REAL                  :: CS,DZ,Q,DS,ACR, B_ENV,RAD_ANGST
+       REAL                  :: GEH,SP_PIXSIZ,SC,AK,B_STR,RAD_PX
+       REAL                  :: PREV_CTF,FIRST_MIN,FIRST_ZERO
        REAL                  :: FIRSTMIN_RAD,FIRSTZERO_RAD,CURR_CTF
-       REAL                  :: CTF_VALUE,STRAIGHT_CTF,TRAPPED_CTF
-       REAL                  :: FLIPPED_CTF
+       REAL                  :: STRAIGHT_CTF,STRAIGHT_CTF_NEG
+       REAL                  :: TRAPPED_CTF,FLIPPED_CTF,FLIPPED_CTF_TRI 
+       REAL                  :: FDUM,SIGN,FVAL,FKEV,PIXSIZ
 
-
-       CALL RDPRM1S(CS,NOT_USED,
-     &                  'SPHERICAL ABERRATION CS[MM]',IRTFLG)
-       IF (IRTFLG .NE. 0) RETURN
-
-       IF (CS < 0.0001)  CS = 0.0001
-
-       CALL RDPRM2S(DZ,LAMBDA,NOT_USED,
-     &              'DEFOCUS[A], LAMBDA[A]',IRTFLG)
-       IF (IRTFLG .NE. 0) RETURN
-
-       CALL RDPRI1S(NX,NOT_USED,
-     &              'NUMBER OF SPATIAL FREQUENCY PTS',IRTFLG)
-       IF (IRTFLG .NE. 0) RETURN
-
-       CALL RDPRM1S(KM,NOT_USED,
-     &              'MAXIMUM SPATIAL FREQUENCY[A-1]',IRTFLG)
-       IF (IRTFLG .NE. 0) RETURN
-
-       CALL RDPRM2S(Q,DS,NOT_USED,
-     &              'SOURCE SIZE[A-1], DEFOCUS SPREAD[A]',IRTFLG)
-       IF (IRTFLG .NE. 0) RETURN
-
-       CALL RDPRM2S(WGH,ENV,NOT_USED,
-     &   'AMPL CONTRAST RATIO[0-1], GAUSSIAN ENV. HALFW.[FOU. UNITS]',
-     &   IRTFLG)
-       IF (IRTFLG .NE. 0) RETURN
-
-       CALL RDPRM1S(SP_PIXSIZ,NOT_USED, 'PIXEL SIZE[A]', IRTFLG)
-       IF (IRTFLG .NE. 0) RETURN
-
-       CALL RDPRMC(ANS,NCHAR,.TRUE.,
-     &       'DIFFRACTOGRAM, ENVELOPE, OR STRAIGHT (D/E/S)',
-     &        NULL,IRTFLG)
-
-       ENV = 1.0 / ENV**2
-       SC  = KM / FLOAT(NX / 2)
-       IE  = 0
-       IF (ANS == 'E') IE = 1
-
-       WGH = ATAN(WGH / (1.0 - WGH))
-       CS  = CS * 1.E7
-       NS1 = NX / 2 + 1
-
-C      GET NUMBER OF FOURIER BINS
-       NUM_BINS = NX - NS1 + 2
-
-       ALLOCATE (DLIST(6,NUM_BINS), STAT=IRTFLG)
-       IF (IRTFLG .NE. 0) THEN
-          CALL ERRT(46,'DLIST',6*NUM_BINS)
-          RETURN
-       ENDIF
-
-       DO K=NS1,NX+1
-
-          AK = (NS1-K) * SC
-          CALL TFD(B,CS,DZ,LAMBDA,Q,DS,IE,AK,WGH,ENV)
-
-          IF (ANS .NE. 'S') B = B * B     ! ENVELOPE
-
-          IKEY          = K - NS1 + 1
-
-          RAD_PX        = REAL(K-NS1) / NX   ! RAD_PX 
-          DLIST(4,IKEY) = RAD_PX             ! RAD_PX
-
-          RAD_ANGST     = RAD_PX / SP_PIXSIZ 
-          DLIST(5,IKEY) = RAD_ANGST
-
-          DLIST(6,IKEY) = B
-
-       ENDDO
-
-C      INITIALIZE FIRST MIN, ABSOLUTE MIN
-       PREV_CTF      = DLIST(1,1)
-
-       FIRST_MIN     = 1        ! RADIUS FOR FIRST MIN.
-       FIRSTMIN_RAD  = -1       ! INITIALIZE FIRST MIN. RADIUS
-       FIRSTZERO_RAD = -1       ! FIRST ZERO RADIUS
-
-C      LOOP THROUGH FOURIER RADII TO FIND FIRST MINIMUM, FIRST ZERO
-       DO IRAD=2,NUM_BINS       
-
-          CURR_CTF  = DLIST(1,IRAD)
-          RAD_PX    = DLIST(4,IRAD)         
-
-C         CHECK FOR FIRST LOCAL MIN
-          IF ( FIRSTMIN_RAD < 0 ) THEN
-             IF ( CURR_CTF  > PREV_CTF ) THEN
-                FIRST_MIN    = IRAD - 1     ! RADIUS TO END TRAP 
-                FIRSTMIN_RAD = SP_PIXSIZ / RAD_PX
-             ENDIF
-          ENDIF
-
-C         FIND FIRST ZERO
-          IF ( FIRSTZERO_RAD < 0 ) THEN
-C            LOOK FOR WHEN CTF CROSSES ORIGIN
-             IF ( (CURR_CTF * PREV_CTF) <= 0 ) 
-     &          FIRSTZERO_RAD = SP_PIXSIZ / RAD_PX
-          ENDIF
-
-          PREV_CTF = CURR_CTF    ! NEW, PREVIOUS CTF VALUE==CURRENT CTF 
-       ENDDO                     ! END RADIUS-LOOP
-
-C      OPEN OUTPUT DOC FILE
+C      OPEN OUTPUT DOC FILE  (first for campatibility with 'TF C' ops
        ADDEXT  = .TRUE.
        GETNAME = .TRUE.
        ISOLD   = .FALSE.
@@ -289,6 +205,99 @@ C      OPEN OUTPUT DOC FILE
        CALL OPENDOC(DOCNAM,ADDEXT,NLET,LUNDOC,LUNDOCNO,GETNAME,
      &           'OUTPUT DOC FILE',ISOLD,APPEND,MESSAGE,
      &            NEWFILE,IRTFLG)
+       IF (IRTFLG .NE. 0) RETURN
+C      GET COMMON TF INPUTS
+       NDIM        =  1         ! SQUARE ONLY
+       WANT_AST    = .FALSE.    ! DO NOT ASK FOR ASTIG
+       WANT_GEH    = .TRUE.     ! ASK FOR GEH
+       WANT_SIGN   = .FALSE.    ! DO NOT ASK FOR SIGN
+       WANT_SPFREQ = .FALSE.    ! DO NOT ASK FOR SPFREQ
+       WANT_PIXSIZ = .TRUE.     ! ASK FOR PIXEL SIZE
+
+       CALL GET_TF_INPUT(CS,DZ,LAMBDA,
+     &                NDIM, NX, NY,
+     &                WANT_SPFREQ,FMAXSPFREQ,
+     &                WANT_PIXSIZ,PIXSIZ,
+     &                Q, DS,
+     &                WANT_AST, FDUM, FDUM,
+     &                WANT_GEH, ACR, GEH,
+     &                WANT_SIGN, FDUM,
+     &                IRTFLG) 
+
+
+       IF (IRTFLG .NE. 0) RETURN
+
+C      GET NUMBER OF FOURIER BINS
+       NS1 = NX / 2 + 1
+       NUM_BINS = NX - NS1 + 2
+
+       ALLOCATE (DLIST(9,NUM_BINS), STAT=IRTFLG)
+       IF (IRTFLG .NE. 0) THEN
+          CALL ERRT(46,'DLIST',9*NUM_BINS)
+          RETURN
+       ENDIF
+
+       IF (GEH .NE. 0) GEH = 1.0 / GEH**2
+       SC  = FMAXSPFREQ / FLOAT(NX / 2)
+
+       ACR = ATAN(ACR / (1.0 - ACR))
+       CS  = CS * 1.E7
+
+       DO K=NS1,NX+1
+
+          AK = (NS1 - K) * SC
+          CALL TFD_PLUS(B_STR,CS,DZ,LAMBDA,Q,DS,AK,ACR,GEH, B_ENV)
+
+          IKEY          = K - NS1 + 1
+
+          RAD_PX        = REAL(K-NS1) / NX   ! RAD_PX 
+          DLIST(1,IKEY) = RAD_PX             ! RAD_PX
+
+          RAD_ANGST     = RAD_PX / PIXSIZ 
+          DLIST(2,IKEY) = RAD_ANGST
+
+          DLIST(3,IKEY) = B_STR           ! STRAIGHT = RAW
+
+          DLIST(7,IKEY) = B_ENV * B_ENV   ! ENVELOPE 
+
+          DLIST(8,IKEY) = B_STR * B_STR   ! DIFFRACTOGRAM
+
+       ENDDO
+
+       !write(6,*) ' filled bins: ',ns1,'...',nx+1,'  numbins:',NUM_BINS
+
+C      INITIALIZE FIRST MIN, ABSOLUTE MIN  FROM STRAIGHT CTF
+       PREV_CTF   = DLIST(3,1)
+
+       FIRST_MIN  = -1       ! RADIUS FOR FIRST MIN (PIXELS)
+       FIRST_ZERO = -1       ! FIRST ZERO RADIUS (A)
+
+C      LOOP THROUGH FOURIER RADII TO FIND FIRST MINIMUM, FIRST ZERO
+       DO IRAD=2,NUM_BINS       
+
+          CURR_CTF  = DLIST(3,IRAD)
+          RAD_PX    = DLIST(1,IRAD)         
+
+C         CHECK FOR FIRST LOCAL MIN
+          IF ( FIRST_MIN < 0 ) THEN
+             IF ( CURR_CTF  > PREV_CTF ) THEN
+                FIRST_MIN    = IRAD - 1     ! RADIUS TO END TRAP 
+                FIRSTMIN_RAD = PIXSIZ / RAD_PX
+             ENDIF
+          ENDIF
+
+C         FIND FIRST ZERO
+          IF ( FIRST_ZERO  < 0 ) THEN
+C            LOOK FOR WHEN CTF CROSSES ORIGIN
+             IF ( (CURR_CTF * PREV_CTF) <= 0 ) THEN
+                FIRST_ZERO    = IRAD
+                FIRSTZERO_RAD = PIXSIZ / RAD_PX
+             ENDIF
+          ENDIF
+
+          PREV_CTF = CURR_CTF    ! NEW, PREVIOUS CTF VALUE==CURRENT CTF 
+       ENDDO                     ! END RADIUS-LOOP
+
 
 C      WRITE RADII (IN ANGSTROMS) TO DOC FILE COMMENT KEY
 C      NOTE: IT WOULD BE MORE ACCURATE TO INTERPOLATE, BI-LINEARLY 
@@ -296,8 +305,20 @@ C      PERHAPS, SO THESE VALUES WILL BE ON AVERAGE 1/2 FOURIER PIXEL OFF
 
 C            123456789 123456789 123456789 123456789 123456789 123456789 
        COMMENT=
+     &   '            DEFOCUS  RAD_FIRST_MIN(PIX)  RAD_FIRST_ZERO(PIX)'
+       CALL LUNDOCPUTCOM(LUNDOCNO,COMMENT(1:60),IRTFLG)
+       DLIST1(1) = DZ 
+       DLIST1(2) = FIRST_MIN 
+       DLIST1(3) = FIRST_ZERO 
+       CALL LUNDOCWRTDAT(LUNDOCNO,-998,DLIST1,3,IRTFLG)
+
+       COMMENT = ' ------------------- '
+       CALL LUNDOCPUTCOM(LUNDOCNO,COMMENT(1:20),IRTFLG)
+C            123456789 123456789 123456789 123456789 123456789 123456789 
+       COMMENT=
      &       '            DEFOCUS  RAD_FIRST_MIN(A)  RAD_FIRST_ZERO(A)'
        CALL LUNDOCPUTCOM(LUNDOCNO,COMMENT(1:60),IRTFLG)
+
        DLIST1(1) = DZ 
        DLIST1(2) = FIRSTMIN_RAD 
        DLIST1(3) = FIRSTZERO_RAD 
@@ -306,38 +327,60 @@ C            123456789 123456789 123456789 123456789 123456789 123456789
        CALL LUNDOCPUTCOM(LUNDOCNO,COMMENT(1:20),IRTFLG)
 
 C                123456789 123456789 123456789 123456789 123456789 123456789 
-       COMMENT = '  TRANSFER '
+       COMMENT = '  TRANSFER: '
        CALL LUNDOCPUTCOM(LUNDOCNO,COMMENT(1:16),IRTFLG)
-       COMMENT = 'RAD    FLIPPED,     STRAIGHT,      TRAPPED, ' //
-     &           '    RAD(PIX^-1)    RAD(A**-1)      RAW'    
-       CALL LUNDOCPUTCOM(LUNDOCNO,COMMENT(1:94),IRTFLG)
+
+       COMMENT = '       RAD(1/PIX),    RAD(1/A),  STRAIGHT,' // 
+     &           '     -STRAIGHT,      FLIPPED,      TRAPPED,'   //   
+     &           '     ENVELOPE,    DIFFRACTOGRAM'
+
+       CALL LUNDOCPUTCOM(LUNDOCNO,COMMENT(1:126),IRTFLG)
 
 C      LOOP THROUGH FOURIER RADII
        DO IRAD=1,NUM_BINS       
 
         ! GET ORIGINAL VALUES
-        RAD_PX    = DLIST(4,IRAD)
-        CTF_VALUE = DLIST(6,IRAD)    ! RAW VALUE
+        RAD_PX       = DLIST(1,IRAD)
+        STRAIGHT_CTF = DLIST(3,IRAD)        ! STRAIGHT = RAW CTF VALUE
 
-        ! STRAIGHT SIGN
-        STRAIGHT_CTF = -CTF_VALUE    ! FOR UNTRAPPED CTF
+        ! STRAIGHT_CTF_NEG HAS NEGATIVE SIGN FOR UNDERFOCUS CONTRAST REVERSAL?
+        STRAIGHT_CTF_NEG = -STRAIGHT_CTF     
 
-        ! FLIP SIGN
-        TRAPPED_CTF  = -CTF_VALUE    ! FOR TRAPPED CTF
+        IF ( IRAD < FIRST_MIN ) THEN
+           TRAPPED_CTF = 1
+        ELSE
+           TRAPPED_CTF = STRAIGHT_CTF_NEG  ! FOR TRAPPED CTF  
+        ENDIF
 
-        ! TRAP FOR LOW RESOLUTION FLIP SIGN
-        IF ( IRAD < FIRST_MIN ) TRAPPED_CTF = 1
+C       FOR PHASE FLIPPING, GIVES BINARY CTF
+        IF (STRAIGHT_CTF_NEG >= 0.0) THEN
+            FLIPPED_CTF =  1.0
+        ELSE
+            FLIPPED_CTF = -1.0
+        ENDIF
 
-        IF ( STRAIGHT_CTF == 0  ) FLIPPED_CTF  = 0
-        IF ( STRAIGHT_CTF .NE. 0 ) 
-     &       FLIPPED_CTF = ABS( STRAIGHT_CTF ) / STRAIGHT_CTF 
+!C      FOR PHASE FLIPPING, GIVES TRINARY CTF
+!       IF ( STRAIGHT_CTF_NEG == 0 ) THEN
+!          FLIPPED_CTF_TRI = 0
+!       ELSE 
+!          FLIPPED_CTF_TRI = ABS( STRAIGHT_CTF_NEG ) / STRAIGHT_CTF_NEG 
+!       ENDIF
 
-        DLIST(1,IRAD) = FLIPPED_CTF 
-        DLIST(2,IRAD) = STRAIGHT_CTF 
-        DLIST(3,IRAD) = TRAPPED_CTF 
+       !DLIST(1,IRAD) = RAD(1/PIX)          ! ALREADY SET
+       !DLIST(2,IRAD) = RAD(1/A)            ! ALREADY SET
+       !DLIST(8,IRAD) = STRAIGHT_CTF        ! ALREADY SET
+        DLIST(4,IRAD) = STRAIGHT_CTF_NEG 
+
+        DLIST(5,IRAD) = FLIPPED_CTF 
+        DLIST(6,IRAD) = TRAPPED_CTF 
+
+       !DLIST(7,IRAD) = ENVELOPE            ! ALREADY SET
+       !DLIST(8,IRAD) = DIFFRACTOGRAM       ! ALREADY SET 
+       !DLIST(9,IRAD) = FLIPPED_CTF_TRI     ! ABANDONED 
   
 C       WRITE TO CTF DOC FILE
-        CALL LUNDOCWRTDAT(LUNDOCNO,IRAD,DLIST(1,IRAD),6,IRTFLG)
+        CALL LUNDOCWRTDAT(LUNDOCNO,IRAD,DLIST(1,IRAD),8,IRTFLG)
+
       ENDDO
 
       CALL REG_SET_NSEL(1,2,FIRSTMIN_RAD,FIRSTZERO_RAD,
@@ -350,4 +393,3 @@ C     CLOSE DOCUMENT FILE
 
       END
 
-      

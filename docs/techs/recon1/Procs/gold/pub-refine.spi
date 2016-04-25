@@ -1,18 +1,19 @@
  ; <html><head><title>Controls and synchronizes refinement</title></head><body><pre>
  ;
- ; SOURCE: spider/docs/techs/recon1/Procs/pub-refine.spi
+ ; SOURCE: spider/docs/techs/recon1/Procs/gold/pub-refine.spi
  ;
- ;         New                                ArDean Leith  Nov 2000
- ;         [rn] for endmerge                  ArDean Leith  May 2005
- ;         [] from publish                    ArDean Leith  Feb 2006
- ;         Ampenhance                         ArDean Leith  May 2006
- ;         More stacks                        ArDean Leith  Dec 2006
- ;         Existing iter_refangs bug          ArDean Leith  Aug 2010
- ;         COG centering                      ArDean Leith  Sep 2010
- ;         Dala files removed                 ArDean Leith  Jan 2012
- ;         pixsiz, resol headers,...          ArDean Leith  Aug 2012
- ;         For CTF corrected images           ArDean Leith  Oct 2013
- ;         For gold standard reconstruction   ArDean Leith  May 2014
+ ;         New                                  ArDean Leith  Nov 2000
+ ;         [rn] for endmerge                    ArDean Leith  May 2005
+ ;         [] from publish                      ArDean Leith  Feb 2006
+ ;         Ampenhance                           ArDean Leith  May 2006
+ ;         More stacks                          ArDean Leith  Dec 2006
+ ;         Existing iter_refangs bug            ArDean Leith  Aug 2010
+ ;         COG centering                        ArDean Leith  Sep 2010
+ ;         Dala files removed                   ArDean Leith  Jan 2012
+ ;         pixsiz, resol headers,...            ArDean Leith  Aug 2012
+ ;         For CTF corrected images             ArDean Leith  Oct 2013
+ ;         For gold standard reconstruction     ArDean Leith  May 2014
+ ;         Reference projections parallelized   ArDean Leith  Oct 2015
  ;
  ; PURPOSE: Runs on master node to control PubSub refinement.  Master procedure for
  ;          multiple iteration refinement on parallel cluster using: PubSub to control
@@ -21,11 +22,9 @@
  ; I/O Registers & files are set in: <a href="./refine-settings.spi">refine-settings.spi</a>
  ;
  ; INPUT REGISTERS:
- ;   [maxspfreq]              Maximum spatial freq (1/A) (used in prepare)
  ;   [r2]                     Radius of object 
  ;   [alignsh]                Translation shift allowed is +-[alignsh]
  ;   [iter-end]               Ending iteration
- ;   [lambda]                 Lambda (A) (used in prepare)
  ;
  ; 
  ; INPUT FILES: ('***' denotes group here)
@@ -43,10 +42,10 @@
  ;    publish                  <a href="./publish.perl">           publish.perl</a>
  ;    ... pub-refine-start     <a href="./pub-refine-start.spi">   pub-refine-start</a>          
  ;    ....... refine-settings  <a href="./refine-settings.spi">    refine-settings.spi</a>            
+ ;    ....... refine-prjloop   <a href="./refine-prjloop.spi">     refine-prjloop.spi</a>            
  ;    ....... refine-loop      <a href="./refine-loop.spi">        refine-loop.spi</a>            
  ;    ....... refine-smangloop <a href="./refine-smangloop.spi">   refine-smangloop.spi</a>            
- ;    ...........refine-bp     <a href="./refine-bp.spi">          refine-bp</a>
- ;    pub-refine-wait          <a href="./pub-refine-wait.spi">    pub-refine-wait.spi</a>
+ ;    ....... refine-bp        <a href="./refine-bp.spi">          refine-bp.spi</a>            
  ;
  ;    refine-merge             <a href="./refine-merge.spi">       refine-merge.spi</a>
  ;    ... enhance (optional)   <a href="./enhance.spi">            enhance.spi</a>
@@ -62,18 +61,17 @@
    2 
 
  ; Input initial parameters & file names but not angular steps
- @refine-settings([pixsiz],[r2],[alignsh],[prj-radius],[iter1],[iter-end],[lambda],[smallang-yn],[winsiz],[incore-yn],[prepare-yn],[bp-type])
+ @refine-settings([pixsiz],[r2],[alignsh],[prj-radius],[iter1],[iter-end],[sphdecon],[smallang-yn],[winsiz],[incore-yn],[prepare-yn],[bp-type])
 
  IF ( [prepare-yn] > 0 ) THEN 
-    ; Prepare input files (only needs to be done once)  
-    @refine-prepare([pixsiz],[lambda],[iter1]) 
-  
-    DE
-      [iter_resol]            ; Resolution doc file              (removed)
+   ; Prepare input files (only needs to be done once)  
+   @refine-prepare([pixsiz],[iter1]) 
  ENDIF
 
  SYS
-   echo -n " Refining the reconstruction   "  ;  date '+ TIME: %x  %X' ; echo 
+   echo -e "  Alignment shift:   {%I0%[alignsh]}   Alignment radius: {%I0%[r2]}"
+ SYS
+   echo    "  Projection radius: {%I0%[prj-radius]}" ; echo
 
  SD /     ITERATION     MASKED-RES    RESOLUTION
    [iter_resol]               ; Resolution doc file              (output)
@@ -85,71 +83,39 @@
 
  DO [iter]=[iter1],[iter-end] ; Loop over all iterations ----------------------------------
 
-   ; Set angles used for making reference projections. Creates: [iter_refangs] doc file for angles
-   @refine-refangles([iter],[smallang-yn],[ang-step-sm],[theta-sm],[ampenhance],[ang-step],[ang-limit],[num-ang])      
+   ; List desired angles for reference projections in a doc file.
 
-   DO [s] = 1,2               ; Loop over resolution subsets ------------------
+   @refine-refangles([iter],[smallang-yn],[ampenhance],[ang-step],[ang-limit],[num-angs])      
 
-     SYS
-       echo  " Iteration: {%I0%[iter]}  Projecting: [vol_s]   From: {%I0%[num-ang]} angles" 
+   ; Create stacks holding reference projections 'PJ 3F' from both subset reference volumes 
+   ; in parallel. Waits for all subscribing nodes to finish their projections. 
 
-     ; Create stacks holding angular reference projections from both current reference volumes.
-     PJ 3F                    ; Projection operation
-       [vol_s]                ; Vol from previous iteration      (input) 
-       [prj-radius]           ; Radius of object
-       1-[num-ang]            ; Number of ref. angles used    
-       [iter_refangs]         ; Ref. angles doc file             (input)
-       [ref_projs_s]@*****    ; Template for ref. projections    (output) 
-   ENDDO
+   @pub-prjrefs([iter],[num-grps],[prj-radius])
 
-   ; Generate 4 digit random number for semi-unique SYNC file numbering
-   [rn] = int(ran(0.0)*9999)
+   ; Process experimental images in parallel by groups of images using Pubsub.
+   ; Find alignment ('AP SHC' or 'AP REF') parameters for experimental images to align with optimal 
+   ; projection image. This is done for two subsets of images, 
+   ; Then align the images ('RT SF'), and backproject ('BP 32F') to create two subset volumes
 
-   ; Process all groups in parallel
+   [task]   = [smallang-yn]     ; pub-refine-start starts: refine-loop or refine-smangloop
+   [script] = 'publish ./spider $PRJEXT/$DATEXT @pub-refine-start'
+   @pub-submit([iter],[num-grps],[task])
+     [script]                 ; Script that runs projection parallel job
 
-   [task] = [smallang-yn]     ; pub-refine-start starts: refine-loop or refine-smangloop
+   ; Consolidate all parallel group volumes for both subsets ('AS S') into two subset output volumes, 
+   ; find resolution ('FSC') using the two subsets and
+   ; filter the combined volumes to limit resolution ('FD C') 
 
-   DO [i]=1,[num-grps]        ; Loop over all groups ---------------------------
-      UD IC [i],[grp]         ; Get group number
-        [sel_group]           ; Group selection file     (input)
-
-      ; Use pub-refine-start to create parallel main loop for each group
-      ; Finds alignment (AP SHC), aligns (RT SF), backprojects (BP 32F)
-      SYS
-        publish './spider $PRJEXT/$DATEXT @pub-refine-start {%I3%[grp]} task={*[task]} iter={**[iter]} grp={***[grp]} rn={****[rn]}' 
-
-   ENDDO                      ; End of: Loop over all groups -------------------
-
-   UD ICE                     ; End doc file usage
-     [sel_group]              ; Group selection file     (closed)
-
-   ;  Wait for all subscribing nodes to finish main loop ----------------------------
- 
-   @pub-refine-wait([num-grps],[iter],[rn])
-     [finished_file]          ; File created when finished (one/group)
-
-   ; Consolidate group volumes (AS S) into output volumes, find resolution (FSC), and
-   ; filter to limit resolution (FD C) 
-
-   @refine-merge([pixsiz],[iter],[ampenhance],[r2])
+   @refine-merge([pixsiz],[iter],[ampenhance],[r2],[sphdecon])
 
    SYS
      echo " Iteration: {%I0%[iter]} Finished" ; echo
 
    MY FL                      ; Flush results
- ENDDO                        ; End of loop over all iterations ---------------------------------
+ ENDDO                        ; End of loop over all iterations ----------------------------
 
- ; Filter final output volume to limit resolution
-
- [iter] = [iter] + 1
- FD C
-   [vol]_all                  ; Reconstructed volume    (input)
-   [vol]_final                ; Filtered volume         (output)
-   [m_fsc]                    ; Masked FSC doc file     (input)
-   5                          ; Register column for filtration
- 
  SYS                          ; Echo current time 
-   echo -n " Refinement finished after iteration: {**[iter]}   " ; date '+ TIME: %x  %X' ; echo " " 
+   echo -n "  Refinement finished after iteration: {**[iter]}   " ; date '+ TIME: %x  %X' ; echo  
 
  EN
  ; </pre></body></html>

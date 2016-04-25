@@ -19,12 +19,13 @@ C            PROMPT(LENP-2:LENP) .EQ. '~9~'      12/07/10 ARDEAN LEITH
 C            ACCEPT EXTENSION BUG                  JUN 11 ARDEAN LEITH 
 C            ! COMMENT DELIMITER                   DEC 11 ARDEAN LEITH
 C            NECHO                                 SEP 12 ARDEAN LEITH
+C            FILENAME ECHO FORMATTING 2 BLANKS     DEC 15 ARDEAN LEITH
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2012  Health Research Inc.,                         *
+C=* Copyright 1985-2015  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -83,7 +84,7 @@ C
 C23456789 123456789 123456789 123456789 123456789 123456789 123456789 12
 C--*********************************************************************
 
-	SUBROUTINE FILERD(FILN,NLET,EXTENT,PROMPT,IRTFLG)
+        SUBROUTINE FILERD(FILN,NLET,EXTENT,PROMPT,IRTFLG)
 
         INCLUDE 'CMBLOCK.INC'
         INCLUDE 'CMLIMIT.INC'
@@ -188,16 +189,16 @@ C          SUBSTITUTE FOR SYMBOLS & REG. FROM CALLING PROCEDURE
            IF (IRTFLG .NE. 0) RETURN
         ENDIF
 
-	IF (FILNAM(1:NLET) == '$') THEN
+        IF (FILNAM(1:NLET) == '$') THEN
 C          DO NOT ALTER FILN  IF INPUT IS "$"
-	   CALL ECHONAME(FILNAM,NLET,COMMENT,NLETC,MYPID)
+           CALL ECHONAME(FILNAM,NLET,COMMENT,NLETC,MYPID)
            IRTFLG = 0
            RETURN 
    
         ELSEIF (FILNAM(1:1) == '^' .OR. FILNAM(1:1) == '*') THEN
 C          RETURN IF  INPUT IS "^" OR "*"
            FILN(1:) = FILNAM(1:1)
-	   CALL ECHONAME(FILN,NLET,COMMENT,NLETC,MYPID)
+           CALL ECHONAME(FILN,NLET,COMMENT,NLETC,MYPID)
            IRTFLG = -1
            RETURN
 
@@ -292,7 +293,7 @@ C       SET NORMAL ERROR RETURN
 
 
 
-	SUBROUTINE ECHONAME(FILN,NLET,COMMENT,NLETC,MYPID)
+        SUBROUTINE ECHONAME(FILN,NLET,COMMENT,NLETC,MYPID)
 
         IMPLICIT NONE
 
@@ -305,20 +306,21 @@ C       SET NORMAL ERROR RETURN
  
         IF (NLETC > 0 .AND. MYPID <= 0) THEN
 
-          IF (.NOT. SILENT) WRITE(NOUT,93) FILN(1:NLET),COMMENT(1:NLETC)
-          IF (NLOG .NE. 0) THEN
-             WRITE(NLOG,93) FILN(1:NLET),COMMENT(1:NLETC)
-             NECHO = NECHO + 1
-         ENDIF
+           IF (.NOT. SILENT)
+     &        WRITE(NOUT,93)FILN(1:NLET),COMMENT(1:NLETC)
+           IF (NLOG .NE. 0) THEN
+              WRITE(NLOG,93) FILN(1:NLET),COMMENT(1:NLETC)
+              NECHO = NECHO + 1
+          ENDIF
 
-93        FORMAT(' ',A,' ',A)
+93        FORMAT('  ',A,' ',A)
 
-        ELSEIF (MYPID <= 0) THEN
+       ELSEIF (MYPID <= 0) THEN
           IF (.NOT. SILENT) WRITE(NOUT,93) FILN(1:NLET)
           IF (NLOG .NE. 0) THEN
-            WRITE(NLOG,93) FILN(1:NLET)
-            NECHO = NECHO + 1
-         ENDIF
-        ENDIF
+             WRITE(NLOG,93) FILN(1:NLET)
+             NECHO = NECHO + 1
+          ENDIF
+       ENDIF
 
-        END
+       END

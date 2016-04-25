@@ -1,29 +1,25 @@
 
 C++*********************************************************************
 C
-C  COPYTOJPG.F  -- NEW                            APR 13 ARDEAN LEITH                    ARDEAN LEITH
-C
+C  COPYTOJPG.F  -- NEW                             APR 13 ArDean Leith                    ARDEAN LEITH
+C                  ECHO                            APR 16 ArDean Leith
 C **********************************************************************
 C=* AUTHOR: A. LEITH                                                   *
-C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright (C) 1985-2013                                            *
-C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
-C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
-C=* Email:  spider@wadsworth.org                                       *
+C=* Copyright 1985-2016  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
-C=* This program is free software; you can redistribute it and/or      *
+C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
 C=* published by the Free Software Foundation; either version 2 of the *
 C=* License, or (at your option) any later version.                    *
 C=*                                                                    *
-C=* This program is distributed in the hope that it will be useful,    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
 C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
-C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
-C=* General Public License for more details.                           *
-C=*                                                                    *
-C=* You should have received a copy of the GNU General Public License  *
-C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=* merchantability or fitness for a particular purpose.  See the      *
+C=* GNU General Public License (www.gnu.org/licenses) for details.     *
 C=*                                                                    *
 C **********************************************************************
 C
@@ -141,6 +137,7 @@ C          GET NAME FOR JPEG FILE
 
         !write(6,*) COMLIN
 
+C       ECHO COMLIN
         CALL CSVMS(COMLIN,.TRUE.,IRTFLG)
 
 C       A DELAY HERE. (KLUDGY)
@@ -207,6 +204,7 @@ C       CONVERT SPIDER IMAGE FILE INTO JPG FILE
         WRITE(COMLIN,90) OPTIONS(1:NLETO),FILNEW(1:NLET)
 90      FORMAT( ' display ', A,' ',A, ' &' )
 
-        CALL CSVMS(COMLIN,.TRUE.,IRTFLG)
+C       DO NOT ECHO COMLIN
+        CALL CSVMS(COMLIN,.FALSE.,IRTFLG)
 
         END

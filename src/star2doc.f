@@ -7,6 +7,7 @@ C              REWRITE WITH VAR NAMES            FEB 2014 ARDEAN LEITH
 C              NREGSTAR = MIN(NVARSTARNAME BUG   MAY 2014 ARDEAN LEITH
 C              MAXLENVAR = 40 --> 120            OCT 2015 ARDEAN LEITH
 C              NVARSTAR BUG                      OCT 2015 ARDEAN LEITH
+C              INTEGER OVERFOW HACK              NOV 2015 ARDEAN LEITH
 C                                                                 
 C **********************************************************************
 C=*                                                                    *
@@ -69,12 +70,15 @@ C--*********************************************************************
       INTEGER                  :: NCOLSTARNAME(NVARSMAX)
       CHARACTER(LEN=MAXLENVAR) :: VARTMP      (NVARSMAX)
       REAL                     :: DLIST       (NVARSMAX)
+    ! DOUBLE PRECISION         :: DLIST       (NVARSMAX)
       CHARACTER(LEN=MAXLENVAR) :: CTOKEN     
       CHARACTER(LEN=240)       :: RECLIN 
       CHARACTER(LEN=240)       :: RECNAM 
       CHARACTER(LEN=10)        :: VALID = '0123456789'
+      CHARACTER(LEN=100)       :: FORMOUT
 
       INTEGER                  :: ILABEL(NVARSMAX) 
+      integer                  :: idlist,NBAD
 
       INTEGER                  :: IENDVAR,IGO,IEND,NCHAR2        
       INTEGER                  :: IFIRST,NCHAR,NGOT,IPUT,IWHICH       
@@ -271,6 +275,8 @@ C     OPEN SPIDER OUTPUT DOC FILE
       NCHAR = lnblnkn(RECLIN)
       CALL LUNDOCPUTCOM(LUNDOCT,RECLIN(:NCHAR),IRTFLG)
 
+      NBAD    = 0
+
 C     LOOP OVER ALL DATA LINES IN STAR FILE
       DO
  
@@ -308,9 +314,11 @@ C        INTERPRET TOKENS AS FLOATS, PLACE IN DLIST
 C        EXTRACT ALL INTEGERS FIELDS FROM FILENAME TOKENS
 
          ! NOTE: NVARSTARNAME MAY BE ZERO
-         IT = 1
+         IT      = 1
+         FORMOUT = '(I7,1X,I2,1X,50(G14.7,1X))'
 
-         ! write(6,*) ' nvarstarname:',nvarstarname
+         !write(6,*) ' nvarstarname:',nvarstarname
+
          DO ITOK = 1,NVARSTARNAME
             IGO    = 0
             RECNAM = ADJUSTL(TRIM(VARTMP(NCOLSTARNAME(ITOK))))
@@ -318,7 +326,7 @@ C        EXTRACT ALL INTEGERS FIELDS FROM FILENAME TOKENS
             !write(6,*) ' recnam:',recnam(1:nchar)
 
 C           PARSE STAR FILE TOKEN INTO SUB-TOKENS
-            CALL GET_TOKENS(RECNAM,NCHAR,MAXLENVAR,NVARSMAX,
+            CALL GET_TOKENS_INTS(RECNAM,NCHAR,MAXLENVAR,NVARSMAX,
      &                     .TRUE.,VALID, VARTMP, NREGSTAR, IRTFLG)
             IF (IRTFLG .NE. 0) EXIT
             IF (NREGSTAR < 1)  EXIT        ! SKIP 
@@ -327,7 +335,7 @@ C           PARSE STAR FILE TOKEN INTO SUB-TOKENS
 
 C           INTERPRET TOKENS AS FLOATS, PLACE IN DLIST
             NREGSTAR = MIN(NREGSTAR,(NVARSPINAME - IT +1))
-            !write(6,*)' nregstar,nvarstarname:',nregstar,nvarstarname
+            !write(6,*)' nregstar:',nregstar
 
             IPUT = 0
             DO I = IT,IT+NREGSTAR-1
@@ -335,10 +343,12 @@ C           INTERPRET TOKENS AS FLOATS, PLACE IN DLIST
                ILOC   = NCOLSPINAME(I)
                CTOKEN = ADJUSTL(VARTMP(IWHICH))
                NCHAR  = lnblnkn(CTOKEN)
-               !write(6,*)' Token:',ctoken(1:nchar),i,iloc
 
-               READ(CTOKEN(1:NCHAR),'(F10.0)') DLIST(ILOC) 
-               !write(6,*)' Token:',ctoken(1:NCHAR),' dlist:',iloc,dlist(iloc)
+               READ(CTOKEN(1:NCHAR),'(I)') IDLIST
+               DLIST(ILOC) = IDLIST
+ 
+               !write(6,*)' Token:',ctoken(1:nchar),i,iloc,idlist
+
                IPUT = IPUT + 1
             ENDDO
             IT = IT + IPUT
@@ -347,11 +357,13 @@ C           INTERPRET TOKENS AS FLOATS, PLACE IN DLIST
 
 C        WRITE OUTPUT LINE IN DOC FILE
          IKEY = IKEY + 1
-         CALL LUNDOCWRTDAT(LUNDOCT,IKEY,DLIST,NLIST,IRTFLG)
+         !CALL LUNDOCWRTDAT(LUNDOCT,IKEY,DLIST,NLIST,IRTFLG)
+         CALL LUNDOCWRTDATF(LUNDOCT,IKEY,DLIST,NLIST,FORMOUT,IRTFLG)
+         !write(6,*)'  dlsit:',dlist(1:7)
 
       ENDDO          ! END OF: DO 
 
-
+ 
 9999  CLOSE(LUNDOC)
 
 C     PUT NUMBER OF KEYS IN OPERATION LINE REGISTER

@@ -1,18 +1,19 @@
 
 C ++********************************************************************
 C
-C INITUNIX.F   ABILITY TO REGISTERS ON START         JUN 00 ARDEAN LEITH
+C INITUNIX.F   ABILITY TO SET REGISTERS ON START     JUN 00 ARDEAN LEITH
 C              SET MEM REMOVED                       JAN 01 ARDEAN LEITH
 C              SET MP REMOVED                        JUN 02 ARDEAN LEITH
 C              SPIREOUT                              JUN 05 ARDEAN LEITH
 C              REG SET REMOVED                       JAN 06 ARDEAN LEITH
 C              MPI CHANGES                           OCT 08 ARDEAN LEITH
 C              SET_MPI                               DEC 10 ARDEAN LEITH
+C              IUSEPUBSUB                            JAN 16 ARDEAN LEITH
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Copyright 1985-2016  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -30,45 +31,50 @@ C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
 C **********************************************************************
 C
-C  INITUNIX(NUMARG,FCHART,NALPHT,CXNUM,COMMANDLINE)
+C  INITUNIX(NUMARG,FCHART,NALPHT,CXNUM,COMMANDLINE,USEPUBSUB)
 C
 C  PURPOSE:  RECOVERS & PROCESSES COMMAND LINE ARGUMENTS                                    *
 C            SETS USE_SPIRE IN CMBLOCK.INC
 C            
 C  PARAMETERS:  NUMARG      NUMBER OF COMMAND LINE ARGUEMENTS (RETURNED)
-C               FCHART      OPERATION ON COMMAND LINE         (RETURNED)
+C               FCHART      SPIDER OPERATION ON COMMAND LINE  (RETURNED)
 C               NALPHT      NO. OF CHARS IN OPERATION         (RETURNED)
 C               CXNUM       RESULTS FILE NUMBER               (RETURNED)
-C               COMMANDLINE SPIDER NAME BEING RUN             (RETURNED)
+C               COMMANDLINE SPIDER EXECUTABLE BEING RUN       (RETURNED)
+C               USEPUBSUB   PUBSUB BEING RUN                  (RETURNED)
 C                                                     
 C23456789012345678901234567890123456789012345678901234567890123456789012
 C***********************************************************************
 
-        SUBROUTINE INITUNIX(NUMARG,FCHART,NALPHT,CXNUM,COMMANDLINE)
+        SUBROUTINE INITUNIX(NUMARG,FCHART,NALPHT,CXNUM,
+     &                      COMMANDLINE,USEPUBSUB)
 
-#ifdef SP_NT
-	use dflib
-#endif
+        IMPLICIT NONE
         INCLUDE 'CMBLOCK.INC'
 
-        CHARACTER(LEN=*)   :: FCHART,CXNUM,COMMANDLINE
+        INTEGER             :: NUMARG,NALPHT
+        CHARACTER(LEN=*)    :: FCHART,CXNUM,COMMANDLINE
+        LOGICAL             :: USEPUBSUB
 
-        INTEGER FUNCTION  iargc
+        CHARACTER(LEN=1000) :: WHOLECOMMAND
+        INTEGER             :: iargc,lnblnk
+        INTEGER             :: ICOMM,MYPID,MPIERR
+        INTEGER             :: IPUB,LENC,ISTATUS
 
         CALL SET_MPI(ICOMM,MYPID,MPIERR)  ! SETS ICOMM AND MYPID
 
         NUMARG = 0
 
 C       GET COMMAND LINE USING iargc
-        IF (MYPID .LE. 0) NUMARG = iargc() 
-C        write(6,*) mypid,'  numarg:',numarg
+        IF (MYPID <= 0) NUMARG = iargc() 
+C       write(6,*) mypid,'  numarg:',numarg
 
-C       GET COMMAND BEING RUN FOR RETURNING TO CALLER --------------
+C       GET EXECUTABLE BEING RUN FOR RETURNING TO CALLER --------------
         CALL GETARG(0,COMMANDLINE)
 
 C       CHECK FOR DATA EXTENSION ON COMMAND LINE --------------------          
         FCHART = ''
-        IF (NUMARG .GE. 1) THEN
+        IF (NUMARG >= 1) THEN
 C          HAS PROJECT/DATA EXTENSION ON COMMAND LINE (ARG. 1)
            CALL GETARG(1,FCHART)
            PRJEXC(1:3) = FCHART(1:3)
@@ -78,19 +84,19 @@ C          HAS PROJECT/DATA EXTENSION ON COMMAND LINE (ARG. 1)
            ELSE
               DATEXC(1:3) = FCHART(5:7)
            ENDIF
-           IF (DATEXC(1:1) .EQ. ' ' .OR. DATEXC(2:2) .EQ. ' ' .OR.
-     &         DATEXC(3:3) .EQ. ' ') 
+           IF (DATEXC(1:1) == ' ' .OR. DATEXC(2:2) == ' ' .OR.
+     &         DATEXC(3:3) == ' ') 
      &        STOP '*** INVALID DATA EXTENSION ON COMMAND LINE!'
         ENDIF
 
 C       CHECK FOR FIRST OPERATION (USUALLY BATCH) ON COMMAND LINE
-        IF (NUMARG .GE. 2) THEN
+        IF (NUMARG >= 2) THEN
 C          HAS FIRST OPERATION GIVEN ON COMMAND LINE (ARG. 2)
            CALL GETARG(2,FCHART)
            NALPHT = lnblnk(FCHART)
 
 C          CHECK FOR SPIRE OPERATION  ON COMMAND LINE 
-           USE_SPIRE = (FCHART(1:5) .EQ. 'SPIRE')
+           USE_SPIRE = (FCHART(1:5) == 'SPIRE')
            IF (USE_SPIRE) THEN
               FCHART = FCHART(6:)
               NALPHT = MAX(0,NALPHT-5)
@@ -99,17 +105,23 @@ C          CHECK FOR SPIRE OPERATION  ON COMMAND LINE
 
 C       CHECK FOR RESULTS FILE VERSIONING ON COMMAND LINE (ARG. 3) ---
         CXNUM = CHAR(0)
-        IF (NUMARG .GE. 3) THEN
+        IF (NUMARG >= 3) THEN
 C          RESULTS FILE VERSIONING GIVEN ON COMMAND LINE (ARG. 3)
            CALL GETARG(3,CXNUM)
-           IF (CXNUM(1:1) .EQ. '-') THEN
+           IF (CXNUM(1:1) == '-') THEN
               NUMARG = 2
               CXNUM  = CHAR(0)
            ENDIF
 	ENDIF
 
 C       REGISTER SETTING FROM COMMAND LINE (ARG. 4...) DONE IN SPIDER
-        IF (NALPHT .LE. 0) NUMARG = MIN(NUMARG,1)
+        IF (NALPHT <= 0) NUMARG = MIN(NUMARG,1)
+
+C       CHECK FOR PUBSUB USAGE (THIS ALTERS COSMETICS ONLY)
+        CALL GET_COMMAND(WHOLECOMMAND,LENC,ISTATUS)
+        IPUB = INDEX(WHOLECOMMAND(:LENC),'PUBSUB')
+        IF (IPUB <=0) IPUB = INDEX(WHOLECOMMAND(:LENC),'pub')
+        USEPUBSUB = (IPUB > 0)
 
 #ifdef USE_MPI
 

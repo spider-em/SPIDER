@@ -6,7 +6,8 @@ C          GAUSSIAN PARAMETER                     9/5/94  JF
 C          USED OPFILE                            NOV  00 ARDEAN LEITH
 C          RECTANGULAR OUTPUTS                    OCT  01 BILL BAXTER
 C          OPFILEC                                FEB  03 ARDEAN LEITH
-C          WANT_CT                                MAR  04 ARDEAN LEITH
+C          WANT_FLIP                              MAR  14 ARDEAN LEITH
+C          REFACTORED                             NOV  15 ARDEAN LEITH
 C
 C **********************************************************************
 C=*                                                                    *
@@ -30,72 +31,82 @@ C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
 C **********************************************************************
 C
-C TRAFC(LUN,WANT_CT)
+C TRAFC(LUN,WANT_FLIP)
+C
+C OPERATIONS:   'TF C'  = STRAIGHT
+C               'TF CT' = PHASE FLIPPING
 C
 C23456789012345678901234567890123456789012345678901234567890123456789012
 C--*********************************************************************
 
-         SUBROUTINE TRAFC(LUN,WANT_CT)
+         SUBROUTINE TRAFC(LUN,WANT_FLIP)
 
+         IMPLICIT NONE
          INCLUDE 'CMBLOCK.INC'
          INCLUDE 'CMLIMIT.INC' 
  
+         INTEGER               :: LUN   
+         LOGICAL               :: WANT_FLIP
+
+         COMPLEX               :: B(NBUFSIZ)  ! from cmlimit.inc
+
          CHARACTER(LEN=MAXNAM) :: FILNAM
-
-         REAL                  :: LAMBDA,KM
-         COMPLEX               :: B
-         COMMON                   B(1)
          CHARACTER             :: NULL = CHAR(0)
-         LOGICAL               :: WANT_CT
 
-         PARAMETER (QUADPI = 3.1415926535897932384626)
+         REAL                  :: CS,DZ,LAMBDA,FMAXSPFREQ, Q,DS
+         REAL                  :: DZA,AZZ,ACR,GEH,FDUM
+         REAL                  :: SIGN,SCX,SCY,AK,AZ,AZR,DZZ,TF
 
-         CALL FILERD(FILNAM,NLET,NULL,'OUTPUT',IRTFLG)
+         INTEGER               :: I,KX
+         INTEGER               :: NLET,LSM,IXC,IYC,NZ,MAXIM,IE,K,KY
+   
+         INTEGER               :: NDIM,NX,NY,IRTFLG   
+         LOGICAL               :: WANT_AST,WANT_GEH,WANT_SIGN
+         LOGICAL               :: WANT_SPFREQ,WANT_PIXSIZ
+
+         DOUBLE PRECISION, PARAMETER :: QUADPI=3.1415926535897932384626
+
+         IF (WANT_FLIP) THEN
+            CALL FILERD(FILNAM,NLET,NULL,'PHASE FLIPPING CTF OUTPUT',
+     &                  IRTFLG)
+         ELSE
+            CALL FILERD(FILNAM,NLET,NULL,'CTF OUTPUT',IRTFLG)
+         ENDIF
          IF (IRTFLG .NE. 0) RETURN
 
-         CALL RDPRM(CS,NOT_USED,'SPHERICAL ABERRATION CS [MM]')
-         IF (CS < 0.0001)    CS = 0.0001
+C        GET COMMON TF INPUTS
+         NDIM        =  2
+         WANT_AST    = .TRUE.
+         WANT_GEH    = .NOT. WANT_FLIP   
+         WANT_SIGN   = .TRUE.
+         WANT_SPFREQ = .TRUE.     ! ASK FOR SPFREQ
+         WANT_PIXSIZ = .FALSE.    ! DO NOT ASK FOR PIXEL SIZE
 
-         CALL RDPRM2(DZ,LAMBDA,NOT_USED,
-     &        'DEFOCUS [A], WAVELENGTH LAMBDA [A]')
- 
-         CALL RDPRMI(NX,NDUM,NOT_USED,'DIMENSIONS OF OUTPUT ARRAY')
+         CALL GET_TF_INPUT(CS,DZ,LAMBDA,
+     &                NDIM, NX, NY,
+     &                WANT_SPFREQ,FMAXSPFREQ,
+     &                WANT_PIXSIZ,FDUM,
+     &                Q, DS,
+     &                WANT_AST, DZA, AZZ,
+     &                WANT_GEH, ACR, GEH,
+     &                WANT_SIGN, SIGN,
+     &                IRTFLG) 
+         IF (IRTFLG .NE. 0) RETURN
 
-         CALL RDPRM(KM,NOT_USED,'MAXIMUM SPATIAL FREQUENCY [1/A]')
-
-         CALL RDPRM2(Q,DS,NOT_USED,
-     &        'SOURCE SIZE [1/A], DEFOCUS SPREAD [A]')
-
-         CALL RDPRM2(DZA,AZZ,NOT_USED,'ASTIGMATISM [A], AZIMUTH [DEG]')
-
-         IF (WANT_CT) THEN
-            CALL RDPRM(WGH,NOT_USED,'AMPLITUDE CONTRAST RATIO [0-1]')
-            ENV = 0.0
-         ELSE
-            CALL RDPRM2(WGH,ENV,NOT_USED,
-     &      'AMPL CONTRAST RATIO [0-1], GAUSSIAN ENV. HALFW. [1/A]')
-            IF (ENV .NE. 0.0) THEN
-               ENV = 1. / ENV**2
-            ENDIF
-         ENDIF
-
-         CALL  RDPRM(SIGN,NOT_USED,'SIGN (+1 or -1.)')
-
-         IF (MOD(NX,2) .EQ. 0)  THEN
+         IF (MOD(NX,2) == 0)  THEN
             IFORM = -12
-            LSM   = NX+2
+            LSM   = NX + 2
          ELSE
             IFORM = -11
-            LSM   = NX+1
+            LSM   = NX + 1
          ENDIF
+         IXC  = NX / 2 + 1
 
-         IXC    = NX/2+1
-         IF (NDUM.EQ.0)  THEN
+         IF (NY == 0)  THEN
             NY   = NX
-            IYC    = IXC
+            IYC  = IXC
          ELSE
-            NY   = NDUM
-            IYC    = NY/2+1
+            IYC  = NY / 2 + 1
          ENDIF
 
          NZ     = 1
@@ -105,13 +116,30 @@ C--*********************************************************************
      &                MAXIM,' ',.TRUE.,IRTFLG)
          IF (IRTFLG .NE. 0) RETURN
 
-C        SC  = KM/FLOAT(NX/2)
+C        IE  = 0 SELECTS STRAIGHT TRANSFER FUNCTION IN SUBROUTINE TFD
+         IE  = 0
+
+         IF (WANT_FLIP) THEN
+C           WANT PHASE FLIPPING TRANSFER
+ 
+C           IGNORE THE GAUSSIAN ENVELOPE FUNCTION
+C           this is almost = 1/10000**2 setting? al
+            GEH = 0.0
+
+         ELSE
+C           WANT FULL CTF TRANSFER FUNCTION
+
+            IF (GEH .NE. 0.0) THEN
+               GEH = 1. / GEH**2
+            ENDIF
+         ENDIF
+
+
+C        sc  = fmaxspfreq / float(nx / 2) ! for ndim=1
          SCX = 2.0 / NX
          SCY = 2.0 / NY
 
-         IE  = 0
-C        IE  = 0 SELECTS TRANSFER FUNCTION OPTION IN SUBROUTINE TFD
-         WGH = ATAN(WGH / (1.0 - WGH))
+         ACR = ATAN(ACR / (1.0 - ACR))
          CS  = CS * 1.E7
 
          DO  K=1,NY
@@ -123,11 +151,12 @@ C        IE  = 0 SELECTS TRANSFER FUNCTION OPTION IN SUBROUTINE TFD
 
 C              Changed AK to handle rectangular images
 C              AK = SQRT(FLOAT(KY)**2 + FLOAT(KX)**2)*SC
-               AK = KM * SQRT((KX*SCX)**2 + (KY*SCY)**2)
+
+               AK = FMAXSPFREQ * SQRT((KX*SCX)**2 + (KY*SCY)**2)
 
 C              AZ = QUADPI / 2.
                IF (KX .NE. 0) THEN
-                  AZ = ATAN2(FLOAT(KY),FLOAT(KX)) + QUADPI/2.
+                  AZ = ATAN2(FLOAT(KY),FLOAT(KX)) + QUADPI / 2.
                ELSE
                   AZ = QUADPI / 2.
                ENDIF
@@ -135,16 +164,20 @@ C              AZ = QUADPI / 2.
                AZR = AZZ * (QUADPI/180.)
                DZZ = DZ + DZA / 2 * SIN(2 *(AZ - AZR))
 
-               CALL TFD(TF,CS,DZZ,LAMBDA,Q,DS,IE,AK,WGH,ENV)
+               CALL TFD(TF,CS,DZZ,LAMBDA,Q,DS,IE,AK,ACR,GEH)
 
-               IF (WANT_CT) THEN
+               IF (WANT_FLIP) THEN
+C                 FOR PHASE FLIPPING
                   IF (TF >= 0.0) THEN
-                     B(KX+1) = CMPLX( 1.0, 0.0) * SIGN
+                     B(KX+1) = CMPLX( 1.0,0.0) * SIGN
                   ELSE
-                     B(KX+1) = CMPLX(-1.0, 0.0) * SIGN
+                     B(KX+1) = CMPLX(-1.0,0.0) * SIGN
                   ENDIF
+
                ELSE
+C                 FOR FULL CTF CORRECTION
                   B(KX+1) = CMPLX(TF*SIGN, 0.0)
+
                ENDIF
             ENDDO
 

@@ -8,13 +8,13 @@
  ;         []                                                  ArDean Leith  Dec 2005
  ;         More stacks & 'RT SQ' selection                     ArDean Leith  Dec 2006
  ;         'AP SH' use                                         ArDean Leith  Feb 2007
- ;         Group sel. filename                                 ArDean Leith  Dec 2009
  ;         COG centering removed, 'AP SH' for 2 iters, Skip=2  ArDean Leith  Sep 2010
  ;         'TF COR'                                            ArDean Leith  Nov 2010
  ;         Dala removal                                        ArDean Leith  Jan 2012
  ;         'AP SHC', skip=1, FSC mask                          ArDean Leith  Sep 2012
- ;         Denoise exp images, mask before bp                  ArDean Leith  Dec 2012
+ ;         Denoise exp images, Mask before bp                  ArDean Leith  Dec 2012
  ;         For CTF corrected images                            ArDean Leith  Oct 2013
+ ;         rinc                                                ArDean Leith  Dec 2015
  ; 
  ; PURPOSE: Main refinement loop. Runs for each group on each iteration
  ;          Finds parameters to align images to projections from reference volume (AP SHC),
@@ -30,7 +30,7 @@
  ;    [ang-step]             Angular steps                     (Varies with iter)
  ;    [ang-limit]            Restrict angular search           (Varies with iter)
  ;    [r2]                   Pixel radius of object used in alignment
- ;    [alignsh]              Pixel shift allowed is +-[alignsh]
+ ;    [alignsh]              Pixel shift used in alignment is +-[alignsh]
  ;    [prj-radius]           Pixel radius of object used in projection
  ;    [iter]                 Alignment step iteration counter   
  ;    [grp]                  Current group                              
@@ -42,15 +42,15 @@
  ;
  ;  '##' denotes iteration,  '##+' denotes next iteration,  '***' denotes group
  ; INPUT FILES:
- ;    [sel_parts]            input/select_***        Group particle selection files  (one)
- ;    [group_align]          final/align##_***       Alignment parameter doc files   (one/iteration/group)    
- ;    [unaligned_images]     input/data_***          Unaligned stacked image files   (one stack/group)
- ;    [iter_refangs]         work/ang_refs_##        Ref. angles doc file for this iteration (one/group)       
- ;    [ref_projs]            refproj##_***           Ref. projections                (one/iteration/group)
+ ;    [sel_parts]            input/select_***        Group particle selection files (one/group)
+ ;    [group_align]          final/align##_***       Alignment parameter doc files  (one/iteration/group)    
+ ;    [unaligned_images]     input/data_***          Unaligned stacked image files  (one stack/group)
+ ;    [iter_refangs]         work/ang_refs_##        Reference angles doc file      (one/iteration/group)       
+ ;    [ref_projs]            refproj##_***           Reference projections          (one stack/iteration/group)
  ;
  ; OUTPUT FILES:
- ;    [next_group_align]     final/align##+_***      Alignment parameter doc file    (one/iteration/group)
- ;    [next_group_vol]       work/vol##+_***         Reconstructed group volume      (one/iteration/group)
+ ;    [next_group_align]     final/align##+_***      Alignment parameter doc file   (one/iteration/group)
+ ;    [next_group_vol]       work/vol##+_***         Reconstructed group volume     (one/iteration/group)
  ;
  ;    [next_group_vol]_s1    work/vol_##+_***_s1     (Created & deleted)
  ;    [next_group_vol]_s2    work/vol_##+_***_s2     (Created & deleted)
@@ -63,7 +63,7 @@
  ; -- END BATCH HEADER -- ...................................................
 
  SYS
-   echo -n " Starting: refine-loop  Iteration: {%I0%[iter]}  Group:{%I3%[grp]} --- " ; date '+ %x  %X'
+   echo -n "  Starting: refine-loop  Iteration: {%I0%[iter]}  Group:{%I3%[grp]} --- " ; date '+ %x  %X'
  
  [r1]             = 5.0             ; First radius for 'AP' (Can alter this)
  [ang-change-thr] = 1.5*[ang-step]  ; Convergence criterion ang. distance limit
@@ -104,13 +104,14 @@
  ; Find reference projection matching current aligned image
 
  [a] = 'Y'                          ; Align images first
+ [rinc] = 1 ; 2                     ! Use: 2 for large radii & faster
 
  IF ( [iter]  <= 3 ) THEN
  
    [a]       = 'Y'                  ; Align images first
    [grp_ali] = [group_align]        ; Alignment parameter doc file     (input)
    IF ( [iter] == 1 ) THEN
-     [a]       = 'N'
+     [a]       = 'N'                ; Do not align images first
      [grp_ali] = '*'                ; Alignment parameter doc file     (input)
    ENDIF
 
@@ -118,7 +119,7 @@
      [ref_projs]@******             ; Template for ref. projections    (input)
      1-[num-refs]                   ; Ref. projection file numbers
      [alignsh],1                    ; Shift search range, Step size
-     [r1],[r2],1                    ; First, last radial ring, & skip
+     [r1],[r2],[rinc]               ; First, last radial ring, & skip
      [iter_refangs]                 ; Ref. angles file                 (input)
      [temp_in_images]******         ; Template for unaligned images    (input)
      [sel_parts]                    ; Particle selection files         (input)
@@ -128,14 +129,14 @@
      [next_group_align]             ; Alignment parameter doc file     (output)
 
    SYS
-     echo " Aligned, iteration: {%I0%[iter]} Group: {%I3%[grp]}"
+     echo "  Aligned, iteration: {%I0%[iter]} Group: {%I3%[grp]}"
 
  ELSE
    AP REF                           ; Poorer search than 'AP SH' but 4-5x faster
      [ref_projs]@******             ; Template for ref. projections    (input)
      1-[num-refs]                   ; Ref. projection file numbers
      [alignsh]                      ; Shift search range
-     [r1],[r2],1                    ; First, last radial ring, & skip
+     [r1],[r2],[rinc]          ; First, last radial ring, & skip
      [iter_refangs]                 ; Ref. angles file                 (input)
      [ref_rings]                    ; No such file if rings fit in-core(rare output)
      [temp_in_images]******         ; Template for unaligned images    (input)
@@ -151,35 +152,27 @@
      [next_group_align]             ; Alignment parameter doc file     (input)
    UD E                             ; Close doc file access
 
-   IF ( [iter] >= 4 ) THEN
-     SYS
-       echo " Iteration: {%I0%[iter]} Group:{%I3%[grp]}  Excessive changes: {%F6.2%[percent-greater]}% "
-     SYS
-       echo " CCROT degred.: {%I0%[degred]}%   Avg. degred.:{%F6.2%[avg-degred]}  Avg. improve.:{%F8.2%[avg-impr]}"
-   ENDIF
+   SYS
+     echo "  Iteration: {%I0%[iter]} Group:{%I3%[grp]}  Excessive changes: {%F6.2%[percent-greater]}% "
+   SYS
+     echo "  CCROT degred.: {%I0%[degred]}%   Avg. degred.:{%F6.2%[avg-degred]}  Avg. improve.:{%F8.2%[avg-impr]}"
  ENDIF
 
  ; Apply new alignments to original particle images
- RT SF                          ; Rotate & shift operation
-   [unaligned_images]@******    ; Unaligned stacked image files     (input)
-   [sel_parts]                  ; Particle selection file           (input) 
-   6,0,7,8                      ; Reg. #s for angle, scale, & shift
-   [next_group_align]           ; Alignment parameter doc file      (input)
-   [temp_out_images]******      ; Current aligned images            (output)
+ RT SF                              ; Rotate & shift operation
+   [unaligned_images]@******        ; Unaligned stacked image files     (input)
+   [sel_parts]                      ; Particle selection file           (input) 
+   6,0,7,8                          ; Reg. #s for angle, scale, & shift
+   [next_group_align]               ; Alignment parameter doc file      (input)
+   [temp_out_images]******          ; Current aligned images            (output)
  
- ; Soft masking of particle prior to back projection (removed- not usefull)
-
- SYS                            ; Echo progress
-   echo " Back projecting,  Iteration: {%I0%[iter]} Group:{%I3%[grp]}"
-
  ; Calculate new, refined volume using centered projections and 
- ; angles from align doc. file. 
+ ; angles from alignment doc. file. 
 
- @refine-bp([next-iter],[grp], [bp-type],[prj-radius])
+  @refine-bp([iter],[grp], [bp-type],[prj-radius])
 
-
- DE                             ; Delete stack                        
-   [temp_out_images]            ; No longer needed                    (deleted)
+ DE                                 ; Delete stack                        
+   [temp_out_images]                ; No longer needed                    (deleted)
        
  RE
 

@@ -20,12 +20,13 @@ C            'VO TA' REMOVED                      OCT 2012 ARDEAN LEITH
 C            'PO R'                               OCT 2013 ARDEAN LEITH
 C            'NC' SHOULD NOT CLOSE NDAT           JAN 2014 ARDEAN LEITH
 C            FINDRIDGES                           APR 2014 ARDEAN LEITH
+C            FINDRIDGES(RIDGESONLY)               MAR 2016 ARDEAN LEITH
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2014  Health Research Inc.,                         *
+C=* Copyright 1985-2016  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -64,15 +65,16 @@ C--*********************************************************************
       CHARACTER(LEN=2*MAXNAM) :: RESPONSE,PROMPT
       CHARACTER(LEN=7)        :: EXTEN
       INTEGER                 :: HRS,MIN,SEC
-      LOGICAL                 :: MULTILINE
+      LOGICAL                 :: MULTILINE,RIDGESONLY
+      INTEGER                 :: ICOMM,MYPID,MPIERR
 
       CHARACTER(LEN=1)        :: NULL = CHAR(0)
 
       INTEGER, PARAMETER      :: LUNDOC = 77
 
-c     DATA MENU/'NC','VM','ME','CK','TM',
-c     &         'SR','RR','FR','PO','SA',
-c     &         'VO','EV','PI','PB'/   -- IS FOR INITILIZING EXTEN
+c     MENU/'NC','VM','ME','CK','TM',
+c     &    'SR','RR','FR','PO','SA',
+c     &    'VO','EV','PI','PB','RI'/   -- IS FOR INITILIZING EXTEN
 
       CALL SET_MPI(ICOMM,MYPID,MPIERR) ! SETS ICOMM AND MYMPID
 
@@ -168,18 +170,30 @@ C        GET NUMBER OF SEC. SINCE LAST TM, AND COMPUTE HOURS,MIN, & SEC
           GOTO 9999
  
  
+       CASE('RI')   !   RIDGE LOCATIONS ---------------------------- RI
+
+          IF (FCHAR(4:5) == 'RV') THEN 
+C            FIND RIDGES & VALLEYS 
+             RIDGESONLY = .FALSE.
+             CALL FINDRIDGES(RIDGESONLY)
+
+          ELSE  
+
+C            FIND VERTICAL RIDGES 
+             RIDGESONLY = .TRUE.
+             CALL FINDRIDGES(RIDGESONLY)
+
+          ENDIF
+
+
        CASE('PO')   !   POLAR CONVERSION --------------------------- PO
 
           IF     (FCHAR(4:4) == 'R') THEN
 C            CONVERT TO POLAR REPRESENTATION - RAYS ALONG X DIMENSION 
              CALL TO_RAYS()
 
-          ELSEIF (FCHAR(4:4) == 'P') THEN
+          ELSEIF (FCHAR(4:4) == 'P') THEN   
              CALL TO_PEAKS()
-
-          ELSEIF (FCHAR(4:4) == 'A') THEN
-C            FIND RIDGES & VALLEYS ACROSS IMAGE
-             CALL FINDRIDGES()
 
           ELSE
 C            CONVERT TO POLAR REPRESENTATION - RAYS ALONG Y DIMENSION 

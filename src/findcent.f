@@ -1,4 +1,4 @@
-C++*********************************************************************
+C **********************************************************************
 C
 C FINDCENT.F
 C                 ADDED CENT_SYM           JAN 2012 GREGORY KISHCHENKO *
@@ -7,7 +7,7 @@ C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2012  Health Research Inc.,                         *
+C=* Copyright 1985-2016  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -27,10 +27,9 @@ C **********************************************************************
 C
 C  FINDCENT()
 C
-C  PURPOSE: DETERMINATION OF CENTER OF OBJECT USING PHASE OR SYMMETRY
-C           INFO                         
+C  PURPOSE: DETERMINE CENTER OF OBJECT USING PHASE OR SYMMETRY INFO                         
 C
-C--*********************************************************************
+C **********************************************************************
 
          SUBROUTINE FINDCENT()
 
@@ -46,7 +45,7 @@ C--*********************************************************************
 
          INTEGER                :: ICOMM,MYPID,MPIERR
          INTEGER                :: MAXIM,ITYPE,NX,NY,NZ
-         INTEGER                :: IRTFLG,M,NS,NR,NC,NXLD
+         INTEGER                :: IRTFLG,M,NS,NR,NC,NXLD,NE
          REAL                   :: SNS,SNR,SNC
          LOGICAL                :: SHIFTIT = .FALSE.
 
@@ -62,6 +61,11 @@ C           IMAGE ----------------------------------------- IMAGE
 
             IF (FCHAR(4:4) == 'S') THEN
 C              FIND QUASI-SYMMETRY CENTER ----------------- IMAGE SYM
+
+               IF (NZ > 1) THEN 
+                  CALL ERRT(101,'OPERATION DOES NOT WORK ON VOLUMES',NE)
+                  GOTO 505
+               ENDIF
 
                NXLD = NX + 2 - MOD(NX,2)
 

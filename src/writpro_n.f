@@ -8,12 +8,13 @@ C                 PJ_RRINGS                     FEB 2005 ARDEAN LEITH  *
 C                 APRINGS_NEW                   APR 2008 ARDEAN LEITH  *
 C                 APRINGS_INIT_PLANS PARAMS     JUN 2011 ARDEAN LEITH  *
 C                 WPRO_FBS                      DEC 2011 G. KISHCHENKO *
+C                 CONSECUTIVE                   DEC 2015 ARDEAN LEITH  *
 C                                                                      *
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2011  Health Research Inc.,                         *
+C=* Copyright 1985-2015  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -59,7 +60,7 @@ C--*********************************************************************
          SUBROUTINE WRITPRO_N(PROJ,LUNPROJ, NX,NY,NZ, NUMTH,
      &                BCKE,NNN,IPCUBE,NN,RI,ISELECT,NANG,MAXKEY,ANGBUF,
      &                LUNRINGS,MODE,MR,NR,ISKIP,LDPX,LDPY,LDPZ,
-     &                FBS_WANTED,IRTFLG)
+     &                FBS_WANTED,WANT_CONSEQ,IRTFLG)
 
         USE TYPE_KINDS                                          
 
@@ -78,7 +79,7 @@ C--*********************************************************************
         INTEGER               :: LUNRINGS
         CHARACTER(LEN=*)      :: MODE
         INTEGER               :: MR,NR,ISKIP,LDPX,LDPY,LDPZ
-        LOGICAL               :: FBS_WANTED
+        LOGICAL               :: FBS_WANTED,WANT_CONSEQ
         INTEGER               :: IRTFLG
 
         REAL                  :: BUFOUT(4)
@@ -118,15 +119,15 @@ C          FILL NUMR WITH RING ADDRESSES
 C          NUMBR(1,*) IS RING NUMBER
            NRING = 0
            DO I=MR,NR,ISKIP
-              NRING = NRING + 1
+              NRING         = NRING + 1
               NUMR(1,NRING) = I
-	   ENDDO
+           ENDDO
 
 C          CALCULATES DATA FOR NUMR & LCIRC
            CALL ALPRBS_Q(NUMR,NRING,LCIRC,MODE)
 
 C          RINGWE RETURNS WR
-	   CALL RINGWE_NEW(WR,NUMR,NRING,NUMR(3,NRING))
+           CALL RINGWE_NEW(WR,NUMR,NRING,NUMR(3,NRING))
            IF (MODE .EQ. 'H') WR = WR * 0.5
 
 C          INITIALIZE FFTW3 PLANS FOR USE WITHIN OMP || SECTIONS
@@ -137,7 +138,7 @@ C          INITIALIZE FFTW3 PLANS FOR USE WITHIN OMP || SECTIONS
 C        GET PROJPAT TEMPLATE ONLY (NOT ILIST)
          NMAX = 0
          CALL FILSEQP(PROJPAT,NLET,ILIST,NMAX,NIMA,
-     &        'TEMPLATE FOR 2-D PROJECTION',IRTFLG)
+     &        'TEMPLATE FOR OUTPUT PROJECTIONS',IRTFLG)
          IF (IRTFLG .NE. 0)  GOTO 9999
 
          IF (REFRINGS)  THEN
@@ -148,11 +149,11 @@ C           OPEN REF RINGS FILE USING SPIDER FORMAT
             IF (IRTFLG .NE. 0)  GOTO 9999
          ENDIF
 
-         IF (VERBOSE .AND. MYPID .LE. 0) WRITE(NOUT,*) ' '
+         IF (VERBOSE .AND. MYPID <= 0) WRITE(NOUT,*) ' '
 
          IF (FBS_WANTED) THEN
 
-            NXLD   = NX + 2 - MOD(NX,2)  ! PAD FOR FFTW
+            NXLD = NX + 2 - MOD(NX,2)  ! PAD FOR FFTW
 
 C           CREATE SPACE FOR DERIVATIVES
             ALLOCATE (XYZ  (NXLD,NY,NZ),
@@ -186,7 +187,7 @@ C           RETURNS: XYZ, X1, Y1, Z1, XY2, XZ2, YZ2
          IFORM = 1
          NSL   = 1
          IANG  = 1
-         DO WHILE (IANG .LE. NANG)
+         DO WHILE (IANG <= NANG)
 
 C           BREAK INTO NUMTH CHUNKS, CALCULATE PROJECTIONS
             NEEDED = MIN(IANG+NUMTH-1,NANG)
@@ -219,10 +220,15 @@ c$omp          parallel do private(i,ifile)
 
 C           WRITE PROJECTIONS TO OUTPUT FILES
             DO I=IANG,NEEDED
-               IFILE  = ISELECT(I)
+               IFILE = ISELECT(I)
+               IF (WANT_CONSEQ) THEN
+                  IFOUT = I
+               ELSE
+                  IFOUT = IFILE
+               ENDIF
 
 C              CREATE OUTPUT FILENAME
-               CALL FILGET(PROJPAT,PROJNAM,NLET,IFILE,IRTFLG)
+               CALL FILGET(PROJPAT,PROJNAM,NLET,IFOUT,IRTFLG)
 
 C              OPEN NEXT PROJECTION OUTPUT FILE
                MAXIM = 0
@@ -232,8 +238,8 @@ C              OPEN NEXT PROJECTION OUTPUT FILE
                CALL WRTVOL(LUNPROJ,NX,NY,1,1,
      &                     PROJ(1,1,I-IANG+1),IRTFLG)
 
-               IF (VERBOSE .AND. MYPID .LE. 0) THEN
-                  WRITE(NOUT,90) IFILE,
+               IF (VERBOSE .AND. MYPID <= 0) THEN
+                  WRITE(NOUT,90) IFOUT,
      &               ANGBUF(1,IFILE),ANGBUF(2,IFILE),ANGBUF(3,IFILE)
 90                FORMAT('  PROJECTION:',I6,
      &                   '  PSI:',F6.1,' THETA:',F6.1,' PHI:',F6.1)
@@ -294,7 +300,7 @@ C       ---------------------- PJ_RRINGS  --------------------------
         INTEGER               :: NUMTH,LUNRINGS
         REAL                  :: WR(NRING) 
         INTEGER(KIND=I_8)     :: FFTW_PLANS(*) ! FFTW_PLANS STRUCTURE
-	REAL                  :: PROJ(NX,NY,NUMTH)
+        REAL                  :: PROJ(NX,NY,NUMTH)
         INTEGER               :: IANG1,IANG2,IRTFLG
 
 C       AUTOMATIC ARRAYS
@@ -310,7 +316,7 @@ C       CALCULATE CENTER FOR APRINGS
         CNR2 = NY / 2 + 1
 
 c$omp   parallel do private(imi,it)
-	DO IMI=IANG1,IANG2
+        DO IMI=IANG1,IANG2
            IT = IMI - IANG1 + 1
 
 C          NORMALIZE IMAGE VALUES UNDER THE MASK OVER VARIANCE RANGE
@@ -325,13 +331,13 @@ C          WEIGHT CIRCREF USING WR
 C       SAVE CIRCREF IN FILE OPENED ON LUNRINGS
         DO IMI=IANG1,IANG2
            IT  = IMI - IANG1 + 1
-	   CALL WRTLIN(LUNRINGS,CIRCREF(1,IT),LCIRC,IMI)
+           CALL WRTLIN(LUNRINGS,CIRCREF(1,IT),LCIRC,IMI)
 
 c          write(6,*) 'oCIRC(1-100):',CIRCREF(1,1),CIRCREF(100,1)
 
         ENDDO
 
-	END
+        END
 
 
 #ifdef NEVER
@@ -343,14 +349,14 @@ C       -------------- PJ_RRINGSNEW-----------------------------------
      &                       NUMTH,LUNRINGS,WR,
      &                       PROJ,IANG1,IANG2,IRTFLG)
 
-	INCLUDE 'CMBLOCK.INC' 
-	INCLUDE 'CMLIMIT.INC' 
+        INCLUDE 'CMBLOCK.INC' 
+        INCLUDE 'CMLIMIT.INC' 
 
         CHARACTER(LEN=1)                    :: MODE
 
 C       EXTERNAL ARRAYS
         INTEGER,DIMENSION(3,NRING)          :: NUMR
-	REAL,DIMENSION(NX,NY,NUMTH)     :: PROJ
+        REAL,DIMENSION(NX,NY,NUMTH)     :: PROJ
         REAL,DIMENSION(NRING)               :: WR
 
 C       AUTOMATIC ARRAYS
@@ -360,10 +366,10 @@ C       AUTOMATIC ARRAYS
 
 C       PREPARE CIRCULAR RINGS DATA FOR REFERENCE IMAGES
 c$omp   parallel do private(IMI,IT)
-	DO IMI=IANG1,IANG2
+        DO IMI=IANG1,IANG2
            IT = IMI - IANG1 + 1     !PROJ & CIRCREF INDEX
 C          NORMALIZE, INTERPOLATE INTO POLAR COORDINATES, FFT, & WEIGHT
-	   CALL APRINGS_ONE(NX,NY,WR,
+           CALL APRINGS_ONE(NX,NY,WR,
      &                      PROJ(1,1,IT),CIRCREF(1,IT),
      &                      MODE,NUMR,NRING,LCIRC, IRTFLG)
         ENDDO
@@ -371,13 +377,13 @@ C          NORMALIZE, INTERPOLATE INTO POLAR COORDINATES, FFT, & WEIGHT
 C       SAVE CIRCREF IN FILE OPENED ON LUNRINGS
         DO IMI=IANG1,IANG2
            IT  = IMI - IANG1 + 1
-	   CALL WRTLIN(LUNRINGS,CIRCREF(1,IT),LCIRC,IMI)
+           CALL WRTLIN(LUNRINGS,CIRCREF(1,IT),LCIRC,IMI)
 
            if (imi.eq.1) THEN
               write(6,*) 'n(1-100):',CIRCREF(1,1),CIRCREF(100,1),numth
            endif
         ENDDO
-	END
+        END
 
 #endif
 

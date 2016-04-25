@@ -1,12 +1,12 @@
 C **********************************************************************
 C
 C TO_PEAKS      NEW                                  FEB 14 ARDEAN LEITH
-C
+C               FINDMINMAX NSEPER PARAMETER          MAR 16 ARDEAN LEITH
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2014  Health Research Inc.,                         *
+C=* Copyright 1985-2016  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -228,7 +228,7 @@ C       FIND LOCATION OF LOWEST RAY AVERAGE
 
            CALL FINDMINMAX(RAYCURVE,NRAD,
      &             LOCVALLEY,LOCRIDGE, VALVALLEY,VALRIDGE,
-     &             NUMMINS,NUMMAXS, NMIN,NMAX,IRTFLG)
+     &             NUMMINS,NUMMAXS,1, NMIN,NMAX,IRTFLG)
 
            !write(6,90) ' locvalley:',locvalley(1),' ',locvalley(2)
 

@@ -45,11 +45,13 @@ C               'LI T x' ADDED                    AUG  14 ARDEAN LEITH
 C               'ST H' KLUDGE FOR BAD EM2EM STACK AUG  14 ARDEAN LEITH
 C               CALL NOISE PARAMETERS             NOV  14 ARDEAN LEITH
 C	        'FI CEN' ADDED                    DEC  14 ARDEAN LEITH
+C	        'TF C?' MERGERS                   NOV  15 ARDEAN LEITH
+C	        'FI H' CAN OPEN STACK WITHOUT @   FEB  16 ARDEAN LEITH
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ARDEAN LEITH               *
-C=* Copyright 1985-2014  Health Research Inc.,                         *
+C=* Copyright 1985-2016  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -180,9 +182,10 @@ C              OUTPUT TO SPIDER'S REGISTERS
         ELSEIF (FCHAR(4:4) == 'H')  THEN ! --------------------- 'FI H'
 C          RETRIEVE HEADER VARIABLE CONTENTS FROM SINGLE FILE 
            MAXIM = 2   ! ALLOWS QUERY ON STACK HEADER
+C          USE ~7 TO ALLOW STACK HEADER ACCESS
            CALL OPFILEC(0,.TRUE.,FILNAM,LUN1,'O',ITYPE,
      &         NX,NY,NZ,
-     &         MAXIM,'INPUT',.TRUE.,IRTFLG)
+     &         MAXIM,'INPUT~7',.TRUE.,IRTFLG)
 
           IF (IRTFLG .NE. 0) THEN
 C             FILE NOT FOUND
@@ -594,11 +597,9 @@ C  	   SET LABEL VALUES TO SOLICITED INPUT
           CASE ('D')
              CALL TRAFD(LUN1)
 
-          CASE ('C')
-             CALL TRAFC(LUN1,.FALSE.)
-
           CASE ('C3')
-             CALL TRAFC3(LUN1)
+             !write(6,*) ' calling: TRAFC3  C  '
+             CALL TRAFC3(LUN1,.FALSE.)
 
           CASE ('COR','CO')
              CALL RCTFONE(LUN1) 
@@ -606,15 +607,21 @@ C  	   SET LABEL VALUES TO SOLICITED INPUT
           CASE ('CRF','CR')
              CALL TFCRF
 
-          CASE ('CT')
-             CALL TRAFC(LUN1,.TRUE.)
-
           CASE ('CT3')
-             CALL TRAFCT3(LUN1)
+             !write(6,*) ' Calling: TRAFC3  CT '
+             CALL TRAFC3(LUN1,.TRUE.)
 
           CASE ('CTS')
              CALL RCTFSS(LUN1,LUN2)  
 	  	   
+          CASE ('CT')
+             !write(6,*) ' Calling: TRAFC  CT'
+             CALL TRAFC(LUN1,.TRUE.)
+
+          CASE ('C')
+             !write(6,*) ' Calling: TRAFC  C'
+             CALL TRAFC(LUN1,.FALSE.)
+
           CASE ('DDF','DD')
              CALL DEFOCUS(IRTFLG)
 
@@ -630,7 +637,7 @@ C  	   SET LABEL VALUES TO SOLICITED INPUT
           CASE ('F','FI','FIN','FIND')
              CALL CTFFIND3()
 	     	     
-          CASE ('L')
+          CASE ('L','LIS')
              CALL TRAFL
           
          CASE ('LM4','LM')

@@ -55,7 +55,7 @@ C
 C **********************************************************************
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* Authors: J. Frank & A. Leith                                       *
-C=* Copyright 1985-2015  Health Research Inc.,                         *
+C=* Copyright 1985-2016  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -797,7 +797,7 @@ C             ECHO SEARCH PARAMETERS
      &               '    Skip increment:',I3)
               IF (MYPID <= 0) WRITE(NOUT,983)RAY1,RAY2
 983           FORMAT('  Rotational search range:',F6.1,' ...',F6.1,/)
-              CALL FLUSHRESULTS
+              CALL FLUSHRESULTS_Q(.FALSE.)
 
               CALL APSH_PSC(INUMBR,NUMREF,IMGLST,NUMEXP, 
      &               NX,NY,ISHRANGEX,ISHRANGEY,ISTEP,
@@ -815,7 +815,7 @@ C             FOR MP, LARGE NUMBER OF IMAGES TO BE ALIGNED, OR SP.
 
               IF (MYPID <= 0) WRITE(NOUT,*)
      &           ' Calling: APSH_PS FOR: ',CTYPE(1:3),' ----------'
-              CALL FLUSHRESULTS
+              CALL FLUSHRESULTS_Q(.FALSE.)
 
 C             ECHO SEARCH PARAMETERS
               NSHIFTSX = (2*ISHRANGEX + 1) 

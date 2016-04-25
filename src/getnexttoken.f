@@ -383,5 +383,113 @@ C        PUT TOKEN IN LIST FOR RETURN
 
       END
 
+      SUBROUTINE GET_TOKENS_INTS(RECLIN,NLET,MAXLENTOK,NTOKSMAX,
+     &                      INSIDE,     DELIM, TOKENS, NGOT,   IRTFLG)
+
+C      FILLS TOKENS ARRAY WITH CONSECUTIVE TOKENS FROM A LINE. SINCE
+C      >7 DIGIT INTEGERS MAY NOT BE EXACTLY REPRESENTED BY A FLOAT THIS
+C      WILL PARTITION SUCH FIELDS INTO MULTIPLE TOKENS. 
+
+       IMPLICIT NONE
+       INCLUDE 'CMBLOCK.INC'
+
+       CHARACTER(LEN=NLET)      :: RECLIN          ! TOKEN LINE  (SENT)
+       INTEGER                  :: NLET            ! LINE LENGTH (SENT)
+       INTEGER                  :: MAXLENTOK,NTOKSMAX  ! (SENT)
+       CHARACTER(LEN=MAXLENTOK) :: TOKENS(NTOKSMAX)! TOKEN FIELDS
+       LOGICAL                  :: INSIDE          ! DELIM IS INSIDE (SENT)
+       CHARACTER(LEN=*)         :: DELIM           ! TOKEN DELIMITERS  (SENT)
+       INTEGER                  :: NGOT            ! NO. OF TOKENS (RETURNED
+       INTEGER                  :: IRTFLG          ! ERROR FLAG     (RETURNED)
+
+       INTEGER                  :: IGO,IEND,IFIRST,NCHAR         
+       INTEGER                  :: I,I1,I2
+
+       NGOT   = 0
+       IRTFLG = 1
+       IEND   = 0
+
+       !write(6,*) '  reclin: ',RECLIN(1:NLET)
+
+       DO      ! ----------------- LOOP --------------------------
+         IFIRST = IEND + 1
+
+         IF (INSIDE) THEN
+C           GET TOKEN (CHAR. STRING CONTAINS SYMBOLS IN: DELIM)
+            CALL GETNEXTTOKEN_NOT(RECLIN(1:NLET),
+     &                            DELIM,IFIRST,IGO,IEND)
+         ELSE
+
+C          GET TOKEN (CHAR. STRING DELIMITED BY SYMBOLS IN: DELIM)
+            CALL GETNEXTTOKEN_D(RECLIN(1:NLET),
+     &                            DELIM,IFIRST,IGO,IEND)
+         ENDIF
+         !write(6,*) '  ifirst,go,end,nlet: ',ifirst, igo, iend, nlet
+
+C        SEE IF ALL TOKENS FROM RECLIN STRING HAVE BEEN EVALUATED
+         IF (IGO <= 0) EXIT
+
+C        TOKEN RETURNED, SET TOKEN IN TOKENS
+
+         NCHAR = IEND - IGO + 1
+         I1    = IGO
+
+         IF (NCHAR > 7) THEN
+C           INEXACT IN DOC FILE, SPLIT
+
+            !IFIELDS = NCHAR / 7
+            !IF ((MOD(NCHAR,7)) > 0) IFIELDS = IFIELDS + 1
+
+             DO 
+               I2 = I1 + 6
+               IF (I2 > IEND) I2 = IEND
+               NGOT = NGOT + 1
+
+               IF (NGOT > NTOKSMAX) THEN
+                  CALL ERRT(102,'MAX NO. OF TOKENS',NTOKSMAX)
+                  RETURN
+               ENDIF
+
+C              PUT TOKEN IN LIST FOR RETURN
+               TOKENS(NGOT) = RECLIN(I1:I2)
+
+               !write(6,*) '  nchar,i1...i2: ',nchar,i1,i2
+               !write(6,'(A,i0,a,a)')'  Token(',ngot,'):',reclin(i1:i2)
+
+               IF (I2 >= IEND) EXIT
+               I1 = I2 + 1
+
+            ENDDO
+
+         ELSE
+            NGOT = NGOT + 1
+            IF (NGOT > NTOKSMAX) THEN
+               CALL ERRT(102,'MAX NO. OF TOKENS',NTOKSMAX)
+               RETURN
+            ENDIF
+
+            !write(6,'(A,i0,a,a)')'  Token(',ngot,'):',reclin(igo:iend)
+            !!write(6,*) '  igo...iend: ',igo,iend
+
+            NCHAR = IEND - IGO + 1
+            IF (NCHAR > MAXLENTOK) THEN
+               CALL ERRT(102,'MAX LENGTH OF TOKEN',MAXLENTOK)
+               RETURN
+            ENDIF
+
+C           PUT TOKEN IN LIST FOR RETURN
+            TOKENS(NGOT) = RECLIN(IGO:IEND)
+
+            IF (NGOT >= NTOKSMAX) EXIT
+            I1 = IEND + 1
+            !write(6,*) ' ---------- got, i1:', i1
+         ENDIF
+
+      ENDDO
+
+      IRTFLG = 0
+
+      END
+
 #ifdef NEVER
 #endif

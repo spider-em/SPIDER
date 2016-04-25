@@ -38,7 +38,7 @@ C                 IRTFLG     ERROR FLAG                     (RETURNED)
 C
 C **********************************************************************
 
-	SUBROUTINE EXPRQ(OLDSTR,NCHAR,VALUE,IRTFLG)
+        SUBROUTINE EXPRQ(OLDSTR,NCHAR,VALUE,IRTFLG)
 
         CHARACTER(LEN=*)    :: OLDSTR
         CHARACTER(LEN=80)   :: NEWSTR
@@ -46,13 +46,13 @@ C **********************************************************************
         LOGICAL             :: ISCHAR
 
 C       SET DEFAULT RETURN VALUES
-	IRTFLG = 0
-	VALUE = 0.0
+        IRTFLG = 0
+        VALUE = 0.0
 
 C       REMOVE ALL BLANKS FROM OLDSTR
-	CALL SHRINKQ(OLDSTR(1:NCHAR),NCHAR,NEWSTR,L2)
+        CALL SHRINKQ(OLDSTR(1:NCHAR),NCHAR,NEWSTR,L2)
 
-	IF (NCHAR .EQ. 1 .AND. ISCHAR(NEWSTR(1:1))) THEN
+        IF (NCHAR .EQ. 1 .AND. ISCHAR(NEWSTR(1:1))) THEN
 
 C          EXPRESSION HAS LENGTH 1, AND IT'S NOT A NUMBER, INTERPRET
 C          AS A OLD-STYLE DO-LOOP INDEX - EVALUATE IT!
@@ -73,5 +73,5 @@ C          IF NONE OF ABOVE APPLIES, HAVE TRUE ARITHMETIC EXPRESSION!
            CALL EVALNQ(ILEVEL,NEWSTR,NCHAR,VALUE,IRTFLG)
         ENDIF
 
-	RETURN
-	END
+        RETURN
+        END

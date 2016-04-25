@@ -5,12 +5,13 @@ C             OPFILEC                             FEB  03 ARDEAN LEITH
 C             MPI                                 OCT  03 CHAO YANG
 C             REMOVED UNDOCUMENTED OLD 'FD R'     MAY  14 ARDEAN LEITH
 C             ADDED 'FQ Q'                        NOV  14 ARDEAN LEITH
+C             ADDED 'FSC MA'                      APR  16 ARDEAN LEITH
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2014  Health Research Inc.,                         *
+C=* Copyright 1985-2016  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -41,7 +42,6 @@ C--*********************************************************************
         CHARACTER(LEN=2)      :: FUNC(NFUNC)
 
         CHARACTER(LEN=MAXNAM) :: FILNAM,FILNAM2
-        CHARACTER(LEN=1)      :: NULL = CHAR(0)
         REAL                  :: VALUES(6)
         LOGICAL               :: FSCOP
 
@@ -58,7 +58,9 @@ C--*********************************************************************
         MAXIM2 = 0
         IRTFLG = 0
 
-C                 FQ, FT, FF, FL, FP, EF, PW, RF, CF, GF, RD, FD, 16 = FSC
+C                 FQ, FT, FF, FL, FP, EF, PW, RF, CF, GF, RD, FD, 
+C                 16 = FSC, 17=FRC
+
         DO IFUNC = 1,NFUNC
             IF (FCHAR(1:2) == FUNC(IFUNC)) THEN
               GOTO ( 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,8,8), (IFUNC)
@@ -101,7 +103,7 @@ C       APPLIES FILTERS TO 2-D OR 3-D FOURIER TRANSFORMS.
 
         IF (IFORM .NE. -11 .AND. IFORM.NE. -12 .AND.
      &      IFORM .NE. -21 .AND. IFORM.NE. -22) THEN
-           CALL  ERRT(101,'OPERATION IN-CONSISTENT WITH DATA FORMAT',NE)
+           CALL  ERRT(101,'OPERATION INCONSISTENT WITH DATA FORMAT',NE)
            GOTO 9001
         ENDIF
 
@@ -109,7 +111,7 @@ C       APPLIES FILTERS TO 2-D OR 3-D FOURIER TRANSFORMS.
            CALL  ERRT(41,'FF S',NE)
 C          CALL FSHADO(LUN1,NX,NY)
 
-        ELSEIF (FCHAR(4:4)=='L' .OR. FCHAR(4:4)=='B') THEN
+        ELSEIF (FCHAR(4:4) == 'L' .OR. FCHAR(4:4) == 'B') THEN
            CALL  ERRT(41,'FF L/B',NE)
 C          CALL FILTB(LUN1,NX,NY)
 
@@ -158,15 +160,21 @@ C       COMPUTES MEASURES OF PROXIMITY BETWEEN 2 GIVEN TRANSFORMS
         ELSEIF (FCHAR(4:6) == '3NN')  THEN
            CALL SSNR3DNN
 
+        ELSEIF (FCHAR(1:2) == '16' .AND. FCHAR(4:4) == 'N') THEN
+           CALL PR3D_NEW()    ! OPERATION: 'FSC NEW' 
+
+        ELSEIF (FCHAR(1:2) == '16' .AND. FCHAR(4:4) == 'M') THEN
+           CALL PR3D(.TRUE.)    ! OPERATION: 'FSC MA' (undocumented)
+
         ELSEIF (FCHAR(4:4) == '3' .OR. FCHAR(1:2) == '16') THEN
            FSCOP = (FCHAR(1:2) == '16')
-           CALL PR3D(FSCOP)
+           CALL PR3D(FSCOP)    ! OPERATION: 'FSC' OR 'RF 3'
 
         ELSEIF (FCHAR(4:5) == 'SN') THEN
            CALL SSNRB
 
         ELSE
-           FSCOP = (FCHAR(1:2) == '17')  ! OPERATION: FRC
+           FSCOP = (FCHAR(1:2) == '17')  ! OPERATION: 'FRC'
            CALL RFACTSDO(FSCOP)
 
         ENDIF

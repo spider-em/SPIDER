@@ -1,14 +1,15 @@
 
 C++*********************************************************************
 C
-C MRCP.F                    FILENAMES LENGTHENED JAN 89 ARDEAN LEITH
-C                           USED OPFILE NOV 00 ARDEAN LEITH
+C MRCP.F                    FILENAMES LENGTHENED   JAN 89 ARDEAN LEITH
+C                           USED OPFILE            NOV 00 ARDEAN LEITH
+C                           YEARS OLD BUG FIXED    MAR 16 ARDEAN LEITH
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Copyright 1985-2016  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -26,61 +27,94 @@ C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
 C **********************************************************************
 C
-C  MRCP(NSAM,NROW,NSLICE,LUN1,LUN2,LUN3,A,BUF,MAXSAM)
+C  MRCP(LUN1,LUN2,LUN3)
 C
-C  PARAMETERS:     NSAM        COLUMNS
-C                  NROW        ROWS
-C                  NSLICE      SLICES
+C  VARIABLES:      NX          COLUMNS
+C                  NY          ROWS
+C                  NZ          SLICES
 C                  LUN1        INPUT FILE
 C                  LUN2        OUTPUT FILE
 C                  LUN3        FOR DOC FILE
 C                  A           ARRAY FOR SLICE
 C                  BUF         IO ARRAY
-C                  MAXSAM      MAX LENGTH OF BUF ARRAY (SINCE A FOLLOWS IT)
 C
 C  NOTE:  CYLINDER X-SECTION IS IN XZ PLANE
 C
 C--*********************************************************************
 
-        SUBROUTINE MRCP(NSAM,NROW,NSLICE,LUN1,LUN2,LUN3,BUF,A,MAXSAM)
+        SUBROUTINE MRCP(LUN1,LUN2,LUN3)
 
-        PARAMETER (MAXREG=7)
-        PARAMETER (MAXKEY=1000)
+        IMPLICIT NONE
 
         INCLUDE 'CMBLOCK.INC'
         INCLUDE 'CMLIMIT.INC' 
-       
-C       WARNING BUF AND A ARE IN UNLABELED COMMON IN VTIL2
 
-        CHARACTER(LEN=MAXNAM)   ::   FLN1,DOCF1
-        COMMON /COMMUN/  FLN1,DOCF1
-        COMMON /DOC_BUF/ DBUF(MAXREG,MAXKEY,2)
+        INTEGER               :: LUN1,LUN2,LUN3
 
-        CHARACTER *1  NULL
-        DIMENSION     PLIST(6),A(NSAM,NSLICE),BUF(MAXSAM)
-        LOGICAL       MITO,DIST
+        INTEGER, PARAMETER    :: MAXREG = 7 
+        INTEGER, PARAMETER    :: MAXKEY = 4000 
+        REAL                  :: DBUF(MAXREG,MAXKEY,2)
 
-        DATA PI/3.14159/
+        CHARACTER(LEN=MAXNAM) :: FLN1,DOCF1,FILNAM
 
-        NULL = CHAR(0)
+        CHARACTER *1          :: NULL = CHAR(0)
+        REAL                  :: PLIST(6)
+    
+        LOGICAL               :: MITO,DIST
 
-        CALL FILERD(FLN1,NLET,NULL,'OUTPUT',IRTFLG)
+        INTEGER               :: NX,NY,NZ,MAXIM,IRTFLG,MWANT,NLET
+        INTEGER               :: PHI0
+        REAL                  :: RADI,RAD,POINTS,AINC,WINK
+        INTEGER               :: IPOINTS,NOT_USED,IRAD
+        INTEGER               :: IRADI,NXP,IRX,IRY,NOPEN,NKEY,NREG,I
+
+        INTEGER               :: NLETD,LERR,LAUF,N0,K,IX,IY
+        REAL                  :: SUM,PHI,CP,SP,X,Y,XCENTER,YCENTER
+        INTEGER               :: DX,DY,DDX,DDY,B1,B2,W
+
+        REAL, ALLOCATABLE     :: A(:,:), BUF(:)
+
+        REAL, PARAMETER       :: PI = 3.14159
+
+
+C       CYLINDRICAL PROJECTION
+        CALL OPFILEC(0,.TRUE.,FILNAM,LUN1,'O',IFORM,
+     &                  NX,NY,NZ,
+     &                  MAXIM,'INPUT',.FALSE.,IRTFLG)
         IF (IRTFLG .NE. 0) GOTO 999
 
-        CALL RDPRM(PHI0,NOT_USED,'STARTING ANGLE (0 = 3 OCLOCK)')
-        PHI0    = PI * (PHI0 / 180.0)
+        MWANT = NX * NZ + NBUFSIZ
+        ALLOCATE (BUF(NBUFSIZ), A(NX,NZ), STAT=IRTFLG)
+        IF (IRTFLG .NE. 0) THEN
+           CALL ERRT(46,'MRCP, BUF...',MWANT)
+           RETURN
+        ENDIF
 
-        CALL RDPRM2(RADI,RAD,NOT_USED,'INNER, OUTER RADIUS')
+        CALL FILERD(FLN1,NLET,NULL,'OUTPUT',IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 998
+
+        PHI0 =0
+        CALL RDPRM1S(PHI0,NOT_USED,
+     &              'STARTING ANGLE (0 = 3 OCLOCK)',IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 998
+
+        PHI0 = PI * (PHI0 / 180.0)
+
+        RADI = 5
+        RAD  = (NX / 2) -5
+
+        CALL RDPRM2S(RADI,RAD,NOT_USED,'INNER, OUTER RADIUS',IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 998
 
         MITO = .FALSE.
         DIST = .FALSE.
-        IF (RADI .LT. 0.0) THEN
+        IF (RADI  <   0.0) THEN
            RADI = - RADI
            MITO = .TRUE.
            WRITE(NOUT,*) 
      &         ' NEGATIVE INNER RADIUS  --> MODIFED MAX. PROJ.'
         ENDIF
-        IF (RAD .LT. 0.0) THEN
+        IF (RAD  <   0.0) THEN
            RAD  = - RAD
            DIST = .TRUE.
            WRITE(NOUT,*) 
@@ -93,8 +127,9 @@ C       WARNING BUF AND A ARE IN UNLABELED COMMON IN VTIL2
         WRITE(NOUT,100) AINC,IPOINTS
 100     FORMAT('  ANGULAR INCREMENT: ',F7.2,
      &         ' DEGREES,      X DIMENSION:',I5)
-
-88      CALL RDPRM(WINK,NOT_USED,'NEW ANGULAR INCREMENT OR <RET>')
+        
+88      CALL RDPRM(WINK,NOT_USED,
+     &       'NEW ANGULAR INCREMENT OR <RET>')
 
         IF (WINK .NE. 0) THEN
           AINC    = WINK
@@ -107,17 +142,17 @@ C       WARNING BUF AND A ARE IN UNLABELED COMMON IN VTIL2
         IRAD   = RAD
         IRADI  = RADI
         AINC   = PI * (AINC / 180.0)
-        NSAMP  = POINTS                 
+        NXP    = POINTS                 
 
-        IF (NSAMP .GT. MAXSAM) THEN
+        IF (NXP > NBUFSIZ) THEN
 C          TOO MANY POINTS FOR BUF ARRAY SIZE
-           WRITE(NOUT,*) ' *** ONLY: ',MAXSAM,' POINTS ALLOWED'
+           WRITE(NOUT,*) ' *** ONLY: ',NBUFSIZ,' POINTS ALLOWED'
            GOTO 88
         ENDIF
 
         IFORM = 1
         MAXIM = 0
-        CALL OPFILEC(0,.FALSE.,FLN1,LUN2,'U',IFORM,NSAMP,NROW,1,
+        CALL OPFILEC(0,.FALSE.,FLN1,LUN2,'U',IFORM,NXP,NY,1,
      &                 MAXIM,' ',.FALSE.,IRTFLG)
         IF (IRTFLG .NE. 0) RETURN
 
@@ -135,17 +170,17 @@ C          TOO MANY POINTS FOR BUF ARRAY SIZE
         IF (LERR .NE. 0) GOTO 998
 
 C     GO THROUGH THE VOLUME
-      DO  LAUF=1,NROW
+      DO  LAUF=1,NY
         XCENTER = DBUF(IRX+1,LAUF,1)
         YCENTER = DBUF(IRY+1,LAUF,1)
         WRITE(NOUT,102) LAUF,XCENTER,YCENTER
 102     FORMAT('  SLICE # ',I3,'  CENTER AT: (',F7.2,',',F7.2,')')
 
 C       READ IN SLICE (PERPENDICULAR TO Y)
-        DO I = 1,NSLICE
-          N0 = (I-1)*NROW+LAUF
-          CALL REDLIN(LUN1,BUF,NSAM,N0)
-          DO  K=1,NSAM
+        DO I = 1,NZ
+          N0 = (I-1)*NY+LAUF
+          CALL REDLIN(LUN1,BUF,NX,N0)
+          DO  K=1,NX
             A(K,I) = BUF(K)
           ENDDO
         ENDDO
@@ -165,8 +200,8 @@ C       LOOP ALONG PHI
             X   = RAD*CP+XCENTER
             Y   = RAD*SP+YCENTER
 
-            IF (X.GE.1 .AND. X.LT.NSAM .AND.
-     &          Y.GE.1 .AND. Y.LT.NSLICE) THEN
+            IF (X >= 1 .AND. X <  NX .AND.
+     &          Y >= 1 .AND. Y <  NZ) THEN
 C             PIXEL IS WITHIN SLICE
               IX  = INT(X)
               IY  = INT(Y)
@@ -182,7 +217,7 @@ C                MODIFED MAXIMUM PROJECTION
  
               ELSEIF (DIST) THEN
 C                DISTANCE FROM CENTER OF PROJECTION 
-                 IF (A(IX,IY) .GT. 0.0) THEN
+                 IF (A(IX,IY) > 0.0) THEN
 C                   HAVE A POSITIVE PIXEL, FIND DISTANCE FROM CENTER
                     SUM = RAD 
                  ENDIF
@@ -199,12 +234,13 @@ C                   HAVE A POSITIVE PIXEL, FIND DISTANCE FROM CENTER
           BUF(I) = SUM
 	ENDDO
      
-        CALL WRTLIN(LUN2,BUF,NSAMP,LAUF)
+        CALL WRTLIN(LUN2,BUF,NXP,LAUF)
       ENDDO
 
 998   CLOSE(LUN2)
 999   CLOSE(LUN1)
+      IF (ALLOCATED(BUF))  DEALLOCATE(BUF)
+      IF (ALLOCATED(A))    DEALLOCATE(A)
 
-      RETURN
       END
 
