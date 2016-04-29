@@ -1,0 +1,153 @@
+ ; <html><head><title> Runs alignment for specified group</title></head><body><pre>
+ ;
+ ; SOURCE: spider/docs/techs/recon1/Procs/align-loop.spi 
+ ;                New                                 Nov 2004 ArDean Leith
+ ;                Rewritten                           Feb 2005 ArDean Leith
+ ;                Added alignment option & stack op   Nov 2006 ArDean Leith
+ ;                SET MP location                     Feb 2008 ArDean Leith
+ ;                Adapted from: pub-refine-start      Jan 2016 ArDean Leith
+ ;
+ ; PURPOSE: Runs alignment for specified group     
+ ;
+ ; INPUT REGISTERS (Set on command line or globally):
+ ;   [grp]               Current group number 
+ ;   [alignsh]           Alignment shift distance
+ ;   [r2]                Alignment outer radius
+ ;   [incore-yn]         Incore images used
+ ;
+ ; INPUT FILES: ([win] denotes input directory, '***' denotes group,  '%' denotes subset)
+ ;   [sel_parts]         [win]/sel_part_***   Group particle selection files (one/group)
+ ;   [unaligned_images]  [win]/data_***       Unaligned image stacks         (one/group)
+ ;
+ ; OUTPUT FILES: ([out] denotes output directory, '$$$$' denotes sync number, and '***' denotes group)
+ ;   [next_group_align]  [rec]/align_01_***   Alignment parameter doc files     (one/group)
+ ;   [aligned_images]    [rec]/dala_***@      Rotationally aligned particle images (one/group)
+ ;   [finished_file]     jnk_sync_$$$$_***    Created when this task is finished   (one)
+ ;
+ ; -------------------- END BATCH HEADER ----------------------------------------
+
+ MD
+   TR OFF                   ; Loop info turned off
+ MD
+   VB OFF                   ; File info turned off
+ MD                          
+   SET MP                   ; Set OMP processors 
+   10                       ; Edit this
+
+ [iter]      = 0
+ [next-iter] = 1
+
+ IF ( [grp] > 0 ) THEN
+   ; Get reconstruction parameters & file names
+   @recon-settings([num-grps],[pixsiz],[ang-step],[r2],[alignsh],[prj-radius],[winsiz],[incore-yn],[bp-type],[qsub])
+
+ ELSE
+   ; Reconstruction file names already available 
+
+   RR [grp]                 ; Input group from caller for inline use
+     ? ENTER GROUP ?
+
+   [qsub] = -1              ; For single group
+ ENDIF
+ 
+ IQ DIR [has-scratch]       ; See if there is a local scratch dir.
+   [temp_local_dir]         ; Dir name
+
+ IF ( [has-scratch] > 0 ) THEN
+   ; Copy files to local compute node disk  
+   @pub-ref-loop-clone([iter],[grp])
+
+ ELSE
+   ; Redefine [temp_local_dir] to work directory 
+   GLO [temp_local_dir] = '[temp_work_dir]'
+ ENDIF
+
+ SYS
+   echo -n "  Starting: align-loop for group: {%I3%[grp]} --- " ; date '+ %x %X'
+ 
+ UD N [num-refs]              ; Get number of reference images used
+   [iter_refangs]             ; Reference images angles file    (input)
+
+ MY FL                        ; Flush results file
+
+ IF ( [incore-yn] > 0 ) THEN
+   ; Load input images into incore image stack for speedup
+   ; Note: If INLN_WRTLIN ARRAY OVERFLOWS,  set: [incore-yn] to: zero    
+   GLO [temp_in_images]  = '_8@' 
+
+   FI H [maxim]               ; Find total number of images (not [numparts])
+     [unaligned_images]@      ; Input file needed               (input)
+     MAXIM                    ; Max. image number, image size
+   CP                         ; Copy unaligned images to inline stack
+     [unaligned_images]@      ; Input file needed                (input)
+     [temp_in_images]         ; Incore unaligned images stack    (output)
+     [maxim]                  ; Number of images in stack _8@
+
+   GLO [temp_out_imgs] = '_8@' ; Incore, inplace
+
+ ELSE
+   ; Use existing image stack for input & a temporary stack for output
+   GLO [temp_in_images] = [unaligned_images]@
+   GLO [temp_out_imgs]  = [aligned_images]@
+ ENDIF
+ 
+ !SYS                         ; Create copy wait time flag file  (unused)
+ !   touch [wait_file].$DATEXT 
+
+ DE                           ; Delete existing files  
+   [next_group_align]         ; Alignment parameter doc file     (deleted)
+ 
+ ; Find reference projection matching current aligned image
+
+ [r1]          = 5.0          ; First radius for 'AP' (Can alter this)
+ [rinc]        = 1            ! Use: 2 for large radii & faster
+
+ AP SHC                       ; (Can change alignment operation)  
+   [ref_projs]@******         ; Template for ref. projections    (input)
+   1-[num-refs]               ; Ref. projection file numbers
+   [alignsh],[alignsh],1      ; Shift search range x & y , Step size
+   [r1],[r2],[rinc]           ; First, last radial ring, & Skip
+   [iter_refangs]             ; Ref. angles file                 (input)
+   [temp_in_images]******     ; Template for unaligned images    (input)
+   [sel_parts]                ; Particle selection files         (input)
+   *                          ; Alignment parameter doc file     (input)
+   0, 0                       ; Angular search restriction
+   Y, N, N                    ; Check mir, align first, denoise
+   [next_group_align]         ; Alignment parameter doc file     (output)
+
+ SYS
+   echo "  Found alignment parameters for iteration: {%I0%[iter]} Group: {%I3%[grp]}"
+
+ ; Apply new rotational alignments to original particle images
+ RT SF                        ; Rotate & shift operation
+   [unaligned_images]@******  ; Unaligned stacked image files     (input)
+   [sel_parts]                ; Particle selection file           (input) 
+   6,0,7,8                    ; Reg. #s for angle, scale, & shift
+   [next_group_align]         ; Alignment parameter doc file      (input)
+   [temp_out_imgs]******      ; Current aligned images            (output)
+ 
+ ; Save aligned images when doing reconstruction but not during refinement
+ IF ( [iter] == 0 ) THEN
+   CP                         ; Copy aligned images to file stack
+     [temp_out_imgs]          ; Aligned images                    (input)
+     [aligned_images]@        ; Aligned images                    (output)
+   DE                         ; Delete stack                        
+     [temp_out_imgs]          ; No longer needed                  (deleted)
+ ENDIF
+ 
+ SYS
+   echo "  Finished rotational alignment  iteration: {%I0%[iter]} Group: {%I3%[grp]}"
+
+ IF ( [qsub] >= 0 ) THEN
+   ; Signal controlling SPIDER run that task is finished and halt
+   SD 1, [task]                ; Set sync file output
+     [finished_file]           ; Sync file                       (output)
+   SD E                        ; Close sync file
+     [finished_file]           ; Sync file                       (closed)
+
+   EN                          ; This SPIDER ends now
+ ENDIF
+
+ RE                            ; Return to caller
+ ; </pre></body></html>
+
