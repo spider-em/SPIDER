@@ -1,9 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: iso-8859-1 -*-
 
-# SOURCE: verifybyview.py
-# PURPOSE: 
-#  
 # Spider Python Library
 # Copyright (C) 2006  Health Research Inc.
 #
@@ -22,7 +19,7 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 # General Public License for more details.
 
-print "verifybyview.py, Modified 2012 Apr 25"
+print "verifybyview.py, Modified 2015 March 18"  
 #    TO DO: when changing #columns, link max to current
 #    TO DO: checkbutton to enable/disable paint-select
 #    TO DO: use arbitrary label for class montage
@@ -70,8 +67,7 @@ import Image, ImageTk
 import os,sys,re
 from math import sqrt
 from SpiderImagePlugin import *
-from support import Spiderutils
-import montage
+from Spider import Spiderutils, montage
 import ImagePalette
 
 def backup(filename):
@@ -547,6 +543,8 @@ class pmontage:
             ib.grid(row=j, column=i, padx=2, pady=2)
             ib.key = key
             ib.bind('<Button-1>', lambda event, w=ib, i=im: self.select(w,i))
+            ib.bind('<Control-Button-1>', lambda event, 
+                w=ib, i=im: self.shiftSelect(w,i))
             ib.bind('<Shift-Button-1>', lambda event, 
                 w=ib, i=im: self.shiftSelect(w,i))
             ib.bind('<Shift-Enter>', lambda event, w=ib, i=im: self.select(w,i))
@@ -768,13 +766,13 @@ class pmontage:
         if key == 0:
             print "No images selected"
             return
-
-        backup(filename)
-        if Spiderutils.writeSpiderDocFile(filename,F, headers=headers, append=1):
-            self.numgood = key
-            print 'Wrote', self.numgood, 'keys to %s' % os.path.basename(filename)
         else:
-            showerror("Error!", "Unable to write to %s" % os.path.basename(filename))
+            backup(filename)
+            if Spiderutils.writeSpiderDocFile(filename,F, headers=headers, append=1):
+                self.numgood = key
+                print 'Wrote', self.numgood, 'keys to %s' % os.path.basename(filename)
+            else:
+                showerror("Error!", "Unable to write to %s" % os.path.basename(filename))
 
     def saveClose(self, event=None):
         self.saveSelections()
@@ -1830,7 +1828,7 @@ datext_button = Button(init_frame, text='Data extension',
     command = lambda w=avg_win, d='ext': initTemplate(w,d))
 datext_button.grid(row=0, column=0, sticky=W)
 datext_var.set(prefs1.extension)
-datext_entry = Entry(init_frame, textvariable=datext_var, width=15)
+datext_entry = Entry(init_frame, textvariable=datext_var, width=34)
 datext_entry.grid(row=0, column=1)
 
 initdir_var = StringVar()
@@ -1838,7 +1836,7 @@ initdir_button = Button(init_frame, text='Initial directory',
     command = lambda w=avg_win, d='dir': initTemplate(w,d))
 initdir_button.grid(row=1, column=0, sticky=W)
 initdir_var.set(prefs1.dir1)
-initdir_entry = Entry(init_frame, textvariable=initdir_var, width=15)
+initdir_entry = Entry(init_frame, textvariable=initdir_var, width=34)
 initdir_entry.grid(row=1, column=1)
 
 class_list_var = StringVar()
@@ -1846,7 +1844,7 @@ class_list_button = Button(init_frame, text='Class list doc file',
     command = lambda w=avg_win, d='list': initTemplate(w,d))
 class_list_button.grid(row=2, column=0, sticky=W)
 class_list_var.set(os.path.splitext(prefs1.class_list_base)[0])
-class_list_entry = Entry(init_frame, textvariable=class_list_var, width=15)
+class_list_entry = Entry(init_frame, textvariable=class_list_var, width=34)
 class_list_entry.grid(row=2, column=1)
 
 class_avg_var = StringVar()
@@ -1854,7 +1852,7 @@ classavg_button = Button(init_frame, text='Class-average template',
     command = lambda w=avg_win, d='avg': initTemplate(w,d))
 classavg_button.grid(row=3, column=0, sticky=W)
 class_avg_var.set(os.path.splitext(prefs1.class_avg_template)[0])
-class_avg_entry = Entry(init_frame, textvariable=class_avg_var, width=15)
+class_avg_entry = Entry(init_frame, textvariable=class_avg_var, width=34)
 class_avg_entry.grid(row=3, column=1)
 
 init_frame.pack(padx=5, pady=5, ipadx=2, ipady=2)
