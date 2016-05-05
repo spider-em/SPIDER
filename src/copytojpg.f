@@ -78,7 +78,7 @@ C       THAT HAS NEGATIVE VALUES WITH ANY OPTION I HAVE TRIED
         IF (IRTFLG .NE. 0) RETURN
 
         IF (IMAMI == 0) THEN
-C          NORMALIZE INPUT IMAGE FIRST
+C          GET INPUT IMAGE STATISTICS FIRST
            CALL NORM3(LUNO,NX,NY,NZ,FMAX,FMIN,AV)
         ENDIF
         IF (FMAX == FMIN) THEN
@@ -113,8 +113,8 @@ C          GET NAME FOR JPEG FILE
            NLETN = lnblnkn(FILNEW)
         ENDIF
          
-        CALL INTTOCHAR(NX,    STRNX, NC2,1)
-        CALL INTTOCHAR(NY,    STRNY, NC3,1)
+        CALL INTTOCHAR(NX, STRNX, NC2,1)
+        CALL INTTOCHAR(NY, STRNY, NC3,1)
 
         IF (VERBOSET) THEN
            WRITE(COMLIN,8005) STRNX(:NC2),STRNY(:NC3),
@@ -171,11 +171,11 @@ C--*******************************************************************
         CHARACTER(LEN=1)      :: NULL = CHAR(0)
         LOGICAL               :: VERBOSET,WANTOUT
         INTEGER               :: NX,NY,NZ,MAXIM,ITYPE,IRTFLG,NLET,NLETC
-        INTEGER               :: ICOMM,MYPID,MPIERR, lnblnkn,nleto
+        INTEGER               :: ICOMM,MYPID,MPIERR, lnblnkn,NLETO
 
         INTEGER, PARAMETER    :: LUN1   = 14 
         INTEGER, PARAMETER    :: LUN2   = 15 
-        INTEGER,PARAMETER     :: IDELAY = 2
+        INTEGER, PARAMETER    :: IDELAY = 3
           
         CALL SET_MPI(ICOMM,MYPID,MPIERR) ! SETS ICOMM AND MYPID
 
@@ -199,7 +199,8 @@ C       CONVERT SPIDER IMAGE FILE INTO JPG FILE
         CALL COPYTOJPG(LUN1,LUN2,FILNEW,NX,NY,NZ, VERBOSET,IDELAY)
 
         IRTFLG = -999   ! KEEP LOWERCASE
-        CALL RDPRMC(OPTIONS,NLETO,.TRUE.,'OPTIONS',NULL,IRTFLG)
+        CALL RDPRMC(OPTIONS,NLETO,.TRUE.,
+     &          'IMAGEMAGICK DISPLAY OPTIONS (or <CR>) ',NULL,IRTFLG)
 
         WRITE(COMLIN,90) OPTIONS(1:NLETO),FILNEW(1:NLET)
 90      FORMAT( ' display ', A,' ',A, ' &' )

@@ -34,12 +34,13 @@ C        UNIQUE IN 'DOC SORT'                    APR  2012 ARDEAN LEITH
 C        UNIQUE IN 'AT IT' BUG                   SEP  2013 ARDEAN LEITH 
 C       'DOC SEP' ADDED                          MAR  2014 ARDEAN LEITH
 C       'DOC PLOT' ADDED                         DEC  2014 ARDEAN LEITH
+C       'DOC SLI' ADDED                          APR  2016 ARDEAN LEITH
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2014  Health Research Inc.,                         *
+C=* Copyright 1985-2016  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -156,8 +157,8 @@ C          REKEY DOC FILE ----------------------------------- 'DOC KEY'
 
         ELSEIF (FCHAR(4:5) == 'AN' .OR.
      &          FCHAR(4:5) == 'SU') THEN
-C          SUBTRACT DOC FILE ------------------------------- 'DOC SUB'
-C          AND DOC FILE      ------------------------------- 'DOC AND'
+C          SUBTRACT DOC FILE -------------------------------- 'DOC SUB'
+C          AND DOC FILE      -------------------------------- 'DOC AND'
            CALL DOCSUB(MAXX, MAXY, DOCBUF(1,1), DLIST,NLIST)
 
         ELSE
@@ -206,11 +207,15 @@ C       STATISTICS FROM DOC FILES -------------------------- 'DOC STAT'
         LOGICAL                      :: SENDIT,REP_KEY,UNIQUE
         LOGICAL                      :: REVERSE
         INTEGER                      :: NEEDINC
+        INTEGER                      :: NILMAX
         LOGICAL                      :: APPENDOK,MESSAGE
 
         INTEGER, PARAMETER           :: NDOCIN2  = 71
         INTEGER, PARAMETER           :: NDOCOUT  = 72
         INTEGER, PARAMETER           :: NDOCOUT2 = 73
+
+C       SPACE FOR COMMON NUMERICAL LIST FROM CMLIMIT
+        NILMAX = NIMAX
 
         IF (FCHAR(4:5) == 'SO') THEN
 C                    12345678901234567890123456789012345678901234567890123456789
@@ -238,6 +243,10 @@ C          MAXX2 IS 1 + NUM OF REGISTERS SINCE DOCBUF CONTAINS KEY ALSO
            CALL GETDOCDAT('SECOND INPUT DOCUMENT',.TRUE.,DOCNAM2,
      &                  NDOCIN2,.TRUE.,MAXX2, MAXY2,DOCBUF2,IRTFLG)
            IF (IRTFLG .NE. 0) RETURN
+
+         ELSEIF (FCHAR(4:5) == 'SL') THEN
+           PROMPT   = 'FIRST AND LAST RETAINED KEYS'
+           NLETP    = 35
 
          ELSEIF (FCHAR(4:5) == 'ST') THEN
            PROMPT   = 'COLUMN TO BE ANALYZED (0 IS KEY)' 
@@ -329,7 +338,7 @@ C                 PUSH VALUES INTO OUTPUT DOC. FILE
            GOTO 9990
 
         ELSEIF ((FCHAR(4:5) == 'ME') .AND. 
-     &          ((KEYCOL .LT. 0) .OR.
+     &          ((KEYCOL  <  0) .OR.
      &           (MAXX  < 1 .OR. MAXY  < 1) .OR. 
      &           (MAXX2 < 1 .OR. MAXY2 < 1))) THEN
 C          NO NEED TO SORT LISTS -------------------------- 'DOC MERGE'
@@ -501,7 +510,7 @@ C          DOC FILE COL STATISTICS--------------------------- 'DOC STAT'
 
         ELSEIF (FCHAR(4:5) == 'SO' .OR. FCHAR(4:5) == 'IT') THEN
 C          SORT THE INPUT DOC FILE--------------------------- 'DOC SORT'
-C          SORT THE INPUT DOC FILE--------------------------- 'AT IT'  '
+C          SORT THE INPUT DOC FILE--------------------------- 'AT IT'  
            NEWKEY = 0
 
            I1    = 1
@@ -552,7 +561,7 @@ C                 PUSH DLIST INTO FIRST DOC. FILE
      &                              NVAL,IRTFLG)
                ENDIF
 
-               IF (IY .LT. MAXY) THEN
+               IF (IY  <  MAXY) THEN
 C                 PUSH NEXT KEY INTO SECOND FILE
                   KEY2 = DOCBUF((IY) * MAXX + 1)
                   IF (KEY2 > 0) THEN
@@ -564,6 +573,37 @@ C                 PUSH NEXT KEY INTO SECOND FILE
      &                                 NVAL,IRTFLG)
                  ENDIF
               ENDIF
+           ENDDO
+
+        ELSEIF (FCHAR(4:5) == 'SL') THEN
+C          SLICE THE INPUT DOC FILE------------------------- 'DOC SLICE'
+
+           NVAL = NILMAX
+           CALL RDPRAI(INUMBR,NILMAX,NVAL,0,0,
+     &          'KEYS TO PLACE IN NEW DOC FILE','F',IRTFLG)
+           IF (IRTFLG == -1) GOTO 9995
+
+           NEWKEY1 = 0
+
+           DO I = 1,NVAL
+              IY = INUMBR(I)
+
+              IF (IY <= 0 .OR. IY > MAXY) THEN
+                 CALL ERRT(102,'BAD KEY',IY)
+                 GOTO 9995
+              ENDIF
+
+              KEY1 = DOCBUF((IY-1) * MAXX + 1)
+
+C             PUSH KEY INTO SLICE FILE
+              DO ICOL = 2,MAXX
+                 DLIST(ICOL) = DOCBUF((IY - 1) * MAXX + ICOL)
+              ENDDO
+
+              NEWKEY1 = NEWKEY1 + 1
+C             PUSH DLIST INTO FIRST DOC. FILE
+              CALL LUNDOCWRTDAT(NICDOCOUT,NEWKEY1,DLIST(2),
+     &                              MAXX-1,IRTFLG)
            ENDDO
 
         ELSEIF (FCHAR(4:5) == 'MI') THEN
@@ -711,7 +751,7 @@ C                   INCREMENT IGO1
                  ELSEIF (IGO1 <= IKEYS) THEN
 C                   STILL IN LIST FROM FILE 1 AND FILE 2
 
-                    IF (VALNEXT1 .LT. VALNEXT2)THEN
+                    IF (VALNEXT1  <  VALNEXT2)THEN
 C                      NOT IN FILE 2, SAVE VALUES FROM FILE 1
                        DO IREG = 1,MAXX
                           DLIST(IREG) = DOCBUF((KEY1 - 1) * MAXX + IREG)
@@ -1268,7 +1308,7 @@ C       OPEN OUTPUT DOC. FILE
           READ(NDOCIN,84,IOSTAT=IERR) RECLIN
 84        FORMAT(A160)
 
-          IF (IERR .LT. 0) THEN
+          IF (IERR  <  0) THEN
 C             END OF FILE
               GOTO 9999
            ENDIF
@@ -1303,7 +1343,7 @@ C               ERROR ON READ USING OLD FORMAT ALSO, RETURN
               WRITE(NOUT,*) ' EMPTY DOCUMENT FILE LINE SKIPPED'
               CYCLE
 
-          ELSEIF (IKEY .LT. 0) THEN
+          ELSEIF (IKEY  <  0) THEN
               WRITE(NOUT,*) ' CONTINUATION LINE SKIPPED IN DOC FILE'
               CYCLE
 
@@ -1364,7 +1404,7 @@ C            TRY OLD DOC. FILE FORMAT
        END
 
 
-C       ----------------------- DOCBOOT--------------------------------
+C       ----------------------- DOCBOOT --------------------------------
 
 	SUBROUTINE DOCBOOT(MAXX, MAXY, DOCBUF, DLIST)
 
