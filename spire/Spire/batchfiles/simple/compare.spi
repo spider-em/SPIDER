@@ -1,0 +1,113 @@
+; Compare alignment results to reference volume projections
+
+; --- registers ---
+
+[max] = 5     ; max number of images per row
+
+; ----- input files -----
+FR G
+[refvol]../reference_volume   ; input volume
+
+FR G
+[angles]../Testdata/angles    ; original angles
+
+FR G
+[aligned]ali/ali    ; aligned noisy images
+
+; ----- output files -----
+FR G
+[outdir]tmp
+
+FR G
+[montage]montage    ; montage of images
+
+; ----------- END BATCH HEADER -------------------
+VM
+mkdir -p [outdir]
+
+FR G
+[refimg][outdir]/ref    ; template for output from PJ 3Q
+
+UD N,[n]
+[angles]
+
+; make an angles file for PJ3Q with Psi (inplane rotation) set to zero
+FR G
+[newangles][outdir]/newangles
+DE
+[newangles]
+[zero] = 0
+DO LB11 x11 = 1,[n]
+
+   UD IC,x11,[psi],[theta],[phi]
+   [angles]
+   SD x11,[zero],[theta],[phi]
+   [newangles]
+LB11
+
+UD ICE
+[angles]
+
+IF ([n].GT.[max]) [n] = [max]
+
+FI [width]   ; get image width
+[refvol]
+12
+
+[radius] = INT([width]) - 1
+
+PJ 3Q
+[refvol]
+[radius]
+1-[n]
+[newangles]
+[refimg]****
+
+[xbig] = [width] * [n]
+[ybig] = [width] * 2
+
+MO       ; create a blank image for the montage
+_1
+[xbig],[ybig]
+B
+0.0
+
+; TOP ROW: insert the reference views in the big image
+DO LB1 [i] = 1,[n]
+
+   [xcoord] = ([width] * ([i]-1) ) + 1
+   [ycoord] = 1
+
+   AR SCA    ; rescale so can view noisy images next to reference views
+   [refimg]{****[i]}
+   _2
+   (0,1)
+  
+   IN
+   _2   ; [refimg]{****[i]}
+   _1
+   [xcoord],[ycoord]
+LB1
+
+; SECOND ROW: insert the aligned noisy images
+DO LB2 [i] = 1,[n]
+
+   [xcoord] = ([width] * ([i]-1) ) + 1
+   [ycoord] = [width] + 1
+
+   AR SCA    ; rescale so can view noisy images next to reference views
+   [aligned]{****[i]}
+   _2
+   (0,1)
+  
+   IN
+   _2 
+   _1
+   [xcoord],[ycoord]
+LB2
+
+CP
+_1
+[montage]
+
+EN D
