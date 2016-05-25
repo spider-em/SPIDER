@@ -64,50 +64,51 @@
  ; Input initial parameters & file names but not angular steps
  @refine-settings([pixsiz],[r2],[alignsh],[prj-radius],[iter1],[iter-end],[sphdecon],[smallang-yn],[qsub],[incore-yn],[gold-std],[bp-type])
 
- 
  SYS
    echo ; echo -e "  Alignment shift:   {%I0%[alignsh]}   Alignment radius: {%I0%[r2]}"
  SYS
-   echo    "  Projection radius: {%I0%[prj-radius]}" ; echo
+   echo    "  Projection radius: {%I0%[prj-radius]}" 
 
- SYS                          ; Create output directories if not present
+ SYS                         ; Create output directories if not present
    mkdir -p [out_dir] [work_dir]
 
  SD /     ITERATION     MASKED-RES    RESOLUTION
-   [iter_resol]               ; Resolution doc file              (output)
+   [iter_resol]              ; Resolution doc file              (output)
  SD E     
-   [iter_resol]               ; Resolution doc file              (finished)
+   [iter_resol]              ; Resolution doc file              (finished)
 
- UD N [num-grps]              ; Find number of groups
-   [sel_group]                ; Group selection file      (input)
+ UD N [num-grps]             ; Find number of groups
+   [sel_group]               ; Group selection file      (input)
 
  IF ( [iter1] == 1 ) THEN
-   ; Create subset volumes from initial model if not already created
+   ; Ensure that starting input files exist
    [iter] = 1
-   [s]    = 1
-   IQ FI [r-exists]
-     [vol_s]                  ; Reference volume
 
-   IF ( [r-exists] <= 0) THEN
-     ; Must create current starting volume from initial model/reference volume
+   DO [s] = 1,2
+     ; Create subset volumes from initial model 
      CP 
-       [vol_orig]             ; Starting initial model == reference volume
-       [vol_s]                ; Starting subset reference volume  
-   ENDIF   
+       [vol_orig]          ; Starting initial model == reference volume
+       [vol_s]             ; Starting subset reference volume  
+   ENDDO
  
-   [s] = 2
-   IF ( [r-exists] <= 0) THEN
-     ; Must create current starting volume from initial model/reference volume
-     CP 
-       [vol_orig]             ; Starting initial model == reference volume
-       [vol_s]                ; Starting subset reference volume   
-   ENDIF   
+   DO [grp] = 1,[num-grps]
+     ; Must create odd and even particle selection lists for all groups
+     DE
+       [sel_parts]_s1        ; Odd  particle selection doc file    (removed)         
+     DE
+       [sel_parts]_s2        ; Even particle selection doc file    (removed)         
+
+     DOC SPLIT
+       [sel_parts]           ; Particle selection doc file         (input)
+       [sel_parts]_s1        ; Odd  particle selection doc file    (output)         
+       [sel_parts]_s2        ; Even particle selection doc file    (output)         
+   ENDDO
  ENDIF
 
  ; Show alignment and projection radii on center slice of a reference volume
- ![s] = 1
- !@show-r2([r2],[alignsh],[prj-radius])
- !  [vol_s]                  ; Reference volume
+ [s] = 1
+ @show-r2([r2],[alignsh],[prj-radius])
+   [vol_orig]                ; Starting initial model == reference volume
 
 
  IF ( [smallang-yn] == 1 ) THEN
@@ -125,7 +126,7 @@
      ; Create reference projection ('PJ 3F') stacks from both subset reference volumes 
      ; in parallel. Waits for all nodes to finish their projections. 
 
-     @pub-prjrefs([iter],[num-grps],[prj-radius])
+     @pub-prjrefs([iter],[num-grps],[prj-radius],[qsub])
 
    ENDIF
 
@@ -145,13 +146,18 @@
 
    @merge-fsc-filt([pixsiz],[iter],[ampenhance],[r2],[sphdecon],[gold-std],[qsub])
  
+ ; Show center slice of current volume
+   [next-iter] = [iter] + 1;
+   @show-r2([r2],[alignsh],[prj-radius])
+     [next_vol]               ; Filtered volume           (output)
+
    SYS
      echo "  Iteration: {%I0%[iter]} Finished" ; echo
    MY FL                      ; Flush results
  ENDDO                        ; End of loop over all iterations ----------------------------
 
  SYS                          ; Echo current time 
-   echo -n "  Refinement finished after iteration: {**[iter]}   " ; date '+ TIME: %x  %X' ; echo  
+   echo -n "  Refinement finished after iteration: {**[iter]}   " ; date '+ Time: %x  %X' ; echo  
 
  EN
  ; </pre></body></html>
