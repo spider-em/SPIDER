@@ -1,0 +1,297 @@
+head	1.5;
+access;
+symbols
+	pre_getangas:1.5
+	GPL2010:1.5
+	pre_GPL2010:1.4
+	pre_var_equation:1.4
+	pre_fftwrings:1.4
+	pre_opfiles:1.4
+	src:1.4
+	best-code:1.4
+	x-named-regs:1.4
+	x:1.4
+	v13-00:1.4
+	pre_GPL:1.2
+	prec_CA:1.2
+	noindx:1.2;
+locks; strict;
+comment	@c @;
+
+
+1.5
+date	2010.06.24.13.26.33;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2005.10.17.20.30.55;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2005.10.17.18.21.59;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2001.03.23.14.59.57;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2001.01.23.15.44.24;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.5
+log
+@GPL_2010
+@
+text
+@C++*********************************************************************
+C
+C PROC_SET.F   -- NEW JAN 2001                   AUTHOR: ARDEAN LEITH
+C                 PLINE LENGTHENED MAR 2001 ARDEAN LEITH
+C
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C  PROC_SET(NUMPRC,NCHARS,NLINES,PLINEGO,PDATA,IRTFLG) 
+C  PROC_GETPLINE(IPLINE,IPROCNUMT,PLINE,NCHAR,IRTFLG)
+C
+C  PURPOSE:  HANDLES ALL INTERACTIONS WITH SPIDER PROCEDURE FILE
+C            CONTAINS SUBROUTINES STARTING  WITH PREFIX: PROC_
+C
+C23456789 123456789 123456789 123456789 123456789 123456789 123456789 12
+C--*********************************************************************
+
+      MODULE PROC_INFO
+
+        INCLUDE 'CMLIMIT.INC'
+
+C       ARRAY OF POINTERS TO PROCEDURE STORAGES
+        TYPE CHARA_POINTER
+           CHARACTER, DIMENSION(:), POINTER :: CPTR 
+        END TYPE CHARA_POINTER
+
+        TYPE INTA_POINTER
+           INTEGER, DIMENSION(:), POINTER :: IPTR 
+        END TYPE INTA_POINTER
+
+        TYPE(CHARA_POINTER), DIMENSION(MAXPRCNAM) :: PROCSTOREPTRS
+        TYPE(INTA_POINTER) , DIMENSION(MAXPRCNAM) :: PROCLINESPTRS
+
+
+      END MODULE PROC_INFO
+
+C      ******************** PROC_SET *****************************
+
+       SUBROUTINE PROC_SET(NUMPRC,NCHARS,NLINES,PLINEGO,PDATA,IRTFLG)
+
+       USE PROC_INFO
+
+       INCLUDE 'CMBLOCK.INC'
+
+       INTEGER, DIMENSION(NLINES)   :: PLINEGO
+       CHARACTER, DIMENSION(NCHARS) :: PDATA
+ 
+       CHARACTER, DIMENSION(:), POINTER :: PROCSTORE 
+       INTEGER,   DIMENSION(:), POINTER :: PROCLINES
+
+C      ALLOCATE NEW PROC STORAGE ARRAYS FOR THIS LENGTH PROCEDURE
+       ALLOCATE(PROCSTORE(NCHARS),PROCLINES(NLINES+1),STAT=IRTFLG)
+       IF (IRTFLG .NE. 0) THEN
+           CALL ERRT(46,'SPIDER,PROCSTORE...',NE)
+           RETURN
+       ENDIF
+
+C      KEEP POINTERS
+       PROCSTOREPTRS(NUMPRC)%CPTR => PROCSTORE
+       PROCLINESPTRS(NUMPRC)%IPTR => PROCLINES
+
+C      FILL ARRAY HOLDING START LOCATION OF EACH LINE
+       DO I = 1, NLINES
+          PROCLINES(I) = PLINEGO(I)
+       ENDDO
+       PROCLINES(NLINES+1) = -NCHARS
+
+C      FILL ARRAY HOLDING PROC. LINES
+       DO I = 1, NCHARS
+          PROCSTORE(I) = PDATA(I) 
+       ENDDO
+
+       IRTFLG = 0
+       RETURN
+       END
+
+
+
+C      ******************** PROC_GETPLINE *****************************
+
+       SUBROUTINE PROC_GETPLINE(IPLINE,IPROCNUMT,PLINE,NCHAR,IRTFLG)
+
+       USE PROC_INFO
+
+       INCLUDE 'CMBLOCK.INC'
+
+       COMMON /PROC_STUFF/ NUMPROCNOW
+
+       CHARACTER(LEN=*)                 :: PLINE
+       CHARACTER, DIMENSION(:), POINTER :: PROCSTORE 
+       INTEGER,   DIMENSION(:), POINTER :: PROCLINES
+
+C      RETRIEVES CURRENT PROCEDURE LINE
+
+       IRTFLG    = 1
+       NCHAR     = 0
+
+       IF (IPROCNUMT .GT. 0) THEN
+          IPROCNUM  = IPROCNUMT
+       ELSE
+          IPROCNUM  = NUMPROCNOW
+       ENDIF
+
+       PROCSTORE => PROCSTOREPTRS(IPROCNUM)%CPTR
+       PROCLINES => PROCLINESPTRS(IPROCNUM)%IPTR
+
+       IGO = PROCLINES(IPLINE)
+C      CHECK TO SEE IF VALID LINE
+       IF (IGO .LE. 0) RETURN
+
+       IEND  = ABS(PROCLINES(IPLINE+1))
+       NCHAR = IEND - IGO
+
+       IRTFLG = 0
+       IF (NCHAR .LE. 0) THEN
+          PLINE(1:) = ' '
+          RETURN
+       ENDIF
+
+       NCHARMAX = LEN(PLINE)
+       NCHAR    = MIN(NCHAR,NCHARMAX)
+       DO I = 1,NCHAR
+          PLINE(I:I) = PROCSTORE(IGO+I-1)
+       ENDDO
+       IF (NCHAR .LT. NCHARMAX) PLINE(NCHAR+1:) = ' '
+
+       RETURN
+       END
+
+
+@
+
+
+1.4
+log
+@GPL License fixed
+@
+text
+@a6 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d8 5
+a12 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d14 1
+a14 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d19 1
+a19 1
+C=* This program is distributed in the hope that it will be useful,    *
+d21 1
+a21 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a22 1
+C=*                                                                    *
+d24 1
+a24 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.3
+log
+@HRI GPL License used
+@
+text
+@a6 1
+C * SPIDER - MODULAR IMAGE PROCESSING SYSTEM.    AUTHOR: J.FRANK       *
+d10 1
+a10 1
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *  
+a29 6
+
+C * COPYRIGHT (C)1985, 1999. HEALTH RESEARCH INCORPORATED (HRI),       *
+C * ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+C * THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO HRI AND ARE NOT   *
+C * TO BE DISCLOSED TO OTHERS OR USED FOR PURPOSES OTHER THAN INTENDED *
+C * WITHOUT WRITTEN APPROVAL OF HRI.                                   *
+@
+
+
+1.2
+log
+@PLINE overflow bug
+@
+text
+@d8 24
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d4 1
+d13 1
+a13 2
+C *******************************************************************C **********************************************************************
+C
+d15 2
+a16 2
+C    PURPOSE:       HANDLES ALL INTERACTIONS WITH SPIDER PROCEDURE FILE
+C                   CONTAINS SUBROUTINES STARTING  WITH PREFIX: PROC
+d18 2
+a19 2
+C    SUBROUTINES:
+
+d95 1
+a95 1
+       CHARACTER(LEN=80)                :: PLINE
+d126 2
+d131 1
+a131 2
+       IF (NCHAR .LT. LEN(PLINE)) PLINE(NCHAR+1:) = ' '
+
+@

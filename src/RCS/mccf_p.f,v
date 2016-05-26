@@ -1,0 +1,461 @@
+head	1.8;
+access;
+symbols
+	pre_getangas:1.8
+	GPL2010:1.8
+	pre_GPL2010:1.7
+	pre_var_equation:1.7
+	pre_fftwrings:1.6
+	pre_opfiles:1.5
+	src:1.5
+	best-code:1.5
+	x-named-regs:1.5
+	x:1.5
+	v13-00:1.5
+	pre_GPL:1.3
+	prec_CA:1.3
+	noindx:1.3;
+locks; strict;
+comment	@c @;
+
+
+1.8
+date	2010.06.24.13.26.08;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2009.04.28.13.15.35;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2008.02.19.16.33.50;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2005.10.17.20.39.09;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2005.10.17.18.29.32;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2002.04.30.20.09.54;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2002.03.21.16.14.43;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2000.10.08.21.16.41;	author pawel;	state Exp;
+branches;
+next	;
+
+
+desc
+@CC MS
+@
+
+
+1.8
+log
+@GPL_2010
+@
+text
+@C++*********************************************************************
+C
+C MCCF_P.F
+C
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C PURPOSE:  CROSS CORRELATION - MASKED AND NORMALIZED 
+C
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C--*********************************************************************
+
+        SUBROUTINE MCCF_P(NSAM,NROW,X,Y,LSD,IRA,MODE)
+
+        INCLUDE 'CMBLOCK.INC'
+
+        DIMENSION         X(LSD,2*NROW),Y(LSD,2*NROW)
+        DOUBLE PRECISION  AVE
+        CHARACTER*1         MODE
+
+        R   = IRA
+        NS2 = NSAM/2+1
+        NR2 = NROW/2+1
+
+c$omp    parallel do private(j,i)
+         DO J=1,2*NROW
+          DO I=NSAM+1,2*NSAM
+           X(I,J)=0.0
+           Y(I,J)=0.0
+          ENDDO  
+         ENDDO
+        
+c$omp    parallel do private(j,i)
+         DO J=NROW+1,2*NROW
+          DO I=1,NSAM
+           X(I,J)=0.0
+           Y(I,J)=0.0
+          ENDDO
+         ENDDO
+         AVE=0.0
+         ILE=0
+         AVEY=0.0
+         ILEY=0
+c$omp    parallel do private(j,i,a,tr) reduction(+:AVE,ILE,AVEY,ILEY)
+         DO J=1,NROW
+          A=FLOAT(J-NR2)**2
+           DO    I=1,NSAM
+            TR=SQRT(FLOAT(I-NS2)**2+A)
+            IF(TR.GT.R)  THEN
+             X(I,J)=0.0
+             Y(I,J)=0.0
+            ELSE
+             AVE=AVE+X(I,J)
+             ILE=ILE+1
+             AVEY=AVEY+X(I,J)
+             ILEY=ILEY+1
+            ENDIF
+           ENDDO
+         ENDDO
+         AVE=AVE/ILE
+         AVEY=AVEY/ILEY
+        
+c$omp    parallel do private(j,i,a,tr)
+         DO J=1,NROW
+          A=FLOAT(J-NR2)**2
+          DO I=1,NSAM
+           TR = SQRT(FLOAT(I-NS2)**2+A)
+           IF (TR.LE.R)  THEN
+                X(I,J)=X(I,J)-AVE
+                Y(I,J)=Y(I,J)-AVEY
+           ENDIF
+          ENDDO
+         ENDDO 
+
+         INS=1
+         CALL FMRS_2(X,2*NSAM,2*NROW,INS)
+         IF (INS .EQ. 0)  THEN
+            CALL ERRT(38,'CC MS ',NE)
+            RETURN
+         ENDIF
+
+         INS=1
+         CALL FMRS_2(Y,2*NSAM,2*NROW,INS)
+         IF (INS .EQ. 0)  THEN
+            CALL ERRT(38,'CC MS ',NE)
+            RETURN
+         ENDIF
+
+         LSC = 2*NSAM+2-MOD(2*NSAM,2)
+         CALL CCRS_2I(X,Y, LSC,2*NSAM,2*NROW)
+
+         IF (MODE .EQ. 'F')  THEN
+           NRL=1
+           NRU=2*NROW
+           NSL=1
+           NSU=2*NSAM
+         ELSE
+           NRL=NR2
+           NRU=NROW+NR2-1
+           NSL=NS2
+           NSU=NSAM+NS2-1
+         ENDIF
+        
+c$omp    parallel do private(j,i,qt,a,t,m)
+         DO J=NRL,NRU
+            QT = FLOAT(J-(NROW+1))**2
+            DO I=NSL,NSU
+               A = SQRT(FLOAT(I-(NSAM+1))**2+QT)/2.0
+               IF (A .EQ. 0.0)  THEN
+                  X(I,J) = X(I,J)/NINT(3.1415926*R*R)*ILE
+               ELSE
+                  IF (R.GT.A)  THEN
+                     T = 2.0*ATAN(SQRT((R/A)**2-1.0))
+                     M = NINT(R*R*(T-SIN(T)))
+
+C                    NORMALIZATION IS APPLIED TO THESE AC COEFF. WHICH 
+C                    WERE ESTIMATED FROM AT LEAST  5 PIXELS
+C                    OTHERWISE AC COEFFS. ARE SET TO ZERO.
+
+                    IF (M.GE.5)  THEN
+                       X(I,J) = X(I,J)/FLOAT(M)*ILE
+                    ELSE
+                       X(I,J) = 0.0
+                    ENDIF
+                 ELSE
+                    X(I,J) = 0.0
+                 ENDIF
+              ENDIF
+           ENDDO        
+        ENDDO
+        END
+@
+
+
+1.7
+log
+@*** empty log message ***
+@
+text
+@a5 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2008  Health Research Inc.                      *
+d7 5
+a11 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d13 1
+a13 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d18 1
+a18 1
+C=* This program is distributed in the hope that it will be useful,    *
+d20 1
+a20 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a21 1
+C=*                                                                    *
+d23 1
+a23 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.6
+log
+@ccrs_ added parameter
+@
+text
+@d31 1
+d36 1
+a36 1
+        SUBROUTINE  MCCF_P(NSAM,NROW,X,Y,LSD,IRA,MODE)
+d44 7
+a50 7
+        R=IRA
+        NS2=NSAM/2+1
+        NR2=NROW/2+1
+
+c$omp parallel do private(j,i)
+         DO    J=1,2*NROW
+          DO    I=NSAM+1,2*NSAM
+d56 3
+a58 3
+c$omp parallel do private(j,i)
+         DO    J=NROW+1,2*NROW
+          DO    I=1,NSAM
+d67 2
+a68 2
+c$omp parallel do private(j,i,a,tr) reduction(+:AVE,ILE,AVEY,ILEY)
+         DO    J=1,NROW
+d86 2
+a87 2
+c$omp parallel do private(j,i,a,tr)
+         DO    J=1,NROW
+d89 3
+a91 3
+          DO    I=1,NSAM
+           TR=SQRT(FLOAT(I-NS2)**2+A)
+           IF(TR.LE.R)  THEN
+d99 2
+a100 2
+         CALL  FMRS_2(X,2*NSAM,2*NROW,INS)
+         IF (INS.EQ.0)  THEN
+d106 2
+a107 2
+         CALL  FMRS_2(Y,2*NSAM,2*NROW,INS)
+         IF (INS.EQ.0)  THEN
+d113 1
+a113 1
+         CALL  CCRS_2(X,Y,X, LSC,2*NSAM,2*NROW)
+d128 6
+a133 6
+         DO    J=NRL,NRU
+            QT=FLOAT(J-(NROW+1))**2
+            DO    I=NSL,NSU
+               A=SQRT(FLOAT(I-(NSAM+1))**2+QT)/2.0
+               IF(A.EQ.0.0)  THEN
+                  X(I,J)=X(I,J)/NINT(3.1415926*R*R)*ILE
+d135 10
+a144 10
+                  IF(R.GT.A)  THEN
+                     T=2.0*ATAN(SQRT((R/A)**2-1.0))
+                     M=NINT(R*R*(T-SIN(T)))
+C
+C  NORMALIZATION IS APPLIED TO THESE AC COEFF. WHICH WERE
+C  ESTIMATED FROM AT LEAST  5 PIXELS
+C  OTHERWISE AC COEFFS. ARE SET TO ZERO.
+C
+                    IF(M.GE.5)  THEN
+                       X(I,J)=X(I,J)/FLOAT(M)*ILE
+d146 1
+a146 1
+                       X(I,J)=0.0
+d149 1
+a149 1
+                    X(I,J)=0.0
+@
+
+
+1.5
+log
+@GPL License fixed
+@
+text
+@d7 1
+a7 1
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+a30 1
+C IMAGE_PROCESSING_ROUTINE
+d96 1
+a96 2
+C     CALL  AUTCOR(X,2*NSAM,2*NROW)
+C
+d99 1
+a99 1
+         IF(INS.EQ.0)  THEN
+d110 3
+a112 1
+         CALL  CCRS_2(X,Y,X,2*NSAM,2*NROW)
+d126 1
+a126 1
+c$omp parallel do private(j,i,qt,a,t,m)
+@
+
+
+1.4
+log
+@HRI GPL License used
+@
+text
+@a1 1
+C++************************************************************************
+a5 3
+C **************************************************************************
+C * SPIDER - MODULAR IMAGE PROCESSING SYSTEM.  AUTHOR: J.FRANK         *
+C *  SPIDER - MODULAR IMAGE PROCESSING SYSTEM.  AUTHOR: J.FRANK            *
+d9 1
+a9 1
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *  
+a28 7
+
+C *  COPYRIGHT (C)1981,1987, WADSWORTH CENTER FOR LABORATORIES AND         *
+C *  RESEARCH, NEW YORK STATE DEPARTMENT OF HEALTH, ALBANY, NY 12201.      *
+C *  THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO THE CENTER FOR       *
+C *  LABORATORIES AND RESEARCH AND ARE NOT TO BE DISCLOSED TO OTHERS OR    *
+C *  USED FOR PURPOSES OTHER THAN INTENDED WITHOUT WRITTEN APPROVAL OF     *
+C *  THE CENTER FOR LABORATORIES AND RESEARCH                              *
+a29 1
+C **************************************************************************
+a34 1
+C--************************************************************************
+@
+
+
+1.3
+log
+@ccr* phase parameter removed
+@
+text
+@d1 1
+d6 1
+d8 1
+d10 24
+d40 1
+d46 1
+@
+
+
+1.2
+log
+@ccrs_2 parameter added
+@
+text
+@d96 2
+a97 2
+          CALL  CCRS_2(X,Y,X,2*NSAM,2*NROW,.FALSE.)
+C
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d3 1
+a3 1
+C $$ MCCF_P.FOR
+a17 1
+C
+d19 1
+a19 3
+C
+C $$ MCCF_P.FOR
+C
+d21 1
+d23 1
+a23 1
+C
+d27 1
+d86 2
+a87 2
+          CALL ERRT(38,'CC MS ',NE)
+          RETURN
+d89 1
+d92 3
+a94 3
+         IF(INS.EQ.0)  THEN
+          CALL ERRT(38,'CC MS ',NE)
+          RETURN
+d96 1
+a96 1
+          CALL  CCRS_2(X,Y,X,2*NSAM,2*NROW)
+d99 4
+a102 4
+         NRL=1
+         NRU=2*NROW
+         NSL=1
+         NSU=2*NSAM
+d104 4
+a107 4
+         NRL=NR2
+         NRU=NROW+NR2-1
+         NSL=NS2
+         NSU=NSAM+NS2-1
+@

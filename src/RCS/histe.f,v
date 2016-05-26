@@ -1,0 +1,878 @@
+head	1.12;
+access;
+symbols
+	pre_getangas:1.12
+	GPL2010:1.12
+	pre_GPL2010:1.11
+	pre_var_equation:1.11
+	pre_fftwrings:1.11
+	pre_opfiles:1.11
+	src:1.11
+	best-code:1.11
+	x-named-regs:1.11
+	x:1.11
+	v13-00:1.11
+	pre_GPL:1.9
+	prec_CA:1.8
+	noindx:1.7
+	Bproc:1.6
+	oct21:1.5
+	last77:1.5;
+locks; strict;
+comment	@c @;
+
+
+1.12
+date	2010.06.24.13.25.55;	author leith;	state Exp;
+branches;
+next	1.11;
+
+1.11
+date	2005.10.17.20.22.12;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2005.10.17.18.14.37;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2005.10.03.19.26.06;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2003.02.20.19.39.03;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2000.11.03.14.18.37;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	99.11.10.23.09.21;	author yuchen;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	97.10.17.15.18.57;	author pawel;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	97.10.09.14.29.36;	author pawel;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	97.07.09.15.21.22;	author pawel;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	94.05.13.14.06.20;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	94.05.13.12.49.33;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@unix specific source code with preprocessor lines
+@
+
+
+1.12
+log
+@GPL_2010
+@
+text
+@C++*********************************************************************
+C
+C HISTE.F                               USED OPFILE NOV 00 ARDEAN LEITH
+C                        REWORKED MEMORY ALLOCATION OCT 05 ARDEAN LEITH
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C  HISTE(UNUSED)
+C
+C  PURPOSE: Finds the linear transformation (applied to pixels) 
+C           which fits the histogram of the image file to the 
+C           histogram of the reference file. 
+C
+C--*********************************************************************
+
+         SUBROUTINE HISTE(UNUSED)
+
+         INCLUDE 'CMBLOCK.INC'
+         INCLUDE 'CMLIMIT.INC' 
+ 
+         CHARACTER(LEN=MAXNAM)   ::  FILNAM
+         COMMON /COMMUN/FILNAM
+
+         REAL, ALLOCATABLE, DIMENSION(:)    :: QK1,QK2
+         LOGICAL, ALLOCATABLE, DIMENSION(:) :: QK6
+
+         DATA  LUN1,LUN2,LUN3,LUN4/8,9,10,11/
+
+         MAXIM = 0
+         CALL OPFILEC(0,.TRUE.,FILNAM,LUN1,'O',IFORM,NSAM,NROW,NSLICE,
+     &                   MAXIM,'REFERENCE IMAGE',.FALSE.,IRTFLG)
+         IF (IRTFLG .NE. 0) RETURN
+
+         MAXIM = 0
+         CALL OPFILEC(0,.TRUE.,FILNAM,LUN2,'O',IFORM,
+     &                NSAM1,NROW1,NSLICE1,
+     &                MAXIM,'IMAGE TO BE CORRECTED~',.FALSE.,IRTFLG)
+         IF (IRTFLG .NE. 0) GOTO 999
+
+         MAXIM = 0
+         CALL OPFILEC(0,.TRUE.,FILNAM,LUN4,'O',IFORM,
+     &          NSAM2,NROW2,NSLICE2,
+     &          MAXIM,'MASK FOR THE IMAGE TO CORRECTED~',.FALSE.,IRTFLG)
+         IF (IRTFLG .NE. 0) GOTO 999
+
+         IF (NSAM1   .NE. NSAM2 .OR.
+     &       NROW1   .NE. NROW2 .OR. 
+     &       NSLICE1 .NE. NSLICE2) THEN
+            CALL ERRT(2,'CE FIT  ',NE)
+            GOTO 999
+         ENDIF
+
+         MAXIM = 0
+         CALL OPFILEC(LUN2,.TRUE.,FILNAM,LUN3,'U',IFORM,
+     &             NSAM1,NROW1,NSLICE1,
+     &             MAXIM,'OUTPUT',.FALSE.,IRTFLG)
+         IF (IRTFLG .NE. 0) GOTO 999
+ 
+         NSR    = NSAM  * NROW * NSLICE
+         NSR1   = NSAM1 * NROW1 * NSLICE1
+         LENH   = MIN0(NSR/16, NSR1/16, 256)
+
+C        OLD MEMORY CALCULATION FOR COMMON BLOCK
+         K1=1              ! NSAM  * NROW * NSLICE
+         K2=K1+NSR         ! NSAM1 * NROW1 * NSLICE1
+         K4=K2+NSR1        ! LENH * 3
+         K5=K4+LENH*3      ! LENH * 3
+         K6=K5+LENH*3      ! (NSR1 + 3) / 4
+
+         ALLOCATE(QK1(NSR), QK2(NSR1), QK6(NSR1+3),STAT=IRTFLG)
+         IF (IRTFLG .NE. 0) THEN
+            NEEDED = NSR + NSR1+ NSR1+3
+            CALL ERRT(101,'UNABLE TO ALLOCATE MEMORY IN HISTE',NEEDED)
+            GOTO 999
+         ENDIF
+
+C        READ REF. IMAGE INTO QK1
+         CALL REDVOL(LUN1,NSAM,NROW,1,NSLICE,QK1,IRTFLG)
+
+C        READ MASK FOR IMAGE TO CORRECT INTO QK2
+         CALL REDVOL(LUN4,NSAM1,NROW1,1,NSLICE1,QK2,IRTFLG)
+
+C        MAKE LOGICAL MASK
+         QK6 = (QK2 .NE. 0.0)
+
+C        READ IMAGE TO CORRECT INTO QK2
+         CALL REDVOL(LUN2,NSAM1,NROW1,1,NSLICE1,QK2,IRTFLG)
+
+         ITRMAX = 100
+         CALL HISTC2(QK1,QK2,QK6,NSR,NSR1,LENH,ITRMAX,NOUT)
+
+C        WRITE OUTPUT IMAGE 
+         CALL WRTVOL(LUN3,NSAM1,NROW1,1,NSLICE1,QK2,IRTFLG)
+
+999      CLOSE(LUN1)
+         CLOSE(LUN2)
+         CLOSE(LUN3)
+         CLOSE(LUN4)
+
+         IF (ALLOCATED(QK1)) DEALLOCATE(QK1)
+         IF (ALLOCATED(QK2)) DEALLOCATE(QK2)
+         IF (ALLOCATED(QK6)) DEALLOCATE(QK6)
+
+         RETURN
+         END
+
+
+
+C--*********************************************************************
+
+         SUBROUTINE  HISTC2(QK1,QK2,QK6,N,  NSR1,LENH,ITRMAX,NOUT)
+
+         REAL      ::  QK1(N),QK2(NSR1)
+         LOGICAL   ::  QK6(NSR1)
+
+         REAL      ::  QK4(3*LENH),QK5(3*LENH)
+
+         REAL      ::  AK(2),P(3,2),Y(3)
+         REAL      ::  PR(2),PRR(2),PBAR(2)
+
+         EXTERNAL  FHT2
+
+         XRMI = QK1(1)
+         XRMA = XRMI
+         AVR  = XRMI
+         SR   = XRMI**2
+         DO I=2,N
+            AVR  = AVR + QK1(I)
+            SR   = SR  + QK1(I) ** 2
+            XRMI = AMIN1(XRMI,QK1(I))
+            XRMA = AMAX1(XRMA,QK1(I))
+	 ENDDO
+
+C        ximi=amin1(ximi,xi(i))
+C1       xima=amax1(xima,xi(i))
+
+         NT1  = 0
+         XIMI = 1.E23
+         XIMA = -XIMI
+         AVI  = 0.0
+         SI   = 0.0
+
+         DO I=1,NSR1
+            IF (QK6(I))  THEN
+               NT1 = NT1 + 1
+               AVI = AVI + QK2(I)
+               SI  = SI  + QK2(I)**2
+            ENDIF
+	 ENDDO
+
+         RXR = XRMA - XRMI
+C        rxi = xima - ximi
+         AVR = AVR / N
+         AVI = AVI / NT1
+         SR  = SQRT((SR - N   * AVR * AVR) / (N-1))
+         SI  = SQRT((SI - NT1 * AVI * AVI) / (NT1-1))
+
+         DO I=1,3*LENH
+            QK4(I) = 0
+	 ENDDO
+
+         DO I=1,N
+            L = INT((QK1(I) - XRMI) / RXR * (LENH-1) + LENH+1)
+            QK4(L) = QK4(L) + 1
+	 ENDDO
+
+         DO I=1,3*LENH
+            QK4(I) = QK4(I) * FLOAT(NT1) / FLOAT(N)
+	 ENDDO
+
+         A      = SR/SI
+         P(1,1) = 0.9*A
+         P(2,1) = A
+         P(3,1) = 1.1*A
+         B      =  AVR-A*AVI
+         P(1,2) = -B
+         P(2,2) = B
+         P(3,2) = 3*B
+
+         DO I=1,3
+            AK(1) = P(I,1)
+            AK(2) = P(I,2)
+            Y(I)  = FHT2(AK,NSR1,LENH,QK2,QK4,QK5,QK6,RXR,XRMI)
+	 ENDDO
+
+         WRITE(NOUT,205)  A,B,Y(2)
+205      FORMAT(' The transformation is  A*x + B',/,
+     &   ' Initial parameters   A =',1pe12.5,'   B =',1pe12.5,/,
+     &   ' Initial chi-square     =',1pe12.5)
+
+         N2  = 2
+         EPS = 0.0001
+
+         CALL AMOEBA2(P,Y,N2,EPS,FHT2,ITER,ITRMAX,PR,PRR,PBAR,
+     &               NSR1,LENH,QK2,QK4,QK5,QK6,RXR,XRMI)
+
+         WRITE(NOUT,206)  ITER,P(2,1),P(2,2),Y(2)
+206      FORMAT(' Minimum was found in ',i3,' iterations.',/,
+     &          ' Parameters found     A =',1pe12.5,'   B =',1pe12.5,/,
+     &          ' Final   chi-square     =',1pe12.5)
+
+C        do  6  i=1,4
+C6          print  203,(p(i,j),j=1,3)
+C203     format(3(3x,e12.5))
+
+         DO I=1,NSR1
+            QK2(I) = QK2(I) * P(2,1) + P(2,2)
+	 ENDDO
+
+         END
+
+
+C--*********************************************************************
+
+         FUNCTION FHT2(AK,N,LENH,XI,H1,H2,IFP,RXR,XRMI)
+
+         REAL    ::  AK(2),XI(N),H1(3*LENH),H2(3*LENH)
+         LOGICAL ::  IFP(N)
+
+         DO I=1,3*LENH
+            H2(I) = 0
+         ENDDO
+
+         DO  I=1,N
+            IF (IFP(I))  THEN
+               XN    = XI(I) * AK(1) + AK(2)
+               L     = INT((XN - XRMI) / RXR * (LENH - 1) + LENH + 1)
+               IF (L.GE.1 .AND. L .LE. 3*LENH)   H2(L) = H2(L) + 1
+            ENDIF
+         ENDDO
+
+         FHT2 = 0.0
+
+         DO I=1,3*LENH
+            FHT2 = FHT2 + (H1(I) - H2(I)) ** 2
+         ENDDO
+
+         END
+
+C--*********************************************************************
+
+         SUBROUTINE AMOEBA2(P,Y,NDIM,FTOL,FUNK,ITER,ITMAX,PR,PRR,PBAR,
+     &                      NSR1,LENH,QK2,QK4,QK5,QK6,RXR,XRMI)
+
+         INCLUDE 'CMBLOCK.INC'
+ 
+         PARAMETER (ALPHA=1.0,BETA=0.5,GAMMA=2.0)
+         DIMENSION P(NDIM+1,NDIM),Y(NDIM+1),PR(NDIM)
+         DIMENSION PRR(NDIM),PBAR(NDIM)
+
+         EXTERNAL  FUNK
+
+         MPTS = NDIM+1
+         ITER = 0
+
+1        ILO = 1
+         IF (Y(1) .GT. Y(2)) THEN
+            IHI  = 1
+            INHI = 2
+         ELSE
+            IHI  = 2
+            INHI = 1
+         ENDIF
+
+         DO I=1,MPTS
+            IF (Y(I) .LT. Y(ILO)) ILO=I
+            IF (Y(I) .GT. Y(IHI)) THEN
+               INHI=IHI
+               IHI=I
+            ELSE IF (Y(I) .GT. Y(INHI)) THEN
+               IF ( I.NE. IHI) INHI=I
+            ENDIF
+         ENDDO
+
+         RTOL = 2.*ABS(Y(IHI)-Y(ILO))/(ABS(Y(IHI))+ABS(Y(ILO)))
+         IF (RTOL .LT. FTOL) RETURN
+         IF (ITER .EQ. ITMAX) THEN
+            WRITE(NOUT,*) ' Amoeba exceeding maximum iterations.'
+            RETURN
+         ENDIF
+         ITER = ITER + 1
+         DO J=1,NDIM
+            PBAR(J) = 0.
+         ENDDO
+
+         DO I=1,MPTS
+            IF (I .NE. IHI) THEN
+               DO  J=1,NDIM
+                  PBAR(J) = PBAR(J)+P(I,J)
+               ENDDO
+            ENDIF
+         ENDDO
+
+         DO J=1,NDIM
+            PBAR(J) = PBAR(J) / NDIM
+            PR(J)   = (1. + ALPHA) * PBAR(J) - ALPHA * P(IHI,J)
+         ENDDO
+
+         YPR = FUNK(PR,NSR1,LENH,QK2,QK4,QK5,QK6,RXR,XRMI)
+C              FHT2(AK,NSR1,LENH,QK2,QK4,QK5,QK6,RXR,XRMI)
+
+         IF (YPR .LE. Y(ILO)) THEN
+            DO  J=1,NDIM
+               PRR(J) = GAMMA*PR(J)+(1. - GAMMA) * PBAR(J)
+            ENDDO
+
+            YPRR = FUNK(PRR,NSR1,LENH,QK2,QK4,QK5,QK6,RXR,XRMI)
+C                  FHT2(AK, NSR1,LENH,QK2,QK4,QK5,QK6,RXR,XRMI)
+
+            IF (YPRR .LT. Y(ILO)) THEN
+               DO J=1,NDIM
+                  P(IHI,J) = PRR(J)
+               ENDDO
+
+               Y(IHI)=YPRR
+            ELSE
+               DO  J=1,NDIM
+                  P(IHI,J) = PR(J)
+               ENDDO
+
+               Y(IHI) = YPR
+            ENDIF
+
+         ELSE IF (YPR .GE. Y(INHI)) THEN
+            IF (YPR .LT. Y(IHI)) THEN
+               DO  J=1,NDIM
+                  P(IHI,J) = PR(J)
+               ENDDO
+
+               Y(IHI)=YPR
+            ENDIF
+            DO J=1,NDIM
+               PRR(J) = BETA*P(IHI,J) + (1.-BETA)*PBAR(J)
+            ENDDO
+
+            YPRR = FUNK(PRR,NSR1,LENH,QK2,QK4,QK5,QK6,RXR,XRMI)
+C                   FHT2(AK,NSR1,LENH,QK2,QK4,QK5,QK6,RXR,XRMI)
+
+            IF (YPRR .LT. Y(IHI)) THEN
+               DO J=1,NDIM
+                  P(IHI,J) = PRR(J)
+               ENDDO
+
+               Y(IHI)=YPRR
+            ELSE
+               DO  I=1,MPTS
+                  IF (I.NE.ILO) THEN
+                     DO  J=1,NDIM
+                        PR(J)  = 0.5*(P(I,J)+P(ILO,J))
+                        P(I,J) = PR(J)
+                     ENDDO
+
+                     Y(I) = FUNK(PR,NSR1,LENH,QK2,QK4,QK5,QK6,RXR,XRMI)
+                  ENDIF
+               ENDDO
+            ENDIF
+         ELSE
+            DO  J=1,NDIM
+               P(IHI,J) = PR(J)
+            ENDDO
+
+            Y(IHI) = YPR
+         ENDIF
+
+         GO TO 1
+         END
+
+@
+
+
+1.11
+log
+@GPL License fixed
+@
+text
+@a5 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d7 5
+a11 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d13 1
+a13 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d18 1
+a18 1
+C=* This program is distributed in the hope that it will be useful,    *
+d20 1
+a20 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a21 1
+C=*                                                                    *
+d23 1
+a23 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.10
+log
+@HRI GPL License used
+@
+text
+@a5 3
+C ***********************************************************************
+C * SPIDER - MODULAR IMAGE PROCESSING SYSTEM.  AUTHOR: J.FRANK         *
+C *  SPIDER - MODULAR IMAGE PROCESSING SYSTEM.  AUTHOR: J.FRANK            *
+d9 1
+a9 1
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *  
+a28 7
+
+C *  COPYRIGHT (C)1981,1987, WADSWORTH CENTER FOR LABORATORIES AND         *
+C *  RESEARCH, NEW YORK STATE DEPARTMENT OF HEALTH, ALBANY, NY 12201.      *
+C *  THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO THE CENTER FOR       *
+C *  LABORATORIES AND RESEARCH AND ARE NOT TO BE DISCLOSED TO OTHERS OR    *
+C *  USED FOR PURPOSES OTHER THAN INTENDED WITHOUT WRITTEN APPROVAL OF     *
+C *  THE CENTER FOR LABORATORIES AND RESEARCH   			   *
+a29 1
+C ***********************************************************************
+a132 1
+C--************************************************************************
+a236 1
+C--************************************************************************
+a263 1
+C--************************************************************************
+@
+
+
+1.9
+log
+@memory alloc. updated
+@
+text
+@d5 1
+d7 1
+d9 24
+d39 1
+d143 1
+d248 1
+d276 1
+@
+
+
+1.8
+log
+@opfilec
+@
+text
+@d1 1
+a1 1
+C++************************************************************************
+d4 2
+a5 2
+C
+C **************************************************************************
+d13 3
+a15 1
+C **************************************************************************
+d17 3
+a19 1
+C  HISTE(MAXMEM)
+d21 1
+a21 1
+C--************************************************************************
+d23 1
+a23 1
+         SUBROUTINE HISTE(MAXMEM)
+d31 2
+a32 3
+         COMMON        Q(1)
+
+         COMMON /POINTERS/  NSR1,LENH,K1,K2,K4,K5,K6,K7
+d44 1
+a44 1
+     &                MAXIM,'IMAGE TO CORRECT',.FALSE.,IRTFLG)
+d49 2
+a50 2
+     &             NSAM2,NROW2,NSLICE2,
+     &             MAXIM,'MASK FOR THE IMAGE TO CORRECT',.FALSE.,IRTFLG)
+d53 3
+a55 2
+         IF (NSAM1.NE.NSAM2.OR.
+     &      NROW1.NE.NROW2.OR.NSLICE1.NE.NSLICE2) THEN
+d66 29
+a94 2
+         NSR    = NSAM*NROW*NSLICE
+         NSR1   = NSAM1*NROW1*NSLICE1
+a95 1
+         LENH   = MIN0(NSR/16,NSR1/16,256)
+d97 9
+d107 61
+a167 15
+C        MEMORY
+         K1=1
+         K2=K1+NSR
+         K4=K2+NSR1
+         K5=K4+LENH*3
+         K6=K5+LENH*3
+         K7=K6+(NSR1+3)/4
+
+         MEMTOT = K7
+         WRITE(NOUT,1010)   MEMTOT
+1010     FORMAT(' MEMORY NEEDED:',I9)
+         IF (MEMTOT .GT. MAXMEM)  THEN
+            CALL  ERRT(6,'HISTE',NE)
+            GOTO  999
+         ENDIF
+d169 3
+a171 2
+         DO J=1,NROW*NSLICE
+           CALL REDLIN(LUN1,Q(K1+(J-1)*NSAM),NSAM,J)
+d174 2
+a175 2
+         DO J=1,NROW1*NSLICE1
+           CALL REDLIN(LUN4,Q(K2+(J-1)*NSAM1),NSAM1,J)
+d178 13
+a190 3
+         CALL CONVL(Q(K2),Q(K7),NSR1)
+         DO J=1,NROW1*NSLICE1
+           CALL REDLIN(LUN2,Q(K2+(J-1)*NSAM1),NSAM1,J)
+d193 19
+a211 2
+         CALL HISTC
+     &      (Q(K1),Q(K2),Q(K4),Q(K5),Q(K7),NSR,NSR1,LENH,ITRMAX,NOUT)
+d213 2
+a214 2
+         DO J=1,NROW1*NSLICE1
+            CALL WRTLIN(LUN3,Q(K2+(J-1)*NSAM1),NSAM1,J)
+d217 154
+a370 4
+999      CLOSE(LUN1)
+         CLOSE(LUN2)
+         CLOSE(LUN3)
+         CLOSE(LUN4)
+d372 1
+a372 1
+         RETURN
+d374 1
+@
+
+
+1.7
+log
+@used opfile & cosmetic
+@
+text
+@d22 4
+d28 1
+a28 1
+         CHARACTER *81 FILNAM
+d34 1
+a34 1
+         CALL OPFILE(.TRUE.,FILNAM,LUN1,'O',IFORM,NSAM,NROW,NSLICE,
+d39 3
+a41 2
+         CALL OPFILE(.TRUE.,FILNAM,LUN2,'O',IFORM,NSAM1,NROW1,NSLICE1,
+     &                   MAXIM,'IMAGE TO CORRECT',.FALSE.,IRTFLG)
+d45 2
+a46 1
+         CALL OPFILE(.TRUE.,FILNAM,LUN4,'O',IFORM,NSAM2,NROW2,NSLICE2,
+d57 2
+a58 1
+         CALL OPFILE(.TRUE.,FILNAM,LUN3,'U',IFORM,NSAM1,NROW1,NSLICE1,
+@
+
+
+1.6
+log
+@a
+@
+text
+@d3 1
+a3 1
+C $$ HISTE.FOR
+d15 1
+a16 1
+C
+d18 1
+a18 3
+C
+C $$ HISTE.FOR
+C
+d20 1
+d22 2
+a23 1
+         COMMON Q(1)
+a24 1
+         CHARACTER *1  NULL
+d26 1
+a26 1
+C
+d29 33
+a61 36
+         NULL=CHAR(0)
+C
+         CALL FILERD(FILNAM,NLETI,NULL,'Reference image',IRTFLG)
+         IF (IRTFLG .EQ. -1) GOTO 5
+         CALL OPENF(FILNAM,LUN1,NSAM,NROW,'O',NF,NSLICE)
+         GOTO (130,110),NF
+110      IF(IFORM.LT.1) GOTO 145
+         CALL FILERD(FILNAM,NLETI,NULL,'Image to correct',IRTFLG)
+         IF (IRTFLG .EQ. -1) GOTO 5
+         CALL OPENF(FILNAM,LUN2,NSAM1,NROW1,'O',NF,NSLICE1)
+         GOTO (130,111),NF
+111      IF(IFORM.LT.1) GOTO 145
+         CALL FILERD(FILNAM,NLETI,NULL,
+     &   'Mask for the image to correct',IRTFLG)
+         IF (IRTFLG .EQ. -1) GOTO 5
+         CALL OPENF(FILNAM,LUN4,NSAM2,NROW2,'O',NF,NSLICE2)
+         GOTO (130,112),NF
+112      IF(IFORM.LT.1) GOTO 145
+         IF(NSAM1.NE.NSAM2.OR.
+     &   NROW1.NE.NROW2.OR.NSLICE1.NE.NSLICE2) GOTO 145
+         CALL FILERD(FILNAM,NLETO,NULL,'OUTPUT',IRTFLG)
+         IF (IRTFLG .EQ. -1) GOTO 5
+         CALL OPENF(FILNAM,LUN3,NSAM1,NROW1,'UNKNOWN',NF,NSLICE1)
+         GOTO (130,951),NF
+951      CONTINUE
+C     CALL  RDPRMI(LENH,ITRMAX,NLOOP,ILOOP,
+C     & 'Histogram length, maximum number of iterations')
+         NSR=NSAM*NROW*NSLICE
+         NSR1=NSAM1*NROW1*NSLICE1
+C     if(lenh.eq.0) lenh=min0(nsr/16,nsr1/16,256)
+C     if(itrmax.eq.0)  itrmax=100
+         LENH=MIN0(NSR/16,NSR1/16,256)
+         ITRMAX=100
+C
+C  MEMORY
+C
+d68 2
+a69 1
+         MEMTOT=K7
+d71 4
+a74 4
+1010     FORMAT(' Memory needed=',I8)
+         IF(MEMTOT.GT.MAXMEM)  THEN
+         CALL  ERRT(6,'Hist  ',NE)
+         GOTO  5
+d76 7
+a82 2
+         DO    J=1,NROW*NSLICE
+           CALL  REDLIN(LUN1,Q(K1+(J-1)*NSAM),NSAM,J)
+d84 4
+a87 3
+         CLOSE(LUN1)
+         DO    J=1,NROW1*NSLICE1
+           CALL  REDLIN(LUN4,Q(K2+(J-1)*NSAM1),NSAM1,J)
+d89 6
+a94 4
+         CLOSE(LUN4)
+         CALL  CONVL(Q(K2),Q(K7),NSR1)
+         DO    J=1,NROW1*NSLICE1
+           CALL  REDLIN(LUN2,Q(K2+(J-1)*NSAM1),NSAM1,J)
+d96 2
+a98 6
+C
+         CALL  HISTC
+     &   (Q(K1),Q(K2),Q(K4),Q(K5),Q(K7),NSR,NSR1,LENH,ITRMAX,NOUT)
+         DO    J=1,NROW1*NSLICE1
+          CALL  WRTLIN(LUN3,Q(K2+(J-1)*NSAM1),NSAM1,J)
+	 ENDDO
+d100 2
+a101 4
+         RETURN
+C
+5        CLOSE(LUN1)
+         CLOSE(LUN2)
+a102 4
+130      CALL ERRT(4,'CE FIT  ',NE)
+         GOTO 5
+145      CALL ERRT(2,'CE FIT  ',NE)
+         GOTO 5
+@
+
+
+1.5
+log
+@R
+@
+text
+@d29 1
+a29 1
+CNO_SAVE
+@
+
+
+1.4
+log
+@*** empty log message ***
+@
+text
+@d34 1
+a34 1
+         CALL OPENF(FILNAM,LUN1,NSAM,NROW,'R',NF,NSLICE)
+d39 1
+a39 1
+         CALL OPENF(FILNAM,LUN2,NSAM1,NROW1,'R',NF,NSLICE1)
+d45 1
+a45 1
+         CALL OPENF(FILNAM,LUN4,NSAM2,NROW2,'R',NF,NSLICE2)
+@
+
+
+1.3
+log
+@*** empty log message ***
+@
+text
+@d79 3
+a81 2
+         DO  101  J=1,NROW*NSLICE
+101      CALL  REDLIN(LUN1,Q(K1+(J-1)*NSAM),NSAM,J)
+d83 3
+a85 2
+         DO  102  J=1,NROW1*NSLICE1
+102      CALL  REDLIN(LUN4,Q(K2+(J-1)*NSAM1),NSAM1,J)
+d88 3
+a90 2
+         DO  103  J=1,NROW1*NSLICE1
+103      CALL  REDLIN(LUN2,Q(K2+(J-1)*NSAM1),NSAM1,J)
+d95 3
+a97 2
+         DO  104  J=1,NROW1*NSLICE1
+104      CALL  WRTLIN(LUN3,Q(K2+(J-1)*NSAM1),NSAM1,J)
+@
+
+
+1.2
+log
+@cpp_lines_added
+@
+text
+@a21 1
+#ifdef SP_UNIX
+a22 3
+#else
+         INCLUDE 'COMMON1:CMBLOCK.INC'
+#endif
+d29 1
+a31 1
+C
+d100 1
+a100 1
+130      CALL ERRT(4,'Hist  ',NE)
+d102 1
+a102 1
+145      CALL ERRT(2,'Hist  ',NE)
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d22 3
+d26 1
+@

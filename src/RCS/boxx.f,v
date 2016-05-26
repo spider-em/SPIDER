@@ -1,0 +1,2097 @@
+head	1.17;
+access;
+symbols
+	pre_getangas:1.14
+	GPL2010:1.14
+	pre_GPL2010:1.13
+	pre_var_equation:1.13
+	pre_fftwrings:1.12
+	pre_opfiles:1.12
+	src:1.12
+	best-code:1.12
+	x-named-regs:1.12
+	x:1.12
+	v13-00:1.12
+	pre_GPL:1.11
+	prec_CA:1.11
+	noindx:1.11
+	Bproc:1.7
+	oct21:1.5
+	last77:1.5;
+locks; strict;
+comment	@c @;
+
+
+1.17
+date	2014.01.12.19.50.35;	author leith;	state Exp;
+branches;
+next	1.16;
+
+1.16
+date	2012.08.02.13.55.16;	author leith;	state Exp;
+branches;
+next	1.15;
+
+1.15
+date	2012.02.15.20.21.30;	author leith;	state Exp;
+branches;
+next	1.14;
+
+1.14
+date	2010.06.24.13.25.09;	author leith;	state Exp;
+branches;
+next	1.13;
+
+1.13
+date	2009.05.22.10.57.04;	author leith;	state Exp;
+branches;
+next	1.12;
+
+1.12
+date	2005.10.17.21.10.03;	author leith;	state Exp;
+branches;
+next	1.11;
+
+1.11
+date	2002.03.11.14.02.13;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2001.03.19.14.27.23;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2000.10.18.19.36.22;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2000.10.13.15.35.59;	author bimal;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2000.09.06.17.50.24;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	99.11.10.23.09.08;	author yuchen;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	99.02.03.19.37.37;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	97.10.01.21.06.38;	author pawel;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	95.07.07.16.03.18;	author mladjadj;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	94.09.07.10.51.40;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	94.05.13.12.47.27;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@copied from USER2:[PSIDER.CMSREF] on 11 May 1994
+@
+
+
+1.17
+log
+@enter
+@
+text
+@C+*********************************************************************
+C
+C BOXX.F 
+C         NORM3 CALL NOT INVOKED FOR MODE 2 BUG  MAR 01 ARDEAN LEITH
+C         SETPRM REMOVED                         MAY 09 ARDEAN LEITH
+C         MENU                                   FEB 12 ARDEAN LEITH
+C         ANCIENT 3D SHIFT BUG & LOWPASS F BUG   AUG 12 ARDEAN LEITH
+C           
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2012  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C  BOXX(LUN1,LUN2,NX,NY,NZ,NDUM)
+C
+C  PARAMETERS:
+C        LUN1     LOGICAL UNIT NUMBER OF FILE
+C        LUN2     LOGICAL UNIT NUMBER OF FILE
+C        NX       NUMBER OF SAMPLES
+C        NY       NUMBER OF ROWS
+C        NZ       NUMBER OF SLICES
+C        NDUM     UNUSED
+C
+C  PURPOSE: DOES OPERATIONS INVOLVING  LOCAL BOX
+C         MODE 1 > SUBTRACTIVE BOX FILTERING        (HIGH PASS)
+C         MODE 2 > RETURNS FMIN IF PT <  XAVG
+C                          FMAX IF PT >= XAVG
+C         MODE 3 > RETURNS LOCAL AVERAGE FOR POINT  (LOW PASS)
+C         MODE 4 > DIVISIVE CONTRAST CORRECTION
+C
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C--*********************************************************************
+
+        SUBROUTINE BOXX(LUN1,LUN2, NX,NY,NZ, NDUM)
+
+        INCLUDE 'CMBLOCK.INC'
+
+        INTEGER            :: LUN1,LUN2,NX,NY,NZ,NDUM
+
+        INTEGER            :: DS,DR,DL
+        CHARACTER (LEN=1)  :: ANS
+        CHARACTER (LEN=1)  :: NULL = CHAR(0)
+        REAL, ALLOCATABLE  :: X(:),XOUT(:)
+
+
+        WRITE(NOUT,92)
+ 92     FORMAT(
+     &      ' .MENU: H   -- HIGH PASS FILTER'/
+     &      '        L   -- LOW  PASS FILTER'/
+     &      '        T   -- THRESHOLD FILTER'/
+     &      '        D   -- DIVISIVE LOCAL FILTER'/)
+
+        CALL RDPRMC(ANS,NC,.TRUE.,'FILTER OPTION (H,L,T,D)',
+     &              NULL,IRTFLG)
+
+        MODE = INDEX('HTLD',ANS)
+        IF (MODE <= 0)  THEN
+           CALL ERRT(101,'UNKNOWN FILTER OPTION',NERROR)
+           RETURN
+        ENDIF
+
+        IF (MODE == 4) THEN 
+C          DIVISIVE LOCAL FILTER  
+           IF (IMAMI.NE.1) CALL NORM3(LUN1,NX,NY,NZ, FMAX,FMIN,AV)
+           AV1 = AV * 0.1   ! why??
+        ENDIF
+
+        FMINN = FMIN
+        FMAXX = FMAX
+        IF (FMIN >= FMAX) THEN
+           FMINN = 0.0
+           FMAXX = 2.0
+        ENDIF
+
+        IF (NZ == 1 ) THEN
+           DR = 0
+           CALL RDPRI2S(DS,DR, NOT_USED,
+     &               'BOX COLUMNS & ROWS',IRTFLG)
+           IF (DS <= 0) THEN
+             CALL ERRT(101,'BOX COLUMNS MUST BE > 0 AND ODD',NERROR)
+             RETURN
+           ENDIF
+           IF (DR == 0) DR = DS
+
+           IF     (MOD(DS,2) == 0) THEN
+             CALL ERRT(101,'BOX COLUMNS MUST BE ODD',DS)
+             RETURN
+           ELSEIF (MOD(DR,2) == 0) THEN
+             CALL ERRT(101,'BOX ROWS MUST BE ODD',   DR)
+             RETURN
+           ENDIF
+
+           WRITE(NOUT,91) DS,DR
+ 91        FORMAT('  BOX SIZE: ',I3,' x',I3)
+
+           ALLOCATE(X(NX*NY),XOUT(NX),STAT=IRTFLG)
+           IF (IRTFLG .NE. 0) THEN
+              MWANT = NX*NY + NX
+              CALL ERRT(46,'BOXX; X & XOUT',MWANT)
+              GOTO 9999
+           ENDIF
+  
+        ELSE
+
+           DR = 0
+           DL = -999
+           CALL RDPRI3S(DS,DR,DL, NOT_USED,
+     &                  'BOX COLUMNS, ROWS, & SLICES',IRTFLG)
+           IF (DS <= 0) THEN
+              CALL ERRT(101,'BOX COLUMNS MUST BE > 0 AND ODD',NERROR)
+              RETURN
+           ENDIF
+           IF (DR == 0) DR = DS
+           IF (DL == 0) DL = DS
+
+           IF (DL == -999) THEN
+C             MUST FIND SLICE DIMENSION OF BOX  
+              CALL RDPRI1S(DL, NOT_USED,'BOX SLICES',IRTLFG)
+              IF (DL == -999) DL = DS
+           ENDIF
+
+           IF     (MOD(DS,2) == 0) THEN
+             CALL ERRT(101,'BOX COLUMNS MUST BE ODD',DS)
+             RETURN
+           ELSEIF (MOD(DR,2) == 0) THEN
+             CALL ERRT(101,'BOX ROWS MUST BE ODD',   DR)
+             RETURN
+           ELSEIF (MOD(DL,2) == 0) THEN
+             CALL ERRT(101,'BOX SLICES MUST BE ODD', DL)
+             RETURN
+           ENDIF
+
+           WRITE(NOUT,90) DS,DR,DL
+ 90        FORMAT('  BOX SIZE: ',I3,' x',I3,' x',I3)
+
+           ALLOCATE(X(NX*NY*DL),XOUT(NX),STAT=IRTFLG)
+           IF (IRTFLG .NE. 0) THEN
+              MWANT = NX*NY*DL + NX
+              CALL ERRT(46,'BOXX; X & XOUT',MWANT)
+              GOTO 9999
+           ENDIF
+        ENDIF
+
+        F = 1.0
+        CALL RDPRM1S(F,NOT_USED,'FILTER WEIGHT (0.0 ... 1.0)',IRTLFG)
+        FC = 1.0 - F
+
+        IF (NZ .LE. 1)  THEN
+C------------------------------------------------------ 2-D -----------
+
+           KT     = 1
+           KR     = 1
+           MOVWAY = 2
+           I      = -1
+
+           DO J=1,NY
+              JOFF = MOD(J-1,DR) * NX
+              KT   = 1
+              IF (MOVWAY == 3) KT = NX
+              NO   = KT
+
+C             *** START OFF OR GO DOWN ***
+              IF (MODE == 1) THEN
+                 CALL AVERG(LUN1,XAVG, J,KT, NX,NY, DS,DR,KR,X)
+
+                 POINT    = X(JOFF+KT)
+                 XOUT(NO) = F * (POINT-XAVG) + POINT * FC
+ 
+
+              ELSEIF (MODE == 2) THEN
+                 CALL AVERG(LUN1,XAVG, J,KT, NX,NY, DS,DR,KR,X)
+
+                 POINT    = X(JOFF+KT)
+                 XOUT(NO) = F * FMINN + FC * POINT
+                 IF (POINT >= XAVG) XOUT(NO) = F * FMAXX + FC * POINT
+ 
+              ELSEIF (MODE == 3) THEN
+                 CALL AVERG(LUN1,XAVG, J,KT, NX,NY,DS,DR,KR,X)
+
+                 POINT    = X(JOFF+KT)
+                 XOUT(NO) = XAVG * F + FC * POINT
+             
+              ELSEIF (MODE == 4) THEN
+                 CALL AVERG(LUN1,XAVG, J,KT, NX,NY, DS,DR,KR,X)
+
+                 POINT    = X(JOFF+KT)
+                 XOUT(NO) = F * POINT / (XAVG+AV1) + POINT * FC
+              ENDIF
+
+              DO  K=2,NX
+                 KT = K
+                 IF (MOVWAY == 3) KT = NX + 1 - K
+                 NO = KT
+
+C                *** MOVE RIGHT OR LEFT ***
+                 IF (MODE == 1) THEN
+                    CALL AVERG(LUN1,XAVG, J,KT, NX,NY,DS,DR,MOVWAY,X)
+
+                    POINT    = X(JOFF+KT)
+                    XOUT(NO) = F * (POINT - XAVG) + POINT * FC
+
+                 ELSEIF (MODE == 2) THEN
+                    CALL AVERG(LUN1,XAVG,J, KT, NX,NY,DS,DR,MOVWAY,X)
+
+                    POINT    = X(JOFF+KT)
+                    XOUT(NO) = F * FMINN + FC * POINT
+                    IF (POINT >= XAVG) XOUT(NO) = F*FMAXX + FC*POINT
+
+                 ELSEIF (MODE == 3) THEN
+                    CALL AVERG(LUN1,XAVG, J,KT, NX,NY,DS,DR,MOVWAY,X)
+
+                    POINT    = X(JOFF+KT)
+                    XOUT(NO) = XAVG * F + FC * POINT
+
+                 ELSEIF (MODE == 4) THEN
+                    CALL AVERG(LUN1,XAVG, J,KT, NX,NY,DS,DR,MOVWAY,X)
+
+                    POINT    = X(JOFF+KT)
+                    XOUT(NO) = F*POINT / (XAVG+AV1) + POINT*FC
+                 ENDIF
+              ENDDO
+
+              I      = -I
+              MOVWAY = MOVWAY+I
+              KT     = 1
+              KR     = 4
+              CALL WRTLIN(LUN2,XOUT,NX,J)
+
+           ENDDO
+
+C------------------------------------------------------ 3D ------------
+        ELSE
+
+           I      = -1
+           MOVWAY = 2
+           IS     = -1
+           MOVSID = 4
+           KR     = 1
+           LREAD  = 0
+
+           DO L=1,NZ    ! LOOP OVER SLICES
+              LOFF = MOD(L-1,DL) * NX * NY    ! 0, 16k, 32k 48k
+
+              DO J=1,NY     ! LOOP OVER ROWS
+                 IF (MOVWAY == 3)  THEN
+                    KT = NX
+                 ELSE
+                    KT = 1
+                 ENDIF
+
+                 IF (MOVSID == 5) THEN
+                    KJ = NY + 1 - J
+                 ELSE
+                    KJ = J
+                 ENDIF
+
+                 NI    = LOFF + (KJ-1)*NX + KT
+                 NO    = KT
+
+                 IF (J == 1)  THEN
+C                   FIRST LINE OF THIS SLICE
+
+                    IF (MODE == 1)  THEN                   
+                       CALL AVERG3(LUN1,XAVG, KJ,KT,L, NX,NY,NZ,
+     &                             DS,DR,DL,KR,LREAD,X)
+                       POINT    = X(NI)
+                       XOUT(NO) = F*(POINT-XAVG) + POINT*FC
+
+                    ELSEIF (MODE == 2)  THEN 
+                       CALL AVERG3(LUN1,XAVG, KJ,KT,L, NX,NY,NZ,
+     &                             DS,DR,DL,KR,LREAD,X)
+
+                       POINT = X(NI)
+                       IF (POINT >= XAVG) XOUT(NO) = F*FMAXX + FC*POINT
+
+                    ELSEIF (MODE == 3)  THEN 
+                       CALL AVERG3(LUN1,XAVG, KJ,KT,L, NX,NY,NZ,
+     &                             DS,DR,DL,KR,LREAD,X)
+
+                       POINT    = X(NI)
+                       XOUT(NO) = XAVG*F + FC*POINT
+                       
+                    ELSEIF (MODE == 4)  THEN 
+                       CALL AVERG3(LUN1,XAVG, KJ,KT,L, NX,NY,NZ,
+     &                             DS,DR,DL,KR,LREAD,X)
+
+                       POINT    = X(NI)
+                       XOUT(NO) = F*POINT/(XAVG+AV1) + POINT*FC
+                    ENDIF 
+                                                                               
+                 ELSE  
+                 
+C                   SECOND OR GREATER LINE OF THIS SLICE
+
+                     IF (MODE == 1) THEN   
+                       CALL AVERG3(LUN1,XAVG, KJ,KT,L, NX,NY,NZ,
+     &                             DS,DR,DL,MOVSID,LREAD,X)
+
+                       POINT    = X(NI)
+                       XOUT(NO) = F*(POINT-XAVG) + POINT*FC
+
+                    ELSEIF (MODE == 2) THEN                       
+                       CALL AVERG3(LUN1,XAVG, KJ,KT,L, NX,NY,NZ,
+     &                             DS,DR,DL,MOVSID,LREAD,X)
+
+                       POINT    = X(NI)
+                       XOUT(NO) = F*FMINN + FC*POINT
+                       IF (POINT >= XAVG) XOUT(NO) = F*FMAXX + FC*POINT
+
+                    ELSEIF (MODE == 3) THEN 
+                       CALL AVERG3(LUN1,XAVG, KJ,KT,L, NX,NY,NZ,
+     &                             DS,DR,DL,MOVSID,LREAD,X)
+
+                       POINT    = X(NI)
+                       XOUT(NO) = XAVG*F + FC*POINT
+
+                    ELSEIF (MODE == 4) THEN                     
+                       CALL AVERG3(LUN1,XAVG, KJ,KT,L, NX,NY,NZ,
+     &                            DS,DR,DL,MOVSID,LREAD,X)
+
+                       POINT    = X(NI)
+                       XOUT(NO) = F*POINT/(XAVG+AV1) + POINT*FC               
+                    ENDIF                    
+                 ENDIF
+             
+                 DO  K=2,NX
+                    IF (MOVWAY == 3) THEN
+                       KT = NX + 1 - K    
+                    ELSE
+                       KT = K
+                    ENDIF
+
+                    NI    = LOFF + (KJ-1)*NX+KT
+                    NO    = KT
+                    
+                    IF (MODE == 1) THEN  
+                       CALL AVERG3(LUN1,XAVG, KJ,KT,L, NX,NY,NZ,
+     &                             DS,DR,DL,MOVWAY,LREAD,X)
+
+                       POINT    = X(NI)
+                       XOUT(NO) = F*(POINT-XAVG) + POINT*FC
+                       
+                    ELSEIF (MODE == 2) THEN                                                               
+                       CALL AVERG3(LUN1,XAVG, KJ,KT,L, NX,NY,NZ,
+     &                             DS,DR,DL,MOVWAY,LREAD,X)
+
+                       POINT    = X(NI)
+                       XOUT(NO)  = F*FMINN + FC*POINT
+                       IF (POINT >= XAVG) 
+     &                     XOUT(NO) = F*FMAXX + FC*POINT
+
+                    ELSEIF (MODE == 3) THEN
+                       CALL AVERG3(LUN1,XAVG, KJ,KT,L, NX,NY,NZ,
+     &                             DS,DR,DL,MOVWAY,LREAD,X)
+
+                       POINT    = X(NI)
+                       XOUT(NO) = XAVG*F + FC*POINT
+                    
+                    ELSEIF (MODE == 4) THEN                    
+                       CALL AVERG3(LUN1,XAVG, KJ,KT,L, NX,NY,NZ,
+     &                             DS,DR,DL,MOVWAY,LREAD,X)
+
+                       POINT    = X(NI)
+                       XOUT(NO) = F*POINT/(XAVG+AV1) + POINT*FC                    
+                    ENDIF
+                 ENDDO
+
+                 I      = -I
+                 MOVWAY = MOVWAY + I
+                 NLIN   = (L-1) * NY + KJ
+
+                 CALL WRTLIN(LUN2,XOUT,NX,NLIN)
+
+              ENDDO
+
+              IS     = -IS
+              MOVSID = MOVSID + IS
+              KR     = 6
+           ENDDO
+  
+        ENDIF	
+
+9999    IF (ALLOCATED(X))    DEALLOCATE(X)
+        IF (ALLOCATED(XOUT)) DEALLOCATE(XOUT)
+        END
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+@
+
+
+1.16
+log
+@fixed lowpass f bug,  3d shift bug, nx & rewrite
+@
+text
+@d70 1
+a70 1
+        CALL RDPRMC(ANS,NC,.TRUE.,'ENTER FILTER OPTION (H,L,T,D)',
+@
+
+
+1.15
+log
+@added new menu
+@
+text
+@d3 6
+a8 5
+C  BOXX.F 
+C             NORM3 CALL NOT INVOKED FOR MODE 2 BUG MAR 01 ARDEAN LEITH
+C             SETPRM REMOVED                        MAY 09 ARDEAN LEITH
+C             MENU                                  FEB 12 ARDEAN LEITH
+C
+d31 1
+a31 1
+C  BOXX(LUN1,LUN2,NX,NY,NZ,MAXDIM)
+d36 4
+a39 4
+C        NX     NUMBER OF SAMPLES
+C        NY     NUMBER OF ROWS
+C        NZ   NUMBER OF SLICES
+C        MAXDIM   MAXIMUM BUFFER SPACE AVAILABLE
+d41 5
+a45 5
+C  PURPOSE: BOXX DOES OPERATIONS INVOLVING  LOCAL BOX
+C         MODE 1 > SUBTRACTIVE BOX FILTERING
+C         MODE 2 > RETURNS FMIN IF PT .LT. XAVG
+C                          FMAX IF PT .GE. XAVG
+C         MODE 3 > RETURNS LOCAL AVERAGE FOR POINT
+d51 1
+a51 1
+        SUBROUTINE BOXX(LUN1,LUN2,NX,NY,NZ,MAXDIM)
+a53 1
+        COMMON X(1)
+d55 6
+a60 1
+        INTEGER           :: LUN1,LUN2,NX,NY,NZ,MAXDIM
+a61 3
+        INTEGER           :: DS,DR,DL,A1
+        CHARACTER (LEN=1) :: ANS
+        CHARACTER (LEN=1) :: NULL = CHAR(0)
+d79 4
+a82 4
+C       INITIALIZATION
+        IF (MODE == 4) THEN   
+           IF(IMAMI.NE.1) CALL NORM3(LUN1,NX,NY,NZ,FMAX,FMIN,AV)
+           AV1 = AV * 0.1
+d92 46
+a137 8
+        DR = 0
+        CALL RDPRI2S(DS,DR, NOT_USED,
+     &               'BOX SIZE COLS, ROWS',IRTFLG)
+        IF (DS <= 0) THEN
+            CALL ERRT(31,'BOXX',NERROR)
+            RETURN
+        ENDIF
+        IF (DR == 0) DR = DS
+d139 10
+a148 5
+        IF (NZ > 1 ) THEN
+C          FIND SLICE DIMENSION OF BOX  
+           DL = 0       
+           CALL RDPRI1S(DL,NOT_USED,'BOX SIZE SLICES',IRTLFG)
+           IF (DL == 0)  DL = DS
+d151 8
+a158 4
+ 90        FORMAT(' BOX SIZE: ',I3,' x',I3,' x',I3)
+        ELSE
+           WRITE(NOUT,91) DS,DR
+ 91        FORMAT(' BOX SIZE: ',I3,' x',I3)
+d162 1
+a162 1
+        CALL RDPRM1S(F,NOT_USED,'FILTER WEIGHT (0.0->1.0)',IRTLFG)
+d166 1
+a166 8
+C          2-D
+C----------------------------------------------------------------------
+           A1 = DR * NX
+           IF (A1 + NX .GT. MAXDIM) THEN
+C             INSUFFICIENT BUFFER SPACE
+              CALL ERRT(6,'BOXX',NERROR)
+              RETURN
+           ENDIF
+d174 4
+a177 2
+              JOFF = MOD(J-1,DR)*NX
+              IF (MOVWAY .EQ. 3) KT=NX
+d180 3
+a182 3
+              IF (MODE .EQ. 1) THEN
+C                *** MODE 1 EQUATIONS ***
+                 CALL AVERG(LUN1,XAVG,J,KT,NX,NY,DS,DR,KR)
+d184 1
+a184 1
+                 X(A1+KT) = F*(POINT-XAVG)+POINT*FC
+d186 4
+a189 3
+              ELSEIF (MODE .EQ. 2) THEN
+C                *** MODE 2 EQUATIONS ***
+                 CALL AVERG(LUN1,XAVG,J,KT,NX,NY,DS,DR,KR)
+d191 2
+a192 2
+                 X(A1+KT) = F*FMINN+FC*POINT
+                 IF (POINT.GE.XAVG) X(A1+KT)=F*FMAXX+FC*POINT
+d194 5
+a198 4
+              ELSEIF (MODE .EQ. 3) THEN
+C                *** MODE 3 EQUATIONS ***
+                 CALL AVERG(LUN1,XAVG,J,KT,NX,NY,DS,DR,KR)
+                 X(A1+KT) = XAVG*F + FC*X(JOFF+KT)
+d200 3
+a202 3
+              ELSEIF (MODE .EQ. 4) THEN
+C                *** MODE 4 EQUATIONS ***
+                 CALL AVERG(LUN1,XAVG,J,KT,NX,NY,DS,DR,KR)
+d204 1
+a204 1
+                 X(A1+KT) = F*POINT/(XAVG+AV1)+POINT*FC
+d208 3
+a210 2
+                 KT=K
+                 IF (MOVWAY .EQ. 3) KT=NX+1-K
+d213 3
+a215 2
+                 IF (MODE .EQ. 1) THEN
+                    CALL AVERG(LUN1,XAVG,J,KT,NX,NY,DS,DR,MOVWAY)
+d217 11
+a227 1
+                    X(A1+KT) = F*(POINT-XAVG)+POINT*FC
+a228 2
+                 ELSEIF (MODE .EQ. 2) THEN
+                    CALL AVERG(LUN1,XAVG,J,KT,NX,NY,DS,DR,MOVWAY)
+d230 1
+a230 2
+                    X(A1+KT) = F*FMINN+FC*POINT
+                    IF (POINT .GE. XAVG) X(A1+KT)=F*FMAXX+FC*POINT
+d232 2
+a233 3
+                 ELSEIF (MODE .EQ. 3) THEN
+                    CALL AVERG(LUN1,XAVG,J,KT,NX,NY,DS,DR,MOVWAY)
+                    X(A1+KT) = XAVG
+a234 2
+                 ELSEIF (MODE .EQ. 4) THEN
+                    CALL AVERG(LUN1,XAVG,J,KT,NX,NY,DS,DR,MOVWAY)
+d236 1
+a236 1
+                    X(A1+KT) = F*POINT/(XAVG+AV1)+POINT*FC
+d239 2
+a240 1
+              I = -I
+d242 4
+a245 3
+              KT = 1
+              CALL WRTLIN(LUN2,X(A1+1),NX,J)
+              KR = 4
+d248 1
+a248 1
+C-------------------------------------------------------------------------
+a249 8
+C          3D
+
+           A1 = DL*NX*NY
+           IF (A1+NX .GT. MAXDIM) THEN  
+C             INSUFFICIENT BUFFER SPACE
+              CALL ERRT(6,'BOXX',NERROR)
+              RETURN
+           ENDIF
+d256 4
+d261 3
+a263 5
+           DO    L=1,NZ
+              LOFF=MOD(L-1,DL)*NX*NY
+              DO    J=1,NY
+                 IF (MOVWAY.EQ.3)  THEN
+                    KT=NX
+d265 1
+a265 1
+                    KT=1
+d267 3
+a269 2
+                 IF (MOVSID .EQ. 5) THEN
+                    KJ=NY+1-J
+d271 1
+a271 1
+                    KJ=J
+a272 1
+                 IF (J .EQ. 1)  THEN
+d274 25
+a298 27
+                    IF (MODE .EQ. 1)  THEN                   
+                       CALL AVERG3(LUN1,XAVG,KJ,KT,L,NX,NY,NZ,
+     &                   DS,DR,DL,KR)
+                       NI=LOFF+(KJ-1)*NX+KT
+                       POINT=X(NI)
+                       NO=A1+KT
+                       X(NO)=F*(POINT-XAVG)+POINT*FC
+                       GOTO  85
+
+                    ELSEIF (MODE .EQ. 2)  THEN 
+                       CALL AVERG3(LUN1,XAVG,KJ,KT,L,NX,NY,NZ,
+     &                     DS,DR,DL,KR)
+                       NI=LOFF+(KJ-1)*NX+KT
+                       POINT=X(NI)
+                       NO=A1+KT
+                       X(NO)=F*FMINN+FC*POINT
+                       IF (POINT .GE. XAVG) X(NO)=F*FMAXX+FC*POINT
+                       GOTO  85
+
+                    ELSEIF (MODE .EQ. 3)  THEN 
+                       CALL AVERG3(LUN1,XAVG,KJ,KT,L,NX,NY,NZ,
+     &                     DS,DR,DL,KR)
+                       NI=LOFF+(KJ-1)*NX+KT
+                       POINT=X(NI)
+                       NO=A1+KT
+                       X(NO)=XAVG*F + FC*POINT
+                       GOTO  85
+d300 6
+a305 8
+                    ELSEIF (MODE .EQ. 4)  THEN 
+                       CALL AVERG3(LUN1,XAVG,KJ,KT,L,NX,NY,NZ,
+     &                     DS,DR,DL,KR)
+                       NI=LOFF+(KJ-1)*NX+KT
+                       POINT=X(NI)
+                       NO=A1+KT
+                       X(A1+KT)=F*POINT/(XAVG+AV1)+POINT*FC
+                       GOTO  85
+d308 30
+a337 33
+                 ELSE                   
+                    IF (MODE .EQ. 1)  THEN   
+                       CALL AVERG3(LUN1,XAVG,KJ,KT,L,NX,NY,NZ,
+     &                     DS,DR,DL,MOVSID)
+                       NI=LOFF+(KJ-1)*NX+KT
+                       POINT=X(NI)
+                       NO=A1+KT
+                       X(NO)=F*(POINT-XAVG)+POINT*FC
+                       GOTO  85
+
+                    ELSEIF (MODE .EQ. 2)  THEN                       
+                       CALL AVERG3(LUN1,XAVG,KJ,KT,L,NX,NY,NZ,
+     &                    DS,DR,DL,MOVSID)
+                       NI    = LOFF+(KJ-1)*NX+KT
+                       POINT = X(NI)
+                       NO    = A1+KT
+                       X(NO) = F*FMINN+FC*POINT
+                       IF (POINT.GE.XAVG)X(NO) = F*FMAXX+FC*POINT
+                       GOTO  85
+
+                    ELSEIF (MODE .EQ. 3)  THEN 
+                       CALL AVERG3(LUN1,XAVG,KJ,KT,L,NX,NY,NZ,
+     &                             DS,DR,DL,MOVSID)
+                       NI    = LOFF+(KJ-1)*NX+KT
+                       POINT = X(NI)
+                       NO    = A1+KT
+                       X(NO) = XAVG*F + FC*POINT
+                       GOTO 85
+
+                    ELSEIF (MODE .EQ. 4)  THEN                     
+                       CALL AVERG3(LUN1,XAVG,KJ,KT,L,NX,NY,NZ,
+     &                            DS,DR,DL,MOVSID)
+                       NI       = LOFF+(KJ-1)*NX+KT
+d339 1
+a339 2
+                       NO       = A1+KT
+                       X(A1+KT) = F*POINT/(XAVG+AV1)+POINT*FC               
+d343 3
+a345 5
+
+85               CONTINUE             
+                 DO  810  K=2,NX
+                    IF (MOVWAY.EQ.3)  THEN
+                       KT = NX+1-K    
+d349 3
+d353 6
+a358 8
+                    IF (MODE .EQ. 1)  THEN  
+                       CALL AVERG3(LUN1,XAVG,KJ,KT,L,NX,NY,NZ,
+     &                             DS,DR,DL,MOVWAY)
+                       NI    = LOFF+(KJ-1)*NX+KT
+                       POINT = X(NI)
+                       NO    = A1+KT
+                       X(NO) = F*(POINT-XAVG)+POINT*FC
+                       GOTO  810 
+d360 15
+a374 16
+                    ELSEIF (MODE .EQ. 2)  THEN                                                               
+                       CALL AVERG3(LUN1,XAVG,KJ,KT,L,NX,NY,NZ,
+     &                              DS,DR,DL,MOVWAY)
+                       NI     = LOFF+(KJ-1)*NX+KT
+                       POINT  = X(NI)
+                       NO     = A1+KT
+                       X(NO)  =F*FMINN+FC*POINT
+                       IF (POINT.GE.XAVG) X(NO) = F*FMAXX+FC*POINT
+                       GOTO  810
+
+                    ELSEIF (MODE .EQ. 3)  THEN
+                       CALL AVERG3(LUN1,XAVG,KJ,KT,L,NX,NY,NZ,
+     &                             DS,DR,DL,MOVWAY)
+                       NO    = A1+KT
+                       X(NO) = XAVG
+                       GOTO  810
+d376 4
+a379 4
+                    ELSEIF (MODE .EQ. 4)  THEN                    
+                       CALL AVERG3(LUN1,XAVG,KJ,KT,L,NX,NY,NZ,
+     &                             DS,DR,DL,MOVWAY)
+                       NI       = LOFF+(KJ-1)*NX+KT
+d381 1
+a381 2
+                       NO       = A1+KT
+                       X(A1+KT) = F*POINT/(XAVG+AV1)+POINT*FC                    
+d383 1
+a383 1
+810              CONTINUE
+d386 5
+a390 3
+                 MOVWAY = MOVWAY+I
+                 NLIN   = (L-1)*NY+KJ
+                 CALL  WRTLIN(LUN2,X(A1+1),NX,NLIN)
+d394 1
+a394 1
+              MOVSID = MOVSID+IS
+d397 1
+d399 3
+d403 40
+@
+
+
+1.14
+log
+@GPL_2010
+@
+text
+@d1 1
+a1 1
+C++*********************************************************************
+d6 1
+d12 1
+a12 1
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+d30 1
+a30 1
+C  BOXX(LUN1,LUN2,NSAM,NROW,NSLICE,MAXDIM)
+d35 3
+a37 3
+C        NSAM     NUMBER OF SAMPLES
+C        NROW     NUMBER OF ROWS
+C        NSLICE   NUMBER OF SLICES
+d50 1
+a50 1
+        SUBROUTINE BOXX(LUN1,LUN2,NSAM,NROW,NSLICE,MAXDIM)
+d55 1
+a55 2
+        INTEGER       DS,DR,DL,A1
+        CHARACTER *1  ANS,NULL
+d57 10
+a66 1
+        NULL = CHAR(0)
+d68 2
+a69 2
+ 8877   CALL RDPRMC(ANS,NC,.TRUE.,
+     &   '(H)IGH PASS / (L)OW PASS / (T)HRES / (D)IVIS',NULL,IRTFLG)
+d72 3
+a74 3
+        IF (MODE .LE. 0)  THEN
+           CALL ERRT(101,'UNKNOWN OPTION',NERROR)
+           GOTO  8877
+d78 3
+a80 3
+        IF (MODE .EQ. 4 ) THEN   
+           IF(IMAMI.NE.1) CALL NORM3(LUN1,NSAM,NROW,NSLICE,FMAX,FMIN,AV)
+           IF (MODE .EQ. 4)  AV1 = AV * 0.1
+d85 1
+a85 1
+        IF (FMIN .GE. FMAX) THEN
+d90 6
+a95 4
+ 3355   CALL RDPRMI(DS,DR,NOT_USED,' LOCAL AREA SIZE COL, ROWS')
+        IF (DS .LE. 0) THEN
+           CALL ERRT(31,'BOXX',NERROR)
+           GOTO  3355
+d97 7
+a103 7
+        IF (DR .EQ. 0)   DR = DS
+ 
+         
+        IF (NSLICE .GT. 1)  THEN
+C          FIND SLICE DIMENSION OF BOX         
+           CALL RDPRMI(DL,IDXUTV,NOT_USED,' LOCAL AREA SIZE SLICES')
+           IF (DL .EQ. 0)  DL = DS
+d112 2
+a113 1
+        CALL RDPRM(F,NOT_USED,'FILTER WEIGHT (0.0->1.0)')
+d116 1
+a116 1
+        IF (NSLICE .LE. 1)  THEN
+d119 2
+a120 2
+           A1 = DR * NSAM
+           IF (A1 + NSAM .GT. MAXDIM) THEN
+d131 3
+a133 3
+           DO J=1,NROW
+              JOFF = MOD(J-1,DR)*NSAM
+              IF (MOVWAY .EQ. 3) KT=NSAM
+d138 1
+a138 1
+                 CALL AVERG(LUN1,XAVG,J,KT,NSAM,NROW,DS,DR,KR)
+d144 1
+a144 1
+                 CALL AVERG(LUN1,XAVG,J,KT,NSAM,NROW,DS,DR,KR)
+d151 1
+a151 1
+                 CALL AVERG(LUN1,XAVG,J,KT,NSAM,NROW,DS,DR,KR)
+d156 1
+a156 1
+                 CALL AVERG(LUN1,XAVG,J,KT,NSAM,NROW,DS,DR,KR)
+d161 1
+a161 1
+              DO  K=2,NSAM
+d163 1
+a163 1
+                 IF (MOVWAY .EQ. 3) KT=NSAM+1-K
+d167 1
+a167 1
+                    CALL AVERG(LUN1,XAVG,J,KT,NSAM,NROW,DS,DR,MOVWAY)
+d172 1
+a172 1
+                    CALL AVERG(LUN1,XAVG,J,KT,NSAM,NROW,DS,DR,MOVWAY)
+d178 1
+a178 1
+                    CALL AVERG(LUN1,XAVG,J,KT,NSAM,NROW,DS,DR,MOVWAY)
+d182 1
+a182 1
+                    CALL AVERG(LUN1,XAVG,J,KT,NSAM,NROW,DS,DR,MOVWAY)
+d190 1
+a190 1
+              CALL WRTLIN(LUN2,X(A1+1),NSAM,J)
+d198 2
+a199 2
+           A1 = DL*NSAM*NROW
+           IF (A1+NSAM .GT. MAXDIM) THEN  
+d211 3
+a213 3
+           DO    L=1,NSLICE
+              LOFF=MOD(L-1,DL)*NSAM*NROW
+              DO    J=1,NROW
+d215 1
+a215 1
+                    KT=NSAM
+d220 1
+a220 1
+                    KJ=NROW+1-J
+d227 1
+a227 1
+                       CALL AVERG3(LUN1,XAVG,KJ,KT,L,NSAM,NROW,NSLICE,
+d229 1
+a229 1
+                       NI=LOFF+(KJ-1)*NSAM+KT
+d236 1
+a236 1
+                       CALL AVERG3(LUN1,XAVG,KJ,KT,L,NSAM,NROW,NSLICE,
+d238 1
+a238 1
+                       NI=LOFF+(KJ-1)*NSAM+KT
+d246 1
+a246 1
+                       CALL AVERG3(LUN1,XAVG,KJ,KT,L,NSAM,NROW,NSLICE,
+d248 1
+a248 1
+                       NI=LOFF+(KJ-1)*NSAM+KT
+d255 1
+a255 1
+                       CALL AVERG3(LUN1,XAVG,KJ,KT,L,NSAM,NROW,NSLICE,
+d257 1
+a257 1
+                       NI=LOFF+(KJ-1)*NSAM+KT
+d266 1
+a266 1
+                       CALL AVERG3(LUN1,XAVG,KJ,KT,L,NSAM,NROW,NSLICE,
+d268 1
+a268 1
+                       NI=LOFF+(KJ-1)*NSAM+KT
+d275 1
+a275 1
+                       CALL AVERG3(LUN1,XAVG,KJ,KT,L,NSAM,NROW,NSLICE,
+d277 1
+a277 1
+                       NI    = LOFF+(KJ-1)*NSAM+KT
+d285 1
+a285 1
+                       CALL AVERG3(LUN1,XAVG,KJ,KT,L,NSAM,NROW,NSLICE,
+d287 1
+a287 1
+                       NI    = LOFF+(KJ-1)*NSAM+KT
+d294 1
+a294 1
+                       CALL AVERG3(LUN1,XAVG,KJ,KT,L,NSAM,NROW,NSLICE,
+d296 1
+a296 1
+                       NI       = LOFF+(KJ-1)*NSAM+KT
+d305 1
+a305 1
+                 DO  810  K=2,NSAM
+d307 1
+a307 1
+                       KT = NSAM+1-K    
+d313 1
+a313 1
+                       CALL AVERG3(LUN1,XAVG,KJ,KT,L,NSAM,NROW,NSLICE,
+d315 1
+a315 1
+                       NI    = LOFF+(KJ-1)*NSAM+KT
+d322 1
+a322 1
+                       CALL AVERG3(LUN1,XAVG,KJ,KT,L,NSAM,NROW,NSLICE,
+d324 1
+a324 1
+                       NI     = LOFF+(KJ-1)*NSAM+KT
+d332 1
+a332 1
+                       CALL AVERG3(LUN1,XAVG,KJ,KT,L,NSAM,NROW,NSLICE,
+d339 1
+a339 1
+                       CALL AVERG3(LUN1,XAVG,KJ,KT,L,NSAM,NROW,NSLICE,
+d341 1
+a341 1
+                       NI       = LOFF+(KJ-1)*NSAM+KT
+d350 2
+a351 2
+                 NLIN   = (L-1)*NROW+KJ
+                 CALL  WRTLIN(LUN2,X(A1+1),NSAM,NLIN)
+@
+
+
+1.13
+log
+@rdprmb parameters
+@
+text
+@a7 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2009  Health Research Inc.                      *
+d9 5
+a13 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d15 1
+a15 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d20 1
+a20 1
+C=* This program is distributed in the hope that it will be useful,    *
+d22 1
+a22 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a23 1
+C=*                                                                    *
+d25 1
+a25 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.12
+log
+@GPL License fixed
+@
+text
+@d5 1
+d9 1
+a9 1
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d43 1
+a43 2
+C  PURPOSE:
+C        BOXX DOES OPERATIONS INVOLVING  LOCAL BOX
+d45 2
+a46 2
+C         MODE 2 > RETURNS FMIN IF PT.LT.XAVG
+C                          FMAX IF PT.GE.XAVG
+a49 2
+C  IMAGE_PROCESSING_ROUTINE
+C
+d58 2
+a59 2
+        INTEGER      DS,DR,DL,A1
+        CHARACTER *1 ANS,NULL
+a66 1
+
+d68 1
+a68 1
+           CALL ERRT(23,'BOXX',NERROR)
+d73 1
+a73 1
+        IF (MODE .EQ. 4 .OR. MODE .EQ. 4) THEN   
+a104 1
+
+d131 2
+a132 2
+                 POINT=X(JOFF+KT)
+                 X(A1+KT)=F*(POINT-XAVG)+POINT*FC
+d137 3
+a139 3
+                 POINT=X(JOFF+KT)
+                 X(A1+KT)=F*FMINN+FC*POINT
+                 IF(POINT.GE.XAVG)X(A1+KT)=F*FMAXX+FC*POINT
+d144 1
+a144 1
+                 X(A1+KT)=XAVG*F + FC*X(JOFF+KT)
+d149 2
+a150 2
+                 POINT=X(JOFF+KT)
+                 X(A1+KT)=F*POINT/(XAVG+AV1)+POINT*FC
+d155 1
+a155 1
+                 IF (MOVWAY.EQ.3)KT=NSAM+1-K
+d160 2
+a161 2
+                    POINT=X(JOFF+KT)
+                    X(A1+KT)=F*(POINT-XAVG)+POINT*FC
+d165 2
+a166 2
+                    POINT=X(JOFF+KT)
+                    X(A1+KT)=F*FMINN+FC*POINT
+d171 1
+a171 1
+                    X(A1+KT)=XAVG
+d175 2
+a176 2
+                    POINT=X(JOFF+KT)
+                    X(A1+KT)=F*POINT/(XAVG+AV1)+POINT*FC
+a185 4
+           IF (MODE .EQ. 2) CALL SETPRM(LUN2,NSAM,NROW,2.,0.,1.,'R')
+30         CONTINUE
+
+C          3D
+d188 1
+d269 5
+a273 5
+                       NI=LOFF+(KJ-1)*NSAM+KT
+                       POINT=X(NI)
+                       NO=A1+KT
+                       X(NO)=F*FMINN+FC*POINT
+                       IF(POINT.GE.XAVG)X(NO)=F*FMAXX+FC*POINT
+d278 5
+a282 5
+     &                     DS,DR,DL,MOVSID)
+                       NI=LOFF+(KJ-1)*NSAM+KT
+                       POINT=X(NI)
+                       NO=A1+KT
+                       X(NO)=XAVG*F + FC*POINT
+d286 6
+a291 6
+                       CALL  AVERG3(LUN1,XAVG,KJ,KT,L,NSAM,NROW,NSLICE,
+     &                      DS,DR,DL,MOVSID)
+                       NI=LOFF+(KJ-1)*NSAM+KT
+                       POINT=X(NI)
+                       NO=A1+KT
+                       X(A1+KT)=F*POINT/(XAVG+AV1)+POINT*FC               
+d298 2
+a299 2
+                    IF(MOVWAY.EQ.3)  THEN
+                       KT=NSAM+1-K    
+d301 1
+a301 1
+                       KT=K
+d306 4
+a309 4
+     &                     DS,DR,DL,MOVWAY)
+                       NI=LOFF+(KJ-1)*NSAM+KT
+                       POINT=X(NI)
+                       NO=A1+KT
+d314 7
+a320 7
+                       CALL  AVERG3(LUN1,XAVG,KJ,KT,L,NSAM,NROW,NSLICE,
+     &                      DS,DR,DL,MOVWAY)
+                       NI=LOFF+(KJ-1)*NSAM+KT
+                       POINT=X(NI)
+                       NO=A1+KT
+                       X(NO)=F*FMINN+FC*POINT
+                       IF(POINT.GE.XAVG)X(NO)=F*FMAXX+FC*POINT
+d325 3
+a327 3
+     &                     DS,DR,DL,MOVWAY)
+                       NO=A1+KT
+                       X(NO)=XAVG
+d332 5
+a336 5
+     &                     DS,DR,DL,MOVWAY)
+                       NI=LOFF+(KJ-1)*NSAM+KT
+                       POINT=X(NI)
+                       NO=A1+KT
+                       X(A1+KT)=F*POINT/(XAVG+AV1)+POINT*FC                    
+@
+
+
+1.11
+log
+@nloop,iloop_removed
+@
+text
+@d1 1
+a1 1
+C++*************************************************************************
+d7 23
+a29 6
+C * SPIDER - MODULAR IMAGE PROCESSING SYSTEM.    AUTHOR: J.FRANK       *
+C * COPYRIGHT (C)1985, 1999. HEALTH RESEARCH INCORPORATED (HRI),       *
+C * ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+C * THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO HRI AND ARE NOT   *
+C * TO BE DISCLOSED TO OTHERS OR USED FOR PURPOSES OTHER THAN INTENDED *
+C * WITHOUT WRITTEN APPROVAL OF HRI.                                   *
+@
+
+
+1.10
+log
+@norm3 should have been available for mode: 2
+@
+text
+@d71 1
+a71 1
+ 3355   CALL RDPRMI(DS,DR,NLOOP,ILOOP,' LOCAL AREA SIZE COL, ROWS')
+d81 1
+a81 1
+           CALL RDPRMI(DL,IDXUTV,NLOOP,ILOOP,' LOCAL AREA SIZE SLICES')
+d92 1
+a92 1
+        CALL RDPRM(F,NLOOP,ILOOP,'FILTER WEIGHT (0.0->1.0)')
+@
+
+
+1.9
+log
+@removed ithaca in CMBLOCK statement
+@
+text
+@d4 1
+d6 8
+a13 9
+C **************************************************************************
+C *  SPIDER - MODULAR IMAGE PROCESSING SYSTEM.  AUTHOR: J.FRANK            *
+C *  COPYRIGHT (C)1981,1987, WADSWORTH CENTER FOR LABORATORIES AND         *
+C *  RESEARCH, NEW YORK STATE DEPARTMENT OF HEALTH, ALBANY, NY 12201.      *
+C *    THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO THE CENTER FOR     *
+C *    LABORATORIES AND RESEARCH AND ARE NOT TO BE DISCLOSED TO OTHERS OR  *
+C *    USED FOR PURPOSES OTHER THAN INTENDED WITHOUT WRITTEN APPROVAL OF   *
+C *    THE CENTER FOR LABORATORIES AND RESEARCH                            *
+C **************************************************************************
+d25 1
+d33 1
+a34 2
+C IMAGE_PROCESSING_ROUTINE
+C        0         2         3         4         5         6         7     
+d59 5
+a90 4
+        IF (MODE .EQ. 4) THEN   
+           IF(IMAMI.NE.1) CALL NORM3(LUN1,NSAM,NROW,NSLICE,FMAX,FMIN,AV)
+           AV1 = AV * 0.1
+        ENDIF
+@
+
+
+1.8
+log
+@removed computed GOTO
+@
+text
+@d40 1
+a40 1
+        INCLUDE '/net/ithaca/usr1/spider/src/CMBLOCK.INC'
+@
+
+
+1.7
+log
+@ibm would not compile some computed go tos
+@
+text
+@a0 1
+
+d12 1
+a12 1
+C *    THE CENTER FOR LABORATORIES AND RESEARCH 			   *
+d22 1
+a22 1
+C	 NSLICE   NUMBER OF SLICES
+d30 2
+a31 1
+C	  MODE 4 > DIVISIVE CONTRAST CORRECTION
+d33 1
+d38 1
+a38 1
+	SUBROUTINE BOXX(LUN1,LUN2,NSAM,NROW,NSLICE,MAXDIM)
+d40 2
+a41 2
+        INCLUDE 'CMBLOCK.INC'
+	COMMON X(1)
+d43 1
+a43 1
+	INTEGER      DS,DR,DL,A1
+d48 1
+a48 1
+ 8877	CALL RDPRMC(ANS,NC,.TRUE.,
+d53 4
+a56 4
+	IF (MODE .LE. 0)  THEN
+          CALL ERRT(23,'BOXX',NERROR)
+          GOTO  8877
+	ENDIF
+d59 3
+a61 3
+	FMINN = FMIN
+	FMAXX = FMAX
+	IF (FMIN .GE. FMAX) THEN
+d66 1
+a66 1
+ 3355	CALL RDPRMI(DS,DR,NLOOP,ILOOP,' LOCAL AREA SIZE COL, ROWS')
+d74 4
+a77 4
+	IF (NSLICE .GT. 1)  THEN
+C         FIND SLICE DIMENSION OF BOX         
+	  CALL RDPRMI(DL,IDXUTV,NLOOP,ILOOP,' LOCAL AREA SIZE SLICES')
+          IF (DL .EQ. 0)  DL = DS
+d79 2
+a80 2
+          WRITE(NOUT,90) DS,DR,DL
+ 90       FORMAT(' BOX SIZE: ',I3,' x',I3,' x',I3)
+d82 2
+a83 2
+          WRITE(NOUT,91) DS,DR
+ 91       FORMAT(' BOX SIZE: ',I3,' x',I3)
+d87 2
+a88 2
+          IF(IMAMI.NE.1) CALL NORM3(LUN1,NSAM,NROW,NSLICE,FMAX,FMIN,AV)
+          AV1 = AV * 0.1
+d94 2
+a95 2
+	IF (NSLICE .LE. 1)  THEN
+C         2-D
+d97 22
+a118 22
+	  A1 = DR * NSAM
+          IF (A1 + NSAM .GT. MAXDIM) THEN
+C           INSUFFICIENT BUFFER SPACE
+            CALL ERRT(6,'BOXX',NERROR)
+            RETURN
+          ENDIF
+
+          KT     = 1
+          KR     = 1
+          MOVWAY = 2
+          I      = -1
+
+	  DO J=1,NROW
+           JOFF = MOD(J-1,DR)*NSAM
+           IF (MOVWAY .EQ. 3) KT=NSAM
+
+C          *** START OFF OR GO DOWN ***
+           IF (MODE .EQ. 1) THEN
+C            *** MODE 1 EQUATIONS ***
+   	     CALL AVERG(LUN1,XAVG,J,KT,NSAM,NROW,DS,DR,KR)
+	     POINT=X(JOFF+KT)
+	     X(A1+KT)=F*(POINT-XAVG)+POINT*FC
+d120 6
+a125 6
+           ELSEIF (MODE .EQ. 2) THEN
+C            *** MODE 2 EQUATIONS ***
+             CALL AVERG(LUN1,XAVG,J,KT,NSAM,NROW,DS,DR,KR)
+             POINT=X(JOFF+KT)
+             X(A1+KT)=F*FMINN+FC*POINT
+             IF(POINT.GE.XAVG)X(A1+KT)=F*FMAXX+FC*POINT
+d127 15
+a141 11
+           ELSEIF (MODE .EQ. 3) THEN
+C            *** MODE 3 EQUATIONS ***
+             CALL AVERG(LUN1,XAVG,J,KT,NSAM,NROW,DS,DR,KR)
+             X(A1+KT)=XAVG*F + FC*X(JOFF+KT)
+ 	     
+           ELSEIF (MODE .EQ. 4) THEN
+C            *** MODE 4 EQUATIONS ***
+             CALL AVERG(LUN1,XAVG,J,KT,NSAM,NROW,DS,DR,KR)
+             POINT=X(JOFF+KT)
+             X(A1+KT)=F*POINT/(XAVG+AV1)+POINT*FC
+           ENDIF
+d143 28
+a170 32
+ 	   DO  K=2,NSAM
+             KT=K
+             IF (MOVWAY.EQ.3)KT=NSAM+1-K
+
+C            *** MOVE RIGHT OR LEFT ***
+             IF (MODE .EQ. 1) THEN
+   	        CALL AVERG(LUN1,XAVG,J,KT,NSAM,NROW,DS,DR,MOVWAY)
+                POINT=X(JOFF+KT)
+                X(A1+KT)=F*(POINT-XAVG)+POINT*FC
+
+             ELSEIF (MODE .EQ. 2) THEN
+                CALL AVERG(LUN1,XAVG,J,KT,NSAM,NROW,DS,DR,MOVWAY)
+                POINT=X(JOFF+KT)
+                X(A1+KT)=F*FMINN+FC*POINT
+                IF (POINT .GE. XAVG) X(A1+KT)=F*FMAXX+FC*POINT
+
+             ELSEIF (MODE .EQ. 3) THEN
+                CALL AVERG(LUN1,XAVG,J,KT,NSAM,NROW,DS,DR,MOVWAY)
+                X(A1+KT)=XAVG
+
+             ELSEIF (MODE .EQ. 4) THEN
+                CALL AVERG(LUN1,XAVG,J,KT,NSAM,NROW,DS,DR,MOVWAY)
+                POINT=X(JOFF+KT)
+                X(A1+KT)=F*POINT/(XAVG+AV1)+POINT*FC
+             ENDIF
+          ENDDO
+          I = -I
+          MOVWAY = MOVWAY+I
+          KT = 1
+          CALL WRTLIN(LUN2,X(A1+1),NSAM,J)
+          KR = 4
+	ENDDO
+d172 2
+a173 2
+        IF (MODE .EQ. 2) CALL SETPRM(LUN2,NSAM,NROW,2.,0.,1.,'R')
+30      CONTINUE
+d175 1
+a175 1
+C       3D
+d177 8
+a184 1
+	ELSE
+d186 20
+a205 6
+        A1 = DL*NSAM*NROW
+        IF (A1+NSAM .GT. MAXDIM) THEN  
+C           INSUFFICIENT BUFFER SPACE
+            CALL ERRT(6,'BOXX',NERROR)
+            RETURN
+        ENDIF
+d207 2
+a208 30
+	I      = -1
+	MOVWAY = 2
+	IS     = -1
+	MOVSID = 4
+	KR     = 1
+
+	DO    L=1,NSLICE
+           LOFF=MOD(L-1,DL)*NSAM*NROW
+           DO    J=1,NROW
+             IF (MOVWAY.EQ.3)  THEN
+                KT=NSAM
+             ELSE
+                KT=1
+             ENDIF
+             IF (MOVSID .EQ. 5) THEN
+               KJ=NROW+1-J
+             ELSE
+               KJ=J
+             ENDIF
+             IF (J .EQ. 1)  THEN
+                GOTO  (1008,2008,3008,4008),MODE
+             ELSE
+                GOTO  (1009,2009,3009,4009),MODE
+             ENDIF
+	     
+C	     moved 1008,2008,3008,4008 out of do loop 810;
+C            just in case add goto 85.
+             GOTO 85
+	       
+ 1008	       CALL AVERG3(LUN1,XAVG,KJ,KT,L,NSAM,NROW,NSLICE,
+d210 5
+a214 5
+               NI=LOFF+(KJ-1)*NSAM+KT
+               POINT=X(NI)
+               NO=A1+KT
+               X(NO)=F*(POINT-XAVG)+POINT*FC
+               GOTO  85
+d216 2
+a217 1
+ 2008          CALL AVERG3(LUN1,XAVG,KJ,KT,L,NSAM,NROW,NSLICE,
+d219 6
+a224 6
+               NI=LOFF+(KJ-1)*NSAM+KT
+               POINT=X(NI)
+               NO=A1+KT
+               X(NO)=F*FMINN+FC*POINT
+               IF (POINT .GE. XAVG) X(NO)=F*FMAXX+FC*POINT
+               GOTO  85
+d226 2
+a227 1
+ 3008          CALL AVERG3(LUN1,XAVG,KJ,KT,L,NSAM,NROW,NSLICE,
+d229 8
+a236 7
+               NI=LOFF+(KJ-1)*NSAM+KT
+               POINT=X(NI)
+               NO=A1+KT
+               X(NO)=XAVG*F + FC*POINT
+               GOTO  85
+
+ 4008          CALL AVERG3(LUN1,XAVG,KJ,KT,L,NSAM,NROW,NSLICE,
+d238 10
+a247 7
+               NI=LOFF+(KJ-1)*NSAM+KT
+               POINT=X(NI)
+               NO=A1+KT
+               X(A1+KT)=F*POINT/(XAVG+AV1)+POINT*FC
+               GOTO  85
+
+ 1009          CALL AVERG3(LUN1,XAVG,KJ,KT,L,NSAM,NROW,NSLICE,
+d249 5
+a253 5
+               NI=LOFF+(KJ-1)*NSAM+KT
+               POINT=X(NI)
+               NO=A1+KT
+               X(NO)=F*(POINT-XAVG)+POINT*FC
+               GOTO  85
+d255 2
+a256 1
+ 2009          CALL AVERG3(LUN1,XAVG,KJ,KT,L,NSAM,NROW,NSLICE,
+d258 6
+a263 6
+               NI=LOFF+(KJ-1)*NSAM+KT
+               POINT=X(NI)
+               NO=A1+KT
+               X(NO)=F*FMINN+FC*POINT
+               IF(POINT.GE.XAVG)X(NO)=F*FMAXX+FC*POINT
+               GOTO  85
+d265 2
+a266 1
+ 3009          CALL AVERG3(LUN1,XAVG,KJ,KT,L,NSAM,NROW,NSLICE,
+d268 5
+a272 5
+               NI=LOFF+(KJ-1)*NSAM+KT
+               POINT=X(NI)
+               NO=A1+KT
+               X(NO)=XAVG*F + FC*POINT
+               GOTO 85
+d274 2
+a275 1
+ 4009          CALL  AVERG3(LUN1,XAVG,KJ,KT,L,NSAM,NROW,NSLICE,
+d277 18
+a294 19
+               NI=LOFF+(KJ-1)*NSAM+KT
+               POINT=X(NI)
+               NO=A1+KT
+               X(A1+KT)=F*POINT/(XAVG+AV1)+POINT*FC
+               GOTO  85
+	     
+ 85          DO  810  K=2,NSAM
+               IF(MOVWAY.EQ.3)  THEN
+                 KT=NSAM+1-K	
+               ELSE
+                 KT=K
+               ENDIF
+               GOTO  (1508,2508,3508,4508),MODE
+
+C	       moved 1008,2008,3008,4008 out of do loop 810;
+c	       mode > 5 ? add goto 1008 just in case.
+	       GOTO 1008
+
+ 1508          CALL AVERG3(LUN1,XAVG,KJ,KT,L,NSAM,NROW,NSLICE,
+d296 8
+a303 7
+               NI=LOFF+(KJ-1)*NSAM+KT
+               POINT=X(NI)
+               NO=A1+KT
+               X(NO) = F*(POINT-XAVG)+POINT*FC
+               GOTO  810
+
+ 2508          CALL  AVERG3(LUN1,XAVG,KJ,KT,L,NSAM,NROW,NSLICE,
+d305 6
+a310 7
+               NI=LOFF+(KJ-1)*NSAM+KT
+               POINT=X(NI)
+               NO=A1+KT
+               X(NO)=F*FMINN+FC*POINT
+               IF(POINT.GE.XAVG)X(NO)=F*FMAXX+FC*POINT
+               GOTO  810
+
+d312 2
+a313 1
+ 3508          CALL AVERG3(LUN1,XAVG,KJ,KT,L,NSAM,NROW,NSLICE,
+d315 6
+a320 4
+               NO=A1+KT
+               X(NO)=XAVG
+               GOTO  810
+ 4508          CALL AVERG3(LUN1,XAVG,KJ,KT,L,NSAM,NROW,NSLICE,
+d322 19
+a340 20
+               NI=LOFF+(KJ-1)*NSAM+KT
+               POINT=X(NI)
+               NO=A1+KT
+               X(A1+KT)=F*POINT/(XAVG+AV1)+POINT*FC
+ 810         CONTINUE
+             I      = -I
+             MOVWAY = MOVWAY+I
+             NLIN   = (L-1)*NROW+KJ
+             CALL  WRTLIN(LUN2,X(A1+1),NSAM,NLIN)
+	ENDDO
+
+           IS     = -IS
+           MOVSID = MOVSID+IS
+           KR     = 6
+ 	ENDDO
+
+	ENDIF
+
+	END
+
+@
+
+
+1.6
+log
+@a
+@
+text
+@a38 2
+
+
+d65 1
+a65 1
+ 3355	CALL RDPRMI(DS,DR,NLOOP,ILOOP,' LOCAL AREA SIZE  COL,ROWS')
+d75 1
+a75 1
+	  CALL RDPRMI(DL,IDXUTV,NLOOP,ILOOP,' LOCAL AREA SIZE  SLICES')
+d111 1
+d113 1
+a113 6
+           GO TO(100,200,300,400),MODE
+
+c+++         moved labels 100,200,300,400 out of do loop 10
+c	     just in case mode can be > 4, add goto 5
+	     GOTO  5 
+	     
+d115 1
+a115 1
+100	     CALL AVERG(LUN1,XAVG,J,KT,NSAM,NROW,DS,DR,KR)
+d118 2
+a119 2
+             GO TO 5
+
+d121 1
+a121 1
+200          CALL AVERG(LUN1,XAVG,J,KT,NSAM,NROW,DS,DR,KR)
+d125 2
+a126 2
+             GO TO 5
+
+d128 1
+a128 1
+300          CALL AVERG(LUN1,XAVG,J,KT,NSAM,NROW,DS,DR,KR)
+d130 2
+a131 2
+             GO TO 5
+	     
+d133 1
+a133 1
+400          CALL AVERG(LUN1,XAVG,J,KT,NSAM,NROW,DS,DR,KR)
+d136 1
+d138 1
+a138 1
+5	   DO 10 K=2,NSAM
+d143 21
+a163 25
+	     GO TO (150,250,350,450),MODE
+	     
+c+++         moved labels 100,200,300,400 out of do loop 10
+c            just in case mode > 4, add goto 100
+	     GOTO 100
+	     
+150	     CALL AVERG(LUN1,XAVG,J,KT,NSAM,NROW,DS,DR,MOVWAY)
+             POINT=X(JOFF+KT)
+             X(A1+KT)=F*(POINT-XAVG)+POINT*FC
+             GO TO 10
+
+250          CALL AVERG(LUN1,XAVG,J,KT,NSAM,NROW,DS,DR,MOVWAY)
+             POINT=X(JOFF+KT)
+             X(A1+KT)=F*FMINN+FC*POINT
+             IF (POINT .GE. XAVG) X(A1+KT)=F*FMAXX+FC*POINT
+             GO TO 10
+
+350          CALL AVERG(LUN1,XAVG,J,KT,NSAM,NROW,DS,DR,MOVWAY)
+             X(A1+KT)=XAVG
+             GO TO 10
+
+450          CALL AVERG(LUN1,XAVG,J,KT,NSAM,NROW,DS,DR,MOVWAY)
+             POINT=X(JOFF+KT)
+             X(A1+KT)=F*POINT/(XAVG+AV1)+POINT*FC
+10        CONTINUE
+@
+
+
+1.5
+log
+@CNO_SAVE
+@
+text
+@d39 1
+a39 1
+CNO_SAVE
+@
+
+
+1.4
+log
+@*** empty log message ***
+@
+text
+@d4 1
+a4 1
+C  BOXX.FOR
+d38 4
+a41 1
+         INCLUDE 'CMBLOCK.INC'
+@
+
+
+1.3
+log
+@solve branch to label 100,200,300,400 from outside block
+@
+text
+@a37 2
+
+#ifdef SP_UNIX
+a38 4
+#else
+         INCLUDE 'COMMON1:CMBLOCK.INC'
+#endif
+
+d107 1
+a107 1
+	  DO 20 J=1,NROW
+d175 1
+a175 1
+20      CONTINUE
+d197 1
+a197 1
+	DO  830  L=1,NSLICE
+d199 1
+a199 1
+           DO  820  J=1,NROW
+d332 1
+a332 1
+ 820	   CONTINUE
+d337 1
+a337 1
+ 830    CONTINUE
+a340 1
+        RETURN
+@
+
+
+1.2
+log
+@used CMBLOCK.INC, improved input prompts, cosmetic
+@
+text
+@d119 4
+a122 7
+5	   DO 10 K=2,NSAM
+             KT=K
+             IF (MOVWAY.EQ.3)KT=NSAM+1-K
+
+C            *** MOVE RIGHT OR LEFT ***
+	     GO TO (150,250,350,450),MODE
+
+a128 5
+150	     CALL AVERG(LUN1,XAVG,J,KT,NSAM,NROW,DS,DR,MOVWAY)
+             POINT=X(JOFF+KT)
+             X(A1+KT)=F*(POINT-XAVG)+POINT*FC
+             GO TO 10
+
+d136 26
+a167 5
+C            *** MODE 3 EQUATIONS ***
+300          CALL AVERG(LUN1,XAVG,J,KT,NSAM,NROW,DS,DR,KR)
+             X(A1+KT)=XAVG*F + FC*X(JOFF+KT)
+             GO TO 5
+
+a171 6
+C            *** MODE 4 EQUATIONS ***
+400          CALL AVERG(LUN1,XAVG,J,KT,NSAM,NROW,DS,DR,KR)
+             POINT=X(JOFF+KT)
+             X(A1+KT)=F*POINT/(XAVG+AV1)+POINT*FC
+             GO TO 5
+
+d221 5
+a225 9
+
+ 85          DO  810  K=2,NSAM
+               IF(MOVWAY.EQ.3)  THEN
+                 KT=NSAM+1-K	
+               ELSE
+                 KT=K
+               ENDIF
+               GOTO  (1508,2508,3508,4508),MODE
+
+d234 2
+a235 2
+ 1009          CALL AVERG3(LUN1,XAVG,KJ,KT,L,NSAM,NROW,NSLICE,
+     &                     DS,DR,DL,MOVSID)
+d239 2
+a240 1
+               X(NO)=F*(POINT-XAVG)+POINT*FC
+d243 2
+a244 2
+ 1508          CALL AVERG3(LUN1,XAVG,KJ,KT,L,NSAM,NROW,NSLICE,
+     &                     DS,DR,DL,MOVWAY)
+d248 2
+a249 2
+               X(NO) = F*(POINT-XAVG)+POINT*FC
+               GOTO  810
+d251 1
+a251 1
+ 2008          CALL AVERG3(LUN1,XAVG,KJ,KT,L,NSAM,NROW,NSLICE,
+d256 1
+a256 2
+               X(NO)=F*FMINN+FC*POINT
+               IF (POINT .GE. XAVG) X(NO)=F*FMAXX+FC*POINT
+d259 2
+a260 2
+ 2009          CALL AVERG3(LUN1,XAVG,KJ,KT,L,NSAM,NROW,NSLICE,
+     &                    DS,DR,DL,MOVSID)
+d264 1
+a264 2
+               X(NO)=F*FMINN+FC*POINT
+               IF(POINT.GE.XAVG)X(NO)=F*FMAXX+FC*POINT
+d267 2
+a268 2
+ 2508          CALL  AVERG3(LUN1,XAVG,KJ,KT,L,NSAM,NROW,NSLICE,
+     &                      DS,DR,DL,MOVWAY)
+a273 8
+               GOTO  810
+
+ 3008          CALL AVERG3(LUN1,XAVG,KJ,KT,L,NSAM,NROW,NSLICE,
+     &                     DS,DR,DL,KR)
+               NI=LOFF+(KJ-1)*NSAM+KT
+               POINT=X(NI)
+               NO=A1+KT
+               X(NO)=XAVG*F + FC*POINT
+d284 4
+a287 2
+ 3508          CALL AVERG3(LUN1,XAVG,KJ,KT,L,NSAM,NROW,NSLICE,
+     &                     DS,DR,DL,MOVWAY)
+d289 14
+a302 2
+               X(NO)=XAVG
+               GOTO  810
+d304 2
+a305 2
+ 4008          CALL AVERG3(LUN1,XAVG,KJ,KT,L,NSAM,NROW,NSLICE,
+     &                     DS,DR,DL,KR)
+d309 2
+a310 2
+               X(A1+KT)=F*POINT/(XAVG+AV1)+POINT*FC
+               GOTO  85
+d312 2
+a313 2
+ 4009          CALL  AVERG3(LUN1,XAVG,KJ,KT,L,NSAM,NROW,NSLICE,
+     &                      DS,DR,DL,MOVSID)
+d317 4
+a320 2
+               X(A1+KT)=F*POINT/(XAVG+AV1)+POINT*FC
+               GOTO  85
+d322 5
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d4 1
+a4 1
+C $$ BOXX.FOR
+d16 1
+a16 1
+C $$ BOXX(LUN1,LUN2,NSAM,NROW,NSLICE,MAXDIM)
+d18 1
+a18 1
+C    PARAMETERS:
+d26 1
+a26 1
+C  BOXX DOES OPERATIONS INVOLVING  LOCAL BOX
+d35 1
+a35 1
+C--*******************************************************************
+d39 5
+a43 5
+	COMMON X     
+	COMMON /MASTER/NNSAM,NNROW,IRED,NLABEL,IFORM,IMAMI,FMAX,FMIN,
+     1  AV,SIG
+	COMMON /UNITS/LUN,NIN,NOUT,NECHO,IFOUND,NPROC,NDAT
+        COMMON /BATCH/ IBCNT,NL,IABSLP,ILP
+d45 2
+a47 1
+	DIMENSION    X(1)
+d50 1
+a50 1
+        NULL=CHAR(0)
+d53 1
+a53 2
+     &   '(H)IGH PASS / (L)OW PASS / (T)HRES / (D)IVIS$',
+     &   NULL,IRTFLG)
+d57 2
+a58 2
+	IF (MODE.EQ.0)  THEN
+	  WRITE(NOUT,*) ' SORRY, NO SUCH OPTION'
+d62 3
+a64 3
+C INITIALIZATION
+	FMINN=FMIN
+	FMAXX=FMAX
+d66 1
+a66 1
+           FMINN = 0.
+d70 12
+a81 1
+	IF(NSLICE.LE.1)  THEN
+d83 5
+a87 8
+C 2-D
+C----------------------------------------------------------------------
+	CALL RDPRMI(DS,DR,NL,ILP,' LOCAL AREA SIZE COL,ROW$')
+        IF (DR.EQ.0) DR=DS
+	A1 = DR * NSAM
+        IF (A1 + NSAM .GT. MAXDIM) THEN
+          WRITE(NOUT,*) ' INSUFFICIENT BUFFER SPACE'
+          RETURN
+d90 3
+a92 18
+3	CALL RDPRM(F,1,1,'FILTER WEIGHT 0.<F<1.$')
+	WRITE(NOUT,9999)NL,ILP
+9999	FORMAT(1X,2I6)
+        FC = 1.-F
+	KT=1
+	KR=1
+	MOVWAY=2
+	I=-1
+        IF (MODE .EQ. 4) THEN
+           IF (IMAMI .NE. 1) CALL NORM(LUN1,NSAM,NROW,FMAX,FMIN,AV)
+           AV1 = AV * 0.1
+
+        ELSEIF (MODE .GT. 4) THEN
+	   IF (FMIN .EQ.0. .AND. FMAX .EQ. 2.) GO TO 7
+           IF (F .EQ. 1.) GO TO 7
+           WRITE(NOUT,*)
+     &      ' SORRY; PICTURE MUST HAVE BEEN CONTRAST ENHANCED'
+           RETURN
+d95 19
+a113 2
+7	CONTINUE
+	DO 20 J=1,NROW
+d116 1
+a116 1
+C *** START OFF OR GO DOWN ***
+d179 1
+a179 1
+C 3D
+a181 18
+ 3355	CALL RDPRMI(DS,DR,NL,ILP,' LOCAL AREA SIZE COL,ROW$')
+	CALL RDPRMI(DL,IDXUTV,NL,ILP,' LOCAL AREA SIZE     SLI$')
+        IF (DR.EQ.0)  THEN
+          IF (DL.EQ.0)  THEN
+             DR=DS
+             DL=DS
+          ELSE
+             WRITE(NOUT,*)' SORRY, YOU CAN NOT GIVE PARAMETERS THIS WAY'
+             GOTO  3355
+          ENDIF
+        ELSEIF(DL.EQ.0)  THEN
+          DL=DR
+        ENDIF
+        A1=DL*NSAM*NROW
+        IF (A1+NSAM.GT.MAXDIM) THEN  
+          WRITE(NOUT,*) ' INSUFFICIENT BUFFER SPACE'
+          RETURN
+	ENDIF
+d183 5
+a187 14
+ 	CALL RDPRM(F,1,1,'FILTER WEIGHT 0.<F<1.$')
+	WRITE(NOUT,9999)NL,ILP
+        FC = 1.-F
+
+        IF (MODE .EQ. 4) THEN   
+          IF(IMAMI.NE.1) CALL NORM3(LUN1,NSAM,NROW,NSLICE,FMAX,FMIN,AV)
+          AV1 = AV*0.1
+
+        ELSEIF (MODE .GT. 4) THEN
+          IF (FMIN .EQ. 0. .AND. FMAX .EQ. 2.) GO TO 77
+          IF (F .EQ. 1.0) GO TO 77
+           WRITE(NOUT,*)
+     &      ' SORRY; PICTURE MUST HAVE BEEN CONTRAST ENHANCED'
+           RETURN
+a188 1
+77	CONTINUE
+d190 5
+a195 5
+	I=-1
+	MOVWAY=2
+	IS=-1
+	MOVSID=4
+	KR=1
+d319 3
+a321 3
+             I=-I
+             MOVWAY=MOVWAY+I
+             NLIN=(L-1)*NROW+KJ
+d325 3
+a327 3
+           IS=-IS
+           MOVSID=MOVSID+IS
+           KR=6
+@

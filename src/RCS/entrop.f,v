@@ -1,0 +1,318 @@
+head	1.6;
+access;
+symbols
+	pre_getangas:1.6
+	GPL2010:1.6
+	pre_GPL2010:1.5
+	pre_var_equation:1.5
+	pre_fftwrings:1.5
+	pre_opfiles:1.5
+	src:1.5
+	best-code:1.5
+	x-named-regs:1.5
+	x:1.5
+	v13-00:1.5
+	pre_GPL:1.3
+	prec_CA:1.1;
+locks; strict;
+comment	@c @;
+
+
+1.6
+date	2010.06.24.13.25.31;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2005.10.17.20.09.46;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2005.10.17.18.04.12;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2004.02.18.13.38.43;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2004.02.13.21.02.56;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2003.02.04.20.28.41;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.6
+log
+@GPL_2010
+@
+text
+@
+C++*********************************************************************
+C
+C  ENTROP.F              NEW                     FEB  2003  ArDean Leith
+C                        VMIN, VMAX              FEB  2004  ArDean Leith
+C
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C    ENTROP(LUN,IFORM,NSAM,NROW,NSLICE,ENTROPY,IRTFLG)
+C
+C    PURPOSE:    COMPUTE ENTROPY OF IMAGE FROM HISTOGRAM 
+C
+C    PARAMETERS:  LUN        IO UNIT NUMBER OF IMAGE FILE
+C                 NSAM,NROW  DIMENSIONS OF IMAGE              
+C                 NSLICE     DIMENSIONS OF IMAGE
+C                 ENTROPY    ENTROPY                              (RET.)
+C                 IRTFLG                                          (RET.)
+C
+C23456789 123456789 123456789 123456789 123456789 123456789 123456789 12
+C--*********************************************************************
+
+      SUBROUTINE ENTROP(LUN,NSAM,NROW,NSLICE,ENTROPY,IRTFLG)
+
+      INCLUDE 'CMBLOCK.INC'
+      INCLUDE 'CMLIMIT.INC'
+
+      COMMON     FREQ
+      REAL, DIMENSION(5000) :: FREQ
+
+      DOUBLE PRECISION      :: FNUMEL
+
+      COMMON /IOBUF/ REDBUF(NBUFSIZ)
+
+C     MAKE SURE STATISTICS ARE CURRENT
+      IF (IMAMI .NE. 1) CALL NORM3(LUN,NSAM,NROW,NSLICE,FMAX,FMIN,AV)
+
+C     NBINS SHOULD BE <= 5000
+      NBINS  = 256
+      CALL RDPRI1S(NBINS,NOT_USED,'NUMBER OF BINS',IRTFLG)
+      IF (IRTFLG .NE. 0) RETURN
+      IF (NBINS .GT. 5000) THEN
+         CALL ERRT(101,'MAX NUMBER OF BINS =5000',NE)
+         RETURN
+      ENDIF
+
+      WRITE(NOUT,*) ' IMAGE RANGE: ',FMIN,'.....',FMAX
+      VMIN = FMIN
+      VMAX = FMAX
+      CALL RDPRM2S(VMIN,VMAX,NOT_USED,'HISTOGRAM RANGE',IRTFLG)
+      IF (IRTFLG .NE. 0) RETURN
+ 
+C     ZERO THE HISTOGRAM FREQUENCIES
+      DO  K = 1,NBINS
+         FREQ(K) = 0.0 
+      ENDDO
+
+      FNPIX  = NSAM * NROW * NSLICE
+      HDIFF  = VMAX - VMIN
+      IF (HDIFF .EQ. 0.0) THEN
+         CALL ERRT(101,'BLANK IMAGE',NE)
+         IRTFLG = 1
+         RETURN
+      ENDIF
+
+      FF     = (NBINS - 1.0) / HDIFF
+      FINPIX  = 0
+
+      DO  IREC=1, NSLICE * NROW
+         CALL REDLIN(LUN,REDBUF,NSAM,IREC)
+
+         DO  ISAM = 1,NSAM
+C           HISTOGRAM THIS PIXEL 
+
+C           FIND BIN NUMBER
+            BVAL = REDBUF(ISAM)
+            JBIN = INT((BVAL - VMIN) * FF) + 1.5
+
+            IF (JBIN.GE.1 .AND. JBIN.LE.NBINS) THEN
+C              WITHIN HISTOGRAM RANGE
+               FREQ(JBIN) = FREQ(JBIN) + 1.0
+               FINPIX      = FINPIX + 1
+           ENDIF
+        ENDDO
+      ENDDO
+
+C     FIND ENTROPY
+      ENTROPY = 0.0
+
+      DO  IBIN = 1,NBINS
+         FT      = FREQ(IBIN) / FNPIX
+         IF (FT .GT. 0.0) ENTROPY = ENTROPY - FT * LOG(FT) 
+      ENDDO
+
+      WRITE(NOUT,*) ' '
+
+      IBIG = HUGE(IBIG)
+
+      IF (FNPIX .LT. IBIG) THEN
+         NPIX  = NSAM * NROW * NSLICE
+         INPIX = FINPIX
+         WRITE(NOUT,90) FMIN,FMAX,VMIN,VMAX,INPIX,NPIX,NBINS,ENTROPY
+
+90       FORMAT(
+     &    ' FILE RANGE:        ',1PG11.4,'   .........     ',1PG11.4,/,
+     &    ' HIST. RANGE:       ',1PG11.4,'   .........     ',1PG11.4,/,
+     &    ' IMAGE PIXELS:      ',I11,    '   HIST. PIXELS: ',I11,/, 
+     &    ' NO. OF BINS:       ',I11,/,
+     &    ' ENTROPY:           ',1PG11.4/)
+      ELSE
+
+         WRITE(NOUT,91) FMIN,FMAX,VMIN,VMAX,FINPIX,FNPIX,NBINS,ENTROPY
+91       FORMAT(
+     &    ' FILE RANGE:        ',1PG11.4,'   .........     ',1PG11.4,/,
+     &    ' HIST. RANGE:       ',1PG11.4,'   .........     ',1PG11.4,/,
+     &    ' IMAGE PIXELS:      ',1PG11.4,'   HIST. PIXELS: ',1PG11.4,/, 
+     &    ' NO. OF BINS:       ',I11,/,
+     &    ' ENTROPY:           ',1PG11.4/)
+      ENDIF
+
+      CALL REG_GET_USED(NSEL_USED)
+
+      IF (NSEL_USED .GT. 0) THEN
+         CALL REG_SET_NSEL(1,1,ENTROPY, 0.0, 0.0, 0.0, 0.0,IRTFLG)
+      ENDIF
+
+      RETURN
+      END
+
+@
+
+
+1.5
+log
+@GPL License fixed
+@
+text
+@a7 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d9 5
+a13 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d15 1
+a15 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d20 1
+a20 1
+C=* This program is distributed in the hope that it will be useful,    *
+d22 1
+a22 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a23 1
+C=*                                                                    *
+d25 1
+a25 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.4
+log
+@HRI GPL License used
+@
+text
+@a2 1
+C++************************************************************************
+a7 1
+C * SPIDER - MODULAR IMAGE PROCESSING SYSTEM.    AUTHOR: J.FRANK       *
+d11 1
+a11 1
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *  
+a30 6
+
+C * COPYRIGHT (C)1981, 2003. HEALTH RESEARCH INCORPORATED (HRI),       *
+C * ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+C * THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO HRI AND ARE NOT   *
+C * TO BE DISCLOSED TO OTHERS OR USED FOR PURPOSES OTHER THAN INTENDED *
+C * WITHOUT WRITTEN APPROVAL OF HRI.                                   *
+@
+
+
+1.3
+log
+@bad if
+@
+text
+@d2 1
+d10 24
+@
+
+
+1.2
+log
+@vmin,vmax
+@
+text
+@d51 1
+a51 1
+      END
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d4 2
+a5 1
+C  ENTROP.F               NEW                   FEB  2003  ArDean Leith
+d48 4
+d53 6
+d65 1
+a65 1
+      HDIFF  = FMAX - FMIN
+d73 1
+d83 1
+a83 1
+            JBIN = INT((BVAL - FMIN) * FF) + 1.5
+d88 1
+d107 2
+a108 1
+         WRITE(NOUT,90) FMIN,FMAX,NPIX,NBINS,ENTROPY
+d112 3
+a114 1
+     &    ' TOTAL PIXELS:      ',I11,    '   NO. OF BINS:  ',I11,/,
+d118 1
+a118 1
+         WRITE(NOUT,91) FMIN,FMAX,FNPIX,NBINS,ENTROPY
+d121 3
+a123 1
+     &    ' TOTAL PIXELS:      ',1PG11.4,'   NO. OF BINS:  ',1PG11.4,/,
+@

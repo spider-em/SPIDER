@@ -1,0 +1,580 @@
+head	1.10;
+access;
+symbols
+	pre_getangas:1.10
+	GPL2010:1.10
+	pre_GPL2010:1.9
+	pre_var_equation:1.9
+	pre_fftwrings:1.9
+	pre_opfiles:1.9
+	src:1.9
+	best-code:1.9
+	x-named-regs:1.9
+	x:1.9
+	v13-00:1.9
+	pre_GPL:1.7
+	prec_CA:1.7
+	noindx:1.7
+	Bproc:1.3
+	oct21:1.1
+	last77:1.1;
+locks; strict;
+comment	@c @;
+
+
+1.10
+date	2010.06.24.13.26.36;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2005.10.17.20.40.46;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2005.10.17.18.31.09;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2001.09.24.19.18.09;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2001.09.24.17.28.40;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2001.09.24.17.26.10;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2000.09.28.20.28.43;	author bimal;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	99.12.07.19.26.17;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	99.11.10.23.11.16;	author yuchen;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	97.09.30.14.35.56;	author pawel;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.10
+log
+@GPL_2010
+@
+text
+@C ++********************************************************************
+C                                                                      *
+C QUADRI_Q                                                                     *
+C                                                                      *
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C                                                                      *
+C  FUNCTION QUADRI_Q(XX, YY, LSD, NXDATA, NYDATA, FDATA)               *
+C                                                                      *
+C  PURPOSE: QUADRATIC INTERPOLATION                                                           *
+C                                                                      *
+C  PARAMETERS:       XX,YY TREATED AS CIRCULARLY CLOSED.
+C                    FDATA - IMAGE 1..NXDATA, 1..NYDATA
+C
+C                    F3    FC       F0, F1, F2, F3 are the values
+C                     +             at the grid points.  X is the
+C                     + X           point at which the function
+C              F2++++F0++++F1       is to be estimated. (It need
+C                     +             not be in the First quadrant).
+C                     +             FC - the outer corner point
+C                    F4             nearest X.
+C
+C                                   F0 is the value of the FDATA at
+C                                   FDATA(I,J), it is the interior mesh
+C                                   point nearest  X.
+C                                   The coordinates of F0 are (X0,Y0),
+C                                   The coordinates of F1 are (XB,Y0),
+C                                   The coordinates of F2 are (XA,Y0),
+C                                   The coordinates of F3 are (X0,YB),
+C                                   The coordinates of F4 are (X0,YA),
+C                                   The coordinates of FC are (XC,YC),
+C
+C                   O               HXA, HXB are the mesh spacings
+C                   +               in the X-direction to the left
+C                  HYB              and right of the center point.
+C                   +
+C            ++HXA++O++HXB++O       HYB, HYA are the mesh spacings
+C                   +               in the Y-direction.
+C                  HYA
+C                   +               HXC equals either  HXB  or  HXA
+C                   O               depending on where the corner
+C                                   point is located.
+c
+C                                   Construct the interpolant
+C                                   F = F0 + C1*(X-X0) +
+C                                       C2*(X-X0)*(X-X1) +
+C                                       C3*(Y-Y0) + C4*(Y-Y0)*(Y-Y1)
+C                                       + C5*(X-X0)*(Y-Y0)
+C
+C  IMAGE_PROCESSING_ROUTINE 
+C
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C***********************************************************************
+
+      FUNCTION QUADRI_Q(XX, YY, LSD, NXDATA, NYDATA, FDATA)
+
+      DIMENSION  FDATA(LSD,NYDATA)
+
+      X = XX
+      Y = YY
+
+C     CIRCULAR CLOSURE
+      IF (X.LT.1.0)               X = X+(1 - IFIX(X) / NXDATA) * NXDATA
+      IF (X.GT.FLOAT(NXDATA)+0.5) X = AMOD(X-1.0,FLOAT(NXDATA)) + 1.0
+      IF (Y.LT.1.0)               Y = Y+(1 - IFIX(Y) / NYDATA) * NYDATA
+      IF (Y.GT.FLOAT(NYDATA)+0.5) Y = AMOD(Y-1.0,FLOAT(NYDATA)) + 1.0
+
+      I   = IFIX(X)
+      J   = IFIX(Y)
+
+      DX0 = X - I
+      DY0 = Y - J
+
+      IP1 = I + 1
+      IM1 = I - 1
+      JP1 = J + 1
+      JM1 = J - 1
+
+      IF (IP1 .GT. NXDATA) IP1 = IP1 - NXDATA     
+      IF (IM1 .LT. 1)      IM1 = IM1 + NXDATA
+      IF (JP1 .GT. NYDATA) JP1 = JP1 - NYDATA        
+      IF (JM1 .LT. 1)      JM1 = JM1 + NYDATA
+
+      F0  = FDATA(I,J)
+      C1  = FDATA(IP1,J) - F0
+      C2  = (C1 - F0 + FDATA(IM1,J)) * 0.5
+      C3  = FDATA(I,JP1) - F0 
+      C4  = (C3 - F0 + FDATA(I,JM1)) * 0.5 
+
+      DXB = (DX0 - 1)
+      DYB = (DY0 - 1)
+
+C     HXC & HYC ARE EITHER 1 OR -1
+      HXC = INT(SIGN(1.0,DX0))
+      HYC = INT(SIGN(1.0,DY0)) 
+ 
+      IC  = I + HXC
+      JC  = J + HYC
+
+      IF (IC .GT .NXDATA) THEN
+         IC = IC - NXDATA    
+      ELSEIF (IC .LT. 1)  THEN
+         IC = IC + NXDATA
+      ENDIF
+
+      IF (JC .GT. NYDATA)  THEN
+         JC = JC - NYDATA
+      ELSEIF (JC .LT. 1)  THEN
+         JC = JC + NYDATA
+      ENDIF
+
+      C5  =  ((FDATA(IC,JC) - F0 - 
+     &         HXC * C1 - 
+     &        (HXC * (HXC - 1.0)) * C2 -
+     &         HYC * C3 - 
+     &        (HYC * (HYC - 1.0)) * C4) * 
+     &        (HXC * HYC)) 
+
+      QUADRI_Q = F0 + 
+     &         DX0 * (C1 + DXB * C2 + DY0 * C5) + 
+     &         DY0 * (C3 + DYB * C4)
+
+
+      END
+@
+
+
+1.9
+log
+@GPL License fixed
+@
+text
+@a5 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d7 5
+a11 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d13 1
+a13 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d18 1
+a18 1
+C=* This program is distributed in the hope that it will be useful,    *
+d20 1
+a20 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a21 1
+C=*                                                                    *
+d23 1
+a23 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.8
+log
+@HRI GPL License used
+@
+text
+@a5 1
+C * SPIDER - MODULAR IMAGE PROCESSING SYSTEM.    AUTHOR: J.FRANK       *
+d9 1
+a9 1
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *  
+a28 6
+
+C * COPYRIGHT (C)1985, 2001. HEALTH RESEARCH INCORPORATED (HRI),       *
+C * ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+C * THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO HRI AND ARE NOT   *
+C * TO BE DISCLOSED TO OTHERS OR USED FOR PURPOSES OTHER THAN INTENDED *
+C * WITHOUT WRITTEN APPROVAL OF HRI.                                   *
+@
+
+
+1.7
+log
+@order wrong at top
+@
+text
+@d7 24
+@
+
+
+1.6
+log
+@_q needed
+@
+text
+@d68 8
+a75 2
+      I = IFIX(X)
+      J = IFIX(Y)
+a78 6
+
+C     CIRCULAR CLOSURE
+      IF (X.LT.1.0)               X = X+(1 - I / NXDATA) * NXDATA
+      IF (X.GT.FLOAT(NXDATA)+0.5) X = AMOD(X-1.0,FLOAT(NXDATA)) + 1.0
+      IF (Y.LT.1.0)               Y = Y+(1 - J / NYDATA) * NYDATA
+      IF (Y.GT.FLOAT(NYDATA)+0.5) Y = AMOD(Y-1.0,FLOAT(NYDATA)) + 1.0
+@
+
+
+1.5
+log
+@speed up
+@
+text
+@d14 1
+a14 1
+C  FUNCTION QUADRI_q(XX, YY, LSD, NXDATA, NYDATA, FDATA)               *
+d125 1
+a125 1
+      QUADRI = F0 + 
+@
+
+
+1.4
+log
+@header and cosmetic
+@
+text
+@d3 1
+a4 1
+C                                                                      *
+d7 1
+a7 1
+C * COPYRIGHT (C)1985, 1999. HEALTH RESEARCH INCORPORATED (HRI),       *
+d14 1
+d16 1
+d18 2
+a19 5
+C  PURPOSE:                                                            *
+C  Quadratic interpolation
+C  XX,YY treated as circularly closed.
+C  fdata - image 1..nxdata, 1..nydata
+C
+d39 16
+d56 1
+a56 1
+C IMAGE_PROCESSING_ROUTINE
+d58 1
+a58 2
+C        1         2         3         4         5         6         7
+C23456789012345678901234567890123456789012345678901234567890123456789012                                                                      *
+d61 1
+a61 1
+        FUNCTION  QUADRI_Q(XX, YY, LSD, NXDATA, NYDATA, FDATA)
+d63 1
+a63 2
+C       SPECIFICATIONS FOR ARGUMENTS
+        DIMENSION  FDATA(LSD,NYDATA)
+d65 63
+a127 63
+        X=XX
+        Y=YY
+        IF(X.LT.1.0)  X=X+(1-IFIX(X)/NXDATA)*NXDATA
+        IF(X.GT.FLOAT(NXDATA)+0.5)  X=AMOD(X-1.0,FLOAT(NXDATA))+1.0
+        IF(Y.LT.1.0)  Y=Y+(1-IFIX(Y)/NYDATA)*NYDATA
+        IF(Y.GT.FLOAT(NYDATA)+0.5)  Y=AMOD(Y-1.0,FLOAT(NYDATA))+1.0
+        I=IFIX(X)
+        J=IFIX(Y)
+
+        X0 = I
+        Y0 = J
+        XA = I-1
+        XB = I+1
+        YA = J-1
+        YB = J+1
+
+        DX0 = X - X0
+        DY0 = Y - Y0
+
+        DXB = X - XB
+        DYB = Y - YB
+
+        IP1=I+1
+        IM1=I-1
+        JP1=J+1
+        JM1=J-1
+        F0 = FDATA(I,J)
+           IF(IP1.GT.NXDATA) IP1=IP1-NXDATA        
+        F1 = FDATA(IP1,J)
+           IF(IM1.LT.1)  IM1=IM1+NXDATA
+        F2 = FDATA(IM1,J)
+           IF(JP1.GT.NYDATA) JP1=JP1-NYDATA        
+        F3 = FDATA(I,JP1)
+           IF(JM1.LT.1)  JM1=JM1+NYDATA
+        F4 = FDATA(I,JM1)
+
+        IC = I + INT(SIGN(1.0,DX0))
+        JC = J + INT(SIGN(1.0,DY0))
+
+        XC = IC
+        YC = JC
+        IF(IC.GT.NXDATA) THEN
+           IC=IC-NXDATA    
+        ELSEIF(IC.LT.1)  THEN
+           IC=IC+NXDATA
+        ENDIF
+        IF(JC.GT.NYDATA)  THEN
+           JC=JC-NYDATA
+        ELSEIF(JC.LT.1)  THEN
+           JC=JC+NYDATA
+        ENDIF
+        FC = FDATA(IC,JC)
+C                       O               HXA, HXB ARE THE MESH SPACINGS
+C                       +               IN THE X-DIRECTION TO THE LEFT
+C                      HYB              AND RIGHT OF THE CENTER POINT.
+C                       +
+C               O++HXA++O++HXB++O       HYB, HYA ARE THE MESH SPACINGS
+C                       +               IN THE Y-DIRECTION.
+C                      HYA
+C                       +               HXC EQUALS EITHER  HXB  OR  HXA
+C                       O               DEPENDING ON WHERE THE CORNER
+C                                       POINT IS LOCATED.
+C
+a128 22
+        HXA = X0 - XA
+        HXB = XB - X0
+        HYA = Y0 - YA
+        HYB = YB - Y0
+
+        HXC = XC - X0
+        HYC = YC - Y0
+
+        HXCB = XC - XB
+        HYCB = YC - YB
+C                                       CONSTRUCT THE INTERPOLANT
+C                                       F = F0 + C1*(X-X0) +
+C                                           C2*(X-X0)*(X-X1) +
+C                                           C3*(Y-Y0) + C4*(Y-Y0)*(Y-Y1)
+C                                           + C5*(X-X0)*(Y-Y0)
+      C1 = (F1-F0)/HXB
+      T1 = (F0-F2)/HXA
+      C2 = (C1-T1)/(HXA+HXB)
+      C3 = (F3-F0)/HYB
+      T3 = (F0-F4)/HYA
+      C4 = (C3-T3)/(HYA+HYB)
+      C5 = (FC-F0-HXC*C1-HXC*HXCB*C2-HYC*C3-HYC*HYCB*C4)/(HXC*HYC)
+a129 1
+      QUADRI_Q = F0 + DX0*(C1+DXB*C2+DY0*C5) + DY0*(C3+DYB*C4)
+@
+
+
+1.3
+log
+@header
+@
+text
+@a0 1
+
+d40 5
+a44 1
+C                                                                      *
+d47 23
+a69 1
+      FUNCTION  QUADRI_Q(XX, YY, LSD, NXDATA, NYDATA, FDATA)
+d71 2
+a72 2
+C                                  SPECIFICATIONS FOR ARGUMENTS
+      DIMENSION  FDATA(LSD,NYDATA)
+d74 33
+a106 55
+	x=xx
+	y=yy
+	if(x.lt.1.0)  x=x+(1-ifix(x)/nxdata)*nxdata
+	if(x.gt.float(nxdata)+0.5)  x=amod(x-1.0,float(nxdata))+1.0
+	if(y.lt.1.0)  y=y+(1-ifix(y)/nydata)*nydata
+	if(y.gt.float(nydata)+0.5)  y=amod(y-1.0,float(nydata))+1.0
+	i=IFIX(x)
+	j=IFIX(y)
+C
+      X0 = I
+      Y0 = J
+      XA = I-1
+      XB = I+1
+      YA = J-1
+      YB = J+1
+C
+      DX0 = X - X0
+      DY0 = Y - Y0
+C
+      DXB = X - XB
+      DYB = Y - YB
+C
+	ip1=i+1
+	im1=i-1
+	jp1=j+1
+	jm1=j-1
+      F0 = FDATA(I,J)
+	if(ip1.gt.nxdata) ip1=ip1-nxdata	
+      F1 = FDATA(Ip1,J)
+	if(im1.lt.1)  im1=im1+nxdata
+      F2 = FDATA(Im1,J)
+	if(jp1.gt.nydata) jp1=jp1-nydata	
+      F3 = FDATA(I,Jp1)
+	if(jm1.lt.1)  jm1=jm1+nydata
+      F4 = FDATA(I,Jm1)
+C
+      IC = I + INT(SIGN(1.0,DX0))
+      JC = J + INT(SIGN(1.0,DY0))
+C
+      XC = IC
+      YC = JC
+	if(ic.gt.nxdata) then
+	ic=ic-nxdata	
+	elseif(ic.lt.1)  then
+	ic=ic+nxdata
+	endif
+	if(jc.gt.nydata)  then
+	jc=jc-nydata
+	elseif(jc.lt.1)  then
+	jc=jc+nydata
+	endif
+      FC = FDATA(IC,JC)
+C                       O               HXA, HXB are the mesh spacings
+C                       +               in the X-direction to the left
+C                      HYB              and right of the center point.
+d108 2
+a109 2
+C               O++HXA++O++HXB++O       HYB, HYA are the mesh spacings
+C                       +               in the Y-direction.
+d111 16
+a126 15
+C                       +               HXC equals either  HXB  or  HXA
+C                       O               depending on where the corner
+C                                       point is located.
+C
+      HXA = X0 - XA
+      HXB = XB - X0
+      HYA = Y0 - YA
+      HYB = YB - Y0
+C
+      HXC = XC - X0
+      HYC = YC - Y0
+C
+      HXCB = XC - XB
+      HYCB = YC - YB
+C                                       Construct the interpolant
+d138 1
+a138 1
+C
+@
+
+
+1.2
+log
+@a
+@
+text
+@d1 17
+a17 1
+      FUNCTION  QUADRI_Q(XX, YY, LSD, NXDATA, NYDATA, FDATA)
+a22 4
+C                                  SPECIFICATIONS FOR ARGUMENTS
+      DIMENSION  FDATA(LSD,NYDATA)
+
+C
+d41 8
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d9 1
+a9 1
+CNO_SAVE
+@

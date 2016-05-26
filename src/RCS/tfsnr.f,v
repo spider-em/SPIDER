@@ -1,0 +1,597 @@
+head	1.9;
+access;
+symbols
+	pre_getangas:1.9
+	pre_GPL2010:1.7
+	pre_var_equation:1.7
+	pre_fftwrings:1.7
+	pre_opfiles:1.7
+	src:1.7
+	best-code:1.7
+	x-named-regs:1.7
+	x:1.7
+	v13-00:1.7
+	pre_GPL:1.6
+	prec_CA:1.6
+	noindx:1.5;
+locks; strict;
+comment	@c @;
+
+
+1.9
+date	2011.01.10.15.03.20;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2010.11.01.15.38.25;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2005.10.17.16.55.11;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2003.02.20.17.13.39;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2002.11.19.20.38.43;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2002.11.19.15.49.54;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2002.06.21.19.47.08;	author bbaxter;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2002.05.10.19.35.27;	author pawel;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2002.05.10.19.26.50;	author pawel;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.9
+log
+@comment
+@
+text
+@C **********************************************************************
+C *  TFSNR.F
+C=**********************************************************************
+C=* From: SPIDER - MODULAR IMAGE PROCESSING SYSTEM                     *
+C=* Copyright (C)2002, L. Joyeux & P. A. Penczek                       *
+C=*                                                                    *
+C=* University of Texas - Houston Medical School                       *
+C=*                                                                    *
+C=* Email:  pawel.a.penczek@@uth.tmc.edu                                *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* This program is distributed in the hope that it will be useful,    *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+C=* General Public License for more details.                           *
+C=*                                                                    *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+C=*                                                                    *
+C=**********************************************************************
+C                         
+C                  OPFILEC                         FEB  03 ARDEAN LEITH
+C                  PROMPTS                         NOV  10 ARDEAN LEITH
+C
+C **********************************************************************
+
+      SUBROUTINE  TFSNR
+
+      INCLUDE 'CMBLOCK.INC'
+      INCLUDE 'CMLIMIT.INC'
+      INCLUDE 'F90ALLOC.INC'
+
+      INTEGER, PARAMETER             :: NILMAX=998
+
+      CHARACTER(LEN=MAXNAM)          :: FINPAT,FILNAM,FINPIC
+      CHARACTER(LEN=MAXNAM)          :: FILPAT1,FILNM1,FILNMO
+
+      INTEGER, ALLOCATABLE           :: ILIST(:)
+      COMPLEX, ALLOCATABLE           :: VOLIN(:,:,:),VOLSUM(:,:,:)
+      COMPLEX, ALLOCATABLE           :: CTF2(:,:,:)
+      CHARACTER(LEN=1)               :: NULL
+      LOGICAL                        :: FIRST
+      REAL,  POINTER                 :: RPOINTER(:,:)
+
+C     AUTOMATIC ARRAY
+      INTEGER,PARAMETER              :: MAXSNR=998
+      INTEGER                        :: IMAR(MAXSNR)
+      
+      DATA    LUN1/10/
+
+      ALLOCATE(ILIST(NILMAX),STAT=IRTFLG)
+      IF (IRTFLG.NE.0) THEN
+         CALL  ERRT(46,'TF CTF, ILIST',NILMAX)
+         GOTO 9999
+      ENDIF
+
+C     ASK FOR DATA FILE
+      CALL FILELIST(.TRUE.,INPIC,FINPAT,NLET,ILIST,NILMAX,NIMA,
+     &    'TEMPLATE FOR IMAGE FILES',IRTFLG)
+      IF (IRTFLG .NE. 0) GOTO 9999
+
+      NULL = CHAR(0)
+
+      CALL  FILERD(FILNAM,NLEP,NULL,'TEMPLATE FOR CTF',IRTFLG)
+      IF (IRTFLG .NE. 0) GOTO 9999
+
+      CALL  FILERD(FILPAT1,NLET1,NULL,'SNR TEMPLATE',IRTFLG)
+      IF (IRTFLG .NE. 0) GOTO 9999
+
+      CALL RDPRM(WI, NOT_USED, 'RING WIDTH')
+
+      CALL RDPRM(SNRF, NOT_USED,'FACTOR APPLIED ON SNR (0.5,1,...)')
+
+      DO  K=1,NIMA
+
+         CALL FILGET(FINPAT,FINPIC,NLET,ILIST(K),IRTFLG)
+         IF (IRTFLG .NE. 0) GOTO 9999
+
+         MAXIM = 0
+         CALL OPFILEC(0,.FALSE.,FINPIC,LUN1,'O',IFORM,NSAM1,NROW1,
+     &             NSLICE1,MAXIM,'DUMMY',.TRUE.,IRTFLG)
+         IF (IRTFLG.NE.0)  GOTO 9999
+         
+C         PROCESS THE VOLUME
+
+         INUMDEM = 0
+CC       USE INUMDEM TO RECORD 3D OR 2D
+CC             INUMDEM = 3    3D
+CC                     1    2D
+
+         IF(IFORM.EQ.-11)  THEN
+            LRCL=NSAM1
+            LS=NSAM1
+            NSAM1=NSAM1-1
+              INUMDEM = 1
+         ELSEIF(IFORM.EQ.-12)  THEN
+            LRCL=NSAM1
+            LS=NSAM1
+            NSAM1=NSAM1-2
+              INUMDEM = 1
+         ELSEIF(IFORM.EQ.1) THEN
+            LS=NSAM1+2-MOD(NSAM1,2)
+            LRCL=NSAM1
+              INUMDEM = 1
+         ELSEIF(IFORM.EQ.-21)  THEN
+            LRCL=NSAM1
+            LS=NSAM1
+            NSAM1=NSAM1-1
+              INUMDEM = 3
+         ELSEIF(IFORM.EQ.-22)  THEN
+            LRCL=NSAM1
+            LS=NSAM1
+            NSAM1=NSAM1-2
+              INUMDEM = 3
+         ELSEIF(IFORM.EQ.3) THEN
+            LS=NSAM1+2-MOD(NSAM1,2)
+            LRCL=NSAM1
+              INUMDEM = 3
+         ELSE
+            CLOSE(LUN1)
+            CALL  ERRT(2,'TF CTF',NE)
+            GOTO 9999
+         ENDIF
+
+C        GET THE DIMENSION INFORMATION FOR THE FIRST TIME
+         IF(K.EQ.1) THEN
+            NSAM=NSAM1
+            NROW=NROW1
+            NSLICE=NSLICE1
+C           VOLUMES NEEDED
+
+            ALLOCATE(VOLIN(LS/2,NROW,NSLICE),STAT=IRTFLG)
+            IF(IRTFLG.NE.0) CALL  ERRT(46,'TF CTF, VOLIN',IER)
+
+            ALLOCATE(VOLSUM(LS/2,NROW,NSLICE),STAT=IRTFLG)
+            IF(IRTFLG.NE.0) CALL  ERRT(46,'TF CTF, VOLSUM',IER)
+
+            ALLOCATE(CTF2(LS/2,NROW,NSLICE),STAT=IRTFLG)
+            IF(IRTFLG.NE.0) CALL  ERRT(46,'TF CTF, CTF2',IER)
+
+C           SET OUTPUT VOLUME AND CTF^2 TO ZERO
+            VOLSUM=0.0
+            CTF2=0.0
+         ELSE
+
+C           VERIFY THE DIMENSIONS
+            IF(NSAM.NE.NSAM1.OR.NROW.NE.NROW1.OR.NSLICE.NE.NSLICE1) THEN
+               CLOSE(LUN1)
+               CALL  ERRT(1,'TF CTF',NE)
+               GOTO 9999
+            ENDIF
+         ENDIF
+
+C        READ INPUT FILE
+         DO L=1,NSLICE
+            DO J=1,NROW
+               CALL  REDLIN(LUN1,VOLIN(1,J,L),LRCL,J+(L-1)*NROW)
+            ENDDO
+         ENDDO
+         CLOSE(LUN1)
+
+
+         IF ((IFORM.EQ.1).OR.(IFORM.EQ.3)) THEN
+C           FOURIER TRANSFORM
+            INV=+1
+            CALL FMRS_3(VOLIN,NSAM,NROW,NSLICE,INV)
+            IF (INV.EQ.0)  THEN
+               CALL  ERRT(38,'TF CTF',NE)
+               GOTO 9999
+            ENDIF
+         ENDIF
+
+
+C        GET CTF
+         CALL FILGET(FILNAM,FINPIC,NLEP,ILIST(K),IRTFLG)
+         IF (IRTFLG .NE. 0) GOTO 9999
+         
+         MAXIM=0
+         CALL OPFILEC(0,.FALSE.,FINPIC,LUN1,'O',IFORM,
+     &          NSAM1,NROW1,NSLICE1,MAXIM,'DUMMY',.TRUE.,IRTFLG)
+         IF (IRTFLG.NE.0) GOTO 9999
+
+         LRCL1=NSAM1
+C        ONLY 2D FOURIER
+
+           INUMCTF = 0
+CC       USE INUMCTF TO RECORD 3D OR 2D
+CC             INUMCTF = 3    3D
+CC                     1    2D
+
+         IF (IFORM.EQ.-11) THEN
+            NSAM1=NSAM1-1
+              INUMCTF = 1
+         ELSEIF (IFORM.EQ.-12) THEN
+            NSAM1=NSAM1-2
+              INUMCTF = 1
+         ELSEIF (IFORM.EQ.-21) THEN
+            NSAM1=NSAM1-1
+              INUMCTF = 3
+         ELSEIF (IFORM.EQ.-22) THEN
+            NSAM1=NSAM1-2
+              INUMCTF = 3
+         ELSE
+            CLOSE(LUN1)
+            CALL  ERRT(2,'TF CTF',NE)
+            GOTO 9999
+         ENDIF
+
+         IF (INUMCTF.NE.INUMDEM) THEN
+             CLOSE(LUN1)
+             CALL ERRT(2,'TF CTF',NE)
+             GOTO 9999
+         ENDIF
+
+c        VERIFY DIMENSIONS OF THE CTF
+         IF (NSAM.NE.NSAM1.OR.NROW.NE.NROW1.OR.NSLICE.NE.NSLICE1) THEN
+            CLOSE(LUN1)
+            CALL ERRT(1,'TF CTF',NE)
+            GOTO 9999
+         ENDIF
+C         READ the snr
+           CALL FILGET(FILPAT1, FILNM1, NLET1,ILIST(K), IRTFLG)
+           CALL FILNAMANDEXT(FILNM1,DATEXC,FILNMO,NFN,.TRUE.,IRTFLG)
+         MAXXT = 0
+         MAXYT = 0
+           CALL GETDOCDAT("Nothing", .FALSE., FILNMO, LUN2, .TRUE.,
+     F         MAXXT, MAXYT, RPOINTER, IRTFLG)
+
+C        MUTLIPLY INPUT VOLUME STORED IN THE MEMORY volin, PLACE OUTPUT
+C        IN VOLSUM AND SQUARED CTF IN CTF2.
+         CALL MULFC3_1(LUN1,VOLIN,VOLSUM,CTF2,LRCL1,NROW,NSLICE,
+     &               RPOINTER,MAXXT,MAXYT,WI,SNRF)
+         
+         DEALLOCATE(RPOINTER)
+         CLOSE(LUN1)
+C        END OF DO-LOOP OVER ALL VOLUMES
+      END DO ! K
+   
+C        DIVIDE BY THE SUM OF H^2+1/SNR
+      VOLIN=VOLSUM/(REAL(CTF2)+1)
+c     CALL  DIVCR3(B(KAD2),B(KAD2),B(KAD3),S,LRCL1/2,NROW,NSLICE)
+
+      INV=-1
+      CALL FMRS_3(VOLIN,NSAM,NROW,NSLICE,INV)
+
+      IFORM = INUMCTF
+      MAXIM = 0
+      CALL OPFILEC(0,.TRUE.,FILNAM,LUN1,'N',IFORM,NSAM,NROW,NSLICE,
+     &              MAXIM,'OUTPUT',.FALSE.,IRTFLG)
+      IF(IRTFLG.NE.0) GOTO 9999
+
+C     WRITE THE OUTPUT
+      DO L=1,NSLICE
+         DO J=1,NROW
+            CALL  WRTLIN(LUN1,VOLIN(1,J,L),NSAM,J+(L-1)*NROW)
+         ENDDO
+      ENDDO
+      CLOSE(LUN1)
+
+9999  IF(ALLOCATED(CTF2)) DEALLOCATE(CTF2)
+      IF(ALLOCATED(VOLSUM)) DEALLOCATE(VOLSUM)
+      IF(ALLOCATED(VOLIN)) DEALLOCATE(VOLIN)
+      IF(ALLOCATED(ILIST)) DEALLOCATE(ILIST)
+
+      END
+#if 1
+CCCCCCCCCCCCCCCCCCCCCC   
+   
+      SUBROUTINE MULFC3_1(LUN1,A1,OUT,H2,NSAM,NROW,NSLICE,RPOINTER,
+     F            MAXXT,MAXYT,WI,SNRF)
+      INCLUDE 'CMBLOCK.INC'
+      INCLUDE 'F90ALLOC.INC'
+      COMPLEX  A1(NSAM/2,NROW,NSLICE),OUT(NSAM/2,NROW,NSLICE)
+      COMPLEX  H2(NSAM/2,NROW,NSLICE)
+      COMPLEX  B1(NSAM/2)
+      REAL      RPOINTER(MAXXT,MAXYT)
+      INTEGER   RADIUS
+C
+      NS2 = NSLICE / 2
+      NR2 = NROW / 2
+      NN2 = NSAM / 2
+      Y1 =  FLOAT(MAX0(NSAM,NROW,NSLICE))
+        RPOINTER(2,:) = RPOINTER(2,:)*SNRF
+      DO    K=1,NSLICE
+         IZ = K-1
+         IF (IZ .GT. NS2)  IZ = IZ - NSLICE
+         PK = (FLOAT(IZ)/FLOAT(NS2))**2
+         DO    J=1,NROW
+            IY = J-1
+            IF (IY .GT. NR2) IY = IY - NROW
+               NR1=J+(K-1)*NROW
+             CALL  REDLIN(LUN1,B1,2*NN2,NR1)
+            PJ=(FLOAT(IY)/FLOAT(NR2))**2
+            
+            DO    I=1,NSAM,2
+               III    = (I-1)/2
+               PIII    = (FLOAT(III)/FLOAT(NN2))**2
+               RR    = SQRT(PIII+PJ+PK)*0.5
+               IR    = MIN0(MAX0(NINT(RR*Y1/WI)+1,1),MAXYT)
+               IF(IR>MAXYT) THEN
+                  WRITE(NOUT,*) 'ERROR:',IR,' is larger than: ', MAXYT
+                  CALL ABORT
+               END IF
+                 FR     = RPOINTER(2,IR)
+               OUT(III,J,K) = OUT(III,J,K)
+     &               +A1(III,J,K)*CONJG(B1(III))*FR
+                H2(III,J,K) = H2(III,J,K)
+     &               +CMPLX(REAL(B1(III)*CONJG(B1(III))),0.0)*FR
+            END DO
+          END DO
+      END DO
+      
+      
+      END
+#endif
+@
+
+
+1.8
+log
+@cosmetic & prompts
+@
+text
+@d50 2
+@
+
+
+1.7
+log
+@Pawels GPL License used
+@
+text
+@d29 2
+d36 1
+d39 13
+a51 11
+      PARAMETER  (NILMAX=998)
+      COMMON  /F_SPEC/  FINPAT,FILNAM,FINPIC,NLET,NLEP
+      CHARACTER*80      FINPAT,FILNAM,FINPIC, FILPAT1, FILNM1, FILNMO
+      INTEGER, ALLOCATABLE, DIMENSION(:) ::  ILIST
+      COMPLEX, ALLOCATABLE, DIMENSION(:,:,:) ::  VOLIN,VOLSUM,CTF2
+      CHARACTER*1  NULL
+      LOGICAL FIRST
+      REAL, DIMENSION(:,:), POINTER  :: RPOINTER
+      INTEGER      MAXSNR
+      PARAMETER(MAXSNR=998)
+      INTEGER   IMAR(MAXSNR)
+d57 1
+a57 1
+         CALL  ERRT(46,'TF CTF, ILIST',IER)
+d63 1
+a63 1
+     &    'ENTER TEMPLATE FOR IMAGE FILE',IRTFLG)
+d68 1
+a68 2
+      CALL  FILERD(FILNAM,NLEP,NULL,
+     &     'ENTER TEMPLATE FOR CTF',IRTFLG)
+d71 1
+a71 2
+      CALL  FILERD(FILPAT1,NLET1,NULL,
+     &     'ENTER SNR TEMPLATE',IRTFLG)
+d76 1
+a76 2
+      CALL RDPRM(SNRF, NOT_USED, 
+     &		'FACTOR APPLIED ON SNR (0.5,1,...)')
+a128 1
+C
+d135 1
+d138 1
+d141 1
+d144 1
+d149 1
+a149 1
+C
+a177 2
+
+
+d213 5
+a217 5
+           IF (INUMCTF.NE.INUMDEM) THEN
+                 CLOSE(LUN1)
+                 CALL ERRT(2,'TF CTF',NE)
+                 GOTO 9999
+           ENDIF
+@
+
+
+1.6
+log
+@opfilec
+@
+text
+@d1 1
+a1 2
+C **************************************************************************
+C *  SPIDER - MODULAR IMAGE PROCESSING SYSTEM.
+d3 24
+a26 3
+C *  COPYRIGHT (C)2002, L.Joyeux&P.A.Penczek
+C *  University of Texas - Houston Medical School
+C *  pawel.a.penczek@@uth.tmc.edu
+d29 1
+a29 1
+C **************************************************************************
+@
+
+
+1.5
+log
+@__FILE___ not standard fortran
+@
+text
+@d8 1
+d31 1
+a31 1
+      IF(IRTFLG.NE.0) THEN
+d42 1
+a46 1
+
+d54 1
+a54 1
+     F		'FACTOR APPLIED ON SNR (0.5,1,...)')
+d59 4
+a62 3
+         IF(IRTFLG .NE. 0) GOTO 9999
+           MAXIM = 0
+           CALL OPFILE(.FALSE.,FINPIC,LUN1,'O',IFORM,NSAM1,NROW1,
+d64 1
+a64 1
+         IF(IRTFLG.NE.0)  GOTO 9999
+a65 2
+         
+
+d159 3
+a161 3
+           MAXIM=0
+           CALL OPFILE(.FALSE.,FINPIC,LUN1,'O',IFORM,NSAM1,NROW1,NSLICE1,
+     &             MAXIM,'DUMMY',.TRUE.,IRTFLG)
+d213 1
+a213 1
+     F               RPOINTER,MAXXT,MAXYT,WI,SNRF)
+d216 1
+a216 1
+           CLOSE(LUN1)
+d229 1
+a229 1
+      CALL OPFILE(.TRUE.,FILNAM,LUN1,'N',IFORM,NSAM,NROW,NSLICE,
+@
+
+
+1.4
+log
+@RDPRM* call param. wrong
+@
+text
+@d282 1
+a282 2
+                  WRITE(NOUT,*) __FILE__, __LINE__, 
+     F               "ERROR :", IR, " is larger than ", MAXYT
+d287 1
+a287 1
+     F               +A1(III,J,K)*CONJG(B1(III))*FR
+d289 1
+a289 1
+     F               +CMPLX(REAL(B1(III)*CONJG(B1(III))),0.0)*FR
+@
+
+
+1.3
+log
+@renamed wctf.f to tfsnr.f
+@
+text
+@d7 1
+a7 2
+C *    THE CONTENTS OF THIS DOCUMENT CANNOT BE CHANGED WITHOUT WRITTEN
+C *    PERMISSION OF THE AUTHOR                          *
+d11 1
+a14 1
+
+a21 1
+      DATA    LUN1/10/
+d27 1
+a28 2
+
+
+d50 3
+a52 2
+      CALL RDPRM(WI, NLOOP, ILOOP, 'RING WIDTH')
+      CALL RDPRM(SNRF, NLOOP, ILOOP, 
+@
+
+
+1.2
+log
+@*** empty log message ***
+@
+text
+@d3 1
+a3 1
+C *  WCTF.F
+d11 1
+a11 1
+      SUBROUTINE  WCTF
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d54 2
+a55 1
+      CALL RDPRM(SNRF, NLOOP, ILOOP, 'FACTOR APPLIED ON SNR (0.5,1,...)')
+@

@@ -1,0 +1,406 @@
+head	1.8;
+access;
+symbols
+	pre_opfiles:1.5
+	src:1.5
+	best-code:1.5
+	x-named-regs:1.3
+	x:1.3
+	v13-00:1.3
+	pre_GPL:1.1
+	prec_CA:1.1
+	noindx:1.1;
+locks; strict;
+comment	@c @;
+
+
+1.8
+date	2011.08.04.14.36.15;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2011.07.29.15.20.30;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2008.02.19.15.16.48;	author leith;	state dead;
+branches;
+next	1.5;
+
+1.5
+date	2006.02.07.17.06.48;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2006.02.07.17.04.39;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2005.10.17.20.42.55;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2005.10.17.18.33.18;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2002.04.30.20.21.17;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.8
+log
+@error trap
+@
+text
+@C++*********************************************************************
+C
+C    CCRS_3.F 
+C      PGI BUG                                  FEB 10 2006 ArDean Leith
+C      REAL CALCULATIONS                        FEB 11 2006 Bimal Rath
+C      MOD PGI COMPILER BUG                     FEB 19 2008 ArDean Leith
+C      CCRS_3_PH                                JUN 30 2011 ArDean Leith
+C
+C **********************************************************************
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2011  Health Research Inc.                      *
+C=*                                                                    *
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+C=*                                                                    *
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* This program is distributed in the hope that it will be useful,    *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+C=* General Public License for more details.                           *
+C=*                                                                    *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+C=*                                                                    *
+C **********************************************************************
+C
+C  CCRS_PH_3(X,Y, LS,NSAM,NROW,NSLICE),IRTFLG
+C
+C  PURPOSE: CALCULATES CIRCULAR CROSCORRELATION, NON-POWER-OF-TWO 
+C           DIMENSIONS
+C  
+C  PARAMETERS:   X    FOURIER TRANSFORMS                      (SENT/RET)
+C                Y    FOURIER TRANSFORMS                      (SENT)
+C                LS   NSAM+2-MOD(NSAM,2)                      (SENT)
+C
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C--*********************************************************************
+
+        SUBROUTINE CCRS_PH_3(X,Y, LS,NSAM,NROW,NSLICE,IRTFLG)
+
+        IMPLICIT NONE
+        INCLUDE 'CMBLOCK.INC'
+
+        REAL             :: X(LS,NROW,NSLICE)
+        REAL             :: Y(LS,NROW,NSLICE)
+        INTEGER          :: LS,NSAM,NROW,NSLICE,IRTFLG
+
+        REAL             :: SX,SY,ARGZ,ARGY,ARG,TMPR,TMPI,FNRM,SZ,BTM
+        INTEGER          :: K,IZ,J,IY,I,INS,ITMP,NE
+
+        LOGICAL          :: BADBTM 
+
+	REAL, PARAMETER  :: QUADPI = 3.1415926535897932384
+	REAL, PARAMETER  :: PI2    = 2*QUADPI
+
+
+        ITMP   = NSAM / 2
+        SX     = PI2 * FLOAT(ITMP)/FLOAT(NSAM)
+        ITMP   = NROW / 2
+        SY     = PI2 * FLOAT(ITMP )/ FLOAT(NROW)
+
+        BADBTM = .FALSE.
+
+c$omp  parallel do private(i,j,k,iy,iz,arg,argy,argz,tmpr,tmpi,fnrm,
+c$omp&                     badbtm,btm)
+        DO K=1,NSLICE
+           IZ = K - 1
+           IF (IZ .GT. (NSLICE/2))  IZ = IZ-NSLICE
+           ARGZ = SZ * IZ
+
+           DO J=1,NROW
+              IY = J - 1
+              IF (IY .GT. (NROW/2)) IY = IY - NROW
+              ARGY = SY * IY
+
+              DO I=1,LS,2
+                 ARG        = SX * (I-1) / 2 + ARGY
+
+    	         TMPR       = X(I,  J,K) * Y(I,  J,K) + 
+     &                        X(I+1,J,K) * Y(I+1,J,K)
+
+	         TMPI       = X(I+1,J,K) * Y(I,  J,K) - 
+     &                        X(I,  J,K) * Y(I+1,J,K)
+
+	         X(I,J,K)   = TMPR * COS(ARG) - TMPI * SIN(ARG)
+	         X(I+1,J,K) = TMPI * COS(ARG) + TMPR * SIN(ARG)
+
+                 BTM = SQRT(X(I,J,K)**2 + X(I+1,J,K)**2)
+                 IF (BTM .LE. 0.0) THEN
+                    BADBTM = .TRUE.
+                    EXIT
+                 ENDIF
+                  
+	         FNRM       = 1.0 / BTM
+
+	         X(I,  J,K) = X(I,  J,K) * FNRM
+	         X(I+1,J,K) = X(I+1,J,K) * FNRM
+              ENDDO
+           ENDDO
+        ENDDO
+
+        IF (BADBTM) THEN
+           WRITE(NOUT,90) X(I,J,K),X(I+1,J,K)
+90         FORMAT(' COMPLEX VALUES GIVE DIV. BY ZERO:',1PG12.3)
+           CALL ERRT(101,'AVOIDED DIV BY ZERO',NE)
+           IRTFLG = 1
+           RETURN
+        ENDIF
+   
+        INS    = -1
+        CALL FMRS_3(X,NSAM,NROW,NSLICE,INS)
+
+        IRTFLG = 0
+        END
+
+
+#ifdef NEVER
+		 OREAL = TMPR * COS(ARG) - TMPI * SIN(ARG)
+		 OIMG  = TMPI * COS(ARG) + TMPR * SIN(ARG)
+		 
+		 O(I,J,K)   = OREAL
+		 O(I+1,J,K) = OIMG		 
+#endif
+
+
+
+ 
+@
+
+
+1.7
+log
+@cc h
+@
+text
+@d7 1
+d11 1
+a11 1
+C=* Copyright (C) 1985-2008  Health Research Inc.                      *
+d35 1
+a35 1
+C  CCRS_3(X,Y, LS,NSAM,NROW,NSLICE)
+d47 1
+a47 1
+        SUBROUTINE CCRS_PH_3(X,Y, LS,NSAM,NROW,NSLICE)
+d50 1
+d54 1
+a54 1
+        INTEGER          :: LS,NSAM,NROW,NSLICE
+d56 4
+a59 2
+        REAL             :: SX,SY,ARGZ,ARGY,ARG,TMPR,TMPI,FNRM,SZ
+        INTEGER          :: K,IZ,J,IY,I,INS,ITMP
+d65 6
+a70 4
+        ITMP = NSAM / 2
+        SX   = PI2 * FLOAT(ITMP)/FLOAT(NSAM)
+        ITMP = NROW / 2
+        SY   = PI2 * FLOAT(ITMP )/ FLOAT(NROW)
+d72 2
+a73 1
+c$omp   parallel do private(i,j,k,iy,iz,arg,argy,argz,tmpr,tmpi,fnrm)
+d89 1
+d96 7
+a102 1
+	         FNRM       = 1 / SQRT(X(I,J,K)**2 + X(I+1,J,K)**2)
+d110 9
+a118 1
+        INS = -1
+d121 1
+@
+
+
+1.6
+log
+@deleted this operation
+@
+text
+@d3 4
+a6 2
+C    CCRS_PH_3.F ADDED PHASE CORRELATION MAR 02 AL & CR
+C                           PGI BUG            FEB 10 2006 ArDean Leith
+d10 1
+a10 1
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d34 1
+a34 1
+C  CCRS_PH_3(X,Y,O,NSAM,NROW,NSLICE)
+d39 3
+a41 4
+C  PARAMETERS:   X,Y FOURIER TRANSFORMS                          (SENT)
+C                O=F(X*CONJG(Y))                                 (RET.)
+C
+C IMAGE_PROCESSING_ROUTINE
+d46 10
+a55 1
+        SUBROUTINE CCRS_PH_3(X,Y,O,NSAM,NROW,NSLICE)
+d57 2
+a58 14
+        COMPLEX ::          X((NSAM+2-MOD(NSAM,2))/2,NROW,NSLICE)
+        COMPLEX ::          Y((NSAM+2-MOD(NSAM,2))/2,NROW,NSLICE)
+        COMPLEX ::          O((NSAM+2-MOD(NSAM,2))/2,NROW,NSLICE)
+        COMPLEX ::          CTEMPA,CTEMPB
+        DOUBLE PRECISION :: PI2
+
+        NNNN = (NSAM+2-MOD(NSAM,2))/2
+        PI2  = 8.0*DATAN(1.0D0)
+        ITMP = NSAM/2
+        SX   = PI2*FLOAT(ITMP)/FLOAT(NSAM)
+        ITMP = NROW/2
+        SY   = PI2*FLOAT(ITMP)/FLOAT(NROW)
+        ITMP = NSLICE/2
+        SZ   = PI2*FLOAT(ITMP)/FLOAT(NSLICE)
+a59 1
+c$omp   parallel do private(i,j,k,ix,iy,iz,arg,argy,argz,ctempa,ctempb)
+d61 6
+d74 18
+a91 11
+              IF (IY .GT. (NROW/2))  IY = IY-NROW
+              ARGY = SY * IY + ARGZ
+C             PHASE CORRELATION
+              DO I=1,NNNN
+                 IX       = I - 1
+                 ARG      = SX * IX + ARGY
+
+                 CTEMPA   = CMPLX(COS(ARG),SIN(ARG))
+                 CTEMPB   = X(I,J,K) * CONJG(Y(I,J,K)) * CTEMPA
+                 O(I,J,K) = CTEMPB / 
+     &                    (SQRT(REAL(CTEMPB)**2 + AIMAG(CTEMPB)**2))
+d97 1
+a97 1
+        CALL FMRS_3(O,NSAM,NROW,NSLICE,INS)
+d100 13
+@
+
+
+1.5
+log
+@typo
+@
+text
+@@
+
+
+1.4
+log
+@PGI BUG
+@
+text
+@d73 4
+a76 4
+C                PHASE CORRELATION
+                 DO I=1,NNNN
+                    IX       = I - 1
+                    ARG      = SX * IX + ARGY
+d78 5
+a82 6
+                    CTEMPA   = CMPLX(COS(ARG),SIN(ARG))
+                    CTEMPB   = X(I,J,K) * CONJG(Y(I,J,K)) * CTEMPA
+                    O(I,J,K) = CTEMPB / 
+     &                    (SQRT(REAL(CTEMPB)**2 + AIMAG(CTEMPB)**2))        ENDDO
+
+                 ENDDO
+@
+
+
+1.3
+log
+@GPL License fixed
+@
+text
+@d4 1
+d50 1
+a50 1
+        COMPLEX ::          CTEMP
+d61 2
+a62 1
+c$omp   parallel do private(i,j,k,ix,iy,iz,arg,argy,argz,ctemp)
+d66 3
+a68 2
+           IF (IZ .GT. NSLICE/2)  IZ = IZ-NSLICE
+           ARGZ = SZ*IZ
+d70 3
+a72 3
+              IY = J-1
+              IF (IY .GT. NROW/2)  IY = IY-NROW
+              ARGY = SY*IY+ARGZ
+d75 8
+a82 6
+                    IX  = I-1
+                    ARG   = SX*IX+ARGY
+                    CTEMP = X(I,J,K)*CONJG(Y(I,J,K))*
+     &                        CMPLX(COS(ARG),SIN(ARG))
+                    O(I,J,K) = CTEMP / 
+     &                    (SQRT(REAL(CTEMP)**2 + AIMAG(CTEMP)**2))        ENDDO
+@
+
+
+1.2
+log
+@HRI GPL License used
+@
+text
+@a1 1
+C++************************************************************************
+a5 1
+C * SPIDER - MODULAR IMAGE PROCESSING SYSTEM.    AUTHOR: J.FRANK       *
+d9 1
+a9 1
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *  
+a28 6
+
+C * COPYRIGHT (C)1985, 2002. HEALTH RESEARCH INCORPORATED (HRI),       *
+C * ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+C * THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO HRI AND ARE NOT   *
+C * TO BE DISCLOSED TO OTHERS OR USED FOR PURPOSES OTHER THAN INTENDED *
+C * WITHOUT WRITTEN APPROVAL OF HRI.                                   *
+a42 1
+C--************************************************************************
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d1 1
+d8 24
+d50 1
+@
+

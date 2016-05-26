@@ -1,0 +1,965 @@
+head	1.15;
+access;
+symbols
+	pre_getangas:1.14
+	GPL2010:1.14
+	pre_GPL2010:1.13
+	pre_var_equation:1.13
+	pre_fftwrings:1.13
+	pre_opfiles:1.13
+	src:1.13
+	best-code:1.13
+	x-named-regs:1.13
+	x:1.13
+	v13-00:1.13
+	pre_GPL:1.11
+	prec_CA:1.11
+	noindx:1.10
+	Bproc:1.9
+	oct21:1.8
+	last77:1.8;
+locks; strict;
+comment	@c @;
+
+
+1.15
+date	2013.01.07.15.21.32;	author leith;	state Exp;
+branches;
+next	1.14;
+
+1.14
+date	2010.06.24.13.25.24;	author leith;	state Exp;
+branches;
+next	1.13;
+
+1.13
+date	2005.10.17.20.38.18;	author leith;	state Exp;
+branches;
+next	1.12;
+
+1.12
+date	2005.10.17.18.28.41;	author leith;	state Exp;
+branches;
+next	1.11;
+
+1.11
+date	2003.02.19.14.55.53;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2002.03.11.14.08.29;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	99.11.10.23.09.13;	author yuchen;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	99.02.04.14.38.24;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	98.01.26.15.50.07;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	98.01.26.15.40.46;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	97.10.06.17.03.56;	author pawel;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	96.07.14.21.04.32;	author mladjadj;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	95.10.04.18.38.45;	author mladjadj;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	95.07.31.20.32.05;	author mladjadj;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	95.07.06.20.33.45;	author mladjadj;	state Exp;
+branches;
+next	;
+
+
+desc
+@created by june Zhu
+@
+
+
+1.15
+log
+@CS_zero
+@
+text
+@C++*********************************************************************
+C
+C DEFO1001.F
+C
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C   DEFO1001(NUM,NP,KP,NA,NSAM,SPMAX)
+C
+C   USING LEAST SQUARE METHOD TO DETERMINE DEFOCUS, AMPLITUDE CONTRAST
+C   (WEIGHTED FIT; CONSTRAIN REQUIRE A2 IS THE SAME FOR DEFOCUS SEARIES)
+C   X(K,A)=PI*(0.5*CS*LAMBDA**3*K**4-DZ*LAMBDA*K**2)-OFFSET
+C   X(K,A)=PI*(0.5*CS*LAMBDA**3*K**4-A1*LAMBDA*K**2)-A2
+C
+C   PARAMETERS:
+C	NUM: NUMBER OF IMAGES
+C       NP(I): NUMBER OF MINIMUM IN EACH IMAGES
+C	KP(I,J): ARRAY OF SP. FREQ. POINTS OF MINIMUM
+C	NA(I,J): ARRAY OF ABBERATION
+C	NSAM: IMAGE DIMENSION
+C	SPMAX: MAX OF SP. FREQ.
+C	NA: NUMBER OF ABBERATION IN UNIT OF PI
+C       
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C **********************************************************************
+
+	SUBROUTINE DEFO1001(NUM,NP,KP,NA,NSAM,SPMAX)
+
+C       I DO NOT KNOW IF SAVE IS NEEDED FEB 99 al
+        SAVE
+
+        INCLUDE 'CMBLOCK.INC' 
+	INCLUDE 'CMLIMIT.INC' 
+
+        CHARACTER (LEN=MAXNAM) ::  OUTNAME
+	
+	REAL      KP(20,20),NA(20,20)
+	DIMENSION NP(*)
+
+        REAL   A1(20)
+	EQUIVALENCE (A0(1),A1(1))
+        COMMON  A0(20),B(20),C(20,20),DA1(10),DXA1(10),NM(30),
+     &          XA1(30,30),XA2(30),XM(30),Y1(20,10),Y2(20,10),
+     &          WEIGHT(20,10),F2(512)
+
+	REAL       KM,KS,LAMBDA,KF
+	CHARACTER  CHO1*1,NULL*1
+
+	DATA PI/3.141592654/
+	
+	NULL=CHAR(0)
+
+	LUN2=10
+	AA0= -100.0   
+	DO I=1,30
+           NM(I)=0
+	ENDDO
+
+C....... INPUT EM PARAMETERS*/
+	WRITE(NOUT,*)' INPUT PARAMETERS OF  IMAGES'
+	CALL RDPRM(LAMBDA,NOT_USED,'WAVELENGTH LAMBDA [A]')
+	CALL RDPRM(CS,NOT_USED,'SPHERICAL ABERRATION CS[MM]')
+           IF (CS < 0.0001)    CS = 0.0001
+	CS=CS*1.0E07
+	KM=SPMAX
+	KS=KM/FLOAT(NSAM)
+
+C.......GET VALUE OF Y1  */
+	DO  I=1,NUM
+	DO  J=1,NP(I)
+	Y1(I,J)=PI*NA(I,J)
+	ENDDO
+	ENDDO
+C.......CALCULATE  DEFOCUS(ROUGH)
+	DO I=1,20
+	A0(I)=0
+	B(I)=0
+	DO J=1,20
+	C(I,J)=0
+	ENDDO
+	ENDDO
+	IF(NUM .EQ. 1 .AND. NP(1) .EQ.1) THEN
+	CALL RDPRM(A2, NOT_USED,' AMPLITUDE CONTRAST [RAD]$')
+	KF=KP(1,1)*KS
+	A0(1)=-(Y1(1,1)+A2-0.5*CS*PI*LAMBDA**3*KF**4)/(PI*LAMBDA*KF**2)
+	GOTO 130
+	ELSE
+	DO  I=1,NUM
+	DO  J=1,NP(I)
+	KF=KP(I,J)*KS
+	C(I,I)=C(I,I)-PI*(LAMBDA*KF**2)**2
+	C(NUM+1,I)=C(NUM+1,I)-PI*LAMBDA*KF**2
+	C(I,NUM+1)=C(I,NUM+1)-LAMBDA*KF**2
+	C(NUM+1,NUM+1)=C(NUM+1,NUM+1)-1.0
+	B(I)=B(I)-(PI*(0.5*CS*LAMBDA**3*KF**4)-Y1(I,J))*(LAMBDA*KF**2)
+	B(NUM+1)=B(NUM+1)-(PI*(0.5*CS*LAMBDA**3*KF**4)-Y1(I,J))
+	ENDDO
+	ENDDO
+	CALL MATINV(C,NUM+1,DET)
+	DO  I=1,NUM+1
+	DO  J=1,NUM+1
+	A0(I)=A0(I)+C(I,J)*B(J)
+	ENDDO
+	ENDDO
+	ENDIF
+	A2=A0(NUM+1)
+	IF( A2 .GT. 0.3 .OR. A2 .LT. 0) THEN
+C   USING DEEPEST GRADIENT METHOD TO CALCULATE AMPLITUDE
+
+C......CALCULATE THE WEIGHT OF EACH POINTS
+	DO  I=1,NUM
+	DO  J=1,NP(I)
+	KF=KP(I,J)*KS
+	WEIGHT(I,J)=PI*SQRT((2.*CS*LAMBDA**3*KF**3)**2+
+     & 	            (2.*A0(I)*LAMBDA*KF)**2)*2.*KS
+C	WRITE(NOUT,*) WEIGHT(I,J)
+	ENDDO
+	ENDDO
+
+	DO  K=1,31
+	DO I=1,NUM
+	A1(I)=A0(I)
+	ENDDO
+	A2=FLOAT(K)*0.01
+	IF (K .EQ. 31) THEN
+	A2=AM2
+	ENDIF
+C.......SET ITERATION STEP */
+	NSTEP=0
+C........CALCULATE VALUE OF Y2 */
+	DO  I=1,NUM
+	DO  J=1,NP(I)
+	KF=KP(I,J)*KS
+	Y2(I,J)=PI*(0.5*CS*LAMBDA**3*KF**4-A1(I)*LAMBDA*KF**2)-A2
+	ENDDO
+	ENDDO
+C.......SET INITIAL VALUE X**2(X,A)=SUM((Y1(I)-Y2(I))**2) */
+	X1=0
+	DO  I=1,NUM
+	DO  J=1,NP(I)
+        X1=X1+(Y1(I,J)-Y2(I,J))**2/WEIGHT(I,J)**2
+	ENDDO
+	ENDDO
+C........CALCULATE THE VALUE OF Y2(I)  */
+999	CONTINUE
+	DO I=1,NUM
+	DA1(I)=0.001*A1(I)
+	ENDDO
+	DA2=0.001*A2
+	DO  I=1,NUM
+	DO  J=1,NP(I)
+	KF=KP(I,J)*KS
+ 	Y2(I,J)=PI*(0.5*CS*LAMBDA**3*KF**4-A1(I)*LAMBDA*KF**2)-A2
+	ENDDO
+	ENDDO
+
+C........CALCULATE DX**2/DA1  */
+
+	DO  L=1,NUM
+	DO  I=1,NUM
+	IF(L .EQ. I) THEN
+	X=A1(L)+0.1*DA1(L)
+	ELSE
+	X=A1(I)
+	ENDIF
+	DO  J=1,NP(I)
+	KF=KP(I,J)*KS
+	Y2(I,J)=PI*(0.5*CS*LAMBDA**3*KF**4-X*LAMBDA*KF**2)-A2
+	ENDDO
+	ENDDO
+	X2=0
+	DO  I=1,NUM
+	DO  J=1,NP(I)
+	X2=X2+(Y1(I,J)-Y2(I,J))**2/WEIGHT(I,J)**2
+	ENDDO
+	ENDDO
+	DXA1(L)=(X2-X1)/(0.1*DA1(L))
+	ENDDO
+
+C........CALCULATE DX**2/DA2 */
+ 	DO  I=1,NUM
+	X=A1(I)
+	DO  J=1,NP(I)
+	KF=KP(I,J)*KS
+	Y2(I,J)=PI*(0.5*CS*LAMBDA**3*KF**4-X*LAMBDA*KF**2)-(A2+0.1*DA2)
+	ENDDO
+	ENDDO
+	X2=0
+	DO  I=1,NUM
+	DO  J=1,NP(I)
+	X2=X2+(Y1(I,J)-Y2(I,J))**2/WEIGHT(I,J)**2
+	ENDDO
+	ENDDO
+	DXA2=(X2-X1)/(0.1*DA2)
+C.......CALCULATE THE SUM=SUM((DX**2/DAI*DAI)**2) 
+	SUM=0
+	DO I=1,NUM
+	SUM=SUM+(DXA1(I)*DA1(I))**2
+	ENDDO
+	SUM=SQRT((DXA2*DA2)**2+SUM)
+	DO I=1,NUM
+        A1(I)=A1(I)-DXA1(I)*DA1(I)**2/SUM
+	ENDDO
+        A2=A2-DXA2*DA2**2/SUM
+C........CRITERI FOR ITERATION */
+	DO  I=1,NUM
+	X=A1(I)
+	DO  J=1,NP(I)
+        KF=KP(I,J)*KS
+	Y2(I,J)=PI*(0.5*CS*LAMBDA**3*KF**4-X*LAMBDA*KF**2)-A2
+	ENDDO
+	ENDDO
+	X2=0
+	DO  I=1,NUM
+	DO  J=1,NP(I)
+	X2=X2+(Y1(I,J)-Y2(I,J))**2/WEIGHT(I,J)**2
+	ENDDO
+	ENDDO
+	IF((X1-X2) .LT. 0) THEN
+	  DO I=1,NUM
+	  A1(I)=A1(I)+0.5*DXA1(I)*DA1(I)**2/SUM
+	  ENDDO
+	  A2=A2+0.5*DXA2*DA2**2/SUM
+C	WRITE(NOUT,*) 'INITIAL A2=',FLOAT(K)*0.01,'STEP',NSTEP
+C	WRITE(NOUT,*) 'A1=',(A1(I),I=1,NUM),'OFFSET(RAD)=',A2,'X**2=',X1
+
+	   AM2=A2/0.01
+	   NAM2=INT(AM2+0.5)
+	  NM(NAM2)=NM(NAM2)+1
+	  XA2(K)=A2
+	  DO I=1,NUM
+	  XA1(K,I)=A1(I)
+	  ENDDO
+	  XM(K)=X1
+	 ELSE
+C........SET PARAMETERS FOR NEXT STEP */
+	  X1=X2
+	  NSTEP=NSTEP+1
+	  GOTO 999
+	ENDIF
+	ENDDO
+C      FIND CONVERGE POINTS
+	NN=0
+	DO I=1,30
+	IF(NM(I) .GT. 5) NN=NN+1
+	ENDDO
+	IF (NN .GT. 1) THEN
+C         THERE ARE TWO CONVERGE POINTS
+          X0=999999999.0
+          DO I=1,30
+          IF(NM(I) .GT. 5 .AND. XM(I) .LT. X0) THEN
+           NN=I
+           X0=XM(I)	
+          ENDIF
+          ENDDO
+	ELSE
+C   THERE IS ONLY ONE CONVERGE POINT
+          NN=0
+	  DO I=1,30
+	     IF( NM(I) .GT. NN .OR. (NM(I) .EQ. NN .AND.
+     $           XM(I) .LT. XM(NN))) NN=I
+	  ENDDO
+           ENDIF
+	   A2=XA2(NN)
+	   DO I=1,NUM
+	      A0(I)=XA1(NN,I)
+	      A1(I)=A0(I)
+	   ENDDO
+	   X1=XM(NN)
+	ENDIF	
+130	WRITE(NOUT,*) ' DEFOCUS=', (A0(I), I=1,NUM)
+	WRITE(NOUT,140) A2
+140	FORMAT(' AMPLITUDE CONTRAST=',F10.6)
+	
+C       GENERATE A FILTER FILE FROM CTF W/O ENVELOPE FUNCTION
+C	GATE VALUE IS 0.08
+
+	GATE=0.08
+	CALL RDPRMC(CHO1,NUMC,.TRUE.,
+     &     'DO YOU WANT TO GENERATE A FILTER?(Y/N)' ,NULL,IRT)
+	IF (CHO1 .EQ. 'Y'  .OR. CHO1 .EQ. 'Y') THEN
+           WRITE(NOUT,*)'GENERATE FILTER IN THE INPUT FILE SEQUENCE'
+           DO  I=1,NUM
+              X=A0(I)
+              DO  J=1,NSAM
+                 KF=FLOAT(J)*KS
+                 X1=PI*(0.5*CS*LAMBDA**3*KF**4-X*LAMBDA*KF**2)-A2
+                 F1=SIN(X1)
+                 IF (F1 .GT. 0) THEN
+                    F2(J)=-1.
+                 ELSE
+                    F2(J)=1.
+                 ENDIF
+                 IF (F1 .GT. GATE) THEN
+                    F2(J)=-1.
+                 ELSE
+                    IF (F1 .LT. -1.*GATE) THEN
+                       F2(J)=1.
+                    ELSEIF( ABS(X1) .GT. PI/2.) THEN
+                       F2(J)=0.
+                    ENDIF
+                 ENDIF
+              ENDDO
+
+              WRITE(NOUT,*)' FILE # ',I	        
+              IFORM = 1
+              MAXIM = 0
+              CALL OPFILEC(0,.TRUE.,OUTNAME,LUN2,'U',IFORM,NSAM,1,1,
+     &               MAXIM,'OUTPUT',.FALSE.,IRTFLG)
+              CALL WRTLIN(LUN2,F2,NSAM,1)
+              CLOSE(LUN2)
+           ENDDO
+	ENDIF
+		
+	RETURN
+	END
+@
+
+
+1.14
+log
+@GPL_2010
+@
+text
+@d80 2
+a81 1
+	CALL RDPRM(CS,NOT_USED,'SPHERICAL ABBERATION CS [MM]')
+@
+
+
+1.13
+log
+@GPL License fixed
+@
+text
+@a5 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d7 5
+a11 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d13 1
+a13 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d18 1
+a18 1
+C=* This program is distributed in the hope that it will be useful,    *
+d20 1
+a20 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a21 1
+C=*                                                                    *
+d23 1
+a23 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.12
+log
+@HRI GPL License used
+@
+text
+@a1 1
+C++************************************************************************
+a5 3
+C **************************************************************************
+C * SPIDER - MODULAR IMAGE PROCESSING SYSTEM.  AUTHOR: J.FRANK         *
+C *  SPIDER - MODULAR IMAGE PROCESSING SYSTEM.  AUTHOR: J.FRANK            *
+d9 1
+a9 1
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *  
+a28 7
+
+C *  COPYRIGHT (C)1981,1987, WADSWORTH CENTER FOR LABORATORIES AND         *
+C *  RESEARCH, NEW YORK STATE DEPARTMENT OF HEALTH, ALBANY, NY 12201.      *
+C *  THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO THE CENTER FOR       *
+C *  LABORATORIES AND RESEARCH AND ARE NOT TO BE DISCLOSED TO OTHERS OR    *
+C *  USED FOR PURPOSES OTHER THAN INTENDED WITHOUT WRITTEN APPROVAL OF     *
+C *  THE CENTER FOR LABORATORIES AND RESEARCH   			   *
+a29 1
+C **************************************************************************
+a47 1
+C **************************************************************************
+@
+
+
+1.11
+log
+@opfilec
+@
+text
+@d1 1
+d6 1
+d8 1
+d10 24
+d40 1
+d59 1
+@
+
+
+1.10
+log
+@nloop,iloop_removed
+@
+text
+@a34 2
+ 
+
+d39 3
+d53 1
+a53 1
+	CHARACTER  OUTNAME*81, CHO1*1,NULL*1
+d58 1
+d62 1
+a62 1
+        NM(I)=0
+d64 1
+d67 2
+a68 2
+	CALL RDPRM(LAMBDA,NOT_USED,' WAVELENGTH LAMBDA [A]')
+	CALL RDPRM(CS,NOT_USED,' SPHERICAL ABBERATION CS [MM]')
+d276 1
+a276 1
+130	WRITE(NOUT,*) 'DEFOCUS=', (A0(I), I=1,NUM)
+d285 1
+a285 1
+     &     'DO YOU WANT TO GENERATE A FILTER?(Y/N)$' ,NULL,IRT)
+d309 2
+a310 1
+              WRITE(NOUT,*)'FILE # ',I	        
+d313 1
+a313 1
+              CALL OPFIL(.TRUE.,OUTNAME,LUN2,'U',NSAM,1,1,
+@
+
+
+1.9
+log
+@a
+@
+text
+@d64 2
+a65 2
+	CALL RDPRM(LAMBDA,NLOOP,ILOOP,' WAVELENGTH LAMBDA [A]')
+	CALL RDPRM(CS,NLOOP,ILOOP,' SPHERICAL ABBERATION CS [MM]')
+d85 1
+a85 1
+	CALL RDPRM(A2, NLOOP,ILOOP,' AMPLITUDE CONTRAST [RAD]$')
+@
+
+
+1.8
+log
+@CNO_SAVE
+@
+text
+@d35 1
+a35 1
+CNO_SAVE 
+@
+
+
+1.7
+log
+@bad commoon ,
+,
+@
+text
+@d35 5
+@
+
+
+1.6
+log
+@f90 formating, used common blocks
+@
+text
+@d40 1
+d42 1
+a42 1
+        COMMON  A0(20),B(20),C(20,20),DA1(10),DXA1(10),NM(30)
+@
+
+
+1.5
+log
+@*** empty log message ***
+@
+text
+@d3 1
+a3 1
+C $$ DEFO1001.FOR
+d14 1
+a14 1
+C   $$ DEFO1001:
+d18 2
+a19 2
+C   x(K,A)=PI*(0.5*CS*LAMBDA**3*K**4-DZ*LAMBDA*K**2)-OFFSET
+C   x(K,A)=PI*(0.5*CS*LAMBDA**3*K**4-A1*LAMBDA*K**2)-A2
+d21 1
+d24 2
+a25 2
+C	KP(I,J): ARRAy OF SP. FREQ. POINTS OF MINIMUM
+C	NA(I,J): ARRAy OF ABBERATION
+d27 1
+a27 1
+C	SPMAx: MAx OF SP. FREQ.
+d31 1
+a31 2
+C
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC*/
+a34 1
+#ifdef SP_UNIX
+a35 3
+#else
+        INCLUDE 'COMMON1:CMBLOCK.INC' 
+#endif
+d37 1
+d39 7
+a45 8
+	DIMENSION A0(20),A1(20),B(20),C(20,20),DA1(10),DXA1(10)
+        dimension nm(30)
+	equivalence (a0(1),a1(1))
+	real kp(20,20),na(20,20)
+	dimension xa1(30,30),xa2(30),xm(30)
+	REAL KM,KS,LAMBDA,KF
+  	DIMENSION Y1(20,10),Y2(20,10),WEIGHT(20,10)
+	DIMENSION F2(512)
+d47 1
+d53 3
+a55 3
+	do i=1,30
+        nm(i)=0
+	enddo
+d58 2
+a59 2
+	CALL RDPRM(LAMBDA,NLOOP,ILOOP,' WAVELENGTH LAMBDA [A]$')
+	CALL RDPRM(CS,NLOOP,ILOOP,' SPHERICAL ABBERATION CS [MM]$')
+d78 6
+a83 6
+	if(num .eq. 1 .and. np(1) .eq.1) then
+	call rdprm(a2, nloop,iloop,' amplitude contrast [rad]$')
+	kf=kp(1,1)*ks
+	a0(1)=-(y1(1,1)+a2-0.5*CS*PI*LAMBDA**3*KF**4)/(PI*LAMBDA*KF**2)
+	goto 130
+	else
+d101 2
+a102 2
+	endif
+	a2=a0(num+1)
+d112 1
+a112 1
+c	WRITE(NOUT,*) weight(i,j)
+d130 1
+a130 1
+	Y2(I,J)=PI*(0.5*CS*LAMBDA**3*KF**4-A1(i)*LAMBDA*KF**2)-A2
+d220 2
+a221 2
+c	WRITE(NOUT,*) 'INITIAL A2=',FLOAT(K)*0.01,'STEP',NSTEP
+c	WRITE(NOUT,*) 'A1=',(A1(i),i=1,num),'OFFSET(RAD)=',A2,'X**2=',X1
+d224 8
+a231 8
+	   nam2=int(am2+0.5)
+	  nm(nam2)=nm(nam2)+1
+	  xa2(k)=a2
+	  do i=1,num
+	  xa1(k,i)=a1(i)
+	  enddo
+	  xm(k)=x1
+	 else
+d238 29
+a266 29
+c      find converge points
+	nn=0
+	do i=1,30
+	if(nm(i) .gt. 5) nn=nn+1
+	enddo
+	if (nn .gt. 1) then
+c         there are two converge points
+          x0=999999999.0
+          do i=1,30
+          if(nm(i) .gt. 5 .and. xm(i) .lt. x0) then
+           nn=i
+           x0=xm(i)	
+          endif
+          enddo
+	else
+c   there is only one converge point
+          nn=0
+	  do i=1,30
+	  if( nm(i) .gt. nn .or. (nm(i) .eq. nn .and.
+     $        xm(i) .lt. xm(nn))) nn=i
+	  enddo
+        endif
+	a2=xa2(nn)
+	do i=1,num
+	a0(i)=xa1(nn,i)
+	a1(i)=a0(i)
+	enddo
+	x1=xm(nn)
+	endif	
+d268 1
+a268 1
+	WRITE(NOUT,140) a2
+a270 1
+C
+d273 1
+a273 1
+C
+d277 33
+a309 33
+	IF ( CHO1 .EQ. 'Y'  .OR. CHO1 .EQ. 'Y') THEN
+	        WRITE(NOUT,*) 
+     &          'GENERATE FILTER IN THE INPUT FILE SEQUENCE'
+		DO  I=1,NUM
+		X=A0(I)
+	 	DO  J=1,NSAM
+	 	KF=FLOAT(J)*KS
+		X1=PI*(0.5*CS*LAMBDA**3*KF**4-X*LAMBDA*KF**2)-A2
+		F1=SIN(X1)
+		if(f1 .gt. 0) then
+		f2(j)=-1.
+		else
+		f2(j)=1.
+		endif
+		IF (F1 .GT. GATE) THEN
+	  	 F2(J)=-1.
+		ELSE
+			IF (F1 .LT. -1.*GATE) THEN
+		   		F2(J)=1.
+			ELSEif(abs(x1) .gt. pi/2.) then
+		   		F2(J)=0.
+		   		
+			ENDIF
+		ENDIF
+		ENDDO
+	        WRITE(NOUT,*)'FILE # ',I	        
+		iform=1
+		CALL FILERD(OUTNAME,NLET,NULL,'OUTPUT',IRTFLG)
+	        CALL OPENF(OUTNAME,LUN2,NSAM,1,'UNKNOWN',NF,1)
+		CALL WRTLIN(LUN2,F2,NSAM,1)
+		CLOSE(LUN2)
+		ENDDO
+	ENDIF		
+@
+
+
+1.4
+log
+@add iform=1
+@
+text
+@d68 2
+a69 2
+	DO 10 I=1,NUM
+	DO 10 J=1,NP(I)
+d71 2
+a72 1
+10 	continue
+d87 2
+a88 2
+	DO 600 I=1,NUM
+	DO 600 J=1,NP(I)
+d96 2
+a97 1
+600	CONTINUE
+d99 2
+a100 2
+	DO 610 I=1,NUM+1
+	DO 610 J=1,NUM+1
+d102 2
+a103 1
+610	CONTINUE
+d110 2
+a111 2
+	DO 520 I=1,NUM
+	DO 520 J=1,NP(I)
+d116 2
+a117 1
+520	continue
+d119 1
+a119 1
+	DO 20 K=1,31
+d130 2
+a131 2
+	DO 30 I=1,NUM
+	DO 30 J=1,NP(I)
+d133 3
+a135 1
+30	Y2(I,J)=PI*(0.5*CS*LAMBDA**3*KF**4-A1(i)*LAMBDA*KF**2)-A2
+d138 5
+a142 3
+	DO 40 I=1,NUM
+	DO 40 J=1,NP(I)
+40      X1=X1+(Y1(I,J)-Y2(I,J))**2/WEIGHT(I,J)**2
+d149 2
+a150 2
+	DO 50 I=1,NUM
+	DO 50 J=1,NP(I)
+d152 3
+a154 1
+50 	Y2(I,J)=PI*(0.5*CS*LAMBDA**3*KF**4-A1(I)*LAMBDA*KF**2)-A2
+d158 2
+a159 2
+	DO 85 L=1,NUM
+	DO 70 I=1,NUM
+d165 1
+a165 1
+	DO 70 J=1,NP(I)
+d167 3
+a169 1
+70	Y2(I,J)=PI*(0.5*CS*LAMBDA**3*KF**4-X*LAMBDA*KF**2)-A2
+d171 7
+a177 4
+	DO 80 I=1,NUM
+	DO 80 J=1,NP(I)
+80	X2=X2+(Y1(I,J)-Y2(I,J))**2/WEIGHT(I,J)**2
+85	DXA1(L)=(X2-X1)/(0.1*DA1(L))
+d180 1
+a180 1
+ 	DO 90 I=1,NUM
+d182 1
+a182 1
+	DO 90 J=1,NP(I)
+d184 3
+a186 1
+90	Y2(I,J)=PI*(0.5*CS*LAMBDA**3*KF**4-X*LAMBDA*KF**2)-(A2+0.1*DA2)
+d188 5
+a192 3
+	DO 100 I=1,NUM
+	DO 100 J=1,NP(I)
+100	X2=X2+(Y1(I,J)-Y2(I,J))**2/WEIGHT(I,J)**2
+d205 1
+a205 1
+	DO 110 I=1,NUM
+d207 1
+a207 1
+	DO 110 J=1,NP(I)
+d209 3
+a211 1
+110	Y2(I,J)=PI*(0.5*CS*LAMBDA**3*KF**4-X*LAMBDA*KF**2)-A2
+d213 5
+a217 3
+	DO 120 I=1,NUM
+	DO 120 J=1,NP(I)
+120	X2=X2+(Y1(I,J)-Y2(I,J))**2/WEIGHT(I,J)**2
+d240 1
+a240 1
+20 	CONTINUE
+d284 1
+a284 1
+		DO 1010 I=1,NUM
+d286 1
+a286 1
+	 	DO 1000 J=1,NSAM
+d305 1
+a305 1
+1000		CONTINUE
+d312 1
+a312 1
+1010		CONTINUE
+@
+
+
+1.3
+log
+@change write(* to write(nout
+@
+text
+@d3 1
+a3 1
+C $$ DEFO001.FOR
+d14 1
+a14 1
+C   $$ DEFO001:
+d247 3
+a249 5
+130	WRITE(NOUT,*) 'Q=', a2
+	WRITE(NOUT,*) 'DEFOCUS=', (A0(I), I=1,NUM)
+	Q=SIN(A2)/COS(A2)*100.
+	WRITE(NOUT,140)Q
+140	FORMAT(' AMPLITUDE CONTRAST=',F10.6,'%')
+d284 1
+@
+
+
+1.2
+log
+@correct warnings from VAX
+@
+text
+@d112 1
+a112 1
+c	write(*,*) weight(i,j)
+d247 2
+a248 2
+130	WRITE(*,*) 'Q=', a2
+	WRITE(*,*) 'DEFOCUS=', (A0(I), I=1,NUM)
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d34 7
+a40 1
+	INCLUDE 'CMBLOCK.INC'
+d50 1
+a50 1
+	CHARACTER *81 OUTNAME, CHO1*1,NULL*1
+d52 1
+d110 2
+a111 2
+	WEIGHT(I,J)=PI*SQRT((2.*CS*LAMBDA**3*KF**3)**2+(2.*A0(I)*LAMBDA*KF)**2)
+     &  *2.*KS
+d225 1
+a225 1
+          x0=9999999990
+d236 2
+a237 1
+	  if( nm(i) .gt. nn .or. (nm(i) .eq. nn .and. xm(i) .lt. xm(nn))) nn=i
+d258 2
+a259 2
+	CALL RDPRMC(CHO1,NUMC,.TRUE.,'DO YOU WANT TO GENERATE A FILTER?(Y/N)
+     &  $',NULL,IRT)
+d261 2
+a262 1
+	        WRITE(NOUT,*) 'GENERATE FILTER IN THE INPUT FILE SEQURNCE'
+@

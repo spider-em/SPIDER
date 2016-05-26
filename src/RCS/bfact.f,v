@@ -1,0 +1,390 @@
+head	1.8;
+access;
+symbols
+	pre_getangas:1.4
+	pre_GPL2010:1.4
+	pre_var_equation:1.4
+	pre_fftwrings:1.4
+	pre_opfiles:1.4
+	src:1.4
+	best-code:1.4
+	x-named-regs:1.4
+	x:1.4
+	v13-00:1.4
+	pre_GPL:1.4
+	prec_CA:1.4
+	noindx:1.3;
+locks; strict;
+comment	@c @;
+
+
+1.8
+date	2014.12.03.14.55.32;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2014.11.04.15.57.04;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2014.10.31.16.17.54;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2014.01.12.19.42.15;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2003.02.19.14.55.27;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2002.03.11.14.07.47;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2001.10.29.14.40.27;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2001.10.10.14.41.50;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.8
+log
+@header, note about nx vs nx fourier pad difference
+@
+text
+@C++*********************************************************************
+C
+C  BFACT.F     ORIGINAL AUTHOR:  F.J. Asturias              SEPT. 2001
+C
+C************************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2014  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C  BFACT(LUN1,LUN2)
+C
+C  PARAMETERS:
+C        LUN1,LUN2         LOGICAL UNIT NUMBERS 
+C
+C  NOTE: THIS SUBROUTINE IS USED BY 'FF' WHERE
+C        'FF' (ffilts.f)            SETS X1 TO: (NX  / 2)**2 BUT
+C        'FQ' (four_fq.f or fq_q.f) SETS X1 TO: (NXF / 2)**2 WHERE
+C             NX  IS X DIMENSION OF POSSIBLY PADDED IMAGE
+C             NXF IS SLIGHTLY LARGER DUE TO MIXED RADIX FOURIER PAD
+C        SO THEY GIVE SLIGHTLY DIFFERENT RESULTS.  I SUSPECT THAT
+C        'FF' IS ACTUALLY CORRECT?
+C
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C***********************************************************************
+
+         SUBROUTINE BFACT(LUN1,LUN2,NX,NY,NZ,NXO)
+
+         INCLUDE 'CMBLOCK.INC'
+
+         COMMON        B(1)
+         COMPLEX       CB(1)
+         EQUIVALENCE   (CB,B)
+
+         WRITE(NOUT,*)
+     &     ' NORMALIZES AMPLITUDES BY A "B" TEMPERATURE FACTOR'
+         WRITE(NOUT,*)' AMP = AMP*D(EXP(Bs**2))'
+
+         CALL RDPRM1S(PARM_B,     NOT_USED,'B FACTOR',   IRTFLG)
+         IF (IRTFLG .NE. 0) RETURN
+
+         CALL RDPRM1S(PARM_D,     NOT_USED,'D CONSTANT', IRTFLG)
+         IF (IRTFLG .NE. 0) RETURN
+
+         CALL RDPRM1S(PARM_CUTOFF,NOT_USED,'FQ CUTOFF',  IRTFLG)
+         IF (IRTFLG .NE. 0) RETURN
+
+         FQCSQ = PARM_CUTOFF**2
+
+         NS2   = NX/2
+         NR2   = NY/2
+         NL2   = NZ/2
+
+         X1    = FLOAT(NXO/2)**2
+         Y1    = FLOAT(NR2)**2
+
+         IF (NZ == 1) THEN
+            Z1 = 1.0
+         ELSE
+            Z1 = FLOAT(NL2)**2
+         ENDIF
+
+         DO K=1,NZ
+            IZ = K-1
+            IF (IZ > NL2) IZ = IZ - NZ
+
+            DO J=1,NY
+               IY = J - 1
+               IF (IY > NR2) IY = IY - NY
+               NR = J + (K - 1) * NY
+
+               CALL REDLIN(LUN1,B,NX,NR )
+
+               DO I=1,NS2
+                  IX = I - 1
+
+C                 B-FACTOR NORMALIZATION
+                  FSQ = (FLOAT(IX*IX) / X1 + 
+     &                   FLOAT(IY*IY) / Y1 + 
+     &                   FLOAT(IZ*IZ) / Z1) * 0.25
+
+                  CORR = FSQ * PARM_B
+
+                  IF (FSQ < FQCSQ)  THEN
+                     CB(I) = CB(I) * PARM_D * EXP(CORR)
+                  ELSE
+                     CB(I) = CB(I)
+                  ENDIF
+               ENDDO
+
+               CALL  WRTLIN(LUN2,B,NX,NR)
+            ENDDO
+         ENDDO
+
+         END
+@
+
+
+1.7
+log
+@overlength line
+@
+text
+@d3 1
+a3 1
+C  BFACT.F                         Copyright:  F.J. Asturias, SEPT. 2001
+d6 20
+d31 8
+@
+
+
+1.6
+log
+@==, nx, rdprm1s, cosmetic
+@
+text
+@d12 2
+a13 1
+C--*********************************************************************
+d23 2
+a24 1
+         WRITE(NOUT,*)' NORMALIZES AMPLITUDES BY A "B" TEMPERATURE FACTOR')
+@
+
+
+1.5
+log
+@enter
+@
+text
+@d14 1
+a14 1
+         SUBROUTINE BFACT(LUN1,LUN2,NSAM,NROW,NSLICE,NSAMO)
+d22 1
+a22 1
+         WRITE(NOUT,*)' NORMALIZES AMPLITUDES BY A B TEMPERATURE FACTOR')
+d25 19
+a43 12
+         CALL RDPRM(PARM1,NOT_USED,'B FACTOR')
+         CALL RDPRM(PARM2,NOT_USED,'D CONSTANT')
+         CALL RDPRM(PARM3,NOT_USED,'FQ CUTOFF')
+
+         FQCSQ=PARM3**2
+
+         NS2 = NSAM/2
+         NR2 = NROW/2
+         NL2 = NSLICE/2
+         X1  = FLOAT(NSAMO/2)**2
+         Y1  = FLOAT(NR2)**2
+         IF (NSLICE .EQ. 1) THEN
+d49 1
+a49 1
+         DO K=1,NSLICE
+d51 3
+a53 2
+            IF (IZ .GT. NL2) IZ = IZ - NSLICE
+            DO J=1,NROW
+d55 5
+a59 3
+               IF (IY .GT. NR2) IY = IY - NROW
+               NR = J + (K - 1) * NROW
+               CALL REDLIN(LUN1,B,NSAM,NR )
+d62 1
+d64 8
+a71 5
+                  FSQ = (FLOAT(IX*IX)/X1+FLOAT(IY*IY)/
+     &                 Y1+ FLOAT(IZ*IZ)/Z1)* 0.25
+                  CORR = FSQ * PARM1
+                  IF (FSQ .LT. FQCSQ)  THEN
+                     CB(I) = CB(I) * PARM2 * EXP(CORR)
+d76 2
+a77 1
+               CALL  WRTLIN(LUN2,B,NSAM,NR)
+a79 2
+
+         RETURN
+@
+
+
+1.4
+log
+@opfilec
+@
+text
+@d25 3
+a27 3
+         CALL RDPRM(PARM1,NOT_USED,'ENTER B FACTOR')
+         CALL RDPRM(PARM2,NOT_USED,'ENTER D CONSTANT')
+         CALL RDPRM(PARM3,NOT_USED,'ENTER FQ CUTOFF')
+@
+
+
+1.3
+log
+@nloop,iloop_removed
+@
+text
+@a17 3
+         CHARACTER *81  FILNAM
+         COMMON /COMMUN/FILNAM
+
+d23 1
+a23 14
+
+c         MAXIM  = 0
+c         CALL OPFIL(.TRUE.,FILNAM,LUN1,'O',NSAM,NROW,NSLICE,
+c      &             MAXIM,'INPUT',.TRUE.,IRTFLG)
+c         IF (IRTFLG .NE. 0)  RETURN
+c
+c         IF (IFORM.NE.-11 .AND. IFORM.NE.-12 .AND.
+c      &      IFORM.NE.-21 .AND. IFORM.NE.-22) THEN
+c            CALL ERRT(2,'FF',NE)
+c            CLOSE(LUN1)
+c            RETURN
+c         ENDIF
+
+         WRITE(NOUT,*) ' AMP = AMP*D(EXP(Bs**2))'
+a24 11
+C        OPEN OUTPUT FILE
+c         NSAMO = NSAM-MOD(-IFORM,10)
+
+c         MAXIM = 0
+c         CALL OPFIL(.TRUE.,FILNAM,LUN2,'U',NSAM,NROW,NSLICE,
+c      &             MAXIM,'OUTPUT',.TRUE.,IRTFLG)
+c         IF (IRTFLG .NE. 0)  THEN
+c            CLOSE(LUN2)
+c            RETURN
+c         ENDIF
+
+d52 1
+a52 1
+C    B-FACTOR NORMALIZATION
+a64 3
+
+c         CLOSE(LUN1)
+c         CLOSE(LUN2)
+@
+
+
+1.2
+log
+@bb's mods
+@
+text
+@d52 3
+a54 3
+         CALL RDPRM(PARM1,NLOOP,ILOOP,'ENTER B FACTOR')
+         CALL RDPRM(PARM2,NLOOP,ILOOP,'ENTER D CONSTANT')
+         CALL RDPRM(PARM3,NLOOP,ILOOP,'ENTER FQ CUTOFF')
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@a0 4
+
+Received Oct 2001 form Asturias, not yet incorporated into SPIDER al
+
+
+d5 1
+a5 5
+C**************************************************************************
+C
+C  BASED ON SPIDER FF CODE                                             *
+C
+**************************************************************************
+d14 1
+a14 1
+         SUBROUTINE BFACT(LUN1,LUN2)
+d27 4
+a30 4
+         MAXIM  = 0
+         CALL OPFIL(.TRUE.,FILNAM,LUN1,'O',NSAM,NROW,NSLICE,
+      &             MAXIM,'INPUT',.TRUE.,IRTFLG)
+         IF (IRTFLG .NE. 0)  RETURN
+d32 6
+a37 6
+         IF (IFORM.NE.-11 .AND. IFORM.NE.-12 .AND.
+      &      IFORM.NE.-21 .AND. IFORM.NE.-22) THEN
+            CALL ERRT(2,'FF',NE)
+            CLOSE(LUN1)
+            RETURN
+         ENDIF
+d42 9
+a50 8
+         NSAMO = NSAM-MOD(-IFORM,10)
+         MAXIM = 0
+         CALL OPFIL(.TRUE.,FILNAM,LUN2,'U',NSAM,NROW,NSLICE,
+      &             MAXIM,'OUTPUT',.TRUE.,IRTFLG)
+         IF (IRTFLG .NE. 0)  THEN
+            CLOSE(LUN2)
+            RETURN
+         ENDIF
+d79 1
+a79 1
+C                 B-FACTOR NORMALIZATION
+d93 4
+a96 2
+         CLOSE(LUN1)
+         CLOSE(LUN2)
+@

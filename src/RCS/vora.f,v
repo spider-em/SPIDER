@@ -1,0 +1,589 @@
+head	1.12;
+access;
+symbols
+	pre_getangas:1.11
+	GPL2010:1.11
+	pre_GPL2010:1.10
+	pre_var_equation:1.10
+	pre_fftwrings:1.10
+	pre_opfiles:1.10
+	src:1.10
+	best-code:1.10
+	x-named-regs:1.10
+	x:1.10
+	v13-00:1.10
+	pre_GPL:1.9
+	prec_CA:1.9
+	noindx:1.9
+	Bproc:1.5
+	oct21:1.3
+	last77:1.3;
+locks; strict;
+comment	@c @;
+
+
+1.12
+date	2012.10.10.15.32.29;	author leith;	state Exp;
+branches;
+next	1.11;
+
+1.11
+date	2010.06.24.13.27.15;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2005.10.17.21.09.02;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2002.03.11.14.09.08;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2001.07.16.20.07.18;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2001.05.31.16.40.33;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2001.05.23.20.07.49;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	99.12.06.19.31.02;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	99.11.10.23.11.24;	author yuchen;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	96.01.16.16.37.20;	author pawel;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	94.05.13.14.12.31;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	94.05.13.12.53.44;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@unix specific source code with preprocessor lines
+@
+
+
+1.12
+log
+@fixed missing key bug
+@
+text
+@C++*********************************************************************
+C
+C VORA.F                ROTATE DOCUMENT FILE     07/12/93                         07/12/93  PP
+C                       ADDED 'VO RAS'           MAY 01    ARDEAN LEITH
+C                       -K DOES NOT PRINT        JUL 01    ARDEAN LEITH
+C                       MISSING KEY BUG          OCT 2012  ARDEAN LEITH
+C
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2012  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C  VORA()
+C
+C  PURPOSE:  ROTATE DOCUMENT FILE  
+C            MULTIPLIES INVERTED INPUT ANGLES BY ANGLES FROM THE 
+C            ANG DOC FILE
+C
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C--*********************************************************************
+
+        SUBROUTINE VORA()
+
+        IMPLICIT NONE
+
+        INCLUDE 'CMLIMIT.INC'
+        INCLUDE 'CMBLOCK.INC'
+
+        INCLUDE 'F90ALLOC.INC'
+        REAL,  POINTER         :: DOCBUF(:,:)
+
+        REAL                   :: FI1(3),FI2(3),FIO(4)
+        CHARACTER (LEN=MAXNAM) :: DOCNAM,DOCOUT
+        CHARACTER (LEN=1)      :: NULL = CHAR(0)
+        CHARACTER(LEN=40)      :: COMMEN
+   
+        INTEGER                :: NDOCINT,MAXX,MAXY,IRTFLG,NOT_USED
+        INTEGER                :: NICDOCOUT,ICOMM,MYPID,MPIERR,IANG
+        INTEGER                :: NLET,NDOC,NLIST,IKEY,NEWKEY,ICOUNT
+        INTEGER                :: NDOUT
+        REAL                   :: FANG,FVAL,DLIST(3)
+        LOGICAL                :: ASKNAM,GETSIZ,NEWFILE,ADDEXT,ISOLD
+        LOGICAL                :: WRTCOM,APPEND
+
+        INTEGER,PARAMETER      :: NDOCIN  = 81
+        INTEGER,PARAMETER      :: NDOCOUT = 82
+
+
+        CALL SET_MPI(ICOMM,MYPID,MPIERR) ! SETS ICOMM AND MYPID
+
+C       OPEN EXISTING DOC FILE
+C       MAXX IS 1 + NUM OF REGISTERS SINCE DOCBUF CONTAINS KEY ALSO
+        MAXX    = 0
+        MAXY    = 0
+        NDOCINT = NDOCIN
+        ASKNAM  = .TRUE.
+        GETSIZ  = .TRUE.
+
+        CALL GETDOCDAT('ANGULAR DOCUMENT',ASKNAM,DOCNAM,
+     &                  NDOCINT,GETSIZ,MAXX, MAXY,DOCBUF,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+
+        IF (FCHAR(4:6) == 'RAS') THEN
+
+            CALL  RDPRM3S(FI1(1),FI1(2),FI1(3),NOT_USED,
+     &                   'ROTATION ANGLES - PSI, THETA & PHI',IRTFLG)
+            IF (IRTFLG .NE. 0)  RETURN
+
+11          CALL  RDPRM2S(FANG,FVAL,NOT_USED,
+     &                   'ANGLE NUMBER(e.g. PSI IS 1) & VALUE',IRTFLG)
+            IF (IRTFLG .NE. 0)  RETURN
+
+            IANG = FANG
+            IF (IANG < 0 .OR. IANG > 3) THEN
+               CALL ERRT(102,'ANGLE NUMBER MUST BE 0...3',IANG)
+               GOTO 11
+            ENDIF
+        ELSE
+
+            FI1(1) = 0.0
+            FI1(2) = 0.0
+            FI1(3) = -999999
+
+            CALL RDPRM3S(FI1(1),FI1(2),FI1(3),NOT_USED,
+     &             'ROTATION ANGLES - PSI, THETA & PHI',IRTFLG)
+            IF (FI1(3) == -999999) THEN
+
+               FI1(3) = 0
+               CALL RDPRM1S(FI1(3),NOT_USED,
+     &             'ROTATION ANGLE - PHI',IRTFLG)
+            ENDIF
+            IANG = 0
+        ENDIF
+
+        ADDEXT  = .TRUE.
+        ASKNAM  = .TRUE.
+        ISOLD   = .FALSE.
+        APPEND  = .FALSE.
+        WRTCOM  = .TRUE.
+
+
+        CALL OPENDOC(DOCOUT,ADDEXT,NLET,
+     &               NDOCOUT,NICDOCOUT,ASKNAM,'OUTPUT DOCUMENT',
+     &               ISOLD,APPEND,WRTCOM,NEWFILE,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+C                 123456789 123456789 123456789 1234567890
+        COMMEN = '           PSI,       THETA,         PHI'
+        CALL LUNDOCPUTCOM(NDOCOUT,COMMEN(1:40),IRTFLG)
+
+C       DOCBUF HAS ICOUNT IN FIRST COL
+        NLIST  = MAXX
+
+        NEWKEY = 0
+        DO IKEY = 1,MAXY
+           ICOUNT = DOCBUF(1,IKEY)        ! NO. OF REG. FOR THIS KEY 
+
+           IF (ICOUNT  >= 3) THEN
+C             GOT VALID DOC FILE DATA LINE WITH 3 ANGLES
+
+C             CONVERT ANGLES
+              CALL CALD(FI1, DOCBUF(2,IKEY), DLIST)
+
+C             CAN SET ONE ANGLE TO SPECIFIED VALUE
+              IF (IANG > 0) DLIST(IANG) = FVAL
+
+C             PUSH DLIST INTO OUTPUT DOC. FILE
+              CALL LUNDOCWRTDAT(NICDOCOUT,IKEY,DLIST,3,IRTFLG)
+
+           ENDIF
+        ENDDO
+
+C       DEALLOCATE DOC. FILE MEMORY
+9995    IF (ASSOCIATED(DOCBUF)) DEALLOCATE(DOCBUF)
+        IF (MYPID <= 0) CLOSE(NDOUT)
+        IF (MYPID <= 0) CLOSE(NDOC)
+
+        END
+@
+
+
+1.11
+log
+@GPL_2010
+@
+text
+@d3 4
+a6 3
+C VORA.F                          07/12/93  PP
+C                                 ADDED 'VO RAS' MAY 01 ARDEAN LEITH
+C                                 -K DOES NOT PRINT *** JULY 01 AL
+d12 1
+a12 1
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+d30 1
+a30 1
+C  VORA(MAXMEM)
+d32 2
+a33 2
+C  PURPOSE:  ROTATE DOCUMENT FILE  07/12/93
+C            MULTIPLIES INVERTED INPUT ANGLES BY THE ANGLES FROM THE 
+d39 1
+a39 1
+         SUBROUTINE VORA(MAXMEM)
+d41 1
+a41 1
+         INCLUDE 'CMBLOCK.INC'
+d43 2
+a44 3
+         COMMON        FI1(3),FI2(3),FIO(4)
+         CHARACTER*81  DOCFIL
+         CHARACTER*1   NULL
+d46 2
+a47 1
+         DATA          NDOC,NDOUT/55,56/
+d49 12
+a60 1
+         NULL  =CHAR(0)
+d62 20
+a81 2
+         CALL FILERD(DOCFIL,NLETI,NULL,'ANGULAR DOCUMENT',IRTFLG)
+         IF (IRTFLG .EQ. -1)  RETURN
+a82 1
+         IF (FCHAR(4:6) .EQ. 'RAS') THEN
+d92 2
+a93 2
+            IF (IANG .LT. 0 .OR. IANG .GT. 3) THEN
+               CALL ERRT(100,'ANGLE NUMBER MUST BE 0...3',IDUM)
+d96 22
+a117 1
+         ELSE
+a118 2
+            CALL RDPRM2(FI1(1),FI1(2),NOT_USED,
+     &                   'ROTATION ANGLES - PSI, THETA')
+d120 35
+a154 3
+            CALL RDPRM(FI1(3),NOT_USED,'ROTATION ANGLE - PHI')
+            IANG = 0
+         ENDIF
+d156 1
+a156 24
+         NLIST = 4
+         K     = 0
+         K2    = 1
+
+778      LERR = -1
+         KEY  = K+1
+         CALL  UNSAV(DOCFIL,-K,NDOC,KEY,FI2,3,LERR,K2)
+         IF (LERR .EQ. 0)  THEN
+            K = K + 1
+            CALL CALD(FI1,FI2,FIO(2))
+            FIO(1) = K
+
+C           CAN SET ONE ANGLE TO SPECIFIED VALUE
+            IF (IANG .GT. 0) FIO(IANG+1) = FVAL
+
+            CALL SAVD(NDOUT,FIO,NLIST,IRTFLG)
+            IF (IRTFLG .EQ. -1) GOTO  5
+            GOTO 778
+         ENDIF
+
+5        CALL  SAVDC
+         CLOSE(NDOUT)
+         CLOSE(NDOC)
+         END
+@
+
+
+1.10
+log
+@GPL License fixed
+@
+text
+@a7 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d9 5
+a13 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d15 1
+a15 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d20 1
+a20 1
+C=* This program is distributed in the hope that it will be useful,    *
+d22 1
+a22 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a23 1
+C=*                                                                    *
+d25 1
+a25 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.9
+log
+@nloop,iloop_removed
+@
+text
+@d1 1
+a1 1
+C++************************************************************************
+d8 23
+a30 6
+C * SPIDER - MODULAR IMAGE PROCESSING SYSTEM.    AUTHOR: J.FRANK       *
+C * COPYRIGHT (C)1985, 2001. HEALTH RESEARCH INCORPORATED (HRI),       *
+C * ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+C * THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO HRI AND ARE NOT   *
+C * TO BE DISCLOSED TO OTHERS OR USED FOR PURPOSES OTHER THAN INTENDED *
+C * WITHOUT WRITTEN APPROVAL OF HRI.                                   *
+d40 1
+a40 1
+C--************************************************************************
+@
+
+
+1.8
+log
+@-k used to lprevent 'not found' msg.
+@
+text
+@d41 1
+a41 1
+            CALL  RDPRM3S(FI1(1),FI1(2),FI1(3),NLOOP,ILOOP,
+d45 1
+a45 1
+11          CALL  RDPRM2S(FANG,FVAL,NLOOP,ILOOP,
+d56 1
+a56 1
+            CALL RDPRM2(FI1(1),FI1(2),NLOOP,ILOOP,
+d59 1
+a59 1
+            CALL RDPRM(FI1(3),NLOOP,ILOOP,'ROTATION ANGLE - PHI')
+@
+
+
+1.7
+log
+@iang bad
+@
+text
+@d5 1
+d67 3
+a69 3
+778      LERR  = -1
+         KP1   = K+1
+         CALL  UNSAV(DOCFIL,K,NDOC,KP1,FI2,3,LERR,K2)
+@
+
+
+1.6
+log
+@added 'VO RAS'
+@
+text
+@d34 1
+a34 1
+         NULL=CHAR(0)
+a38 1
+         
+d48 1
+a48 1
+            IANG = FVAL
+@
+
+
+1.5
+log
+@cosmetic
+@
+text
+@d3 2
+a4 1
+C VORA.F
+d6 8
+a13 9
+C **************************************************************************
+C *  SPIDER - MODULAR IMAGE PROCESSING SYSTEM.  AUTHOR: J.FRANK            *
+C *  COPYRIGHT (C)1981,1987, WADSWORTH CENTER FOR LABORATORIES AND         *
+C *  RESEARCH, NEW YORK STATE DEPARTMENT OF HEALTH, ALBANY, NY 12201.      *
+C *  THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO THE CENTER FOR       *
+C *  LABORATORIES AND RESEARCH AND ARE NOT TO BE DISCLOSED TO OTHERS OR    *
+C *  USED FOR PURPOSES OTHER THAN INTENDED WITHOUT WRITTEN APPROVAL OF     *
+C *  THE CENTER FOR LABORATORIES AND RESEARCH   			   *
+C **************************************************************************
+d15 1
+a15 2
+C  ROTATE DOCUMENT FILE  07/12/93
+C  MULTIPLIES INVERTED INPUT ANGLES BY THE ANGLES FROM THE ANG DOC FILE
+d17 4
+d28 1
+a28 1
+         COMMON        DUMMY(1024),FI1(3),FI2(3),FIO(4)
+d31 1
+d36 2
+a37 2
+         CALL  FILERD(DOCFIL,NLETI,NULL,'ANGULAR DOCUMENT',IRTFLG)
+         IF (IRTFLG.EQ.-1)  RETURN
+d39 27
+a65 7
+         CALL  RDPRM2
+     &     (FI1(1),FI1(2),NLOOP,ILOOP,'ROTATION ANGLES PSI, THETA')
+         CALL  RDPRM(FI1(3),NLOOP,ILOOP,'ROTATION ANGLE PHI')
+
+         NLIST=4
+         K=0
+         K2=1
+d67 2
+a68 2
+778      LERR=-1
+         KP1=K+1
+d70 11
+a80 7
+         IF (LERR.EQ.0)  THEN
+            K=K+1
+            CALL  CALD(FI1,FI2,FIO(2))
+            FIO(1)=K
+            CALL  SAVD(NDOUT,FIO,NLIST,IRTFLG)
+            IF(IRTFLG.EQ.-1) GOTO  5
+            GOTO  778
+@
+
+
+1.4
+log
+@a
+@
+text
+@d3 1
+a3 1
+C $$ VORA.FOR
+d15 2
+a17 1
+C
+d20 1
+a20 3
+C
+C $$ VORA.FOR
+C
+d22 1
+a22 3
+C  Rotate document file  07/12/93
+c  Multiplies inverted input angles by the angles from the ang doc file
+#ifdef SP_UNIX
+d24 2
+a25 4
+#else
+         INCLUDE 'COMMON1:CMBLOCK.INC'
+#endif
+         COMMON  DUMMY(1024),FI1(3),FI2(3),FIO(4)
+d27 2
+a28 2
+         CHARACTER*1  NULL
+         DATA  NDOC,NDOUT/55,56/
+d31 4
+a34 4
+C
+         CALL  FILERD(DOCFIL,NLETI,NULL,'Angular document',IRTFLG)
+         IF(IRTFLG.EQ.-1)  RETURN
+C
+d36 3
+a38 3
+     &   (FI1(1),FI1(2),NLOOP,ILOOP,'Rotation angles psi, theta')
+         CALL  RDPRM(FI1(3),NLOOP,ILOOP,'Rotation angle phi')
+C
+d42 1
+d46 7
+a52 7
+         IF(LERR.EQ.0)  THEN
+         K=K+1
+         CALL  CALD(FI1,FI2,FIO(2))
+         FIO(1)=K
+         CALL  SAVD(NDOUT,FIO,NLIST,IRTFLG)
+         IF(IRTFLG.EQ.-1) GOTO  5
+         GOTO  778
+d54 1
+@
+
+
+1.3
+log
+@nosave
+@
+text
+@d34 1
+a34 1
+CNO_SAVE
+@
+
+
+1.2
+log
+@cpp_lines_added
+@
+text
+@d34 1
+a34 1
+C
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d25 3
+d29 1
+@

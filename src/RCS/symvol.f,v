@@ -1,0 +1,605 @@
+head	1.8;
+access;
+symbols
+	pre_getangas:1.8
+	pre_GPL2010:1.8
+	pre_var_equation:1.8
+	pre_fftwrings:1.8
+	pre_opfiles:1.8
+	src:1.8
+	best-code:1.8
+	x-named-regs:1.8
+	x:1.8
+	v13-00:1.8
+	pre_GPL:1.7
+	prec_CA:1.5
+	noindx:1.5;
+locks; strict;
+comment	@c @;
+
+
+1.8
+date	2005.10.17.16.56.02;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2005.01.24.18.31.30;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2004.08.23.20.03.31;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2002.07.12.12.59.16;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2002.06.28.21.26.13;	author pawel;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2002.06.05.21.08.13;	author pawel;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2002.05.07.19.06.01;	author pawel;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2002.05.03.22.11.58;	author pawel;	state Exp;
+branches;
+next	;
+
+
+desc
+@symmetrize a volume
+@
+
+
+1.8
+log
+@Pawels GPL License used
+@
+text
+@C **********************************************************************
+c  REPS.F
+C                 OMP FAILS ON SARK (ONLY)        AUG 04 ArDean Leith
+C++*********************************************************************
+C *
+C *  SYMVOL
+C *
+C *  Symmetrize volume in real space
+C *  Q1- input volume
+C *  Q2 - output volume
+C *  RM - matrices with symmetry operations (as calculated using BLDR or BUILDS)
+C=**********************************************************************
+C=* From: SPIDER - MODULAR IMAGE PROCESSING SYSTEM                     *
+C=* Copyright (C)2002, P. A. Penczek                                   *
+C=*                                                                    *
+C=* University of Texas - Houston Medical School                       *
+C=*                                                                    *
+C=* Email:  pawel.a.penczek@@uth.tmc.edu                                *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* This program is distributed in the hope that it will be useful,    *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+C=* General Public License for more details.                           *
+C=*                                                                    *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+C=*                                                                    *
+C=**********************************************************************
+C *
+C **********************************************************************
+
+         SUBROUTINE SYMVOL(Q1,Q2, KLX,KNX,KLY,KNY,KLZ,KNZ, RM,NSYM)
+
+         DIMENSION  Q1(KLX:KNX,KLY:KNY,KLZ:KNZ)
+         DIMENSION  Q2(KLX:KNX,KLY:KNY,KLZ:KNZ)
+	 DIMENSION  RM(3,3,NSYM)
+
+         DOUBLE     PRECISION  QR(3),QRT(3), DX,DY,DZ
+
+         INTEGER, PARAMETER :: NSIZE = 27
+
+         INTEGER, DIMENSION(27) :: X,Y,Z
+
+#ifndef SP_MP
+         REAL, DIMENSION(27) :: F
+#endif
+
+
+C        SET THE KNOWN COORDINATE GRID
+C  Replaced by loops below, data does not agree with openmp.
+c         DATA X/  
+c     &          -1, 0, 1, -1, 0, 1, -1, 0, 1, 
+c     &          -1, 0, 1, -1, 0, 1, -1, 0, 1, 
+c     &          -1, 0, 1, -1, 0, 1, -1, 0, 1/ 
+
+c         DATA Y/ 
+c     &          -1,-1,-1,  0, 0, 0,  1, 1, 1, 
+c     &          -1,-1,-1,  0, 0, 0,  1, 1, 1, 
+c     &          -1,-1,-1,  0, 0, 0,  1, 1, 1/ 
+ 
+c         DATA Z/  
+c     &          -1,-1,-1, -1,-1,-1, -1,-1,-1, 
+c     &           0, 0, 0,  0, 0, 0,  0, 0, 0,
+c     &           1, 1, 1,  1, 1, 1,  1, 1, 1/
+
+C      write(6,*) ' symvol -1'
+
+C        SET THE KNOWN COORDINATE GRID
+	 DO  L=1,NSIZE,3
+	    X(L)   = -1
+	    X(L+1) = 0
+	    X(L+2) = 1
+	    Y(L)   = MOD(L/3,3)-1
+	    Y(L+1) = MOD(L/3,3)-1
+	    Y(L+2) = MOD(L/3,3)-1
+	 ENDDO
+
+	 DO  L=1,NSIZE
+	    Z(L) = (L-1) / 9-1
+	 ENDDO
+
+C        Calculate radius within which the rotation is valid
+	 IRADI = (MIN(IABS(KLX),IABS(KNX),IABS(KLY),IABS(KNY),
+     &		      IABS(KLZ),IABS(KNZ))-1)**2
+
+c        write(6,*) ' symvol 0',klz,knz,kly,kny,klx,knx
+
+#if defined (__ia64)
+C        CAN NOT RUN IN PARALLEL ON ALTIX (CRASHES) 2004
+#else
+c$omp    parallel do private(IZ,IY,IX)
+#endif
+         DO IZ=KLZ,KNZ
+           DO IY=KLY,KNY
+              DO IX=KLX,KNX
+		Q2(IX,IY,IZ) = 0.0
+              ENDDO
+           ENDDO
+         ENDDO
+
+C       write(6,*) ' symvol 111',nsym
+
+	DO  ISYM=1,NSYM
+
+           IF (RM(1,1,ISYM) .EQ. 1.0 .AND.
+     &	       RM(2,2,ISYM) .EQ. 1.0 .AND. RM(3,3,ISYM) .EQ. 1.0)  THEN
+
+
+C             NO ROTATION NEEDED
+#if defined (__ia64)
+C             CAN NOT RUN IN PARALLEL ON ALTIX (CRASHES)
+#else
+c$omp         parallel do private(IZ,IY,IX)
+#endif
+              DO IZ=KLZ,KNZ
+                 DO IY=KLY,KNY
+                    DO IX=KLX,KNX
+                      Q2(IX,IY,IZ) = Q2(IX,IY,IZ) + Q1(IX,IY,IZ)
+                    ENDDO
+                 ENDDO
+              ENDDO
+
+	   ELSE   ! END OF:  IF (RM(1,1,ISYM) .EQ. 1.0 .AND. true
+C             ROTATION NEEDED
+
+#ifdef SP_MP
+#if defined (__ia64)
+C             CAN NOT RUN IN PARALLEL ON ALTIX (CRASHES)
+#else
+c$omp        parallel do private(IZ,IY,IX, QR,QRT, ICRD)
+#endif
+
+             DO IZ=KLZ,KNZ
+                DO IY=KLY,KNY
+                   QRT(1) = RM(2,1,ISYM)*IY + RM(3,1,ISYM)*IZ
+                   QRT(2) = RM(2,2,ISYM)*IY + RM(3,2,ISYM)*IZ
+                   QRT(3) = RM(2,3,ISYM)*IY + RM(3,3,ISYM)*IZ
+
+                   DO IX=KLX,KNX
+		      ICRD = IX*IX + IY*IY + IZ*IZ
+		      IF (ICRD .LE. IRADI)  THEN
+                         QR(1) = QRT(1) + RM(1,1,ISYM)*IX
+                         QR(2) = QRT(2) + RM(1,2,ISYM)*IX
+                         QR(3) = QRT(3) + RM(1,3,ISYM)*IX
+
+C                        EVALUATE INTENSITY AT PX,PY,PZ
+		         Q2(IX,IY,IZ) = Q2(IX,IY,IZ)+ 
+     &	                   TRIQDF(QR,Q1,KLX,KNX,KLY,KNY,KLZ,KNZ,X,Y,Z)
+		      ELSE
+C                        ROTATED POSITION IS OUTSIDE VOLUME
+                         Q2(IX,IY,IZ) = Q2(IX,IY,IZ)+ Q1(IX,IY,IZ)
+		      ENDIF
+                   ENDDO  ! END OF: DO IX=KLX,KNX
+                ENDDO     ! END OF: DO IY=KLY,KNY
+             ENDDO        ! END OF: DO IZ=KLZ,KNZ
+           ENDIF
+
+C          write(6,*) ' symvol 3'
+#else
+             DO IZ=KLZ,KNZ
+                DO IY=KLY,KNY
+
+                   QRT(1) = RM(2,1,ISYM)*IY+RM(3,1,ISYM)*IZ
+                   QRT(2) = RM(2,2,ISYM)*IY+RM(3,2,ISYM)*IZ
+                   QRT(3) = RM(2,3,ISYM)*IY+RM(3,3,ISYM)*IZ
+
+                   DO IX=KLX,KNX
+		      ICRD = IX*IX+IY*IY+IZ*IZ
+		      IF (ICRD.LE.IRADI)  THEN
+                         QR(1) = QRT(1) + RM(1,1,ISYM)*IX
+                         QR(2) = QRT(2) + RM(1,2,ISYM)*IX
+                         QR(3) = QRT(3) + RM(1,3,ISYM)*IX
+
+C                        IOX..  INTEGER LOCATION IN -NSAM/2...NSAM/2 ARRAY
+                         IOX = FLOOR(QR(1))   
+                         IOY = FLOOR(QR(2))   
+                         IOZ = FLOOR(QR(3))   
+
+C                        DX.. OFFSET FROM INTEGER ARRAY
+                         DX  = QR(1) - IOX
+                         DY  = QR(2) - IOY
+                         DZ  = QR(3) - IOZ
+C                        ROTATED POSITION IS INSIDE OF VOLUME
+
+C                        FIND INTENSITIES ON 3x3x3 COORDINATE GRID
+                         DO L = 1,NSIZE
+                            F(L) = Q1(IOX + X(L),IOY + Y(L),IOZ + Z(L))
+                         ENDDO
+
+C                        EVALUATE INTENSITY AT PX,PY,PZ
+                       Q2(IX,IY,IZ) = Q2(IX,IY,IZ) + TRIQUAD(DX,DY,DZ,F)
+
+                      ELSE
+C                        ROTATED POSITION IS OUTSIDE VOLUME
+                         Q2(IX,IY,IZ) = Q2(IX,IY,IZ) + Q1(IX,IY,IZ)
+                      ENDIF
+                   ENDDO
+                ENDDO
+             ENDDO
+          ENDIF
+#endif
+       ENDDO
+
+
+#if defined (__ia64)
+C             CAN NOT RUN IN PARALLEL ON ALTIX (CRASHES)
+#else
+c$omp  parallel do private(IZ,IY,IX)
+#endif
+
+         DO IZ=KLZ,KNZ
+           DO IY=KLY,KNY
+              DO IX=KLX,KNX
+		Q2(IX,IY,IZ)=Q2(IX,IY,IZ)/NSYM
+              ENDDO
+           ENDDO
+         ENDDO
+        END
+
+
+#ifdef SP_MP
+
+	 FUNCTION  TRIQDF(QR,Q1,KLX,KNX,KLY,KNY,KLZ,KNZ,X,Y,Z)
+
+         INTEGER, PARAMETER :: NSIZE = 27
+         DOUBLE     PRECISION  QR(3),DX,DY,DZ
+         DIMENSION  Q1(KLX:KNX,KLY:KNY,KLZ:KNZ)
+         INTEGER, DIMENSION(27) :: X,Y,Z
+	 DIMENSION  F(NSIZE)
+
+C        IOX..  INTEGER LOCATION IN -NSAM/2...NSAM/2 ARRAY
+         IOX = FLOOR(QR(1))
+         IOY = FLOOR(QR(2))
+         IOZ = FLOOR(QR(3))   
+
+C        DX.. OFFSET FROM INTEGER ARRAY
+         DX  = QR(1) - IOX
+         DY  = QR(2) - IOY
+         DZ  = QR(3) - IOZ
+
+C        FIND INTENSITIES ON 3x3x3 COORDINATE GRID
+         DO L = 1,NSIZE
+            F(L) = Q1(IOX + X(L),IOY + Y(L),IOZ + Z(L))
+         ENDDO
+
+         TRIQDF = TRIQUAD(DX,DY,DZ,F)
+
+	 END
+#endif
+@
+
+
+1.7
+log
+@note
+@
+text
+@d1 1
+a1 1
+C **************************************************************************
+d4 1
+a4 2
+C++************************************************************************
+C *  SPIDER - MODULAR IMAGE PROCESSING SYSTEM.
+d12 24
+a35 3
+C *  COPYRIGHT (C)2002, P.A.Penczek
+C *  University of Texas - Houston Medical School
+C *  pawel.a.penczek@@uth.tmc.edu
+d37 1
+a37 1
+C **************************************************************************
+@
+
+
+1.6
+log
+@OMP FAILS ON SARK (ONLY) fixes
+@
+text
+@d76 1
+a76 1
+C        CAN NOT RUN IN PARALLEL ON ALTIX (CRASHES)
+@
+
+
+1.5
+log
+@pp's changes 7/12
+@
+text
+@d2 3
+d6 1
+d8 1
+d16 1
+a16 2
+C *    THE CONTENTS OF THIS DOCUMENT CANNOT BE CHANGED WITHOUT WRITTEN
+C *    PERMISSION OF THE AUTHOR                          *
+d19 1
+a19 1
+         SUBROUTINE SYMVOL(Q1,Q2,KLX,KNX,KLY,KNY,KLZ,KNZ,RM,NSYM)
+a23 1
+         DOUBLE     PRECISION  QR(3),QRT(3),DX,DY,DZ
+d25 2
+d30 2
+a31 2
+#ifdef SP_MP
+#else
+d35 1
+d52 3
+a54 1
+C
+d57 6
+a62 6
+	  X(L)=-1
+	  X(L+1)=0
+	  X(L+2)=1
+	  Y(L)=MOD(L/3,3)-1
+	  Y(L+1)=MOD(L/3,3)-1
+	  Y(L+2)=MOD(L/3,3)-1
+d64 1
+d66 1
+a66 1
+	  Z(L)=(L-1)/9-1
+d68 12
+a79 6
+C
+C  Calculate radius within which the rotation is valid
+	IRADI=(MIN(IABS(KLX),IABS(KNX),IABS(KLY),IABS(KNY),
+     &		IABS(KLZ),IABS(KNZ))-1)**2
+C
+c$omp  parallel do private(IZ,IY,IX)
+d83 1
+a83 1
+		Q2(IX,IY,IZ)=0.0
+d87 3
+a89 1
+C
+d91 17
+a107 9
+ 
+         IF (RM(1,1,ISYM).EQ.1.0 .AND.
+     &		RM(2,2,ISYM).EQ.1.0 .AND. RM(3,3,ISYM).EQ.1.0)  THEN
+C           NO ROTATION NEEDED
+c$omp  parallel do private(IZ,IY,IX)
+         DO IZ=KLZ,KNZ
+           DO IY=KLY,KNY
+              DO IX=KLX,KNX
+		Q2(IX,IY,IZ)=Q2(IX,IY,IZ)+Q1(IX,IY,IZ)
+d109 3
+a111 2
+           ENDDO
+         ENDDO
+a112 1
+	ELSE
+d114 2
+a115 24
+c$omp  parallel do private(IZ,IY,IX,QR,QRT,ICRD)
+        DO IZ=KLZ,KNZ
+           DO IY=KLY,KNY
+              QRT(1) = RM(2,1,ISYM)*IY+RM(3,1,ISYM)*IZ
+              QRT(2) = RM(2,2,ISYM)*IY+RM(3,2,ISYM)*IZ
+              QRT(3) = RM(2,3,ISYM)*IY+RM(3,3,ISYM)*IZ
+              DO IX=KLX,KNX
+		ICRD=IX*IX+IY*IY+IZ*IZ
+		IF(ICRD.LE.IRADI)  THEN
+                 QR(1) = QRT(1) + RM(1,1,ISYM)*IX
+                 QR(2) = QRT(2) + RM(1,2,ISYM)*IX
+                 QR(3) = QRT(3) + RM(1,3,ISYM)*IX
+
+C                   EVALUATE INTENSITY AT PX,PY,PZ
+		 Q2(IX,IY,IZ) = Q2(IX,IY,IZ)+ 
+     &	         TRIQDF(QR,Q1,KLX,KNX,KLY,KNY,KLZ,KNZ,X,Y,Z)
+		ELSE
+C                ROTATED POSITION IS OUTSIDE VOLUME
+                 Q2(IX,IY,IZ) = Q2(IX,IY,IZ)+ Q1(IX,IY,IZ)
+		ENDIF
+              ENDDO
+           ENDDO
+         ENDDO
+         ENDIF
+d117 2
+a118 2
+         DO IZ=KLZ,KNZ
+           DO IY=KLY,KNY
+d120 24
+a143 3
+              QRT(1) = RM(2,1,ISYM)*IY+RM(3,1,ISYM)*IZ
+              QRT(2) = RM(2,2,ISYM)*IY+RM(3,2,ISYM)*IZ
+              QRT(3) = RM(2,3,ISYM)*IY+RM(3,3,ISYM)*IZ
+d145 4
+a148 22
+              DO IX=KLX,KNX
+		ICRD=IX*IX+IY*IY+IZ*IZ
+		IF(ICRD.LE.IRADI)  THEN
+                 QR(1) = QRT(1) + RM(1,1,ISYM)*IX
+                 QR(2) = QRT(2) + RM(1,2,ISYM)*IX
+                 QR(3) = QRT(3) + RM(1,3,ISYM)*IX
+
+C                IOX..  INTEGER LOCATION IN -NSAM/2...NSAM/2 ARRAY
+                 IOX = FLOOR(QR(1))   
+                 IOY = FLOOR(QR(2))   
+                 IOZ = FLOOR(QR(3))   
+
+C                DX.. OFFSET FROM INTEGER ARRAY
+                 DX  = QR(1) - IOX
+                 DY  = QR(2) - IOY
+                 DZ  = QR(3) - IOZ
+C                   ROTATED POSITION IS INSIDE OF VOLUME
+
+C                   FIND INTENSITIES ON 3x3x3 COORDINATE GRID
+                    DO L = 1,NSIZE
+                     F(L) = Q1(IOX + X(L),IOY + Y(L),IOZ + Z(L))
+                    ENDDO
+d150 40
+a190 2
+C                   EVALUATE INTENSITY AT PX,PY,PZ
+                    Q2(IX,IY,IZ) = Q2(IX,IY,IZ) + TRIQUAD(DX,DY,DZ,F)
+d192 5
+a196 4
+                 ELSE
+C                   ROTATED POSITION IS OUTSIDE VOLUME
+                    Q2(IX,IY,IZ) = Q2(IX,IY,IZ) + Q1(IX,IY,IZ)
+                 ENDIF
+a197 7
+              ENDDO
+           ENDDO
+         ENDDO
+         ENDIF
+#endif
+	ENDDO
+c$omp  parallel do private(IZ,IY,IX)
+a204 1
+C
+d206 2
+d209 3
+a211 1
+	FUNCTION  TRIQDF(QR,Q1,KLX,KNX,KLY,KNY,KLZ,KNZ,X,Y,Z)
+d217 19
+a235 16
+C                IOX..  INTEGER LOCATION IN -NSAM/2...NSAM/2 ARRAY
+                 IOX = FLOOR(QR(1))
+                 IOY = FLOOR(QR(2))
+                 IOZ = FLOOR(QR(3))   
+
+C                DX.. OFFSET FROM INTEGER ARRAY
+                 DX  = QR(1) - IOX
+                 DY  = QR(2) - IOY
+                 DZ  = QR(3) - IOZ
+
+C                   FIND INTENSITIES ON 3x3x3 COORDINATE GRID
+                    DO L = 1,NSIZE
+                     F(L) = Q1(IOX + X(L),IOY + Y(L),IOZ + Z(L))
+                    ENDDO
+		 TRIQDF=TRIQUAD(DX,DY,DZ,F)
+	END
+@
+
+
+1.4
+log
+@corrected sym
+@
+text
+@d61 2
+a62 3
+	IRADI=MIN(IABS(KLX),IABS(KNX))**2+
+     &		MIN(IABS(KLY),IABS(KNY))**2+
+     &		MIN(IABS(KLZ),IABS(KNZ))**2  -1
+@
+
+
+1.3
+log
+@*** empty log message ***
+@
+text
+@d25 2
+d28 1
+d60 5
+d89 13
+d103 12
+a114 2
+c$omp  parallel do
+C$& private(IZ,IY,IX,QR,QRT,L,F,iox,ioy,ioz,dx,dy,dz)
+d123 2
+a137 4
+
+                 IF ((IOX.GT.KLX .AND. IOX.LT.(KNX)) .AND.
+     &               (IOY.GT.KLY .AND. IOY.LT.(KNY)) .AND.
+     &               (IOZ.GT.KLZ .AND. IOZ.LT.(KNZ))) THEN
+d158 1
+d170 24
+@
+
+
+1.2
+log
+@corrected ||
+@
+text
+@d66 1
+a66 2
+	DO  ISYM=1,1
+cNSYM
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d65 3
+a67 2
+
+	DO  ISYM=1,NSYM
+d84 1
+a84 1
+C$& private(IZ,IY,IX,QR,QRT,L,I,J,K,F,iox,ioy,ioz,dx,dy,dz)
+d114 1
+a114 4
+                       I    = IOX + X(L)
+                       J    = IOY + Y(L)
+                       K    = IOZ + Z(L)
+                       F(L) = Q1(I,J,K)
+@

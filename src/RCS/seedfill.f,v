@@ -1,0 +1,392 @@
+head	1.8;
+access;
+symbols
+	pre_getangas:1.7
+	GPL2010:1.7
+	pre_GPL2010:1.6
+	pre_var_equation:1.6
+	pre_fftwrings:1.6
+	pre_opfiles:1.6
+	src:1.6
+	best-code:1.6
+	x-named-regs:1.6
+	x:1.6
+	v13-00:1.6
+	pre_GPL:1.4
+	prec_CA:1.4
+	noindx:1.4
+	Bproc:1.3
+	oct21:1.2
+	last77:1.2;
+locks; strict;
+comment	@c @;
+
+
+1.8
+date	2014.01.12.19.13.09;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2010.06.24.13.26.53;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2005.10.17.20.42.41;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2005.10.17.18.33.03;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2002.03.11.14.08.34;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	99.11.10.23.11.19;	author yuchen;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	99.02.05.14.00.30;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	95.09.25.15.22.41;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@new (not now)
+@
+
+
+1.8
+log
+@enter
+@
+text
+@
+C++*********************************************************************
+C
+C    SEEDFILL.F                    ArDean Leith   Mar 1995
+C
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C   SEEDFILL()
+C
+C   PURPOSE:   A SEED FILL PROGRAM
+C
+C   PARAMETERS: MAXDIM     MAX LENGTH OF COMMON BUFFER
+C
+C23456789 123456789 123456789 123456789 123456789 123456789 123456789 12
+C--*********************************************************************
+
+        SUBROUTINE SEEDFILL(LUNIN,LUNOUT,NSAM,NROW,FMINT,MAXDIM,IRTFLG)
+
+	INCLUDE 'CMBLOCK.INC' 
+ 
+
+        CHARACTER *1   NULL
+
+	COMMON   BUF(1)
+        INTEGER  LIST(1)
+        EQUIVALENCE(BUF,LIST)
+
+        IX = 1
+        IY = 1
+10      CALL RDPRIS(IX,IY,NOT_USED,'SEED LOCATION',IRTFLG)
+        IF (IRTFLG .EQ. -1) RETURN
+        IF (IX .LT. 0 .OR. IY .LT. 0 .OR. 
+     &      IX .GT. NSAM .OR. IY .GT. NROW) THEN
+            CALL ERRT(101,'LOCATION NOT WITHIN IMAGE',NE)
+            GOTO 10
+        ENDIF
+ 
+        CALL RDPRM2S(THRESH,FILL,NOT_USED, 
+     &       'THRESHOLD & FILL VALUE',IRTFLG)
+        IF (IRTFLG .EQ. -1) GOTO 10
+
+C       LOAD INPUT IMAGE IN INPUT BUFFER
+        J = 1
+        DO I = 1,NROW
+          CALL REDLIN(LUNIN,BUF(J),NSAM,I)
+          J = J + NSAM
+        ENDDO
+
+C       COPY INPUT IMAGE TO OUTPUT BUFFER
+        ISIZE = NSAM * NROW
+        DO I = 1,ISIZE
+          BUF(ISIZE + I) = BUF(I) 
+        ENDDO
+
+C       DETERMINE A UNIQUE VALUE FOR VISTED 
+        VISITED = FMINT -1
+
+C       PUT SEED LOCATION IN TO-BE-VISITED LIST
+        NEWSTART   = NSAM * NROW
+        LSTART     = 2 * NSAM * NROW + 1
+        LAST       = LSTART
+
+        ILOC       = (IY -1) * NSAM + IX
+        LIST(LAST) = ILOC 
+
+        DO WHILE (LAST .GE. LSTART) 
+
+C          GET CURRENT LOCATION FROM TO-BE-VISITED LIST
+           ILOC = LIST(LAST)
+
+C          DECREMENT THE TO-BE-VISITED  LIST POINTER        
+           LAST = LAST - 1
+
+C          CHECK IF CURRENT LOCATION HAS BEEN VISITED
+           IF (BUF(ILOC) .GT. VISITED) THEN
+C             NOT VISITED YET, UPDATE OUTPUT IMAGE
+
+              IF (BUF(ILOC) .GT. THRESH) THEN
+C                DO NOT FILL, COPY THIS PIXEL TO OUTPUT
+                 BUF(ILOC+NEWSTART) = BUF(ILOC)
+
+              ELSE
+C                SET THIS PIXEL TO FILL VALUE
+                 BUF(ILOC+NEWSTART) = FILL
+
+C                PUT NEIGHBORS OF CURRENT LOCATION
+C                IN TO-BE-VISITED LIST, IF NOT VISITED YET
+                 CALL FILLPUT(BUF,ILOC,LIST,LAST,NSAM,NROW,
+     &                  VISITED,MAXDIM)
+              ENDIF
+           ENDIF
+ 
+C          MARK CURRENT LOCATION AS VISITED
+           BUF(ILOC) = VISITED             
+
+        ENDDO
+
+C       REMOVE OUTPUT IMAGE FROM OUTPUT BUFFER
+        J = NSAM * NROW + 1
+        DO I = 1,NROW
+          CALL WRTLIN(LUNOUT,BUF(J),NSAM,I)
+          J = J + NSAM
+        ENDDO
+
+	RETURN
+        END
+
+
+
+C       ***************************************************************
+
+        SUBROUTINE FILLPUT(BUF,ILOC,LIST,LAST,NSAM,NROW,VISITED,MAXDIM)
+
+        DIMENSION BUF(1)
+        INTEGER   LIST(1)
+
+        IROW = ((ILOC - 1) / NSAM) + 1
+        ICOL = ILOC - (IROW - 1) * NSAM
+
+        NEXT = ILOC + 1
+        IF (ICOL .LT. NSAM .AND. BUF(NEXT) .GT. VISITED) THEN
+C          ADD LOCATION FROM NEXT COL
+           LAST = LAST + 1
+           IF (LAST .GT. MAXDIM) THEN
+              CALL ERRT(6,'SEEDFILL',NE)
+              LAST = 0
+              RETURN
+           ENDIF
+           LIST(LAST) = NEXT
+        ENDIF
+
+        NEXT = ILOC + NSAM
+        IF (IROW .LT. NROW .AND. BUF(NEXT) .GT. VISITED) THEN
+C          ADD LOCATION FROM NEXT LINE DOWN
+           LAST = LAST + 1
+           IF (LAST .GT. MAXDIM) THEN
+              CALL ERRT(6,'SEEDFILL',NE)
+              LAST = 0
+              RETURN
+           ENDIF
+           LIST(LAST) = NEXT
+        ENDIF
+
+        NEXT = ILOC - 1
+        IF (ICOL .GT. 1 .AND. BUF(NEXT) .GT. VISITED) THEN
+C          ADD LOCATION FROM PREVIOUS COL
+           LAST = LAST + 1
+           IF (LAST .GT. MAXDIM) THEN
+              CALL ERRT(6,'SEEDFILL',NE)
+              LAST = 0
+              RETURN
+           ENDIF
+           LIST(LAST) = NEXT
+        ENDIF
+
+        NEXT = ILOC - NSAM
+        IF (IROW .GT. 1 .AND. BUF(NEXT) .GT. VISITED) THEN
+C          ADD LOCATION FROM PREVIOUS LINE
+           LAST = LAST + 1
+           IF (LAST .GT. MAXDIM) THEN
+              CALL ERRT(6,'SEEDFILL',NE)
+              LAST = 0
+              RETURN
+           ENDIF
+           LIST(LAST) = NEXT
+        ENDIF
+
+        RETURN
+        END
+@
+
+
+1.7
+log
+@GPL_2010
+@
+text
+@d50 1
+a50 1
+10      CALL RDPRIS(IX,IY,NOT_USED,'ENTER SEED LOCATION',IRTFLG)
+d59 1
+a59 1
+     &       'ENTER THRESHOLD & FILL VALUE',IRTFLG)
+@
+
+
+1.6
+log
+@GPL License fixed
+@
+text
+@a6 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d8 5
+a12 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d14 1
+a14 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d19 1
+a19 1
+C=* This program is distributed in the hope that it will be useful,    *
+d21 1
+a21 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a22 1
+C=*                                                                    *
+d24 1
+a24 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.5
+log
+@HRI GPL License used
+@
+text
+@a2 1
+C++************************************************************************
+a6 3
+C **************************************************************************
+C * SPIDER - MODULAR IMAGE PROCESSING SYSTEM.  AUTHOR: J.FRANK         *
+C *  SPIDER - MODULAR IMAGE PROCESSING SYSTEM.  AUTHOR: J.FRANK            *
+d10 1
+a10 1
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *  
+a29 7
+
+C *  COPYRIGHT (C)1981,1995, WADSWORTH CENTER FOR LABORATORIES AND         *
+C *  RESEARCH, NEW YORK STATE DEPARTMENT OF HEALTH, ALBANY, NY 12201.      *
+C *    THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO THE CENTER FOR     *
+C *    LABORATORIES AND RESEARCH AND ARE NOT TO BE DISCLOSED TO OTHERS OR  *
+C *    USED FOR PURPOSES OTHER THAN INTENDED WITHOUT WRITTEN APPROVAL OF   *
+C *    THE CENTER FOR LABORATORIES AND RESEARCH 			   *
+a30 1
+C **************************************************************************
+@
+
+
+1.4
+log
+@nloop,iloop_removed
+@
+text
+@d2 1
+d7 1
+d9 1
+d11 24
+d41 1
+@
+
+
+1.3
+log
+@a
+@
+text
+@d38 1
+a38 1
+10      CALL RDPRIS(IX,IY,NLOOP,ILOOP,'ENTER SEED LOCATION',IRTFLG)
+d46 1
+a46 1
+        CALL RDPRM2S(THRESH,FILL,NLOOP,ILOOP, 
+@
+
+
+1.2
+log
+@CNO_SAVE
+@
+text
+@d28 1
+a28 1
+CNO_SAVE 
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@a26 1
+#ifdef SP_UNIX
+d28 1
+a28 3
+#else
+	INCLUDE 'COMMON1:CMBLOCK.INC' 
+#endif
+@

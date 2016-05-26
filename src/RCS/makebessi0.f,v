@@ -1,0 +1,192 @@
+head	1.2;
+access;
+symbols;
+locks; strict;
+comment	@c @;
+
+
+1.2
+date	2007.03.29.14.32.06;	author leith;	state dead;
+branches;
+next	1.1;
+
+1.1
+date	2007.03.29.14.05.43;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.2
+log
+@renamed fillbessi0.f
+@
+text
+@ 
+C++*********************************************************************
+C 
+C  MAKEBESSI0.F        NEW                    ARDEAN LEITH     3/22/07
+C 
+C ********************************************************************** 
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+C=*                                                                    *
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+C=*                                                                    *
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* This program is distributed in the hope that it will be useful,    *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+C=* General Public License for more details.                           *
+C=*                                                                    *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+C=*                                                                    *
+C ********************************************************************** 
+C
+C PURPOSE:   THIS ROUTINE GIVES THE REGULAR MODIFIED CYLINDRICAL 
+C            BESSEL FUNCTION OF ZEROTH ORDER 
+C
+C  PARAMETERS:
+C        NSAM      SIZE                                         (SENT)
+C        LTABI     ARRAY SIXE                                   (SENT)
+C        LNB       -3                                           (RET.)
+C        LNE       3                                            (RET.)
+C        FLTB                                                   (RET.)
+C        ALPHA     1.75                                         (RET.)
+C        RRR       NSAM/2                                       (RET.)
+C        V         3/(2*NSAM)                                   (RET.)
+C
+C23456789 123456789 123456789 123456789 123456789 123456789 123456789 12 
+C--********************************************************************* 
+
+        SUBROUTINE MAKEBESSI0(NSAM,LTABI,LNB,LNE,FLTB,TABI,ALPHA,RRR,V)
+ 
+        REAL            :: TABI(0:LTABI)
+
+	REAL, PARAMETER  :: QUADPI = 3.1415926535897932384626D0
+	REAL, PARAMETER  :: TWOPI = 2*QUADPI 
+
+C       KAISER-BESSEL WINDOW ACCORDING TO SCHOMBERG
+
+        LN    = 6
+        LNB   = -INT(LN/2)                ! ALWAYS: -3
+	LNE   = INT(LN/2)                 ! ALWAYS   3
+
+        NPAD  = 2 * NSAM
+	LTAB  = NINT(REAL(LTABI) / 1.25)
+	RRR   = NSAM / 2
+	ALPHA = 1.75                      ! CONSTANT
+	V     = REAL(LN) / 2.0 / REAL(NPAD)
+
+C       Adjust V to make sure that it is not zero at the window border
+	VADJUST = 1.0 * V
+
+C       GENERATE TABLE WITH INTERPOLANTS
+	IF (LTABI .GT. LTAB)  TABI(LTAB+1:LTABI) = 0.0
+	B0   = BESI0(TWOPI * ALPHA * RRR * VADJUST)
+        FLTB = REAL(LTAB) / REAL(LNE)
+
+cc$omp  parallel do private(i,s,xx)
+        DO I=0,LTAB
+	   S = REAL(I) / FLTB / NPAD
+	   IF (S .LT. VADJUST)  THEN
+	      XX      = SQRT(1.0 - (S / VADJUST)**2)
+	      TABI(I) = BESI0(TWOPI * ALPHA * RRR * VADJUST * XX) / B0
+	   ELSE
+	      TABI(I) = 0.0
+	   ENDIF
+        ENDDO
+
+        END
+
+
+C------------------------------------------------------------------------------------------------------
+
+#ifdef NEVER
+   M=image.get_xsize()
+   # padd two times
+   npad = 2
+   N = M*npad
+
+   # support of the window
+   K = 6
+   alpha = 1.75
+   r = M/2
+   v = K/2.0/N
+   #                       1.75, 6, nsam/2, 6/2.*2*nsam, 2*nsam
+   kb = Util.KaiserBessel(alpha, K, r, K/(2.*N), N)
+
+
+Util::KaiserBessel::KaiserBessel(float alpha_, int K_, float r_, float v_,
+		                 int N_, float vtable_, int ntable_) 
+		   : alpha(alpha_), v(v_), r(r_), N(N_), K(K_), vtable(vtable_), 
+		     ntable(ntable_) 
+   {
+   // Default values are alpha=1.25, K=6, r=0.5, v = K/2
+   if (0.f == v) v = float(K)/2;
+   if (0.f == vtable) vtable = v;
+   alphar  = alpha*r;
+   fac     = static_cast<float>(twopi)*alphar*v;
+   vadjust = 1.0f*v;
+   facadj  = static_cast<float>(twopi)*alphar*vadjust;
+   build_I0table();
+   }
+
+void Util::KaiserBessel::build_I0table() 
+   {
+   i0table.resize(ntable+1); // i0table[0:ntable]
+   int ltab   = int(round(float(ntable)/1.25f));
+   fltb       = float(ltab)/(K/2);
+   float val0 = gsl_sf_bessel_I0(facadj);
+
+   for (int i=ltab+1; i <= ntable; i++) i0table[i] = 0.f;
+   for (int i=0; i <= ltab; i++) 
+      {
+      float s = float(i)/fltb/N;
+      if (s < vadjust) 
+         {
+         float rt = sqrt(1.f - pow(s/vadjust, 2));
+         i0table[i] = gsl_sf_bessel_I0(facadj*rt)/val0;
+         } 
+      else 
+         {
+         i0table[i] = 0.f;
+         }
+      // cout << "  "<<s*N<<"  "<<i0table[i] <<endl;
+      }
+   }
+
+
+./usr/include/gsl/gsl_sf_bessel.h
+Gnu scientific lib.
+
+double gsl_sf_bessel_I0(const double x);
+Regular Modified Cylindrical Bessel Functions
+-- Function: double gsl_sf_bessel_I0 (double x)
+
+These routines compute the regular modified cylindrical Bessel function of zeroth order, I_0(x). 
+
+#endif
+@
+
+
+1.1
+log
+@new
+@
+text
+@@
+

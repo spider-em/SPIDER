@@ -1,0 +1,1221 @@
+head	1.7;
+access;
+symbols;
+locks; strict;
+comment	@c @;
+
+
+1.7
+date	2012.07.05.17.21.34;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2011.03.17.16.20.36;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2011.03.17.15.02.51;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2011.03.11.14.20.13;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2011.03.10.19.20.19;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2011.03.10.19.07.32;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2011.03.03.13.18.33;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.7
+log
+@tried omp FAILED
+@
+text
+@
+C ++********************************************************************
+C                                                                      *
+C MEANSHIFT                                                            *
+C                                                                      *
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NROW 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) aNROW later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANROW WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C   PURPOSE: MEAN SHIFT DENOISING AND SMOOTHING FILTER (2D/3D FILES)   *
+C                                                                      *
+C      THE MEAN SHIFT FILTER INTRODUCED FIRST BY COMANICIU AND MEER    *
+C      (2002) IS A DYNAMIC NONLINEAR FILTER, THAT ACHIEVES A HIGH      *
+C      QUALITY EDGE-PRESERVING FILTERING                               *
+C                                                                      *
+C         USER:                                                        *
+C     1. SET THE RADIUS OF CIRCULAR OR SPHERICAL KERNEL IN PIXELS.     *
+C     2. SET THE VALUE OF DENSITY DISTANCE.                            *
+C         ~ THE KERNEL RADIUS IN THE RANGE 3-7 PIXELS AND THE DENSITY  *
+C        DENSITY DISTANCE IN THE RANGE 1/2-2 STANDARD DEVIATION ARE    *
+C        RECOMMENDED                                                   *
+C                                                                      *
+C         ALGORITHM:                                                   *
+C     1. START AT A POINT 'A'.                                         *
+C     2. SELECT THE PIXELS (VOXELS) FALLING WITHIN A CERTAIN           *
+C         SPATIAL DISTANCE (KERNEL) AND WITHIN CERTAIN DENSITY         *
+C         DISTANCE.                                                    *
+C     3. CALCULATE THE CENTER OF MASS OF THE SET OF SELECTED PIXELS    *
+C        (VOXELS), AND DISPLACE THE CENTER OF KERNEL TO THE CENTER     *
+C        OF MASS.                                                      *
+C     4. REPEAT ITERATIVELY UNTIL THE SPATIAL VARIATION IS LOWER       *
+C        THAN 2/3 OF AKERNEL RADIUS                                    *                                           *
+C     5. APPLY THE MEAN DENSITY OF SELECTED PIXELS AROUND THE FINAL    *
+C        POINT 'B' (THE MODE) TO STARTING POINT 'A'.                   *
+C        ~ CALCULATION OF MEAN DENSITY INSIDE KERNEL INVOLVES ONLY     *
+C        PIXELS/VOXELS WITHIN AN APPOINTED DENSITY DISTANCE            *
+C        ~ IN SOME OTHER SOFTWARE THE DENSITY OF FINAL POINT 'B'       *
+C                      ITSELF IS USED.                                 *
+C     6. REPEAT FOR ALL PIXELS (VOXELS) IN THE IMAGE.                  *
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C***********************************************************************
+
+       SUBROUTINE MEANSHIFT(LUN1,LUN2,NSAM,NROW,NSLICE,SIG1,IRTFLG)
+
+       INCLUDE 'CMBLOCK.INC'
+       INCLUDE 'CMLIMIT.INC'
+
+       INTEGER               :: LUN1,LUN2
+       INTEGER               :: NSAM,NROW,NSLICE
+       REAL                  :: SIG1
+       INTEGER               :: IRTFLG
+
+       INTEGER               :: KERNEL
+       REAL, ALLOCATABLE     :: BUF1(:,:,:),BUF2(:,:,:)
+       REAL                  :: DFACTOR,GRAD
+       LOGICAL               :: erri2
+
+
+       KERNEL = 3
+       CALL RDPRI1S(KERNEL,NOT_USED,'RADIUS',IRTFLG)
+       IF (IRTFLG .NE. 0) GOTO 9999
+       IF (ERRI2(KERNEL,IDUM,1,1,30,0,0)) GOTO 9999
+       
+       DFACTOR = 1.0
+       CALL RDPRM1S(DFACTOR,NOT_USED,
+     &       'DENSITY DISTANCE FACTOR (OR <CR> FOR 1)',IRTFLG)
+       IF (IRTFLG .NE. 0) GOTO 9999
+       IF (DFACTOR .LE. 0) THEN
+          CALL ERRT(101,'FACTOR MUST BE > 0',NE)
+          GOTO 9999
+       ENDIF
+
+       GRAD = SIG1 * DFACTOR
+
+       ALLOCATE (BUF1(NSAM,NROW,NSLICE), 
+     &           BUF2(NSAM,NROW,NSLICE),STAT=IRTFLG)
+       IF (IRTFLG .NE. 0) THEN 
+           CALL ERRT(46,'MEANSHIFT; BUF1,BUF2',2*NSAM*NROW*NSLICE)
+           GOTO 9999
+       ENDIF
+
+       CALL REDVOL(LUN1,NSAM,NROW,1,NSLICE,BUF1,IRTFLG)
+       IF (IRTFLG .NE. 0) GOTO 9999
+
+       IF (NSLICE < 2) THEN
+          CALL MEANSHIFT2(BUF1,BUF2,NSAM,NROW,
+     &                    SIG1,KERNEL,GRAD,IRTFLG)
+       ELSE
+          CALL MEANSHIFT3(BUF1,BUF2,NSAM,NROW,NSLICE,
+     &                    SIG1,KERNEL,GRAD,IRTFLG)
+       ENDIF
+       
+       CALL WRTVOL(LUN2,NSAM,NROW,1,NSLICE,BUF2,IRTFLG)
+
+9999   IF (ALLOCATED(BUF1))   DEALLOCATE(BUF1)                          
+       IF (ALLOCATED(BUF2))   DEALLOCATE(BUF2)                          
+       CLOSE(LUN1)
+       CLOSE(LUN2)
+            
+       END
+
+  
+C      ******************************* MEANSHIFT2 *******************
+
+       SUBROUTINE MEANSHIFT2(BUF1,BUF2,NX,NY,
+     &                        SIG1,KERNEL,GRAD,IRTFLG)
+
+       INTEGER :: J, I, J2,I2
+       INTEGER    NX,NY,NJ,NI
+       INTEGER :: JTMP,ITMP
+       INTEGER :: KERNEL
+       INTEGER :: JCNTR, ICNTR
+       INTEGER :: NN,  TEMP
+       INTEGER :: WEIGHT
+       INTEGER :: FILT(-30:30,-30:30)
+       REAL    :: BUF1(NX,NY)
+       REAL    :: BUF2(NX,NY)
+       REAL    :: GRAD
+       REAL    :: RJCNTR,  RICNTR
+       REAL    :: SIG1
+       REAL    :: DENS, INCNTR
+       REAL    :: RAD
+
+       !WRITE(6,*) 'SIG1 =',SIG1
+       !WRITE(6,*) 'NY,NX =',NY,NX
+       !WRITE(6,*) 'KERNEL =',KERNEL
+
+C      CALCULATE THE CIRCULAR AREA OF KERNEL
+C      INVOLVING A ROUNDING OF BOUNDARIES
+
+       DO I=-KERNEL,KERNEL
+          DO J=-KERNEL,KERNEL
+             RAD = I**2 + J**2
+             RAD = SQRT(RAD)
+             RAD = INT(RAD+0.5)
+             IF (RAD <= KERNEL) THEN
+	        FILT(J,I) = 1
+             ELSE
+	        FILT(J,I) = 0		   
+             ENDIF
+          ENDDO
+       ENDDO
+
+! SIMPLE OMP IS SLOWER!!
+!c$omp  parallel do private(i,j,ni,nj,nn,icntr,jcntr,weight,dens,itmp,
+!c$omp&                     jtmp,incntr,i2,j2,temp)  
+       DO I=1,NY
+          DO J=1,NX
+               NI     = I
+               NJ     = J
+	       NN     = 0
+
+14             ICNTR  = 0
+               JCNTR  = 0
+               WEIGHT = 0
+ 	       DENS   = 0
+               ITMP   = 1 + MODULO(NI-1,NY)
+               JTMP   = 1 + MODULO(NJ-1,NX)
+               INCNTR = BUF1(JTMP,ITMP)
+
+               DO I2=NI-KERNEL, NI+KERNEL
+                  ITMP = 1 + MODULO(I2-1,NY)
+
+                  DO J2=NJ-KERNEL, NJ+KERNEL
+                     JTMP = 1 + MODULO(J2-1,NX)
+
+                    IF (ABS(BUF1(JTMP,ITMP)-INCNTR) < GRAD) THEN
+                       ICNTR  = ICNTR  + I2*FILT(J2-NJ,I2-NI)
+                       JCNTR  = JCNTR  + J2*FILT(J2-NJ,I2-NI)
+                       WEIGHT = WEIGHT +    FILT(J2-NJ,I2-NI)
+                       DENS   = DENS   + BUF1(JTMP,ITMP) *
+     &                                   FILT(J2-NJ,I2-NI)
+                    ENDIF
+                ENDDO
+             ENDDO
+             NN    = NN+1
+             ICNTR = INT(REAL(ICNTR) / REAL(WEIGHT))
+             JCNTR = INT(REAL(JCNTR) / REAL(WEIGHT))
+             TEMP  = ABS(JCNTR-NJ) + ABS(ICNTR-NI)
+
+             IF (3*TEMP > 2*KERNEL) THEN
+                
+                NI = ICNTR
+                NJ = JCNTR
+                IF (NN < 10) GOTO 14
+             ENDIF
+
+             BUF2(J,I) = DENS / REAL(WEIGHT)
+          ENDDO
+       ENDDO
+       
+       END
+
+C      ******************************* MEANSHIFT3 *******************
+
+       SUBROUTINE MEANSHIFT3(BUF1,BUF2,NX,NY,NZ,
+     &                        SIG1,KERNEL,GRAD,IRTFLG)
+
+       INTEGER :: S, J, I, S2,J2,I2
+       INTEGER :: NZ,NX,NY,NS,NJ,NI
+       INTEGER :: STMP,JTMP,ITMP
+       INTEGER :: KERNEL
+       INTEGER :: SCNTR, JCNTR, ICNTR
+       INTEGER :: NN,  TEMP
+       INTEGER :: WEIGHT
+       INTEGER :: FILT(-30:30,-30:30,-30:30)
+       REAL    :: BUF1(NX,NY,NZ)
+       REAL    :: BUF2(NX,NY,NZ)
+       REAL    :: GRAD
+       REAL    :: RSCNTR,  RJCNTR,  RICNTR
+       REAL    :: SIG1
+       REAL    :: DENS, INCNTR
+       REAL    :: RAD
+	 
+       !WRITE(6,*) 'SIG1 =',SIG1
+       !WRITE(6,*) 'NX,NY,NZ =',NX,NY,NZ
+       !WRITE(6,*) 'KERNEL =',KERNEL
+
+C      CALCULATE THE SPHERICAL AREA OF KERNEL
+C       INVOLVING A ROUNDING OF BOUNDARIES
+
+       DO S=-KERNEL,KERNEL
+           DO I=-KERNEL,KERNEL
+              DO J=-KERNEL,KERNEL
+                 RAD = S**2 + I**2 + J**2
+                 RAD = INT(RAD + 0.5)
+                 IF (RAD <= KERNEL) THEN
+	            FILT(J,I,S) = 1
+                 ELSE
+	            FILT(J,I,S) = 0		   
+                 ENDIF
+              ENDDO
+           ENDDO
+       ENDDO
+
+! SIMPLE OMP IS SLOWER!!
+!c$omp  parallel do private(s,i,j, ns,ni,nj, nn, rscntr,ricntr,rjcntr
+!c$omp&                     weight,dens,stmp,itmp,jtmp,incntr,s2,i2,j2,
+!c$omp&                     temp)  
+
+       DO S=1,NZ
+          DO I=1,NY
+
+             DO J=1,NX
+               NS     = S
+               NI     = I
+               NJ     = J
+	       NN     = 0
+
+14             RSCNTR = 0
+               RICNTR = 0
+               RJCNTR = 0
+               WEIGHT = 0
+ 	       DENS   = 0
+               STMP   = 1 + MODULO(NS-1,NZ)
+               ITMP   = 1 + MODULO(NI-1,NY)
+               JTMP   = 1 + MODULO(NJ-1,NX)
+               INCNTR = BUF1(JTMP,ITMP,STMP)
+
+               DO S2=NS-KERNEL, NS+KERNEL
+                  STMP = 1 + MODULO(S2-1,NZ)
+
+                  DO I2=NI-KERNEL, NI+KERNEL
+                     ITMP = 1 + MODULO(I2-1,NY)
+
+                     DO J2=NJ-KERNEL, NJ+KERNEL
+                        JTMP = 1 + MODULO(J2-1,NX)
+
+                        IF (ABS(BUF1(JTMP,ITMP,STMP)-INCNTR) < GRAD)
+     &                  THEN
+                           RSCNTR = RSCNTR + S2*FILT(J2-NJ,I2-NI,S2-NS)
+                           RICNTR = RICNTR + I2*FILT(J2-NJ,I2-NI,S2-NS)
+                           RJCNTR = RJCNTR + J2*FILT(J2-NJ,I2-NI,S2-NS)
+                           WEIGHT = WEIGHT +    FILT(J2-NJ,I2-NI,S2-NS)
+                           DENS   = DENS   + BUF1(JTMP,ITMP,STMP) * 
+     &                                       FILT(J2-NJ,I2-NI,S2-NS)
+                        ENDIF
+                    ENDDO
+                ENDDO
+             ENDDO
+             NN    = NN+1
+             SCNTR = INT(RSCNTR/WEIGHT)
+             ICNTR = INT(RICNTR/WEIGHT)
+             JCNTR = INT(RJCNTR/WEIGHT)
+             TEMP  = ABS(JCNTR-NJ) + ABS(ICNTR-NI) + ABS(SCNTR-NS)
+
+             IF (3*TEMP > 2*KERNEL) THEN
+                NS = SCNTR
+                NJ = JCNTR
+                NI = ICNTR
+                IF (NN < 40) GOTO 14
+             ENDIF
+
+16           BUF2(J,I,S)  =  DENS / REAL(WEIGHT)
+          ENDDO
+        ENDDO
+      ENDDO
+       
+      END
+@
+
+
+1.6
+log
+@cosmetic & prompts
+@
+text
+@d161 3
+d166 3
+a168 3
+              NI      = I
+              NJ      = J
+	      NN      = 0
+d170 2
+a171 2
+14            ICNTR   = 0
+              JCNTR   = 0
+d185 5
+a189 4
+                       ICNTR  = ICNTR + I2*FILT(J2-NJ,I2-NI)
+                       JCNTR  = JCNTR + J2*FILT(J2-NJ,I2-NI)
+                       WEIGHT = WEIGHT + FILT(J2-NJ,I2-NI)
+                       DENS   = DENS + BUF1(JTMP,ITMP)*FILT(J2-NJ,I2-NI)
+d202 1
+a202 1
+                IF (NN .LT. 10) GOTO 14
+a208 1
+       RETURN
+d243 3
+a245 3
+                 RAD=INT(RAD + 0.5)
+                 IF (RAD. LE. KERNEL) THEN
+	                   FILT(J,I,S)  =   1
+d247 1
+a247 1
+	                   FILT(J,I,S) = 0		   
+d253 5
+d260 1
+d286 1
+a286 1
+                        IF (ABS(BUF1(JTMP,ITMP,STMP)-INCNTR).LT .GRAD)
+d291 3
+a293 3
+                           WEIGHT = WEIGHT   +  FILT(J2-NJ,I2-NI,S2-NS)
+                           DENS   = DENS + BUF1(JTMP,ITMP,STMP) * 
+     &                              FILT(J2-NJ,I2-NI,S2-NS)
+d302 1
+a302 1
+             TEMP  = ABS(JCNTR-NJ)+ABS(ICNTR-NI)+ABS(SCNTR-NS)
+d308 1
+a308 1
+                IF (NN .LT. 40) GOTO 14
+@
+
+
+1.5
+log
+@gk's bug fixes
+@
+text
+@d77 1
+a77 1
+       CALL RDPRI1S(KERNEL,NOT_USED,'DISTANCE',IRTFLG)
+d145 21
+a165 2
+C       CALCULATE THE CIRCULAR AREA OF KERNEL
+C       INVOLVING A ROUNDING OF BOUNDARIES
+d167 2
+a168 20
+              DO I=-KERNEL,KERNEL
+                 DO J=-KERNEL,KERNEL
+                  RAD = I**2 + J**2
+                  RAD=SQRT(RAD)
+                  RAD=INT(RAD+0.5)
+                   IF (RAD. LE. KERNEL) THEN
+	           FILT(J,I) = 1
+		   ELSE
+	           FILT(J,I) = 0		   
+                   ENDIF
+                 ENDDO
+               ENDDO
+C
+                DO I=1,NY
+                   DO J=1,NX
+                NI          = I
+                NJ          = J
+	        NN          = 0
+14             ICNTR = 0
+               JCNTR = 0
+d170 3
+a172 3
+ 	       DENS = 0
+                  ITMP = 1 + MODULO(NI-1,NY)
+                  JTMP = 1 + MODULO(NJ-1,NX)
+d174 1
+d176 11
+a186 9
+                     ITMP = 1 + MODULO(I2-1,NY)
+                   DO J2=NJ-KERNEL, NJ+KERNEL
+                        JTMP = 1 + MODULO(J2-1,NX)
+                IF (ABS(BUF1(JTMP,ITMP)-INCNTR).LT.GRAD) THEN
+              ICNTR = ICNTR + I2*FILT(J2-NJ,I2-NI)
+              JCNTR = JCNTR + J2*FILT(J2-NJ,I2-NI)
+              WEIGHT = WEIGHT + FILT(J2-NJ,I2-NI)
+              DENS = DENS + BUF1(JTMP,ITMP)*FILT(J2-NJ,I2-NI)
+                ENDIF
+d189 7
+a195 7
+                  NN = NN+1
+               ICNTR = INT(REAL(ICNTR)/REAL(WEIGHT))
+               JCNTR = INT(REAL(JCNTR)/REAL(WEIGHT))
+             TEMP    = ABS(JCNTR-NJ)+ABS(ICNTR-NI)
+             IF (3*TEMP .LE. 2*KERNEL) THEN
+               GOTO 16
+                  ENDIF
+d198 4
+a201 5
+              IF (NN .LT. 10) THEN
+                GOTO 14
+                       ENDIF
+16            BUF2(J,I)  =  DENS/REAL(WEIGHT)
+            ENDDO
+d203 1
+d233 1
+a233 1
+C       CALCULATE THE SPHERICAL AREA OF KERNEL
+d236 22
+a257 21
+           DO S=-KERNEL,KERNEL
+              DO I=-KERNEL,KERNEL
+                 DO J=-KERNEL,KERNEL
+                  RAD = S**2 + I**2 + J**2
+                  RAD=INT(RAD + 0.5)
+                        IF (RAD. LE. KERNEL) THEN
+	                FILT(J,I,S)  =   1
+		        ELSE
+	                FILT(J,I,S) = 0		   
+                        ENDIF
+                    ENDDO
+                  ENDDO
+               ENDDO
+C
+             DO S=1,NZ
+                DO I=1,NY
+                   DO J=1,NX
+               NS          = S
+               NI          = I
+               NJ          = J
+	       NN          = 0
+d262 4
+a265 4
+ 	       DENS = 0
+                  STMP = 1 + MODULO(NS-1,NZ)
+                  ITMP = 1 + MODULO(NI-1,NY)
+                  JTMP = 1 + MODULO(NJ-1,NX)
+d267 2
+a268 1
+            DO S2=NS-KERNEL, NS+KERNEL
+d270 2
+a271 1
+               DO I2=NI-KERNEL, NI+KERNEL
+d273 2
+a274 1
+                   DO J2=NJ-KERNEL, NJ+KERNEL
+d276 10
+a285 7
+                IF (ABS(BUF1(JTMP,ITMP,STMP)-INCNTR).LT.GRAD) THEN
+              RSCNTR = RSCNTR + S2*FILT(J2-NJ,I2-NI,S2-NS)
+              RICNTR = RICNTR + I2*FILT(J2-NJ,I2-NI,S2-NS)
+              RJCNTR = RJCNTR + J2*FILT(J2-NJ,I2-NI,S2-NS)
+              WEIGHT = WEIGHT   +  FILT(J2-NJ,I2-NI,S2-NS)
+              DENS = DENS+BUF1(JTMP,ITMP,STMP)*FILT(J2-NJ,I2-NI,S2-NS)
+                ENDIF
+d289 7
+a295 8
+                  NN = NN+1
+               SCNTR = INT(RSCNTR/WEIGHT)
+               ICNTR = INT(RICNTR/WEIGHT)
+               JCNTR = INT(RJCNTR/WEIGHT)
+             TEMP    = ABS(JCNTR-NJ)+ABS(ICNTR-NI)+ABS(SCNTR-NS)
+             IF (3*TEMP .LE. 2*KERNEL) THEN
+              GOTO 16
+                  ENDIF
+d299 4
+a302 5
+              IF (NN .LT. 40) THEN
+                GOTO 14
+                       ENDIF
+16            BUF2(J,I,S)  =  DENS/REAL(WEIGHT)
+            ENDDO
+d304 2
+a305 1
+       ENDDO
+d307 1
+a307 2
+       RETURN
+       END
+@
+
+
+1.4
+log
+@error traps
+@
+text
+@d4 1
+a4 1
+C MEANSHIFT                    *
+d10 2
+a11 2
+C=* Copyright 1985-2011  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+d17 1
+a17 1
+C=* License, or (at your option) aNY later version.                    *
+d20 1
+a20 1
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+d34 2
+a35 2
+C     1. SETTING THE RADIUS OF CIRCULAR OR SPHERICAL KERNEL IN PIXELS. *
+C     2. SETTING THE VALUE OF DENSITY DISTANCE.                        *
+d40 3
+a42 3
+C         SUBROUTINE:                                                  *
+C     1. STARTING AT A POINT 'A'.                                      *
+C     2. SELECTING THE PIXELS (VOXELS) FALLING WITHIN A CERTAIN        *
+d45 2
+a46 2
+C     3. CALCULATING THE CENTER OF MASS OF THE SET OF SELECTED PIXELS  *
+C        (VOXELS), AND DISPLACING THE CENTER OF KERNEL TO THE CENTER   *
+d48 3
+a50 3
+C     4. REPEATING ITERATIVELY UNTIL NO VARIATION IS OBSERVED.         *
+C        ~ LAST SHIFT IS LESS THAN 2/3 KERNEL RADIUS                   *                                           *
+C     5. APPLYING THE MEAN DENSITY OF SELECTED PIXELS AROUND THE FINAL *
+d53 1
+a53 1
+C        PIXELS (VOXELS) WITHIN AN APPOINTED DENSITY DISTANCE          *
+d56 1
+a56 1
+C     6. REPEATING FOR ALL PIXELS (VOXELS) IN THE IMAGE.               *
+d60 1
+a60 2
+        SUBROUTINE MEANSHIFT(LUN1,LUN2,NSAM,NROW,NSLICE,
+     &                       SIG1,IRTFLG)
+d73 1
+d75 2
+d83 1
+a83 1
+     &              'DENSITY DISTANCE FACTOR (OR <CR> FOR 1)',IRTFLG)
+d112 3
+a114 1
+9999   CLOSE(LUN1)
+d119 1
+d125 1
+a125 1
+       INTEGER :: S, J, I, J2,I2
+a126 1
+       INTEGER :: WEIGHT
+d129 1
+a129 1
+       INTEGER :: SCNTR, JCNTR, ICNTR
+d131 2
+a134 2
+
+       REAL    :: FILT(-30:30,-30:30)
+d145 2
+a146 2
+C      CALCULATING THE CIRCULAR AREA OF KERNEL
+C      INVOLVING A ROUNDING OF BOUNDARIES
+d148 34
+a181 33
+       DO I=-KERNEL,KERNEL
+          DO J=-KERNEL,KERNEL
+             RAD = I**2 + J**2
+             RAD = SQRT(RAD)
+             RAD = INT(RAD+0.5)
+             IF (RAD. LE. KERNEL) FILT(J,I) = 1
+          ENDDO
+       ENDDO
+
+       DO I=1,NY
+          DO J=1,NX
+             NI     = I
+             NJ     = J
+	     NN     = 0
+14           RICNTR = 0
+             RJCNTR = 0
+             WEIGHT = 0
+ 	     DENS   = 0
+             ITMP   = INT(NI-NY*.5*(SIGN(1,NI-1)+SIGN(1,NI-1-NY)))
+             JTMP   = INT(NJ-NX*.5*(SIGN(1,NJ-1)+SIGN(1,NJ-1-NX)))
+             INCNTR = BUF1(JTMP,ITMP)
+
+              DO I2=NI-KERNEL, NI+KERNEL
+                 ITMP = INT(I2-NY*.5*(SIGN(1,I2-1)+SIGN(1,I2-1-NY)))
+
+                 DO J2=NJ-KERNEL, NJ+KERNEL
+                     JTMP = INT(J2-NX*.5*(SIGN(1,J2-1)+SIGN(1,J2-1-NX)))
+
+                 IF (ABS(BUF1(JTMP,ITMP)-INCNTR) .LT. GRAD) THEN
+                    RICNTR = RICNTR + I2*FILT(J2-NJ,I2-NI)
+                    RJCNTR = RJCNTR + J2*FILT(J2-NJ,I2-NI)
+                    WEIGHT = WEIGHT   +  FILT(J2-NJ,I2-NI)
+                    DENS   = DENS+BUF1(JTMP,ITMP)*FILT(J2-NJ,I2-NI)
+d185 8
+a192 5
+             NN    = NN + 1
+             ICNTR = INT(RICNTR/WEIGHT)
+             JCNTR = INT(RJCNTR/WEIGHT)
+             TEMP  = ABS(JCNTR-NJ)+ABS(ICNTR-NI)
+             IF (3*TEMP > 2*KERNEL) THEN
+d194 5
+a198 5
+                NI = ICNTR
+                IF (NN < 10) GOTO 14
+             ENDIF
+
+             BUF2(J,I)  = DENS / WEIGHT
+a199 1
+       ENDDO
+d204 1
+a204 1
+C      ******************************* MEANSHIFT-3 *******************
+d210 1
+a210 2
+       INTEGER    NZ,NX,NY,NS,NJ,NI
+       INTEGER :: WEIGHT
+d215 2
+a218 1
+       REAL    :: FILT(-30:30,-30:30,-30:30)
+d224 1
+d229 2
+a230 20
+C      CALCULATING THE SPHERICAL AREA OF KERNEL
+C      INVOLVING A ROUNDING OF BOUNDARIES
+
+       DO S=-KERNEL,KERNEL
+          DO I=-KERNEL,KERNEL
+             DO J=-KERNEL,KERNEL
+                RAD = S**2 + I**2 + J**2
+                RAD = INT(RAD + 0.5)
+                IF (RAD. LE. KERNEL) FILT(J,I,S)  =   1
+             ENDDO
+          ENDDO
+       ENDDO
+
+       DO S=1,NZ
+          DO I=1,NY
+             DO J=1,NX
+               NS     = S
+               NI     = I
+               NJ     = J
+	       NN     = 0
+d232 21
+d257 4
+a260 5
+ 	       DENS   = 0
+               STMP   = INT(NS-NZ*.5*(SIGN(1,NS-1)+SIGN(1,NS-1-NZ)))
+               ITMP   = INT(NI-NY*.5*(SIGN(1,NI-1)+SIGN(1,NI-1-NY)))
+               JTMP   = INT(NJ-NX*.5*(SIGN(1,NJ-1)+SIGN(1,NJ-1-NX)))
+
+d262 13
+a274 19
+
+               DO S2=NS-KERNEL, NS+KERNEL
+                  STMP=INT(S2-NZ*.5*(SIGN(1,S2-1)+SIGN(1,S2-1-NZ)))
+
+                  DO I2=NI-KERNEL, NI+KERNEL
+                    ITMP=INT(I2-NY*.5*(SIGN(1,I2-1)+SIGN(1,I2-1-NY)))
+
+                    DO J2=NJ-KERNEL, NJ+KERNEL
+                      JTMP=INT(J2-NX*.5*(SIGN(1,J2-1)+SIGN(1,J2-1-NX)))
+
+                      IF (ABS(BUF1(JTMP,ITMP,STMP)-INCNTR).LT.GRAD) THEN
+                      RSCNTR = RSCNTR + S2*FILT(J2-NJ,I2-NI,S2-NS)
+                      RICNTR = RICNTR + I2*FILT(J2-NJ,I2-NI,S2-NS)
+                      RJCNTR = RJCNTR + J2*FILT(J2-NJ,I2-NI,S2-NS)
+                      WEIGHT = WEIGHT +    FILT(J2-NJ,I2-NI,S2-NS)
+
+                      DENS = DENS+BUF1(JTMP,ITMP,STMP) *
+     &                            FILT(J2-NJ,I2-NI,S2-NS)
+                      ENDIF
+d278 15
+a292 14
+
+             NN    = NN+1
+             SCNTR = INT(RSCNTR/WEIGHT+0.5)
+             ICNTR = INT(RICNTR/WEIGHT+0.5)
+             JCNTR = INT(RJCNTR/WEIGHT+0.5)
+             TEMP  = ABS(JCNTR-NJ)+ABS(ICNTR-NI)+ABS(SCNTR-NS)
+             IF (3*TEMP <= 2*KERNEL)  GOTO 16
+
+             NS = SCNTR
+             NJ = JCNTR
+             NI = ICNTR
+             IF (NN < 40)  GOTO 14
+
+16           BUF2(J,I,S) =  DENS / WEIGHT
+d296 2
+a297 1
+
+@
+
+
+1.3
+log
+@cosmetic
+@
+text
+@d60 2
+a61 1
+       SUBROUTINE MEANSHIFT(LUN1,LUN2)
+d67 3
+a69 1
+       CHARACTER(LEN=MAXNAM) ::  FILNAM1,FILNAM2
+d71 1
+a71 1
+       INTEGER               :: MAXIM
+d73 1
+a73 19
+       REAL                  :: DFACTOR
+
+C      OPEN INPUT FILE, SOME OPERATIONS CAN TAKE WHOLE STACKS
+       MAXIM = 0
+       CALL OPFILEC(0,.TRUE.,FILNAM1,LUN1,'O',ITYPE,NSAM,NROW,NSLICE,
+     &               MAXIM,'INPUT',.FALSE.,IRTFLG)
+       IF (IRTFLG .NE. 0) RETURN
+
+       IF (IMAMI.NE.1) CALL NORM3(LUN,NSAM,NROW,NSLICE,FMAX1,FMIN1,AV1)
+       SIG1  = SIG
+       FMIN1 = FMIN
+       FMAX1 = FMAX
+       
+C      OPEN OUTPUT FILE
+       MAXIM2 = 0
+       IF (MAXIM .GT. 0) MAXIM2 = MAXIM
+       CALL OPFILEC(LUN1,.TRUE.,FILNAM2,LUN2,'U',ITYPE,
+     &             NSAM,NROW,NSLICE,MAXIM2,'OUTPUT',.TRUE.,IRTFLG)
+       IF (IRTFLG .NE. 0) GOTO 9999
+d77 1
+d83 4
+d93 1
+a93 1
+           CALL ERRT(46,'MEANSHIFT; BUF1,BUF2',2*NSAM*NROW)
+d211 1
+a211 1
+       REAL    :: FILT(-20:20,-20:20,-20:20)
+@
+
+
+1.2
+log
+@gk's mods
+@
+text
+@d10 1
+a10 1
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+d70 1
+d78 1
+a81 4
+       AV1   = AV
+       SIG1  = SIG
+       IF (IMAMI.NE.1) CALL NORM3(LUN,NSAM,NROW,NSLICE,FMAX1,FMIN1,AV1)
+       SIG1  = SIG
+d93 3
+a95 1
+       CALL RDPRM1S(GRAD,NOT_USED,'GRADIENT',IRTFLG)
+d98 2
+d111 2
+a112 3
+       
+          CALL MEANSHIFTIT(BUF1,BUF2,NSAM,NROW,
+     &                  SIG1,KERNEL,GRAD,IRTFLG)
+d115 1
+a115 1
+     &                  SIG1,KERNEL,GRAD,IRTFLG)
+d125 1
+a125 1
+C      ******************************* MEANSHIFTIT *******************
+d127 1
+a127 1
+       SUBROUTINE MEANSHIFTIT(BUF1,BUF2,NX,NY,
+d137 4
+a140 3
+         REAL    :: BUF1(1:NX,1:NY)
+         REAL    :: BUF2(1:NX,1:NY)
+         REAL    :: FILT(-30:30,-30:30)
+d145 17
+a161 1
+         REAL    :: RAD
+d163 24
+a186 40
+         WRITE(6,*) 'SIG1 =',SIG1
+         WRITE(6,*) 'NY,NX =',NY,NX
+         WRITE(6,*) 'KERNEL =',KERNEL
+C
+C          CALCULATING THE CIRCULAR AREA
+C                   OF KERNEL
+C          INVOLVING A ROUNDING OF BOUNDARIES
+C                ******************
+              DO I=-KERNEL,KERNEL
+                 DO J=-KERNEL,KERNEL
+                  RAD = I**2 + J**2
+                  RAD=SQRT(RAD)
+                  RAD=INT(RAD+0.5)
+                   IF (RAD. LE. KERNEL) THEN
+	           FILT(J,I) = 1
+                   ENDIF
+                 ENDDO
+               ENDDO
+C
+                DO I=1,NY
+                   DO J=1,NX
+               NI          = I
+               NJ          = J
+	       NN          = 0
+14               RICNTR = 0
+               RJCNTR = 0
+               WEIGHT = 0
+ 	       DENS = 0
+                  ITMP=INT(NI-NY*.5*(SIGN(1,NI-1)+SIGN(1,NI-1-NY)))
+                  JTMP=INT(NJ-NX*.5*(SIGN(1,NJ-1)+SIGN(1,NJ-1-NX)))
+               INCNTR = BUF1(JTMP,ITMP)
+               DO I2=NI-KERNEL, NI+KERNEL
+                    ITMP=INT(I2-NY*.5*(SIGN(1,I2-1)+SIGN(1,I2-1-NY)))
+                   DO J2=NJ-KERNEL, NJ+KERNEL
+                     JTMP=INT(J2-NX*.5*(SIGN(1,J2-1)+SIGN(1,J2-1-NX)))
+                IF (ABS(BUF1(JTMP,ITMP)-INCNTR).LT.GRAD) THEN
+              RICNTR = RICNTR + I2*FILT(J2-NJ,I2-NI)
+              RJCNTR = RJCNTR + J2*FILT(J2-NJ,I2-NI)
+              WEIGHT = WEIGHT   +  FILT(J2-NJ,I2-NI)
+              DENS = DENS+BUF1(JTMP,ITMP)*FILT(J2-NJ,I2-NI)
+d190 5
+a194 7
+                  NN = NN+1
+               ICNTR = INT(RICNTR/WEIGHT)
+               JCNTR = INT(RJCNTR/WEIGHT)
+             TEMP    = ABS(JCNTR-NJ)+ABS(ICNTR-NI)
+             IF (3*TEMP .LE. 2*KERNEL) THEN
+               GOTO 16
+                  ENDIF
+d197 4
+a200 5
+              IF (NN .LT. 10) THEN
+                GOTO 14
+                       ENDIF
+16            BUF2(J,I)  =  DENS/WEIGHT
+            ENDDO
+d202 1
+d219 3
+a221 3
+         REAL    :: BUF1(NX,NY,NZ)
+         REAL    :: BUF2(NX,NY,NZ)
+         REAL    :: FILT(-20:20,-20:20,-20:20)
+d226 26
+a251 28
+         REAL    :: RAD
+	 
+       WRITE(6,*) 'SIG1 =',SIG1
+       WRITE(6,*) 'NX,NY,NZ =',NX,NY,NZ
+       WRITE(6,*) 'KERNEL =',KERNEL
+C
+C          CALCULATING THE SPHERICAL AREA
+C                   OF KERNEL
+C          INVOLVING A ROUNDING OF BOUNDARIES
+           DO S=-KERNEL,KERNEL
+              DO I=-KERNEL,KERNEL
+                 DO J=-KERNEL,KERNEL
+                  RAD = S**2 + I**2 + J**2
+                  RAD=INT(RAD + 0.5)
+                        IF (RAD. LE. KERNEL) THEN
+	              FILT(J,I,S)  =   1
+                        ENDIF
+                    ENDDO
+                  ENDDO
+               ENDDO
+C
+             DO S=1,NZ
+                DO I=1,NY
+                   DO J=1,NX
+               NS          = S
+               NI          = I
+               NJ          = J
+	       NN          = 0
+d256 5
+a260 4
+ 	       DENS = 0
+                  STMP=INT(NS-NZ*.5*(SIGN(1,NS-1)+SIGN(1,NS-1-NZ)))
+                  ITMP=INT(NI-NY*.5*(SIGN(1,NI-1)+SIGN(1,NI-1-NY)))
+                  JTMP=INT(NJ-NX*.5*(SIGN(1,NJ-1)+SIGN(1,NJ-1-NX)))
+d262 5
+a266 3
+            DO S2=NS-KERNEL, NS+KERNEL
+                    STMP=INT(S2-NZ*.5*(SIGN(1,S2-1)+SIGN(1,S2-1-NZ)))
+               DO I2=NI-KERNEL, NI+KERNEL
+d268 13
+a280 9
+                   DO J2=NJ-KERNEL, NJ+KERNEL
+                     JTMP=INT(J2-NX*.5*(SIGN(1,J2-1)+SIGN(1,J2-1-NX)))
+                IF (ABS(BUF1(JTMP,ITMP,STMP)-INCNTR).LT.GRAD) THEN
+              RSCNTR = RSCNTR + S2*FILT(J2-NJ,I2-NI,S2-NS)
+              RICNTR = RICNTR + I2*FILT(J2-NJ,I2-NI,S2-NS)
+              RJCNTR = RJCNTR + J2*FILT(J2-NJ,I2-NI,S2-NS)
+              WEIGHT = WEIGHT   +  FILT(J2-NJ,I2-NI,S2-NS)
+              DENS = DENS+BUF1(JTMP,ITMP,STMP)*FILT(J2-NJ,I2-NI,S2-NS)
+                ENDIF
+d284 14
+a297 15
+                  NN = NN+1
+               SCNTR = INT(RSCNTR/WEIGHT+0.5)
+               ICNTR = INT(RICNTR/WEIGHT+0.5)
+               JCNTR = INT(RJCNTR/WEIGHT+0.5)
+             TEMP    = ABS(JCNTR-NJ)+ABS(ICNTR-NI)+ABS(SCNTR-NS)
+             IF (3*TEMP .LE. 2*KERNEL) THEN
+              GOTO 16
+                  ENDIF
+                NS = SCNTR
+                NJ = JCNTR
+                NI = ICNTR
+              IF (NN .LT. 40) THEN
+                GOTO 14
+                       ENDIF
+16            BUF2(J,I,S)  =  DENS/WEIGHT
+d301 1
+a301 2
+       
+       RETURN
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d27 1
+a27 1
+C PURPOSE: MEAN SHIFT DENOISING AND SMOOTHING FILTER (2D/3D FILES)     *
+d34 5
+a38 5
+C      1. SETTING THE RADIUS OF SPHERICAL KERNEL IN PIXELS             *
+C         <<KERNELS IN THE RANGE 5-10 PIXELS ARE USUALY USED>>         *
+C      2. SETTING THE VALUE OF GRADIENT                                *
+C         <<STANDARD DEVIATION COMPUTED FROM THE WHOLE SET IS          *
+C         RECOMENDED>>                                                 *
+d40 17
+a56 15
+C         PROGRAM:                                                     *
+C      1. STARTING AT A POINT 'A'                                      *
+C      2. SELECTING THE PIXELS (VOXELS) FALLING WITHIN A CERTAIN SPATIAL        *
+C         DISTANCE (KERNEL) AND WITHIN CERTAIN DENSITY DISTANCE        *
+C         (GRADIENT)                                                   *
+C      3. CALCULATION THE CENTER OF MASS INSIDE KERNEL, AND DISPLACING *
+C         THE CENTER OF KERNEL TO THE CENTER OF MASS                   *
+C      4. REPEATING ITERATIVELY UNTIL NO VARIATION IS OBSERVED         *
+C      5. APPLYING THE MEAN DENSITY OF KERNEL AROUND THE FINAL POINT   *
+C        'B' (THE MODE) TO STARTING POINT 'A'                          *
+C         <<CALCULATION OF MEAN DENSITY INSIDE KERNEL ENVOLVES ONLY    *
+C         PIXELS (VOXELS) WITHIN AN APOINTED DENSITY DISTANCE (GRADIENT);       *
+C         IN SOME OTHER SOFTWARE THE DENSITY OF FINAL POINT 'B'        *
+C         ITSELF IS USED>>                                             *
+C      6. REPEATING FOR ALL PIXELS (VOXELS) IN THE IMAGE               *
+d60 1
+a60 1
+       SUBROUTINE MEANSHIFT(LUN1,LUN2,NSAM,NROW,NSLICE,IRTFLG)
+d66 1
+d71 19
+a89 1
+       CALL RDPRI1S(KERNEL,NOT_USED,'RADIUS',IRTFLG)
+d92 4
+a95 3
+       WRITE(NOUT,"('  DEFAULT GRADIENT:',1pg13.3)")GRAD       
+       CALL RDPRM1S(GRAD,NOT_USED,
+     &              'GRADIENT (USE <CR> FOR DEFAULT)',IRTFLG)
+d109 3
+a111 2
+          CALL MEANSHIFT2(BUF1,BUF2,NSAM,NROW,
+     &                    SIG1,KERNEL,GRAD,IRTFLG)
+d119 2
+a120 1
+9999   RETURN
+d124 1
+a124 1
+C      ******************************* MEANSHIFT2 *******************
+d126 1
+a126 1
+       SUBROUTINE MEANSHIFT2(BUF1,BUF2,NX,NY,
+d129 10
+a138 8
+       INTEGER :: I,J,I2,J2,DELTA, NX,NY,NI,NJ
+       INTEGER :: WEIGHT, ITMP,JTMP
+       INTEGER :: KERNEL, ICNTR, JCNTR
+       INTEGER :: NN, TEMP
+
+       REAL    :: BUF1(NX,NY)
+       REAL    :: BUF2(NX,NY)
+
+d140 1
+a140 2
+       REAL    :: REALDELTA
+       REAL    :: RICNTR, RJCNTR
+d142 2
+a143 1
+       REAL    :: DENS,INCNTR
+d145 15
+a159 32
+C      GRAD = .5*SIG1 - OK
+C      GRAD = SIG1 AND DISTANCE=4 PIXELS - GOOD
+C      GRAD = 2*SIG1 - BLURRED IMAGE
+
+       DO I=1,NY
+          ! WRITE(6,*) 'I =',I
+
+          DO J=1,NX
+             NI     = I
+             NJ     = J
+	     NN     = 0
+14           RJCNTR = 0
+             RICNTR = 0
+             WEIGHT = 0
+ 	     DENS   = 0
+
+             ITMP   = INT(NI-NY*.5*(sign(1,NI-1)+sign(1,NI-1-NY)))
+             JTMP   = INT(NJ-NX*.5*(sign(1,NJ-1)+sign(1,NJ-1-NX)))
+             INCNTR = BUF1(JTMP,ITMP)
+
+             DO I2=NI-KERNEL, NI+KERNEL
+                REALDELTA = SQRT(REAL(KERNEL**2-(I2-NI)**2))
+                DELTA     = INT(REALDELTA)
+                ITMP      = INT(I2-NY*.5*(sign(1,I2-1)+sign(1,I2-1-NY)))
+
+                DO J2=NJ-DELTA, NJ+DELTA
+                  JTMP = INT(J2-NX*.5*(sign(1,J2-1)+sign(1,J2-1-NX)))
+                  IF (ABS(BUF1(JTMP,ITMP)-INCNTR) < GRAD) THEN
+                     RICNTR = RICNTR + I2
+                     RJCNTR = RJCNTR + J2
+                     WEIGHT = WEIGHT + 1  
+		     DENS   = DENS + BUF1(JTMP,ITMP)
+d161 25
+d188 14
+a201 11
+             NN    = NN+1
+             JCNTR = INT(RJCNTR/WEIGHT)
+             ICNTR = INT(RICNTR/WEIGHT)
+             TEMP  = ABS(JCNTR-NJ) + ABS(ICNTR-NI)
+
+             IF (TEMP .LE. 2) GOTO 16
+
+             NJ = JCNTR
+             NI = ICNTR
+             IF (NN < 100) GOTO 14
+16           BUF2(J,I) = DENS/WEIGHT
+a202 1
+       ENDDO
+d207 1
+a207 2
+
+C      ******************************* MEANSHIFT3 *******************
+d213 1
+a213 2
+       INTEGER :: DELTA,GAMMA
+       INTEGER :: NZ,NX,NY,NS,NJ,NI
+d219 3
+a221 4
+
+       REAL    :: BUF1(NX,NY,NZ)
+       REAL    :: BUF2(NX,NY,NZ)
+
+a222 1
+       REAL    :: REALDELTA, REALGAMMA
+d226 28
+a253 21
+
+       REAL    :: RAD
+
+        WRITE(6,*) 'SIG1 =',SIG1
+        WRITE(6,*) 'NX,NY,NZ =',NX,NY,NZ
+
+C       GRAD=.25*SIG1 - OK
+C       GRAD=.5*SIG1 - OK
+C       GRAD=SIG1 - GOOD
+C       GRAD=2*SIG1 - BLURRED IMAGE
+       
+          DO S=1,NZ
+             !WRITE(6,*) 'S =',S
+
+             DO I=1,NY
+                DO J=1,NX
+
+               NS     = S
+               NI     = I
+               NJ     = J
+	       NN     = 0
+d258 4
+a261 4
+ 	       DENS   = 0
+               STMP   = INT(NS-NZ*.5*(SIGN(1,NS-1)+SIGN(1,NS-1-NZ)))
+               ITMP   = INT(NI-NY*.5*(SIGN(1,NI-1)+SIGN(1,NI-1-NY)))
+               JTMP   = INT(NJ-NX*.5*(SIGN(1,NJ-1)+SIGN(1,NJ-1-NX)))
+d263 13
+a275 22
+	      
+              DO S2=NS-KERNEL, NS+KERNEL
+                    STMP = INT(S2-NZ*.5*(SIGN(1,S2-1)+SIGN(1,S2-1-NZ)))
+
+                 DO I2=NI-KERNEL, NI+KERNEL
+                    ITMP = INT(I2-NY*.5*(SIGN(1,I2-1)+SIGN(1,I2-1-NY)))
+
+                     DO J2=NJ-KERNEL, NJ+KERNEL
+                     JTMP = INT(J2-NX*.5*(SIGN(1,J2-1)+SIGN(1,J2-1-NX)))
+
+                        RAD = (S2-NS)**2+(I2-NI)**2+(J2-NJ)**2
+                        RAD = SQRT(RAD)
+
+C                       IF (RAD.LE.KERNEL) THEN
+                        IF (ABS(BUF1(JTMP,ITMP,STMP)-INCNTR).LT.GRAD)
+     &                     THEN
+                           RSCNTR = RSCNTR + S2
+                           RICNTR = RICNTR + I2
+                           RJCNTR = RJCNTR + J2
+                           WEIGHT = WEIGHT + 1
+                           DENS   = DENS + BUF1(JTMP,ITMP,STMP)
+                         ENDIF
+d279 12
+a290 11
+
+             NN    = NN + 1
+             SCNTR = INT(RSCNTR/WEIGHT)
+             ICNTR = INT(RICNTR/WEIGHT)
+             JCNTR = INT(RJCNTR/WEIGHT)
+             TEMP  = ABS(JCNTR-NJ)+ABS(ICNTR-NI)+ABS(SCNTR-NS)
+             IF (TEMP .LE. 4) GOTO 16
+             NS = SCNTR
+             NJ = JCNTR
+             NI = ICNTR
+             IF (NN .LT. 8) THEN
+d292 2
+a293 7
+             ELSE    
+                WRITE(6,*) 'WOW'
+             ENDIF
+		   
+16           BUF2(J,I,S)  =  DENS/WEIGHT
+C            16            BUF2(J,I,S) = BUF1(JCNTR,ICNTR,SCNTR)
+C            WRITE(6,*) J,I,S,BUF2(J,I,S)
+d297 2
+a298 1
+
+@

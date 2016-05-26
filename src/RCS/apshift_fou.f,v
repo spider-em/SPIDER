@@ -1,0 +1,1150 @@
+head	1.8;
+access;
+symbols;
+locks; strict;
+comment	@c @;
+
+
+1.8
+date	2012.06.18.13.27.38;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2012.05.08.15.53.47;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2012.04.20.12.55.58;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2011.12.19.15.03.54;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2011.12.12.16.54.18;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2011.12.09.13.16.32;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2011.12.01.17.33.26;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2011.12.01.17.24.09;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.8
+log
+@all rots
+@
+text
+@
+C++*********************************************************************
+C                                                                      *
+C APSHIFT_FOU.F     NEW                          AUG 2011 ARDEAN LEITH *
+C                   QUADRI_COR FOR SPEED         NOV 2011 ARDEAN LEITH *
+C                   FBS2                         DEC 2011 ARDEAN LEITH *
+C                   FBS2  NXP                    DEC 2011 ARDEAN LEITH *
+C                   DO_FFT_R SET                 APR 2012 ARDEAN LEITH *
+C                                                                      *
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2012  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C                                                                       
+C  APSHIFT_FOU(LUNIN, REFPAT,IMGREF,  NX,NY, NXP,NYP, 
+C              EXPBUF,AVI,SIGI, ISHRANGE,
+C              ROTANG,XSH,YSH,MIRRORIT,PEAKV,IRTFLG)
+C                                                                       
+C  PURPOSE:  ROTATE EXPBUF IMAGE BY ROTANG, MIRROR IF NECESSARY, 
+C            CROSS-CORRELATE WITH REFERENCE IMAGE, FIND CC PEAK.
+C                                                                       
+C  PARAMETERS: LUNIN        IO UNIT                               SENT
+C              EXPPAT       EXP. IMAGE TEMPLATE                   SENT
+C              IMGEXP       EXP. IMAGE NUMBER                     SENT
+C              REFPAT       REF. IMAGE TEMPLATE                   SENT
+C              IMGREF       REF. IMAGE NUMBER (UNUSED)            SENT
+C              NX,NY        ACTUAL INPUT IMAGE DIM.               SENT
+C              EXPBUF       EXP. IMAGE BUFFER                     SENT  
+C              AVI,SIGI     EXP. IMAGE STATISTICS                 SENT
+C              AVR          REF. IMAGE AVERAGE (UNUSED)           SENT
+C              SIGR         REF. IMAGE STATISTICS                 SENT
+C              LMASK                                              SENT
+C              BUFPADI      EXP IMAGE FFT                         WORK
+C              BUFPADR      REF IMAGE FFT                         SENT
+C              F0,X1,Y1,XY2 FBS ARRAYS                            WORK
+C              ISHRANGE..   POSSIBLE IMAGE SHIFTS                 SENT
+C              ROTANG       INPLANE ROTATION ANGLE                SENT
+C              XSH,YSH      SHIFTS                                RET.
+C              MIRRORIT     LOGICAL FLAG THAT REF. NEEDS MIRROR   SENT
+C              PEAKV        PEAK HEIGHT                           RET. 
+C              IRTFLG       ERROR FLAG                            RET.  
+C                                                                       
+C  NOTE:   NXP INCLUDES THE EXTRA SPACE FOR FOURIER XFORM
+C                                                                       
+C--*********************************************************************
+
+        SUBROUTINE APSHIFT_FOU(LUNIN,  IMGREF,
+     &                     NX,NY,      NXLD, 
+     &                     EXPBUF,     AVI,SIGI, AVR,SIGR, LMASK,
+     &                     BUFPADI,    BUFPADR,
+     &                     F0,         X1,Y1,XY2, 
+     &                     ISHRANGEX,  ISHRANGEY,
+     &                     ROTANG,     XSH,YSH,
+     &                     MIRRORIT,   PEAKV, IRTFLG)
+
+        IMPLICIT NONE
+
+        INCLUDE 'CMLIMIT.INC'
+        INCLUDE 'CMBLOCK.INC'
+
+        INTEGER,INTENT(IN)     :: LUNIN
+        INTEGER,INTENT(IN)     :: IMGREF
+        INTEGER,INTENT(IN)     :: NX,NY, NXLD
+        REAL                   :: EXPBUF(NX,NY)
+        REAL,   INTENT(IN)     :: AVI,SIGI
+        REAL,   INTENT(IN)     :: avr,SIGR
+        LOGICAL,INTENT(IN)     :: LMASK(NXLD,NY)
+        INTEGER,INTENT(IN)     :: ISHRANGEX,ISHRANGEY
+        REAL,INTENT(OUT)       :: BUFPADI(NXLD,NY)  
+        REAL,INTENT(IN)        :: BUFPADR(NXLD,NY)    
+        REAL                   :: F0(NXLD,NY), XY2(NXLD,NY)
+        REAL                   :: X1(NXLD,NY), Y1 (NXLD,NY)
+
+        REAL,   INTENT(INOUT)  :: ROTANG
+        REAL,   INTENT(OUT)    :: XSH,YSH
+        LOGICAL,INTENT(IN)     :: MIRRORIT
+        REAL,   INTENT(OUT)    :: PEAKV
+        INTEGER,INTENT(OUT)    :: IRTFLG
+
+        CHARACTER(LEN=MAXNAM)  :: FILNAM
+        INTEGER * 8            :: IPLAN = 0     !STRUCTURE POINTER 
+
+        INTEGER                :: NLET,NSLICE,MAXIM,IYCEN,IXCEN
+        INTEGER                :: IREP,IY,IGO,IX,ITYPE,NXP1
+        INTEGER                :: NE,IBEST,IODD,MWANT,INV,IRAD,IRADSQ
+        integer                :: NXt,NYt,itypet
+                   
+        REAL                   :: PADVAL,RNY1,RNX1,RNY2,RNX2
+        REAL                   :: COD,SID,YI,YCOD,YSID,XOLD,YOLD
+        REAL                   :: COST(2),SINT(2)
+        REAL                   :: XI,ZDUM
+
+        REAL                   :: fbs2,quadri,quadri_cor
+
+        LOGICAL                :: DO_FFT_R     = .FALSE.  
+        LOGICAL                :: DO_FFT_I     = .TRUE.
+        LOGICAL                :: SPIDER_SCALE = .FALSE.
+        LOGICAL                :: SPIDER_SIGN  = .FALSE.
+        LOGICAL                :: NORMIT       = .TRUE.
+        LOGICAL                :: SKIP_PEAK    = .FALSE.
+        INTEGER                :: ILOCS(2)
+
+        REAL                   :: PEAKVT(2), ROTANGT(2)
+        REAL                   :: XSHT(2),   YSHT(2)
+        DOUBLE PRECISION       :: DAVT(2)    ! UNUSED
+        DOUBLE PRECISION       :: DSIGT(2)
+        INTEGER                :: ILOC
+
+        REAL, PARAMETER        :: QUADPI = 3.1415926535897932384626
+        REAL, PARAMETER        :: DGR_TO_RAD = QUADPI / 180          
+
+        real :: temp
+
+
+         IF (USE_FBS_INTERP) THEN
+C           PREPARE DATA FOR FSBI
+            write(6,*) ' Using fbs_interp not implemented'
+            stop
+
+            F0(1:NX, 1:NY) = EXPBUF(1:NX, 1:NY)  ! PADDING
+            CALL FBS2_PREP(F0, X1,Y1,XY2, NXLD,NX,NY, IRTFLG)
+            IF (IRTFLG .NE. 0) GOTO 9999
+         ENDIF
+
+         IRAD       = (MIN(NX,NY)) / 2 - 1
+         IRADSQ     = IRAD**2
+
+         NXP1        =  NX + 1
+
+C        SPIDER IMAGE CENTER
+         IYCEN       =  NY/2+1
+         IXCEN       =  NX/2+1
+
+C        IMAGE DIMENSIONS AROUND ORIGIN
+         RNY1         = -NY/2
+         RNX1         = -NX/2
+
+         RNY2         = -RNY1
+         RNX2         = -RNX1
+         IF (MOD(NX,2) == 0) RNX2 = RNX2 - 1.0
+         IF (MOD(NY,2) == 0) RNY2 = RNY2 - 1.0
+
+         ROTANGT(1) = ROTANG
+         ROTANGT(2) = ROTANG + 180.0
+
+C        CREATE TRANSFORMATION MATRIX
+
+         SINT(1)     = SIN(ROTANG * DGR_TO_RAD)
+         !COST(1)    = COS(ROTANG * DGR_TO_RAD)
+         !temp       = SQRT(1 - SINT(1)**2)  !faster??
+         IF (ROTANG > 90 ) THEN
+             COST(1) = -SQRT(1 - SINT(1)**2)  
+         ELSE
+             COST(1) =  SQRT(1 - SINT(1)**2)  
+         ENDIF 
+
+         SINT(2)     = -SINT(1)
+         COST(2)     = -COST(1)
+
+#ifdef NEVER
+         SINT(1)     = SIN(ROTANGT(1) * DGR_TO_RAD)
+         COST(1)     = COS(ROTANGT(1) * DGR_TO_RAD)
+         SINT(2)     = SIN(ROTANGT(2) * DGR_TO_RAD)
+         COST(2)     = COS(ROTANGT(2) * DGR_TO_RAD)
+         write(6,*)'  ang,sin,cos 1:', ROTANGT(1),sint(1),COST(1)
+         write(6,*)'  ang,sin,cos 2:', ROTANGT(2),sint(2),COST(2)
+#endif
+
+         IF (     (1 - IYCEN) < RNY1) THEN
+            CALL ERRT(102,'PGM ERR, BAD (1 - IYCEN)',(1 - IYCEN))
+            STOP
+         ELSEIF ( (1 - IYCEN) > RNY2) THEN
+            CALL ERRT(102,'PGM ERR, BAD (1 - IYCEN)',(1 - IYCEN))
+            STOP
+         ELSEIF ( (1 - IXCEN) < RNX1) THEN
+            CALL ERRT(102,'PGM ERR, BAD (1 - IXCEN)',(1 - IXCEN))
+            STOP
+         ELSEIF ( (1 - IXCEN) > RNX2) THEN
+            CALL ERRT(102,'PGM ERR, BAD (1 - IXCEN)',(1 - IXCEN))
+            STOP
+         ENDIF
+         !call chkfile('jnkexpbufa',66,1,nx,ny,1, expbuf,irtflg)
+
+         DO IREP = 1,2
+
+            !bufpadi(nx+1:nxld,1:ny) = 0.0   ! ZERO PAD
+            !call chkcmplx('rings',bufpadr,nxld*NY, nxld,4,NY*nxld)
+
+C           ROTATE EXP IMAGE BY ROTANG & PAD FOR FFT  ------ ROTATE
+
+C           CURRENT TRANSFORMATION MATRIX
+            COD  = COST(IREP)
+            SID  = SINT(IREP)
+
+C           OMP ON OUTER LOOP MUCH FASTER!
+c$omp       parallel do private(iy,yi,ycod,ysid,
+c$omp&                          ix,xi,xold,yold,iloc)
+            DO IY=1,NY
+
+               YI   = IY - IYCEN
+
+               YCOD =  YI * COD + IYCEN
+               YSID = -YI * SID + IXCEN
+
+               DO IX=1,NX
+                  XI   = IX - IXCEN
+ 
+                  XOLD = XI * COD  + YSID
+                  YOLD = XI * SID  + YCOD
+
+                  ILOC = IX
+                  IF (MIRRORIT) ILOC = NXP1 - IX
+
+                 !write(6,*)'  ILOC,IY zero:', ILOC,IY,xold,yold 
+
+                  IF ( XOLD < 2 .OR. XOLD >= NX .OR. 
+     &                 YOLD < 2 .OR. YOLD >= NY) THEN
+C                      OUTSIDE OF UNROTATED IMAGE
+                     BUFPADI(ILOC,IY) = AVI    !AVI
+                     !write(6,*)'  ILOC,IY zero:', ILOC,IY,xold,yold 
+
+                     CYCLE
+                  ELSEIF (LMASK(ILOC,IY)) THEN
+                     BUFPADI(ILOC,IY) = AVI    !AVI
+                     CYCLE
+ 
+                  ENDIF
+                  BUFPADI(ILOC,IY) = 
+     &                  QUADRI_COR(XOLD,YOLD,NX,NY,EXPBUF)
+	       ENDDO
+	    ENDDO
+
+C           SINCE IMAGE IS ROTATED AND SHIFTED STATS MAY CHANGE.
+C           SLOWER IF NORM CODE IS EXTRACTED AND PUT IN ABOVE LOOP!!
+            CALL NORMVALSP(BUFPADI,NX,NY,1,
+     &                     NXLD,NY,1, 
+     &                     DAVT(IREP),DSIGT(IREP),.TRUE.)
+ 
+            !if (irep == 1)  then
+            !bufpadi(nx+1:nxld,1:ny) = 0.0   ! ZERO PAD
+            !call chkfile('jnkrtsq1',66,1,nxld,ny,1, bufpadi,irtflg)
+            !call chkfile('jnkpadr', 66,1,nxld,ny,1, bufpadr,irtflg)
+            !else
+            !bufpadi(nx+1:nxld,1:ny) = 0.0   ! ZERO PAD
+            !call chkfile('jnkrtsq2',66,1,nxld,ny,1, bufpadi,irtflg)
+            !endif
+
+            !write(6,*)' Calling apcc_new, irep: ',irep
+C           FFT CROSS CORRELATION BUFPADI vs BUFPADR --------------- CC
+            CALL APCC_NEW(NXLD,  NX,NY,1, 
+     &                BUFPADI,   BUFPADR,
+     &                DO_FFT_I,  DO_FFT_R,
+     &                SKIP_PEAK, NORMIT,SPIDER_SIGN, 
+     &                ISHRANGEX, ISHRANGEY,0,
+     &                XSHT(IREP),YSHT(IREP),ZDUM, 
+     &                PEAKVT(IREP),IRTFLG)
+            IF (IRTFLG .NE. 0)  THEN
+               CALL ERRT(101,'APSHIFT_FOU CC ERROR',NE)
+               RETURN
+            ENDIF
+
+            !if (irep == 1)  then
+            !call chkfile('jnkcc1',66,1,nxld,ny,1, bufpadi,irtflg)
+            !else
+            !call chkfile('jnkcc2',66,1,nxld,ny,1, bufpadi,irtflg)
+            !endif
+
+        ENDDO
+
+C       NORMALIZATION 
+C       NO SCALING IN FMRS OR IN CCRS, IS SCALED BY 1/NX*NY in APCC
+ 
+        PEAKVT(1) = PEAKVT(1) / FLOAT(NX*NY-1) / DSIGT(1) / SIGR
+        PEAKVT(2) = PEAKVT(2) / FLOAT(NX*NY-1) / DSIGT(2) / SIGR
+
+        IBEST = 1
+        IF (PEAKVT(2) > PEAKVT(1)) IBEST = 2
+
+        PEAKV  = PEAKVT  (IBEST)
+        ROTANG = ROTANGT(IBEST)
+        XSH    = XSHT (IBEST)
+        YSH    = YSHT (IBEST)
+      
+        !write(6,*)' 1:',rotangt(1),xsht(1),ysht(1),peakvt(1)
+        !write(6,*)' 2:',rotangt(2),xsht(2),ysht(2),peakvt(2)
+
+C       ADJUST FOR MIRROR OF IMAGE NOT MIRROR OF REF. IMAGE
+        IF (MIRRORIT) THEN              ! BUG FIX MAR 2011
+           IODD = MOD(NX,2)
+           IF (IODD == 0) THEN
+              XSH = 1 - XSH
+           ELSE
+              XSH = -XSH
+           ENDIF
+        ENDIF            
+    
+9999    CONTINUE
+
+        END
+
+
+C     ------------------- QUADRI_COR ---------------------------------
+
+      REAL FUNCTION QUADRI_COR(X,Y, NX,NY, FDATA)
+
+C     MUST HAVE ALREADY HANDLED  CORNER VALUES IN CALLER AND 
+C     ENSURED THAT X & Y ARE INSIDE IMAGE!!
+    
+      IMPLICIT NONE
+
+      REAL      :: X,Y           ! INPUT LOCATION
+      INTEGER   :: NX,NY         ! IMAGE DIMENSIONS
+      REAL      :: FDATA(NX,NY)  ! INPUT IMAGE
+
+      INTEGER   :: I,J, IM1,IP1,JM1,JP1
+      REAL      :: DX0,DY0,DXB,DYB,F0,C1,C2,C3,C4,C5
+
+      I   = IFIX(X)
+      J   = IFIX(Y)
+
+      DX0 = X - I          ! SLOWER IF MOVED DOWN!!
+      DY0 = Y - J
+      DXB = DX0 - 1.0
+      DYB = DY0 - 1.0
+
+      IM1 = I-1            ! USE SPEEDS UP!
+      IP1 = I+1
+      JM1 = J-1
+      JP1 = J+1
+
+      F0  = FDATA(I,J)
+
+      C1  = FDATA(IP1,J) - F0
+
+      C2  = (C1 - F0 + FDATA(IM1,J)) * 0.5
+
+      C3  = FDATA(I,JP1) - F0 
+
+      C4  = (C3 - F0 + FDATA(I,JM1)) * 0.5 
+
+      IF (DX0 < 0) THEN
+         IF (DY0 < 0) THEN   ! -1 -1
+            C5 =  (FDATA(IM1,JM1) - F0 + C1 - 2 * (C2 + C4) + C3)
+
+         ELSE                ! -1 +1
+            C5 =  (FDATA(IM1,JP1) + F0 - C1 + 2 * C2 + C3)  
+
+         ENDIF
+      ELSE
+         IF (DY0 < 0) THEN   ! +1 -1
+            C5 =  (FDATA(IP1,JM1) + F0 + C1 - C3 + 2 * C4) 
+ 
+         ELSE                ! +1 +1
+            C5 =  (FDATA(IP1,JP1) - F0 - C1 - C3)
+         ENDIF
+      ENDIF
+
+      QUADRI_COR = F0 + 
+     &              DX0 * (C1 + DXB * C2 + DY0 * C5) + 
+     &              DY0 * (C3 + DYB * C4)
+
+      END
+
+
+
+
+
+
+
+
+
+
+
+#ifdef DEBUGNEVER
+               IF (USE_FBS_INTERP) THEN
+
+c$omp            parallel do private(IX,xi,xold,yold)
+                 DO IX=1,NX
+
+                    !IRADNOW = IY**2 + IX**2
+                    !IF (IRADNOW > IRADSQ) THEN
+C                   !   OUTSIDE OF ROTATIONAL MASK
+                    !   BUFPADI(IX,IY)
+                    !ENDIF
+                    XI = IX - IXCEN 
+
+                    IF (XI .LT. RNX1) XI = MIN(RNX2+XI-RNX1+1.0,RNX2)
+                    IF (XI .GT. RNX2) XI = MAX(RNX1+XI-RNX2-1.0,RNX1)
+
+                    YOLD = XI * SID  + YCOD
+                    XOLD = XI * COD  + YSID
+
+                    IF (.NOT. MIRRORIT) THEN
+C                      NO MIRROR 
+                       BUFPADI(IX,IY) = FBS2(XOLD,YOLD,
+     &                      NXLD,NX,NY,EXPBUF,NX,X1,Y1,XY2,.FALSE.)
+                    ELSE
+C                      MIRROR THE IMAGE IN PLACE  
+                       BUFPADI(NXP1-IX,IY) = FBS2(XOLD,YOLD,
+     &                      NXLD,NX,NY, EXPBUF,NX, X1,Y1,XY2, .FALSE.)
+                    ENDIF
+	         ENDDO
+
+              ELSE
+#endif
+
+
+@
+
+
+1.7
+log
+@may7 last changes
+@
+text
+@d36 2
+a37 3
+C  PURPOSE:  ROTATE EXPBUF IMAGE BY ROTANG, MIRROR IF NECESSARY, PAD 
+C            TO 2X SIZE, CROSS-CORRELATE WITH REFERENCE IMAGE, FIND
+C            CC PEAK.
+d43 1
+a43 1
+C              IMGREF       REF. IMAGE NUMBER                     SENT
+a44 1
+C              NXP,NYP      NXP=2*NX+2,NYP=2*NX                   SENT
+d49 1
+d55 1
+a55 1
+C              XSH..        SHIFT                                 RET.
+d66 1
+a66 1
+     &                     EXPBUF,     AVI,SIGI, AVR,SIGR, lmask,
+d71 1
+a71 1
+     &                     MIRRORIT,PEAKV,IRTFLG)
+d84 1
+a84 1
+        logical,intent(in)     :: lmask(nxld,ny)
+a110 1
+        LOGICAL                :: DO_FFT_R  
+d112 1
+d120 1
+a120 1
+        REAL                   :: PEAKVT(2), ROTANGT(2),tmin
+d199 1
+a199 3
+
+         !call chkfile('jnkexpbuf',66,1,nx,ny,1, expbuf,irtflg)
+
+d203 1
+a203 2
+      !bufpadi(nx+1:nxld,1:ny) = 0.0   ! ZERO PAD
+
+a244 1
+
+d257 2
+a258 1
+            ! call chkfile('jnkrtsq1',66,1,nxld,ny,1, bufpadi,irtflg)
+d261 3
+a263 4
+            ! call chkfile('jnkrtsq2',66,1,nxld,ny,1, bufpadi,irtflg)
+            ! endif
+
+            DO_FFT_R = (IREP < 2)
+@
+
+
+1.6
+log
+@partial changes
+@
+text
+@d8 1
+d14 1
+a14 1
+C=* Copyright 1985-2011  Health Research Inc.,                         *
+d33 2
+a34 2
+C          EXPBUF,AVI,SIGI, ISHRANGE,
+C          RANGNEW,XSHNEW,YSHNEW,MIRRORNEW,PEAKV,IRTFLG)
+d36 1
+a36 1
+C  PURPOSE:  ROTATE EXPBUF IMAGE BY RANGNEW, MIRROR IF NECESSARY, PAD 
+d49 1
+d55 3
+a57 3
+C              RANGNEW      INPLANE ROTATION ANGLE                SENT
+C              XSHNEW..     SHIFT                                 RET.
+C              MIRRORNEW    LOGICAL FLAG THAT REF. NEEDS MIRROR   SENT
+d67 1
+a67 1
+     &                     EXPBUF,     AVI,SIGI, AVR,SIGR,
+d71 2
+a72 2
+     &                     RANGNEW,    XSHNEW,YSHNEW,
+     &                     MIRRORNEW,PEAKV,IRTFLG)
+d84 2
+a85 1
+        REAL,   INTENT(IN)     :: AVR,SIGR
+d92 3
+a94 3
+        REAL,   INTENT(INOUT)  :: RANGNEW
+        REAL,   INTENT(OUT)    :: XSHNEW,YSHNEW
+        LOGICAL,INTENT(IN)     :: MIRRORNEW
+d104 1
+a104 1
+        integer                :: NXt,NYt,nslicet,itypet
+d112 1
+d114 1
+a114 1
+        INTEGER                :: ILOCS(2)
+a117 2
+        LOGICAL                :: DO_FFT_I     = .TRUE.
+        LOGICAL                :: DO_FFT_R     = .FALSE.
+d119 1
+d121 4
+a124 3
+        REAL                   :: PEAKVT(2), RANGNEWT(2)
+        REAL                   :: XSHNEWT(2),YSHNEWT(2)
+        DOUBLE PRECISION       :: DAVT(2),DSIGT(2),DSIGI
+d135 1
+a135 1
+            write(6,*) ' Using fbs_interp'
+d161 2
+a162 2
+         RANGNEWT(1) = RANGNEW
+         RANGNEWT(2) = RANGNEW + 180.0
+d166 2
+a167 3
+#ifdef NEVER
+         SINT(1)     = SIN(RANGNEW * DGR_TO_RAD)
+         !COST(1)    = COS(RANGNEW * DGR_TO_RAD)
+d169 1
+a169 1
+         IF (RANGNEW > 90 ) THEN
+a173 4
+         !write(6,*)'  ang,cos,sq:',rangnew,COST(1),temp
+
+         SINT(1)     = SIN(RANGNEWT(1) * DGR_TO_RAD)
+         COST(1)     = COS(RANGNEWT(1) * DGR_TO_RAD)
+d177 8
+a186 6
+         SINT(1)     = SIN(RANGNEWT(1) * DGR_TO_RAD)
+         COST(1)     = COS(RANGNEWT(1) * DGR_TO_RAD)
+         SINT(2)     = SIN(RANGNEWT(2) * DGR_TO_RAD)
+         COST(2)     = COS(RANGNEWT(2) * DGR_TO_RAD)
+
+
+d201 2
+d206 1
+a206 1
+         bufpadi = avi
+d210 1
+a210 1
+C           ROTATE EXP IMAGE BY RANGNEW & PAD FOR FFT  ------ ROTATE
+d218 1
+a218 1
+c$omp&                         ix,xi,xold,yold,iloc)
+d233 1
+a233 1
+                  IF (MIRRORNEW) ILOC = NXP1 - IX
+d235 1
+d240 3
+a242 1
+                     BUFPADI(ILOC,IY) = AVI
+d244 2
+a245 5
+                  ENDIF
+
+                  IF (((ILOC-IXCEN)**2 + (IY-IYCEN)**2) > IRADSQ)THEN
+C                      OUTSIDE OF UNROTATED IMAGE
+                     BUFPADI(ILOC,IY) = AVI
+d247 1
+d261 8
+a268 5
+            if (irep == 1)  then
+            call chkfile('jnkrtsq1',66,1,nxld,ny,1, bufpadi,irtflg)
+            else
+            call chkfile('jnkrtsq2',66,1,nxld,ny,1, bufpadi,irtflg)
+            endif
+d272 6
+a277 6
+            CALL APCC_NEW(NXLD, NX,NY,1, 
+     &                BUFPADI, BUFPADR,
+     &                DO_FFT_I, DO_FFT_R,
+     &                SKIP_PEAK,NORMIT,SPIDER_SIGN, 
+     &                ISHRANGEX,ISHRANGEY,0,
+     &                XSHNEWT(IREP),YSHNEWT(IREP),ZDUM, 
+d284 5
+a288 5
+            if (irep == 1)  then
+            call chkfile('jnkcc1',66,1,nxld,ny,1, bufpadi,irtflg)
+            else
+            call chkfile('jnkcc2',66,1,nxld,ny,1, bufpadi,irtflg)
+            endif
+a297 3
+        write(6,*)' 1:',rangnewt(1),xshnewt(1),yshnewt(1),peakvt(1)
+        write(6,*)' 2:',rangnewt(2),xshnewt(2),yshnewt(2),peakvt(2)
+
+d301 4
+a304 4
+        PEAKV   = PEAKVT  (IBEST)
+        RANGNEW = RANGNEWT(IBEST)
+        XSHNEW  = XSHNEWT (IBEST)
+        YSHNEW  = YSHNEWT (IBEST)
+d306 3
+d310 1
+a310 1
+        IF (MIRRORNEW) THEN              ! BUG FIX MAR 2011
+d313 1
+a313 1
+              XSHNEW = 1 - XSHNEW
+d315 1
+a315 1
+              XSHNEW = -XSHNEW
+a322 3
+#ifdef NEVER
+        call chkfile('jnkrtsq1',66,1,nxld,ny,1, bufpadi,irtflg)
+#endif
+a396 2
+
+
+d415 1
+a415 1
+                    IF (.NOT. MIRRORNEW) THEN
+a426 15
+c
+
+c-----------------debug
+         bufpadi(NX+1:NXLD, 1:NY) = AVI !not needed for fft
+
+         !write(6,*) ' nxld,NX: ', nxld,NX
+         maxim = 0
+         itype = 1
+         if (irep ==1) then
+         call opfilec(0,.false.,'jnkpadi',lunin,'U',itype,
+     &                nxld,NY,1,maxim,' ',.false.,irtflg)
+         call wrtvol(lunin,nxld,NY,1,1,bufpadi,irtflg)
+         close(lunin)
+         endif
+c---------------------------
+@
+
+
+1.5
+log
+@fbs2 parameter added
+.rep bckcq.f
+fbs2 parameter added
+@
+text
+@d30 1
+a30 1
+C                                                                      *
+d34 1
+a34 1
+C                                                                      *
+d38 1
+a38 1
+C                                                                      *
+d58 1
+a58 1
+C                                                                      *
+d60 1
+a60 1
+C                                                                      *
+a94 1
+        CHARACTER(LEN=1)       :: NULL = CHAR(0)
+d98 3
+a100 3
+        INTEGER                :: NLET,NSLICE,MAXIM,ICENT,KCENT
+        INTEGER                :: IREP,IROW,IGO,ISAM,ITYPE,NXP1
+        INTEGER                :: NE,IBEST,IODD,MWANT,INV
+d103 1
+a103 1
+        REAL                   :: PADVAL,RN2,SN2,RW2,RS2
+d105 1
+a105 1
+        REAL                   :: CODT(2),SIDT(2)
+a119 1
+        REAL                   :: MIRRORNEWT(2)
+d123 2
+a124 2
+        REAL, PARAMETER        :: PI = 3.1415926535897932384626
+        REAL, PARAMETER        :: DGR_TO_RAD = PI/180          
+d139 17
+a155 12
+         !IRAD       = (MAX(NX,NY)) / 2 - 1
+         !IRADSQ     = IRAD**2
+         NXP1        = NX + 1
+         ICENT       = NY/2+1
+         KCENT       = NX/2+1
+         RN2         = -NY/2
+         SN2         = -NX/2
+
+         RW2         = -RN2
+         RS2         = -SN2
+         IF (MOD(NX,2) .EQ. 0) RW2 = RW2 - 1.0
+         IF (MOD(NY,2) .EQ. 0) RS2 = RS2 - 1.0
+d160 6
+a165 3
+         SIDT(1)     = SIN(RANGNEW * DGR_TO_RAD)
+         !CODT(1)    = COS(RANGNEW * DGR_TO_RAD)
+         !temp       = SQRT(1 - SIDT(1)**2)  !faster??
+d167 1
+a167 1
+             CODT(1) = -SQRT(1 - SIDT(1)**2)  
+d169 1
+a169 1
+             CODT(1) =  SQRT(1 - SIDT(1)**2)  
+d171 13
+a183 1
+         !write(6,*)'  ang,cos,sq:',rangnew,CODT(1),temp
+a184 2
+         SIDT(2)     = -SIDT(1)
+         CODT(2)     = -CODT(1)
+d186 2
+a187 2
+         IF (     (1 - ICENT) .LT. RN2) THEN
+            CALL ERRT(102,'PGM ERR, BAD (1 - ICENT)',(1 - ICENT))
+d189 2
+a190 2
+         ELSEIF ( (1 - ICENT) .GT. RW2) THEN
+            CALL ERRT(102,'PGM ERR, BAD (1 - ICENT)',(1 - ICENT))
+d192 2
+a193 2
+         ELSEIF ( (1 - KCENT) .LT. SN2) THEN
+            CALL ERRT(102,'PGM ERR, BAD (1 - KCENT)',(1 - KCENT))
+d195 2
+a196 2
+         ELSEIF ( (1 - KCENT) .GT. RS2) THEN
+            CALL ERRT(102,'PGM ERR, BAD (1 - KCENT)',(1 - KCENT))
+d200 1
+d203 2
+d209 3
+a211 2
+            COD  = CODT(IREP)
+            SID  = SIDT(IREP)
+d214 3
+a216 3
+c$omp       parallel do private(irow,yi,ycod,ysid,
+c$omp&                         isam,xi,xold,yold,iloc)
+            DO IROW=1,NY
+d218 1
+a218 1
+               YI   = IROW - ICENT
+d220 2
+a221 2
+               YCOD =  YI * COD + ICENT
+               YSID = -YI * SID + KCENT
+d223 2
+a224 2
+               DO ISAM=1,NX
+                  XI   = ISAM - KCENT
+d229 3
+a231 2
+                  ILOC = ISAM
+                  IF (MIRRORNEW) ILOC = NXP1-ISAM
+d236 7
+a242 1
+                     BUFPADI(ILOC,IROW) = AVI
+d246 1
+a246 1
+                  BUFPADI(ILOC,IROW) = 
+d251 1
+a251 1
+C           SINCE IMAGE IS ROTATED AND SHIFTED STATS MAY CHANGE
+d256 7
+a262 1
+    
+d277 6
+a284 3
+        !write(6,*)' 1:',rangnewt(1),xshnewt(1),yshnewt(1) peakvt(1)
+        !write(6,*)' 2:',rangnewt(2),xshnewt(2),yshnewt(2),peakvt(1)
+
+d288 6
+d297 1
+a297 1
+        DSIGI   = DSIGT   (IBEST)
+a301 3
+        PEAKV   = PEAKVT(IBEST)            ! FFTW3 SCALING DONE ALREADY
+        PEAKV   = PEAKV / FLOAT(NX*NY-1) / DSIGI / SIGR
+
+a311 1
+    
+d317 1
+a317 6
+           maxim = 0
+           itype = 1
+           call opfilec(0,.false.,'jnkcce',98,'U',itype,
+     &               nx,ny,1,maxim,' ',.true.,irtflg)
+           call wrtvol(98,nx,ny, 1,1, expbuf,irtflg)
+           close(98)
+d397 2
+a398 2
+c$omp            parallel do private(isam,xi,xold,yold)
+                 DO ISAM=1,NX
+d400 1
+a400 1
+                    !IRADNOW = IROW**2 + ISAM**2
+d403 1
+a403 1
+                    !   BUFPADI(ISAM,IROW)
+d405 1
+a405 1
+                    XI = ISAM - KCENT 
+d407 2
+a408 2
+                    IF (XI .LT. SN2) XI = MIN(RS2+XI-SN2+1.0,RS2)
+                    IF (XI .GT. RS2) XI = MAX(SN2+XI-RS2-1.0,SN2)
+d415 1
+a415 1
+                       BUFPADI(ISAM,IROW) = FBS2(XOLD,YOLD,
+d419 1
+a419 1
+                       BUFPADI(NXP1-ISAM,IROW) = FBS2(XOLD,YOLD,
+@
+
+
+1.4
+log
+@fbs2 CHKBOUND
+@
+text
+@d7 2
+d30 1
+a30 1
+C
+d34 1
+a34 1
+C                                  
+d38 1
+a38 1
+C
+d58 1
+a58 1
+C
+d60 1
+a60 1
+C
+a79 1
+        !!REAL,   INTENT(IN)     :: EXPBUF(NX,NY)
+d108 2
+a109 1
+        REAL                   :: FBS2,quadri,quadri_cor
+d136 2
+a137 2
+            F0(1:NX, 1:NY) = EXPBUF(1:NX, 1:NY)  ! PADDED
+            CALL FBS2_PREP(F0, X1,Y1, XY2, NXLD, NX,NY, IRTFLG)
+d383 1
+a383 1
+     &                                 NX,NY,EXPBUF,X1,Y1,XY2,.FALSE.)
+d387 1
+a387 1
+     &                                 NX,NY,EXPBUF,X1,Y1,XY2,.FALSE.)
+@
+
+
+1.3
+log
+@fbs --> fbs2
+@
+text
+@d381 1
+a381 1
+     &                                 NX,NY,EXPBUF,X1,Y1,XY2)
+d385 1
+a385 1
+     &                                 NX,NY,EXPBUF,X1,Y1,XY2)
+@
+
+
+1.2
+log
+@ QUADRI_COR FOR SPEED
+@
+text
+@d4 3
+a6 2
+C APSHIFT_FOU.F     NEW                            AUG 11 ARDEAN LEITH *
+C                   QUADRI_COR FOR SPEED           NOV 11 ARDEAN LEITH *
+d107 1
+a107 1
+        REAL                   :: fbs_fast,quadri,quadri_cor
+d135 1
+a135 1
+            CALL FBS_PREP(F0, X1,Y1, XY2, NXLD, NX,NY, IRTFLG)
+d380 1
+a380 1
+                       BUFPADI(ISAM,IROW) = FBS_FAST(XOLD,YOLD,
+d384 1
+a384 1
+                       BUFPADI(NXP1-ISAM,IROW) = FBS_FAST(XOLD,YOLD,
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d5 1
+a5 1
+C
+d28 1
+a28 1
+C  APSHIFT_FOU(LUNIN, REFPAT,IMGREF,  NSAM,NROW, NSAMP,NROWP, 
+d32 1
+a32 4
+C  PURPOSE:  MASTER SHIFT DETERMINATION ROUTINE FOR MANY 'AP ..' 
+C            OPERATIONS
+C
+C            ROTATE EXPBUF IMAGE BY RANGNEW, MIRROR IF NECESSARY, PAD 
+d36 19
+a54 16
+C  PARAMETERS: LUNIN       IO UNIT                                SENT
+C              EXPPAT      EXP. IMAGE TEMPLATE                    SENT
+C              IMGEXP      EXP. IMAGE NUMBER                      SENT
+C              REFPAT      REF. IMAGE TEMPLATE                    SENT
+C              IMGREF      REF. IMAGE NUMBER                      SENT
+C              NSAM,NROW   ACTUAL INPUT IMAGE DIMENSIONS          SENT
+C              NSAMP,NROWP NSAMP=2*NSAM+2,NROWP=2*NSAM            SENT
+C              EXPBUF      EXP. IMAGE BUFFER                      SENT  
+C              AVI,SIGI    EXP. IMAGE STATISTICS                  SENT
+C              SIGR        REF. IMAGE STATISTICS                  SENT
+C              ISHRANGE..  POSSIBLE IMAGE SHIFTS                  SENT
+C              RANGNEW     INPLANE ROTATION ANGLE                 SENT
+C              XSHNEW..    SHIFT                                  RET.
+C              MIRRORNEW   LOGICAL FLAG THAT REF. NEEDS MIRROR    SENT
+C              PEAKV       PEAK HEIGHT                            RET. 
+C              IRTFLG      ERROR FLAG                             RET.  
+d56 1
+a56 1
+C  NOTE:   NSAMP INCLUDES THE EXTRA SPACE FOR FOURIER XFORM
+d61 1
+a61 1
+     &                     NSAM,NROW,  NXLD, 
+d76 3
+a78 2
+        INTEGER,INTENT(IN)     :: NSAM,NROW, NXLD
+        REAL,   INTENT(IN)     :: EXPBUF(NSAM,NROW)
+d82 4
+a85 4
+        REAL,INTENT(OUT)       :: BUFPADI(NXLD,NROW)  
+        REAL,INTENT(IN)        :: BUFPADR(NXLD,NROW)    
+        REAL                   :: F0(NXLD,NROW), XY2(NXLD,NROW)
+        REAL                   :: X1(NXLD,NROW), Y1(NXLD,NROW)
+a92 1
+
+d98 1
+a98 1
+        INTEGER                :: IREP,IROW,IGO,ISAM,ITYPE,NSAMP1
+d100 1
+a100 1
+        integer                :: nsamt,nrowt,nslicet,itypet
+d106 1
+a106 1
+        REAL                   :: fbs_fast,quadri
+d120 2
+a121 1
+ 
+d133 2
+a134 2
+            F0(1:NSAM, 1:NROW) = EXPBUF(1:NSAM, 1:NROW)  ! PADDED
+            CALL FBS_PREP(F0, X1,Y1, XY2, NXLD, NSAM,NROW, IRTFLG)
+d138 7
+a144 7
+         !IRAD        = (MAX(NSAM,NROW)) / 2 - 1
+         !IRADSQ      = IRAD**2
+         NSAMP1      = NSAM + 1
+         ICENT       = NROW/2+1
+         KCENT       = NSAM/2+1
+         RN2         = -NROW/2
+         SN2         = -NSAM/2
+d148 2
+a149 2
+         IF (MOD(NSAM,2) .EQ. 0) RW2 = RW2 - 1.0
+         IF (MOD(NROW,2) .EQ. 0) RS2 = RS2 - 1.0
+d155 7
+a161 8
+         !CODT(1)     = COS(RANGNEW * DGR_TO_RAD)
+
+         !temp        = SQRT(1 - SIDT(1)**2)  !faster??
+         if (rangnew > 90 ) THEN
+             CODT(1)     = -SQRT(1 - SIDT(1)**2)  
+         else
+             CODT(1)     = SQRT(1 - SIDT(1)**2)  
+         endif 
+d167 14
+d183 1
+a183 1
+            !call chkcmplx('rings',bufpadr,nxld*nrow, nxld,4,nrow*nxld)
+d187 2
+a188 2
+            COD = CODT(IREP)
+            SID = SIDT(IREP)
+d190 4
+a193 1
+            DO IROW=1,NROW
+d195 1
+a195 3
+               YI = IROW - ICENT
+               IF (YI .LT. RN2) YI = MIN(RW2+YI-RN2+1.0, RW2)
+               IF (YI .GT. RW2) YI = MAX(RN2+YI-RW2-1.0, RN2)
+a198 1
+               IGO  = (IROW - 1) * NSAM
+d200 2
+a201 3
+c$omp            parallel do private(isam,xi,xold,yold)
+                 DO ISAM=1,NSAM
+                    XI = ISAM - KCENT
+d203 2
+a204 2
+                    IF (XI .LT. SN2) XI = MIN(RS2+XI-SN2+1.0,RS2)
+                    IF (XI .GT. RS2) XI = MAX(SN2+XI-RS2-1.0,SN2)
+d206 2
+a207 13
+                    YOLD = XI * SID  + YCOD
+                    XOLD = XI * COD  + YSID
+
+                    IF (.NOT. MIRRORNEW) THEN
+C                      NO MIRROR 
+                       BUFPADI(ISAM,IROW) = 
+     &                         QUADRI(XOLD,YOLD,NSAM,NROW,EXPBUF)
+                    ELSE
+C                      MIRROR THE IMAGE IN PLACE  
+                       BUFPADI(NSAMP1-ISAM,IROW) = 
+     &                         QUADRI(XOLD,YOLD,NSAM,NROW,EXPBUF)
+                    ENDIF
+	         ENDDO
+d209 10
+a220 2
+            !write(6,*)' Calling normvalsp, irep: ',irep
+
+d222 3
+a224 2
+            CALL NORMVALSP(BUFPADI,NSAM,NROW,1,
+     &                     NXLD,NROW,1, 
+d226 1
+a226 1
+
+d229 1
+a229 1
+            CALL APCC_NEW(NXLD, NSAM,NROW,1, 
+d240 1
+d247 1
+a247 1
+C       NO SCALING IN FMRS OR IN CCRS, IS SCALED BY 1/NSAM*NROW in APCC
+d258 1
+a258 1
+        PEAKV   = PEAKV / FLOAT(NSAM*NROW-1) / DSIGI / SIGR
+d262 1
+a262 1
+           IODD = MOD(NSAM,2)
+d275 74
+d362 1
+a362 1
+                 DO ISAM=1,NSAM
+d380 1
+a380 1
+     &                                 NSAM,NROW,EXPBUF,X1,Y1,XY2)
+d383 2
+a384 2
+                       BUFPADI(NSAMP1-ISAM,IROW) = FBS_FAST(XOLD,YOLD,
+     &                                 NSAM,NROW,EXPBUF,X1,Y1,XY2)
+d392 1
+a392 1
+         bufpadi(NSAM+1:NXLD, 1:NROW) = AVI !not needed for fft
+d394 1
+a394 1
+         !write(6,*) ' nxld,nsam: ', nxld,nsam
+d399 2
+a400 2
+     &                nxld,nrow,1,maxim,' ',.false.,irtflg)
+         call wrtvol(lunin,nxld,nrow,1,1,bufpadi,irtflg)
+@

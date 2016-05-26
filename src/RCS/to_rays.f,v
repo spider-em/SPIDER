@@ -1,0 +1,938 @@
+head	1.6;
+access;
+symbols;
+locks; strict;
+comment	@c @;
+
+
+1.6
+date	2016.03.07.19.29.03;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2014.12.03.18.41.44;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2014.08.05.13.47.23;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2014.05.01.14.42.34;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2014.04.23.14.15.53;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2013.10.15.17.55.43;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.6
+log
+@split out findridges.f
+@
+text
+@C **********************************************************************
+C
+C  TO_RAYS     NEW                                 AUG 13 ARDEAN LEITH
+C
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2016  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C TO_RAYS
+C
+C PURPOSE:  CREATE POLAR REPRESENTATION OF IMAGE WITH RAYS ALONG THE
+C           X DIMENSION.
+C
+C **********************************************************************
+
+        SUBROUTINE TO_RAYS
+
+        IMPLICIT NONE
+        INCLUDE 'CMBLOCK.INC'
+        INCLUDE 'CMLIMIT.INC' 
+ 
+        CHARACTER(LEN=MAXNAM) :: FILNAM
+        CHARACTER(LEN=72)     :: FORMOUT
+        CHARACTER(LEN=96)     :: COMMENT
+
+        REAL, ALLOCATABLE     :: BUF(:,:)
+        REAL, ALLOCATABLE     :: OUT(:,:)
+
+        CHARACTER(LEN=3)      :: MODE
+        LOGICAL               :: HALFCIRC
+        INTEGER               :: MAXIM,ITYPE,NX,NY,NZ,IRTFLG,IER,NLET
+        INTEGER               :: NA,NRAYS,NR,IXC,IYC,I,J
+        INTEGER               :: NRAD,NXP,NYP,IRAY,IRAD
+        REAL                  :: PI,DFI,FI,XS,YS,VTMP,VMIN
+        REAL                  :: UNUSED 
+ 
+        INTEGER               :: NMIN,NMAX
+
+        REAL                  :: quadri
+
+        INTEGER, PARAMETER    :: LUNIN  = 20
+        INTEGER, PARAMETER    :: LUNOUT = 21
+
+        CHARACTER(LEN=1)      :: NULL   = CHAR(0)
+
+
+C       GET NAME FOR INPUT FILE
+        MAXIM = 0
+        CALL OPFILEC(0,.TRUE.,FILNAM,LUNIN,'O',ITYPE,NX,NY,
+     &              NZ,MAXIM,'INPUT',.FALSE.,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+        IF (NZ > 1)  THEN
+           CALL ERRT(101,'DOES NOT WORK ON VOLUMES',IER)
+           RETURN
+        ENDIF
+
+C       GET NAME FOR POLAR OUTPUT FILE
+        CALL FILERD(FILNAM,NLET,NULL,'OUTPUT',IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 9999
+
+        CALL RDPRMC(MODE,NA,.TRUE.,
+     &        'FULL OR HALF CIRCLE (F/H)',NULL,IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 9999
+
+        HALFCIRC  = (INDEX(MODE,'H') > 0)
+        PI        = 4*DATAN(1.0D0)
+        
+C       FIND DEFAULT LENGTH OF RAYS = RADIUS = X
+        NRAD = MIN(((NX-1)/2), ((NY-1)/2))  ! LENGTH OF RAY = X SIZE
+
+C       FIND DEFAULT NUMBER OF RAYS = CIRCUMFERANCE = Y
+        NRAYS = INT(2*PI*NRAD)                ! LEN. OF CIR = # OF RAYS
+        IF (HALFCIRC) NRAYS = INT(PI*NRAD)    ! USED FOR POWER SPECTRA
+
+        WRITE(NOUT,99)'  DEFAULT, RADIUS: ',NRAD,'   RAYS:',NRAYS
+ 99     FORMAT(A,I0,A,I0)
+
+        CALL RDPRI2S(NRAD,NRAYS,UNUSED,
+     &              'RADIUS & NUMBER OF RAYS',IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 9999
+
+        NXP  = NRAD + 1                       ! X SIZE
+        NYP  = NRAYS                          ! Y SIZE
+
+        DFI  = 2 * PI / NYP                   ! RADIANS 
+        IF (HALFCIRC) DFI = PI / NYP
+
+C       OPEN OUTPUT FILE
+        MAXIM = 0
+        ITYPE = 1
+        CALL OPFILEC(0,.FALSE.,FILNAM,LUNOUT,'N',ITYPE,NXP,NYP,
+     &               1,MAXIM,'RAY',.FALSE.,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+        ALLOCATE (BUF(NX,NY),
+     &            OUT(NXP,NYP),         ! NRAD + 1 x NRAYS
+     &            STAT=IRTFLG)
+        IF (IRTFLG .NE. 0) THEN 
+           CALL ERRT(46,'TO_RAYS; BUF, OUT',NX*NY + NXP*NYP + 2*NRAYS)
+           GOTO 9999
+        ENDIF
+
+C       LOAD INPUT IMAGE
+        CALL REDVOL(LUNIN,NX,NY, 1,1, BUF,IRTFLG)
+           
+        IXC     = NX/2+1     ! X CENTER
+        IYC     = NY/2+1
+
+        !write(6,*) ' Center:(',ixc,iyc,')  rad,rays:',nrad,nrays
+
+C       CREATE POLAR REPRESENTATION
+C       NOTE: ALGORITHM IS DEPENDENT ON CIRCULAR CLOSURE IN QUADRI!
+        DO  J=0,NRAD       ! OVER ALL RADII
+          DO I=1,NRAYS     ! OVER ALL POINTS ON CIRCLE 
+
+             FI         = (I-1)   * DFI
+             XS         = COS(FI) * J
+             YS         = SIN(FI) * J
+
+             !VTMP      = QUADRI(XS+IXC,YS+IYC,NX,NY,BUF)!*SQRT(REAL(J))
+             VTMP       = QUADRI(XS+IXC,YS+IYC,NX,NY,BUF)
+
+             OUT(J+1,I) = VTMP
+
+             !if(i == 1) write(6,*) j,' : ',out(j+1,1)     
+          ENDDO
+        ENDDO
+
+
+C       OUTPUT IMAGE -------------------------------------
+        CALL WRTVOL(LUNOUT,NXP,NYP, 1,1, OUT,IRTFLG)
+         
+9999    IF (ALLOCATED(BUF))     DEALLOCATE (BUF)
+        IF (ALLOCATED(OUT))     DEALLOCATE (OUT)
+
+        CLOSE(LUNIN)
+        CLOSE(LUNOUT) 
+ 
+        END
+
+
+
+
+
+
+
+
+
+@
+
+
+1.5
+log
+@removed *SQRT(REAL(J) from product
+@
+text
+@d9 1
+a9 1
+C=* Copyright 1985-2014  Health Research Inc.,                         *
+a157 228
+        END
+
+C       --------------------- FINDRIDGES ------------------------
+
+        SUBROUTINE FINDRIDGES
+
+        IMPLICIT NONE
+        INCLUDE 'CMBLOCK.INC'
+        INCLUDE 'CMLIMIT.INC' 
+ 
+        CHARACTER(LEN=MAXNAM) :: FILNAM,DOCNAM
+        CHARACTER(LEN=72)     :: FORMOUT
+        CHARACTER(LEN=96)     :: COMMENT
+
+        REAL, ALLOCATABLE     :: BUF(:,:)
+        REAL, ALLOCATABLE     :: CURVE(:)
+
+        REAL                  :: DLIST(8)
+        INTEGER               :: IRAY_SHORT,IRAY_LONG
+        INTEGER               :: MAXIM,ITYPE,NX,NY,NZ,IRTFLG,IER,NLET
+        INTEGER               :: NA,NR,IROW
+        REAL                  :: ANGLE_L,ANGLE_S
+        INTEGER               :: IRADRIDGESHORT,IRADRIDGELONG
+        INTEGER               :: IASTIG,NMIN,NMAX
+        INTEGER               :: IRADRIDGEMAX,IRADRIDGEMIN,IRADRIDGE
+        REAL                  :: VALRIDG 
+
+        LOGICAL               :: ADDEXT,GETNAME,ISOLD
+        LOGICAL               :: APPEND,MESSAGE,NEWFILE
+        INTEGER               :: LUNDOCN,LUNDOCNO,NLETD,KEY,NDIGITS
+ 
+        INTEGER, PARAMETER    :: NUMMINS = 3 
+        INTEGER, PARAMETER    :: NUMMAXS = 3
+
+        INTEGER               :: LOCVALLEY(NUMMINS),LOCRIDGE(NUMMAXS)
+        REAL                  :: VALVALLEY(NUMMINS),VALRIDGE(NUMMAXS)
+
+        INTEGER, PARAMETER    :: LUNIN  = 20
+
+        CHARACTER(LEN=1)      :: NULL   = CHAR(0)
+
+
+C       OPEN INPUT FILE
+        MAXIM = 0
+        CALL OPFILEC(0,.TRUE.,FILNAM,LUNIN,'O',ITYPE,NX,NY,
+     &              NZ,MAXIM,'INPUT',.FALSE.,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+        IF (NZ > 1)  THEN
+           CALL ERRT(101,'DOES NOT WORK ON VOLUMES',IER)
+           RETURN
+        ENDIF
+
+        ALLOCATE (BUF(NX,NY),
+     &            CURVE(NX), 
+     &            STAT=IRTFLG)
+        IF (IRTFLG .NE. 0) THEN 
+           CALL ERRT(46,'FINDRIDGES; BUF, CURVE',NX*NY + NX)
+           GOTO 9999
+        ENDIF
+
+C       LOAD INPUT IMAGE
+        CALL REDVOL(LUNIN,NX,NY, 1,1, BUF,IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 9999
+           
+        ADDEXT  = .TRUE.
+        GETNAME = .TRUE.
+        ISOLD   = .FALSE.
+        APPEND  = .TRUE.
+        MESSAGE = .FALSE. 
+        IRTFLG  = -8         ! NO IC USE
+
+        CALL OPENDOC(DOCNAM,ADDEXT,NLETD,LUNDOCN,LUNDOCNO,GETNAME,
+     &         'OUTPUT DOC',ISOLD,APPEND,MESSAGE,NEWFILE,IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 9999
+
+C                  123456789 123456789 123456789 123456789 123456789 123456789
+        COMMENT = '  NUM,     S,          ANG_S,        V_S,         '//
+     &               'L,           ANG_L,        V_L'
+        !CALL LUNDOCPUTCOM(LUNDOCNO,COMMENT(1:80),IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 9999
+
+C       FIND RIDGES & VALLEY LOCATIONS ALONG ALL RAYS ------------- 
+
+        IRAY_LONG    = 0
+        IRAY_SHORT   = 0
+        IRADRIDGEMAX = 0
+        IRADRIDGEMIN = HUGE(IRADRIDGEMIN)
+
+        !DO IROW=1,NY     ! LOOP OVER ALL ROWS 
+        DO IROW=1+2,NY-2     ! LOOP OVER ALL ROWS (SKIP TOP & BOTTEM)
+
+           CURVE = BUF(1:NX,IROW)
+
+           CALL FINDMINMAX(CURVE,NX,
+     &             LOCVALLEY,LOCRIDGE, VALVALLEY,VALRIDGE,
+     &             3,3, NMIN,NMAX,IRTFLG)
+
+C          FIND LONGEST AXIS OF CIRCLE RAY ---------------------------
+           IRADRIDGE = LOCRIDGE(2)   ! RADIUS AT FIRST RIDGE
+           VALRIDG   = VALRIDGE(2)   ! VALUE  AT FIRST RIDGE 
+
+C          FIND LONGEST DISTANCE TO RIDGE ---------------------------
+           IF (IRADRIDGE > IRADRIDGEMAX) THEN
+              IRAY_LONG    = IROW
+              IRADRIDGEMAX = IRADRIDGE
+           ENDIF
+   
+C          FIND SHORTEST DISTANCE TO RIDGE ---------------------------
+           IF (IRADRIDGE < IRADRIDGEMIN) THEN
+              IRAY_SHORT   = IROW
+              IRADRIDGEMIN = IRADRIDGE
+           ENDIF
+        ENDDO
+
+        ANGLE_S = 180.0 * FLOAT(IRAY_SHORT) / FLOAT(NY)
+        ANGLE_L = 180.0 * FLOAT(IRAY_LONG)  / FLOAT(NY)
+
+        WRITE(6,90) ' SHORT RIDGE Y:',IRAY_SHORT,
+     &              '   ANG:',        ANGLE_S,
+     &              '  DISTANCE: ',   IRADRIDGEMIN
+        WRITE(6,90) ' LONG  RIDGE Y:',IRAY_LONG,
+     &              '   ANG:',        ANGLE_L,
+     &              '  DISTANCE: ',   IRADRIDGEMAX
+90      FORMAT(1X, A,I6, A,F7.2, A,I5) 
+
+        IASTIG = IRADRIDGEMAX - IRADRIDGEMIN 
+
+        WRITE(6,91) ' ASTIGMATISM:', IASTIG
+91      FORMAT(1X, A,I5, A,ES10.3, A,I5) 
+
+        !CALL GETFILENUM(FILNAM,KEY,NDIGITS,.TRUE.,IRTFLG)
+        KEY = 9999
+
+C       SAVE PARAMETERS
+        DLIST(1) = IRAY_SHORT 
+        DLIST(2) = ANGLE_S
+        DLIST(3) = IRADRIDGEMIN
+
+        DLIST(4) = IRAY_LONG
+        DLIST(5) = ANGLE_L
+        DLIST(6) = IRADRIDGEMAX
+
+        DLIST(7) = IASTIG
+        CALL REG_SET_NSELA(7,DLIST,.TRUE.,IRTFLG)
+
+C        123456789 123456789 123456789 123456789 123456789 123456789 
+        FORMOUT  = 
+     &  '(I7,1X,I2,1X,F5.0,3X,F6.2,1X,F8.3,1X,F5.0,3X,F6.2,1X,' //
+     &  'F8.3,F5.0,F5.0)'
+C           123456789 123456789 123456789 123456789 123456789 123456789 1234
+        CALL LUNDOCWRTDATF(LUNDOCNO,KEY,DLIST,8,FORMOUT,IRTFLG)
+
+9999    IF (ALLOCATED(BUF))     DEALLOCATE (BUF)
+        IF (ALLOCATED(CURVE))   DEALLOCATE (CURVE)
+
+        CLOSE(LUNIN)
+        CLOSE(LUNDOCN) 
+ 
+        END
+
+
+
+C       --------------------- FINDMINMAX ------------------------
+C       FIND VALLEYS & RIDGES LOCATIONS ALONG SPECIFIED CURVE
+
+
+        SUBROUTINE FINDMINMAX(CURVE,N,
+     &             LOCVALLEY,LOCRIDGE, VALVALLEY,VALRIDGE,
+     &             NUMMINS,NUMMAXS, NMIN,NMAX,IRTFLG)
+
+        INTEGER             :: N
+        REAL                :: CURVE(N)
+        INTEGER             :: NUMMINS,NUMMAXS
+
+        INTEGER             :: LOCVALLEY(NUMMINS),LOCRIDGE(NUMMAXS)
+        REAL                :: VALVALLEY(NUMMINS),VALRIDGE(NUMMAXS)
+        INTEGER             :: NMIN,NMAX
+        INTEGER             :: IRTFLG
+
+        REAL                :: VAL,VTMP
+        LOGICAL             :: WANTMIN,WANTMAX
+
+        IRTFLG  = 0
+        VAL     = CURVE(1)         ! VALUE AT ORIGIN
+
+        NMIN    = 0
+        NMAX    = 0
+
+        WANTMIN = .TRUE.
+        WANTMAX = .TRUE.
+
+         DO ILOC = 2,N          ! LOOP ALONG THE CURVE
+           VTMP = CURVE(ILOC)
+
+           IF (VTMP < VAL) THEN
+C             GOING DOWN
+              IF (WANTMAX) THEN
+C                FOUND A MAX (MAY BE AT INITIAL POINT)
+
+                 IF (NMAX >= NUMMAXS) CYCLE  
+                 NMAX         = NMAX + 1
+   
+                 LOCRIDGE(NMAX) = ILOC - 1  ! FOUND A RIDGE
+                 VALRIDGE(NMAX) = VAL       ! VALUE AT RIDGE
+                 WANTMAX      = .FALSE.
+                 WANTMIN      = .TRUE.
+              ENDIF
+           ELSE
+C             GOING UP
+              IF (WANTMIN) THEN
+C                FOUND A MIN (MAY BE AT INITIAL POINT)
+                 IF (NMIN >= NUMMINS) CYCLE
+                 NMIN         = NMIN + 1
+                 LOCVALLEY(NMIN) = ILOC - 1  ! FOUND A VALLEY
+                 VALVALLEY(NMIN) = VAL    ! VALUE AT VALLEY
+                 WANTMIN      = .FALSE.
+                 WANTMAX      = .TRUE.
+              ENDIF
+           ENDIF
+
+           IF (NMIN >= NUMMINS .AND. NMAX >= NUMMAXS) RETURN
+                 
+           VAL = VTMP  
+
+           !write(6,'(a,i5,a,f7.2,a,L)')' R:',irad,' ',raymin,' ',gotmin
+        ENDDO
+
+@
+
+
+1.4
+log
+@bad ending , in to_rays.f
+format statement
+@
+text
+@d139 3
+a141 1
+             VTMP       = QUADRI(XS+IXC,YS+IYC,NX,NY,BUF)*SQRT(REAL(J))
+d143 2
+a144 1
+                
+d148 1
+a317 5
+
+
+
+
+
+@
+
+
+1.3
+log
+@added 'PO A' seperate oper.
+@
+text
+@d283 1
+a283 1
+91      FORMAT(1X, A,I5, A,ES10.3, A,I5,) 
+@
+
+
+1.2
+log
+@version using radius 43 sampling only
+@
+text
+@d40 1
+a40 1
+        CHARACTER(LEN=MAXNAM) :: FILNAM,PROFILE,DOCNAM
+a45 3
+        REAL, ALLOCATABLE     :: CURVE(:)
+        REAL, ALLOCATABLE     :: RINGSUM(:)
+        INTEGER, ALLOCATABLE  :: LOCMAX1(:)
+a46 5
+        REAL                  :: DLIST(8)
+        INTEGER               :: LOCMAX(1)
+        INTEGER               :: LOCVALAVG(1)
+        INTEGER               :: IRAY_SHORT,IRAY_LONG
+        INTEGER               :: MINRAD_OF_CIR,MAXRAD_OF_CIR
+d51 3
+a53 22
+        INTEGER               :: NRAD,NXP,NYP,IRAY,IRAD,IOFF90
+        REAL                  :: PI,DFI,FI,XS,YS,VTMP,VMIN,FMAXDIF
+        REAL                  :: RAYMIN,RAYMAX,ANGLE_L,ANGLE_S,VMAX
+        LOGICAL               :: GOTMIN,GOTMAX,WANTLINES
+        INTEGER               :: IRADVALLEYSHORT,IRADVALLEYLONG
+        INTEGER               :: IRADRIDGELONG,  IRADVALLEY2LONG
+        INTEGER               :: IRADRIDGESHORT, IRADVALLEY2SHORT 
+        REAL                  :: VALVALLEYSHORT, VALVALLEYLONG
+        REAL                  :: VALRIDGELONG,   VALRIDGESHORT
+        REAL                  :: VALLONG,        VALSHORT
+        REAL                  :: VALVALLEY2SHORT,VALVALLEY2LONG 
+        INTEGER               :: IASTIG,IASTIGP
+
+        integer               :: locvalmin43(1),locvalmax43(1)
+        integer               :: IR_PROFILE,nlet1
+        integer               :: IRAY_LOW43,IRAY_HI43
+        real                  :: VALLOW43,VALHI43,astig,ang,unused
+        logical               :: savdoc
+
+        LOGICAL               :: ADDEXT,GETNAME,ISOLD
+        LOGICAL               :: APPEND,MESSAGE,NEWFILE
+        INTEGER               :: LUNDOCNO,NLETD,KEY,NDIGITS
+a54 5
+        INTEGER, PARAMETER    :: NUMMINS = 2 
+        INTEGER, PARAMETER    :: NUMMAXS = 2
+
+        INTEGER               :: LOCVALLEY(NUMMINS),LOCRIDGE(NUMMAXS)
+        REAL                  :: VALVALLEY(NUMMINS),VALRIDGE(NUMMAXS)
+d59 2
+a60 4
+        INTEGER, PARAMETER    :: LUNIN   = 20
+        INTEGER, PARAMETER    :: LUNOUT  = 21
+        INTEGER, PARAMETER    :: LUNPRO  = 22
+        INTEGER, PARAMETER    :: LUNDOCN = 80
+d77 1
+a77 5
+        CALL FILERD(FILNAM,NLET,NULL,'POLAR OUTPUT',IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 9999
+
+C       GET NAME FOR PROFILE OUTPUT FILE
+        CALL FILERD(PROFILE,NLET1,NULL,'PROFILE OUTPUT',IRTFLG)
+d81 1
+a81 1
+     &              'FULL OR HALF CIRCLE (F/H)',NULL,IRTFLG)
+d85 3
+a87 4
+        WANTLINES = (INDEX(MODE,'L') > 0)
+	PI        = 4*DATAN(1.0D0)
+
+C       FIND DEFAULT LENGTH OF RAYS = RADIUS = Y
+d90 1
+a90 1
+C       FIND DEFAULT NUMBER OF RAYS = CIRCUMFERANCE = X
+d92 1
+a92 1
+	IF (HALFCIRC) NRAYS = INT(PI*NRAD)    ! USED FOR POWER SPECTRA
+d97 2
+a98 7
+        IR_PROFILE = 43        ! DEFAULT PROFILE RADIUS
+        IF (IR_PROFILE > NRAD) THEN 
+            IR_PROFILE = NRAD / 2   ! FALLBACK DEFAULT
+        ENDIF
+
+        CALL RDPRI2S(NRAD,NRAYS,IR_PROFILE,UNUSED,
+     &              'RADIUS, NUMBER OF RAYS, & PROFILE RADIUS',IRTFLG)
+a99 4
+        IF (IR_PROFILE > NRAD) THEN 
+           CALL ERRT(102,'PROFILE RADIUS > IMAGE SIZE',NRAD)
+           GOTO 9999
+        ENDIF
+d105 1
+a105 3
+	IF (HALFCIRC) DFI = PI / NYP
+
+        !write(6,*) '  pi:',pi,'rad:',nrad,' dfi:',dfi
+d109 1
+a109 1
+	ITYPE = 1
+a113 7
+C       OPEN PROFILE OUTPUT FILE
+        MAXIM = 0
+	ITYPE = 1
+        CALL OPFILEC(0,.FALSE.,PROFILE,LUNPRO,'N',ITYPE,NYP,1,
+     &               1,MAXIM,' ',.FALSE.,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+a115 3
+     &            RINGSUM(NRAYS), 
+     &            LOCMAX1(NRAYS), 
+     &            CURVE(NYP), 
+a121 1
+
+d125 2
+a126 3
+        RINGSUM = 0.0
+	IXC     = NX/2+1     ! X CENTER
+	IYC     = NY/2+1
+d132 2
+d135 18
+a152 60
+        !j    = 0
+        !i    = 1
+        !FI   = (I-1)   * DFI
+        !XS   = COS(FI) * J
+        !YS   = SIN(FI) * J
+        !VTMP = QUADRI(XS+IXC,YS+IYC,NX,NY,BUF)
+        !write(6,*) 'buf(129+42,129):',buf(129+42,129)
+        !write(6,*) 'buf(129-42,129):',buf(129-42,129)
+        !write(6,*) 'buf(129+1,129):',buf(129+1,129)
+        !write(6,*) 'buf(129-1,129):',buf(129-1,129)
+
+
+	DO  J=0, NRAD       ! OVER ALL RADII
+	  DO I=1,NRAYS      ! NRAYS     ! OVER ALL POINTS ON CIRCLE 
+
+	     FI         = (I-1)   * DFI
+	     XS         = COS(FI) * J
+	     YS         = SIN(FI) * J
+
+             !VTMP      = QUADRI(XS+IXC,YS+IYC,NX,NY,BUF)*SQRT(REAL(J))
+             VTMP       = QUADRI(XS+IXC,YS+IYC,NX,NY,BUF)
+	     OUT(J+1,I) = VTMP
+             !write(6,*) j,i,xs+ixc,ys+iyc,vtmp
+             !if ((j+1) == 43)write(6,*) j,i,xs+ixc,ys+iyc,vtmp 
+
+             RINGSUM(I) = RINGSUM(I) + VTMP   ! FOR ROTATIONAL AVG.
+	  ENDDO
+	ENDDO
+        !write(6,*) j,i,xs+ixc, ys+iyc, vtmp
+        !write(6,*) ' fi:',fi, '  nyp:',nyp
+               
+C       FIND VALUES FOR LINE OVERLAYS
+        VMIN = MINVAL(OUT)                     ! MINUMUM OF IMAGE
+        VMAX = MAXVAL(OUT)                     ! MAXIMUM OF IMAGE
+
+C       FIND LONGEST AXIS OF CIRCLE RAY ---------------------------
+
+C       FIND AVERAGE FOR EACH RING USING ARRAY OP
+        RINGSUM = RINGSUM / NRAYS     ! AVERAGE FOR EACH RING
+  
+C       FIND LOCATION OF HIGHEST RAY AVERAGE = LONGEST AXIS OF 'CIRCLE' 
+        LOCVALAVG = MAXLOC(RINGSUM)  ! RETURNS ARRAY OF LENGTH: 1
+        IRAY_LONG = LOCVALAVG(1)
+
+        !write(6,'(1x,a,i5)') ' Longest axis at ray: ',iray_long
+
+C       FIND LONGEST AXIS ------------- 
+
+        CURVE = OUT(IR_PROFILE,1:NYP)
+
+        !write(6,*) ' curve:',curve(1),curve(nyp)
+
+        LOCVALMIN43 = MINLOC(CURVE)    ! RETURNS ARRAY OF LENGTH: 1
+        LOCVALMAX43 = MAXLOC(CURVE)    ! RETURNS ARRAY OF LENGTH: 1
+        IRAY_LOW43  = LOCVALMIN43(1)
+        IRAY_HI43   = LOCVALMAX43(1)
+        VALLOW43    = CURVE(IRAY_LOW43)
+        VALHI43     = CURVE(IRAY_HI43)
+        ASTIG       = VALHI43 - VALLOW43  
+        IASTIG      = ASTIG + 0.5 
+d154 36
+a189 7
+	IF (HALFCIRC) THEN    ! USED FOR POWER SPECTRA
+          ANGLE_L = 180.0 * FLOAT(IRAY_HI43  - 1) / FLOAT(NRAYS)
+          ANGLE_S = 180.0 * FLOAT(IRAY_LOW43 - 1) / FLOAT(NRAYS)
+        ELSE
+          ANGLE_L = 360.0 * FLOAT(IRAY_HI43  - 1) / FLOAT(NRAYS)
+          ANGLE_S = 360.0 * FLOAT(IRAY_LOW43 - 1) / FLOAT(NRAYS)
+        ENDIF
+d191 1
+a191 1
+        ANG = ANGLE_S
+d193 1
+a193 11
+        WRITE(6,90) ' '
+        WRITE(6,90) ' MAX:',      IRAY_LONG,
+     &              '   SHORT:',  IRAY_LOW43,
+     &              '   LONG:',   IRAY_HI43,
+     &              '   ANG:',    ANG,
+     &              '   ASTIG:',  ASTIG
+90      FORMAT(1X, A, I5, A,I5, A,I5, A,F7.2, A,F6.2) 
+
+        IF (WANTLINES) THEN
+C          !DRAW AXIS OF PROFILE  
+           OUT(IR_PROFILE,:) = VMIN
+a194 3
+C          DRAW LONGEST AXIS  
+           OUT(:,IRAY_HI43) = VMAX
+        ENDIF
+d196 5
+a200 2
+C       OUTPUT IMAGE
+        CALL WRTVOL(LUNOUT,NXP,NYP, 1,1, OUT,IRTFLG)
+d202 4
+a205 2
+C       OUTPUT PROFILE IMAGE
+        CALL WRTVOL(LUNPRO,NYP,1, 1,1, CURVE,IRTFLG)
+d207 7
+a213 9
+C       SAVE PARAMETERS
+        DLIST(1) = IRAY_LOW43
+        DLIST(2) = VALLOW43
+        DLIST(3) = IRAY_HI43
+        DLIST(4) = VALHI43
+        DLIST(5) = ANG          
+        DLIST(6) = ASTIG
+        DLIST(7) = IRAY_LONG
+        CALL REG_SET_NSELA(7,DLIST,.TRUE.,IRTFLG)
+d215 4
+d227 18
+a244 2
+     &      'OUTPUT DOC',ISOLD,APPEND,MESSAGE,NEWFILE,IRTFLG)
+        IF (IRTFLG > 0) GOTO 9999
+d246 1
+a246 2
+        SAVDOC = (IRTFLG == 0)
+        IF (SAVDOC) THEN
+d248 58
+a305 15
+C                  123456789 123456789 123456789 123456789 123456789 123456789
+           COMMENT='  NUM,     S,          ANG_S,        V_S,       '//
+     &            '  L,           ANG_L,        V_L'
+           !CALL LUNDOCPUTCOM(LUNDOCNO,COMMENT(1:80),IRTFLG)
+
+C          SET KEY NUMBER == IMAGE NUMBER
+!           CALL GETFILENUM(FILNAM,KEY,NDIGITS,.TRUE.,IRTFLG)
+           KEY = 999
+
+           FORMOUT  = 
+     &      '(I7,1X,I2,1X,F5.0,3X,F6.3,2X,F5.0,1X,F6.3,3X,F6.2,1X,'//
+     &      'F8.3,2X,F5.0)'
+C            123456789 123456789 123456789 123456789 123456789 123456789 1234
+           CALL LUNDOCWRTDATF(LUNDOCNO,KEY,DLIST,7,FORMOUT,IRTFLG)
+        ENDIF
+a307 3
+        IF (ALLOCATED(OUT))     DEALLOCATE (OUT)
+        IF (ALLOCATED(RINGSUM)) DEALLOCATE (RINGSUM)
+        IF (ALLOCATED(LOCMAX1)) DEALLOCATE (LOCMAX1)
+a310 1
+        CLOSE(LUNOUT) 
+a311 1
+        CLOSE(LUNPRO) 
+d318 4
+d388 6
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d3 1
+a3 1
+C             NEW                                  AUG 13 ARDEAN LEITH
+d9 1
+a9 1
+C=* Copyright 1985-2013  Health Research Inc.,                         *
+d27 2
+d40 3
+a42 1
+        CHARACTER(LEN=MAXNAM) :: FILNAM
+d50 1
+d68 1
+d70 11
+a80 1
+        INTEGER               :: IASTIG,IASTIGMIN
+d91 4
+a94 2
+        INTEGER, PARAMETER    :: LUNIN  = 20
+        INTEGER, PARAMETER    :: LUNOUT = 21
+d111 5
+a115 1
+        CALL FILERD(FILNAM,NLET,NULL,'OUTPUT',IRTFLG)
+d125 2
+a126 2
+        
+C       FIND LENGTH OF RAYS = RADIUS = Y
+d129 1
+a129 1
+C       FIND TOTAL NUMBER OF RAYS = CIRCUMFERANCE = X
+d131 17
+a147 1
+	IF (HALFCIRC) NRAYS = INT(PI*NRAD)    ! USED FOR POWER SPECTRUMS
+d152 1
+a152 1
+        DFI  = 2 * PI / NYP
+d155 2
+d164 7
+d175 1
+a175 1
+     &            CURVE(NXP), 
+d194 15
+a208 2
+	DO  J=0,NRAD       ! OVER ALL RADII
+	  DO I=1,NRAYS     ! OVER ALL POINTS ON CIRCLE 
+d214 2
+a215 1
+             VTMP       = QUADRI(XS+IXC,YS+IYC,NX,NY,BUF)*SQRT(REAL(J))
+d217 3
+a219 1
+                
+d223 3
+a225 1
+
+d239 1
+a239 1
+        !write(6,'(1x,a,i5)') 'longest ray axis at ray: ',iray_long
+d241 1
+a241 1
+C       FIND RIDGES & VALLEY LOCATIONS ALONG LONGEST AXIS ------------- 
+d243 1
+a243 2
+        IRAY  = IRAY_LONG
+        CURVE = OUT(1:NXP,IRAY)
+d245 14
+a258 13
+        CALL FINDMINMAX(CURVE,NXP,
+     &             LOCVALLEY,LOCRIDGE, VALVALLEY,VALRIDGE,
+     &             2,2, NMIN,NMAX,IRTFLG)
+
+        IRADRIDGELONG  = LOCRIDGE(1)
+        VALRIDGELONG   = VALRIDGE(1)   ! VALUE  AT VALLEY MAX
+        IRADVALLEYLONG = LOCVALLEY(1)
+        VALVALLEYLONG  = VALVALLEY(1)   ! VALUE  AT VALLEY MAX
+
+        IF (NMIN < 2) THEN
+           WRITE (6,*) ' ONLY one min: ',nmin
+           IRADVALLEY2LONG = 0
+           VALVALLEY2LONG  = 0   ! VALUE  AT VALLEY MAX
+d260 2
+a261 4
+           IRADVALLEY2LONG = LOCVALLEY(2)
+           VALVALLEY2LONG  = VALVALLEY(2)   ! VALUE  AT VALLEY MAX
+
+           !WRITE(6,'(A,i0)') ' IRADVALLEYLONG: ',IRADVALLEYLONG
+d264 1
+a264 3
+        MAXRAD_OF_CIR  = LOCRIDGE(1)
+        VALRIDGELONG   = VALRIDGE(1)
+        !WRITE(6,'(A,i0)') ' MAXRAD_OF_CIR:  ',MAXRAD_OF_CIR
+d266 7
+a272 2
+   
+        ANGLE_L = 360.0 * FLOAT(IRAY_LONG) / FLOAT(NRAYS)
+d274 3
+a276 27
+        WRITE(6,90) ' LONGEST  AXIS RAY:',IRAY_LONG,
+     &              '   ANG:',            ANGLE_L,
+     &              '   MAX:',            VALRIDGELONG,
+     &              '  AT RADIUS: ',      MAXRAD_OF_CIR
+90      FORMAT(1X, A,I6, A,F7.2, A,ES10.3, A,I5) 
+
+
+
+C       FIND RAY FOR SHORTEST AXIS OF CIRCLE ------------------
+        IOFF90     = NYP / 2
+        IRAY_SHORT = IRAY_LONG + IOFF90
+        IF (IRAY_SHORT > NYP) IRAY_SHORT = IRAY_LONG - IOFF90 
+
+        !~=write(6,'(1x,a,i5)') 'shortest axis at ray:    ',iray_short
+
+C       FIND RIDGES & VALLEY LOCATIONS ALONG SHORTEST AXIS 
+        IRAY  = IRAY_SHORT
+        CURVE = OUT(1:NXP,IRAY)
+
+        CALL FINDMINMAX(CURVE,NXP,
+     &             LOCVALLEY,LOCRIDGE, VALVALLEY,VALRIDGE,
+     &             2,2, NMIN,NMAX,IRTFLG)
+
+        IRADRIDGESHORT  = LOCRIDGE(1)
+        VALRIDGESHORT   = VALRIDGE(1)   ! VALUE  AT VALLEY MAX
+        IRADVALLEYSHORT = LOCVALLEY(1)
+        VALVALLEYSHORT  = VALVALLEY(1)   ! VALUE  AT VALLEY MAX
+d278 2
+a279 9
+        IF (NMIN < 2) THEN
+           WRITE (6,*) ' ONLY one min: ',nmin
+           IRADVALLEY2SHORT = 0
+           VALVALLEY2SHORT  = 0   ! VALUE  AT VALLEY MAX
+        ELSE
+           IRADVALLEY2SHORT = LOCVALLEY(2)
+           VALVALLEY2SHORT  = VALVALLEY(2)   ! VALUE  AT VALLEY MAX
+
+           !WRITE(6,'(A,i0)') ' IRADVALLEYLONG: ',IRADVALLEYLONG
+d282 2
+a283 26
+C       FIND  RIDGE LOCATION ALONG SHORTEST AXIS
+        MINRAD_OF_CIR = LOCRIDGE(1)
+        VALRIDGESHORT = VALRIDGE(1)     ! VALUE 
+        !WRITE(6,'(A,i0)') ' MINRAD_OF_CIR:  ',LOCRIDGE(2)
+
+        ANGLE_S = 360.0 * FLOAT(IRAY_SHORT) / FLOAT(NRAYS)
+
+        WRITE(6,90) ' SHORTEST AXIS RAY:',IRAY_SHORT,
+     &              '   ANG:',            ANGLE_S,
+     &              '   MAX:',            VALRIDGESHORT,
+     &              '  AT RADIUS: ',      MINRAD_OF_CIR
+
+        FMAXDIF    = RAYMAX - RAYMIN 
+        IASTIG     = MAXRAD_OF_CIR  - MINRAD_OF_CIR
+        IASTIGMIN  = IRADVALLEYLONG - IRADVALLEYSHORT
+        WRITE(6,91) ' ASTIG:  ',IASTIG,
+     &              '  MAXDIF: ',FMAXDIF,
+     &              '  ASTIG2:  ',IASTIGMIN
+91      FORMAT(1X, A,I5, A,ES10.3, A,I5,) 
+
+        IF (WANTLINES) THEN
+C          DRAW LONGEST AXIS OF CIRCLE RAY  
+           OUT(:,IRAY_LONG)  = VMIN
+
+C          DRAW SHORTEST AXIS OF CIRCLE RAY  
+           !OUT(:,IRAY_SHORT) = VMIN
+d285 2
+a286 2
+C          DRAW FIRST VALLEY FOR LONGEST AXIS  
+           OUT(IRADRIDGELONG,:) = VMIN
+d288 38
+a325 2
+C          DRAW FIRST VALLEY FOR SHORTEST AXIS  
+           OUT(IRADRIDGESHORT,:) = VMIN
+a327 3
+C       OUTPUT IMAGE
+        CALL WRTVOL(LUNOUT,NXP,NYP, 1,1, OUT,IRTFLG)
+
+d332 1
+d336 2
+@

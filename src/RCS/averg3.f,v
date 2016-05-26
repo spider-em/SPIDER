@@ -1,0 +1,1095 @@
+head	1.13;
+access;
+symbols
+	pre_getangas:1.12
+	GPL2010:1.12
+	pre_GPL2010:1.11
+	pre_var_equation:1.11
+	pre_fftwrings:1.11
+	pre_opfiles:1.11
+	src:1.11
+	best-code:1.11
+	x-named-regs:1.11
+	x:1.11
+	v13-00:1.11
+	pre_GPL:1.9
+	prec_CA:1.9
+	noindx:1.9
+	Bproc:1.8
+	oct21:1.6
+	last77:1.6;
+locks; strict;
+comment	@c @;
+
+
+1.13
+date	2012.08.02.13.55.03;	author leith;	state Exp;
+branches;
+next	1.12;
+
+1.12
+date	2010.06.24.13.25.07;	author leith;	state Exp;
+branches;
+next	1.11;
+
+1.11
+date	2005.10.17.20.07.39;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2005.10.17.18.02.24;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2000.10.13.15.38.26;	author bimal;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2000.01.06.17.05.09;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	99.11.10.23.09.08;	author yuchen;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	99.02.03.19.17.54;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	97.10.01.20.17.09;	author pawel;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	95.02.14.19.41.13;	author mladjadj;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	95.02.13.20.54.14;	author pawel;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	95.02.07.16.14.27;	author mladjadj;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	94.05.13.12.47.20;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@copied from USER2:[PSIDER.CMSREF] on 11 May 1994
+@
+
+
+1.13
+log
+@added x param, nx
+@
+text
+@C++*******************************************************************
+C
+C AVERG3.F
+C         X PASSED                              AUG 12 ARDEAN LEITH
+C 
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C  AVERG3(LUN1,XAVG,J,K,L,NX,NY,NZ,DS,DR,DL,MOVWAY,LREAD,X)
+C      
+C  XAVG: RECURSIVE LOCAL AVERAGE OF 3D PICTURE VOLUME
+C  X( ): DL PICTURE SLICES STORED
+C  X[J,K,L]<>X(MOD(L-1,DL)*NY+J*NX+K)
+C  J,K,L      PICTURE COORD
+C  NX,NY,NZ:  PICTURE SIZE
+C  DS,DR,DL:  LOCAL BOX  SIZE
+C  MOVWAY= 1: READ IN DL SLICES AND COMPUTE 1ST AVERAGE VALUE FROM SCRATCH
+C             IF J,K,L IS IN A BORDER AREA COMPUTE XAVG FOR NEAREST
+C             ACTIVE POINT
+C        = 2: MOVE RIGHT ONE PIXEL
+C        = 3: MOVE LEFT  ONE PIXEL
+C        = 4: MOVE DOWN  RIGHT ONE PIXEL
+C        = 5: MOVE DOWN  LEFT  ONE PIXEL
+C        = 6: MOVE UP,   READ IN NEXT SLICE
+C
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C--*******************************************************************
+
+        SUBROUTINE AVERG3(LUN1,XAVG, J,K,L, NX,NY,NZ,
+     &                    DS,DR,DL, MOVWAY,LREAD,X)
+
+        INTEGER :: LUN1
+        REAL    :: XAVG
+        INTEGER :: J,K,L, NX,NY,NZ,DS,DR,DL,MOVWAY,LREAD
+
+        INTEGER :: HDS,HDR,HDL
+        INTEGER :: EDGFST,EDGLST,EDGLFT,EDGRT,EDGDW,EDGUP
+
+        REAL    :: X(*)
+        SAVE             ! WHY??al
+
+        IF (MOVWAY == 1) THEN        
+C          INITIALIZE PARM AND XAVG ---------------------- 1
+           HDR    = DR / 2
+           HDS    = DS / 2
+           HDL    = DL / 2
+           EDGFST = HDR + 1
+           EDGLST = NY  - HDR
+           EDGLFT = HDS + 1
+           EDGRT  = NX  - HDS
+           EDGDW  = HDL + 1
+           EDGUP  = NZ  - HDL
+
+C          CHECK IF IN BORDER
+           XAVG = 0.
+           JT   = J
+           KT   = K
+           KL   = L
+           IF (J .LT. EDGFST) JT = EDGFST
+           IF (J .GT. EDGLST) JT = EDGLST
+           IF (K .LT. EDGLFT) KT = EDGLFT
+           IF (K .GT. EDGRT)  KT = EDGRT
+           IF (L .LT. EDGDW)  KL = EDGDW
+           IF (L .GT. EDGUP)  KL = EDGUP
+
+C          READ IN DL SLICES AND COMPUTE AVERAGE FROM SCRATCH
+           DO LL=1,DL
+              LSTART = (LL-1)* NX * NY
+
+              DO JJ=1,NY
+                 NL = MOD(LL-1,DL)  * NY + JJ
+                 NI = LSTART + (JJ-1) * NX
+                 CALL REDLIN(LUN1,X(NI+1),NX,NL)
+
+                 LREAD = LREAD + 1
+               ENDDO
+           ENDDO
+
+           DO LL=KL-HDL,KL+HDL
+              LSTART = MOD(LL-1,DL) * NX * NY
+
+              DO  JJ=JT-HDR,JT+HDR
+                 NI = LSTART + (JJ-1) * NX
+
+                 DO  KK=KT-HDS,KT+HDS
+                    XAVG = XAVG + X(NI+KK)
+                 ENDDO
+              ENDDO
+           ENDDO
+
+           XAVG = XAVG / FLOAT(DR*DS*DL)
+           RETURN
+
+        ELSEIF (MOVWAY == 2) THEN 
+C          MOVE RT ONE PIXEL, UPDATE XAVG ----------------------2
+           JT = J
+           LT = L
+           IF (K .LE. EDGLFT .OR. K.GT. EDGRT) RETURN
+           IF (J .LT. EDGFST) JT = EDGFST
+           IF (J .GT. EDGLST) JT = EDGLST
+           IF (L .LT. EDGDW)  LT = EDGDW
+           IF (L .GT. EDGUP)  LT = EDGUP
+           CORECT = 0.0
+           DO LL=LT-HDL,LT+HDL
+              LSTART = MOD(LL-1,DL)*NY*NX
+
+              DO  JJ=JT-HDR,JT+HDR
+                 NI     = LSTART + (JJ-1) * NX
+                 CORECT = CORECT + X (NI+K+HDS) - X(NI+K-HDS-1)
+              ENDDO
+           ENDDO
+           XAVG = CORECT / FLOAT(DR*DS*DL) + XAVG
+           RETURN
+
+        ELSEIF (MOVWAY == 3) THEN
+C          MOVE LEFT ONE PIXEL UPDATE XAVG ---------------------- 3
+           JT=J
+           LT=L
+           IF (K .LT. EDGLFT .OR. K .GE. EDGRT) RETURN
+           IF (J .LT. EDGFST) JT = EDGFST
+           IF (J .GT. EDGLST) JT = EDGLST
+           IF (L .LT. EDGDW)  LT = EDGDW
+           IF (L .GT. EDGUP)  LT = EDGUP
+           CORECT = 0.0
+           DO    LL=LT-HDL,LT+HDL
+              LSTART = MOD(LL-1,DL)*NY*NX
+
+              DO  JJ=JT-HDR,JT+HDR
+                 NI     = LSTART+(JJ-1)*NX
+                 CORECT = CORECT + X(NI+K-HDS) - X(NI+K+HDS+1)
+              ENDDO
+           ENDDO
+           XAVG = CORECT / FLOAT(DR*DS*DL) + XAVG
+           RETURN
+
+        ELSEIF (MOVWAY == 4) THEN
+C          J INCREMENTED ONE ----------------------------------- 4
+           IF(J.LE.EDGFST .OR. J.GT.EDGLST) RETURN
+           LT = L
+           KT = K
+           IF(K .LT. EDGLFT) KT = EDGLFT
+           IF(K .GT. EDGRT)  KT = EDGRT
+           IF(L .LT. EDGDW)  LT = EDGDW
+           IF(L .GT. EDGUP)  LT = EDGUP
+           CORECT = 0.0
+           DO LL=LT-HDL,LT+HDL
+              LSTART = MOD(LL-1,DL)*NY*NX
+
+              DO  KK=KT-HDS,KT+HDS
+                 NI     = LSTART + KK+(J-HDR-2) * NX
+                 NO     = LSTART + KK+(J-1+HDR) * NX
+                 CORECT = CORECT + X(NO) - X(NI)
+              ENDDO
+           ENDDO
+           XAVG = XAVG + CORECT / FLOAT(DS*DR*DL)
+           RETURN
+
+        ELSEIF (MOVWAY == 5) THEN
+C          J DECREMENTED ONE ----------------------------------- 5
+
+           IF(J .LT. EDGFST .OR. J .GE. EDGLST) RETURN
+           LT = L
+           KT = K
+           IF (K .LT. EDGLFT) KT = EDGLFT
+           IF (K .GT. EDGRT)  KT = EDGRT
+           IF (L .LT. EDGDW)  LT = EDGDW
+           IF (L .GT. EDGUP)  LT = EDGUP
+           CORECT = 0.0
+           DO    LL=LT-HDL,LT+HDL
+              LSTART = MOD(LL-1,DL)*NY*NX
+
+              DO  KK=KT-HDS,KT+HDS
+                 NI     = LSTART + KK+(J+HDR)   * NX
+                 NO     = LSTART + KK+(J-HDR-1) * NX
+                 CORECT = CORECT + X(NO) - X(NI)
+              ENDDO
+           ENDDO
+           XAVG = XAVG + CORECT / FLOAT(DS*DR*DL)
+           RETURN
+
+        ELSEIF (MOVWAY == 6) THEN
+C          L INCREMENTED ONE ----------------------------------- 6
+
+           IF (L .LE. EDGDW .OR. L .GT. EDGUP) RETURN
+           JT = J
+           IF (J .LT. EDGFST) JT = EDGFST
+           IF (J .GT. EDGLST) JT = EDGLST
+           KT = K
+           IF (K .LT. EDGLFT) KT = EDGLFT
+           IF (K .GT. EDGRT)  KT = EDGRT
+
+           CORECT = 0.0
+           LOLD   = L - HDL -1
+           LSTART = MOD(LOLD-1,DL)* NX * NY
+
+           DO JJ=JT-HDR, JT+HDR
+              NI = (JJ-1)*NX + LSTART
+
+              DO  KK = KT-HDS, KT+HDS
+                 CORECT = CORECT - X(NI+KK)
+              ENDDO
+           ENDDO
+
+           DO JJ=1,NY
+              NL    = L*NY + JJ
+              NI    = LSTART + (JJ-1)*NX
+
+              LREAD = LREAD + 1
+
+              CALL  REDLIN(LUN1,X(NI+1),NX,lread)
+
+              !it = mod(nl,ny) 
+              !if (it == 1) write(6,*) ' read line1:',nl
+
+           ENDDO
+
+           DO JJ=JT-HDR, JT+HDR
+              NI = (JJ-1) * NX + LSTART
+
+              DO  KK=KT-HDS, KT+HDS
+                 CORECT = CORECT + X(NI+KK)
+              ENDDO
+           ENDDO
+
+           XAVG = XAVG + CORECT / FLOAT(DS*DR*DL)
+
+           RETURN
+        ENDIF
+
+        END
+@
+
+
+1.12
+log
+@GPL_2010
+@
+text
+@d4 2
+a5 1
+C
+d27 2
+a28 1
+C      AVERG3(LUN1,XAVG,J,K,L,NSAM,NROW,NSLICE,DS,DR,DL,MOVWAY)
+a29 2
+C      FOR FURTHER INFORMATION, SEE COMMENTS IN AVERG3.
+C
+d32 4
+a35 4
+C  X[J,K,L]<>X(MOD(L-1,DL)*NROW+J*NSAM+K)
+C  J,K,L PICTURE COORD
+C  NSAM,NROW,NSLICE: PICTURE SIZE
+C  DS,DR,DL: LOCAL BOX  SIZE
+d39 5
+a43 5
+C        = 2: MOVE RT ONE PIXEL
+C        = 3: MOVE LEFT ONE PIXEL
+C        = 4: MOVE DOWN RIGHT ONE PIXEL
+C        = 5: MOVE DOWN LEFT  ONE PIXEL
+C        = 6: MOVE UP, READ IN NEXT SLICE
+a44 3
+C IMAGE_PROCESSING_ROUTINE
+C
+C        1         2         3         4         5         6         7
+d48 2
+a49 2
+        SUBROUTINE AVERG3(LUN1,XAVG,J,K,L,NSAM,NROW,NSLICE,
+     &                   DS,DR,DL,MOVWAY)
+d51 21
+a71 18
+        INTEGER DS,DR,DL,HDS,HDR,HDL,EDGFST,EDGLST,EDGLFT,EDGRT
+        INTEGER EDGDW,EDGUP
+        COMMON /UNITS/LUN,NIN,NOUT,NECHO,IFOUND,NPROC,NDAT
+        DIMENSION X(1)
+        COMMON X
+        SAVE
+
+        IF (MOVWAY .EQ. 1) THEN        
+C          INITIALIZE PARM AND XAVG
+           HDR=DR/2
+           HDS=DS/2
+           HDL=DL/2
+           EDGFST=HDR+1
+           EDGLST=NROW-HDR
+           EDGLFT=HDS+1
+           EDGRT=NSAM-HDS
+           EDGDW =HDL+1
+           EDGUP=NSLICE-HDL
+d74 11
+a84 10
+           XAVG=0.
+           JT=J
+           KT=K
+           KL=L
+           IF(J.LT.EDGFST)JT=EDGFST
+           IF(J.GT.EDGLST)JT=EDGLST
+           IF(K.LT.EDGLFT)KT=EDGLFT
+           IF(K.GT.EDGRT)KT=EDGRT
+           IF(L.LT.EDGDW) KL=EDGDW
+           IF(L.GT.EDGUP) KL=EDGUP
+d86 10
+a95 7
+           DO    LL=1,DL
+              LSTART=(LL-1)*NSAM*NROW
+              DO    JJ=1,NROW
+                 NL=MOD(LL-1,DL)*NROW+JJ
+                 NI=LSTART+(JJ-1)*NSAM
+                 CALL  REDLIN(LUN1,X(NI+1),NSAM,NL)
+              ENDDO
+d98 3
+a100 2
+           DO  LL=KL-HDL,KL+HDL
+              LSTART=MOD(LL-1,DL)*NSAM*NROW
+d102 2
+a103 1
+                 NI=LSTART+(JJ-1)*NSAM
+d105 1
+a105 1
+                    XAVG=XAVG+X(NI+KK)
+d109 2
+a110 1
+           XAVG=XAVG/FLOAT(DR*DS*DL)
+d113 13
+a125 12
+        ELSEIF (MOVWAY .EQ. 2) THEN 
+C          MOVE RT ONE PIXEL, UPDATE XAVG
+           JT=J
+           LT=L
+           IF(K.LE.EDGLFT.OR.K.GT.EDGRT)RETURN
+           IF(J.LT.EDGFST)JT=EDGFST
+           IF(J.GT.EDGLST)JT=EDGLST
+           IF(L.LT.EDGDW) LT=EDGDW
+           IF(L.GT.EDGUP) LT=EDGUP
+           CORECT=0.
+           DO    LL=LT-HDL,LT+HDL
+              LSTART=MOD(LL-1,DL)*NROW*NSAM
+d127 2
+a128 2
+                 NI=LSTART+(JJ-1)*NSAM
+                 CORECT=CORECT+X(NI+K+HDS)-X(NI+K-HDS-1)
+d131 1
+a131 1
+           XAVG=CORECT/FLOAT(DR*DS*DL)+XAVG
+d134 2
+a135 2
+        ELSEIF (MOVWAY .EQ. 3) THEN
+C          MOVE LEFT ONE PIXEL UPDATE XAVG
+d138 6
+a143 6
+           IF(K.LT.EDGLFT.OR.K.GE.EDGRT)RETURN
+           IF(J.LT.EDGFST)JT=EDGFST
+           IF(J.GT.EDGLST)JT=EDGLST
+           IF(L.LT.EDGDW) LT=EDGDW
+           IF(L.GT.EDGUP) LT=EDGUP
+           CORECT=0.
+d145 2
+a146 1
+              LSTART=MOD(LL-1,DL)*NROW*NSAM
+d148 2
+a149 2
+                 NI=LSTART+(JJ-1)*NSAM
+                 CORECT=CORECT+X(NI+K-HDS)-X(NI+K+HDS+1)
+d152 1
+a152 1
+           XAVG=CORECT/FLOAT(DR*DS*DL)+XAVG
+d155 13
+a167 12
+        ELSEIF (MOVWAY .EQ. 4) THEN
+C          J INCREMENTED ONE
+           IF(J.LE.EDGFST.OR.J.GT.EDGLST)RETURN
+           LT=L
+           KT=K
+           IF(K.LT.EDGLFT)KT=EDGLFT
+           IF(K.GT.EDGRT)KT=EDGRT
+           IF(L.LT.EDGDW) LT=EDGDW
+           IF(L.GT.EDGUP) LT=EDGUP
+           CORECT=0.
+           DO    LL=LT-HDL,LT+HDL
+              LSTART=MOD(LL-1,DL)*NROW*NSAM
+d169 3
+a171 3
+                 NI=LSTART+KK+(J-HDR-2)*NSAM
+                 NO=LSTART+KK+(J-1+HDR)*NSAM
+                 CORECT=CORECT+X(NO)-X(NI)
+d174 1
+a174 1
+           XAVG=XAVG+CORECT/FLOAT(DS*DR*DL)
+d177 11
+a187 10
+        ELSEIF (MOVWAY .EQ. 5) THEN
+C          J DECREMENTED ONE
+           IF(J.LT.EDGFST.OR.J.GE.EDGLST)RETURN
+           LT=L
+           KT=K
+           IF(K.LT.EDGLFT)KT=EDGLFT
+           IF(K.GT.EDGRT)KT=EDGRT
+           IF(L.LT.EDGDW) LT=EDGDW
+           IF(L.GT.EDGUP) LT=EDGUP
+           CORECT=0.
+d189 2
+a190 1
+              LSTART=MOD(LL-1,DL)*NROW*NSAM
+d192 3
+a194 3
+                 NI=LSTART+KK+(J+HDR)*NSAM
+                 NO=LSTART+KK+(J-HDR-1)*NSAM
+                 CORECT=CORECT+X(NO)-X(NI)
+d197 1
+a197 1
+           XAVG=XAVG+CORECT/FLOAT(DS*DR*DL)
+d200 20
+a219 16
+        ELSEIF (MOVWAY .EQ. 6) THEN
+C          L INCREMENTED ONE
+           IF(L.LE.EDGDW.OR.L.GT.EDGUP)  RETURN
+           JT=J
+           IF(J.LT.EDGFST)JT=EDGFST
+           IF(J.GT.EDGLST)JT=EDGLST
+           KT=K
+           IF(K.LT.EDGLFT)KT=EDGLFT
+           IF(K.GT.EDGRT)KT=EDGRT
+           CORECT=0.0
+           LOLD=L-HDL-1
+           LSTART=MOD(LOLD-1,DL)*NSAM*NROW
+           DO    JJ=JT-HDR,JT+HDR
+              NI=(JJ-1)*NSAM+LSTART
+              DO  KK=KT-HDS,KT+HDS
+                 CORECT=CORECT-X(NI+KK)
+d223 11
+a233 4
+           DO    JJ=1,NROW
+              NL=L*NROW+JJ
+              NI=LSTART+(JJ-1)*NSAM
+              CALL  REDLIN(LUN1,X(NI+1),NSAM,NL)
+d236 5
+a240 4
+           DO    JJ=JT-HDR,JT+HDR
+              NI=(JJ-1)*NSAM+LSTART
+              DO  KK=KT-HDS,KT+HDS
+                 CORECT=CORECT+X(NI+KK)
+d243 2
+a244 1
+           XAVG=XAVG+CORECT/FLOAT(DS*DR*DL)
+d248 1
+@
+
+
+1.11
+log
+@GPL License fixed
+@
+text
+@a5 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d7 5
+a11 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d13 1
+a13 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d18 1
+a18 1
+C=* This program is distributed in the hope that it will be useful,    *
+d20 1
+a20 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a21 1
+C=*                                                                    *
+d23 1
+a23 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.10
+log
+@HRI GPL License used
+@
+text
+@a5 3
+C **************************************************************************
+C * SPIDER - MODULAR IMAGE PROCESSING SYSTEM.  AUTHOR: J.FRANK         *
+C *  SPIDER - MODULAR IMAGE PROCESSING SYSTEM.  AUTHOR: J.FRANK            *
+d9 1
+a9 1
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *  
+a28 7
+
+C *  COPYRIGHT (C)1981,1987, WADSWORTH CENTER FOR LABORATORIES AND         *
+C *  RESEARCH, NEW YORK STATE DEPARTMENT OF HEALTH, ALBANY, NY 12201.      *
+C *    THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO THE CENTER FOR     *
+C *    LABORATORIES AND RESEARCH AND ARE NOT TO BE DISCLOSED TO OTHERS OR  *
+C *    USED FOR PURPOSES OTHER THAN INTENDED WITHOUT WRITTEN APPROVAL OF   *
+C *    THE CENTER FOR LABORATORIES AND RESEARCH                            *
+a29 1
+C **************************************************************************
+@
+
+
+1.9
+log
+@removed computed GOTO
+@
+text
+@d5 1
+d7 1
+d9 24
+d39 1
+@
+
+
+1.8
+log
+@overlenght lines shortened
+@
+text
+@d12 1
+a12 1
+C *    THE CENTER FOR LABORATORIES AND RESEARCH 			   *
+d33 4
+d42 1
+a42 1
+	INTEGER DS,DR,DL,HDS,HDR,HDL,EDGFST,EDGLST,EDGLFT,EDGRT
+d44 3
+a46 3
+	COMMON /UNITS/LUN,NIN,NOUT,NECHO,IFOUND,NPROC,NDAT
+	DIMENSION X(1)
+	COMMON X
+d49 145
+a193 1
+	GO TO(1000,2000,3000,4000,5000,6000),MOVWAY
+d195 3
+a197 28
+C       INITIALIZE PARM AND XAVG
+1000	HDR=DR/2
+	HDS=DS/2
+	HDL=DL/2
+	EDGFST=HDR+1
+	EDGLST=NROW-HDR
+	EDGLFT=HDS+1
+	EDGRT=NSAM-HDS
+	EDGDW =HDL+1
+	EDGUP=NSLICE-HDL
+
+C       CHECK IF IN BORDER
+	XAVG=0.
+	JT=J
+	KT=K
+	KL=L
+	IF(J.LT.EDGFST)JT=EDGFST
+	IF(J.GT.EDGLST)JT=EDGLST
+	IF(K.LT.EDGLFT)KT=EDGLFT
+	IF(K.GT.EDGRT)KT=EDGRT
+	IF(L.LT.EDGDW) KL=EDGDW
+	IF(L.GT.EDGUP) KL=EDGUP
+C       READ IN DL SLICES AND COMPUTE AVERAGE FROM SCRATCH
+	DO    LL=1,DL
+	   LSTART=(LL-1)*NSAM*NROW
+	   DO    JJ=1,NROW
+	      NL=MOD(LL-1,DL)*NROW+JJ
+	      NI=LSTART+(JJ-1)*NSAM
+d199 9
+a207 123
+	   ENDDO
+	ENDDO
+C
+	DO  LL=KL-HDL,KL+HDL
+	   LSTART=MOD(LL-1,DL)*NSAM*NROW
+	   DO  JJ=JT-HDR,JT+HDR
+	      NI=LSTART+(JJ-1)*NSAM
+	      DO  KK=KT-HDS,KT+HDS
+	         XAVG=XAVG+X(NI+KK)
+	      ENDDO
+	   ENDDO
+	ENDDO
+	XAVG=XAVG/FLOAT(DR*DS*DL)
+	RETURN
+C
+C       MOVE RT ONE PIXEL, UPDATE XAVG
+2000	JT=J
+	LT=L
+	IF(K.LE.EDGLFT.OR.K.GT.EDGRT)RETURN
+	IF(J.LT.EDGFST)JT=EDGFST
+	IF(J.GT.EDGLST)JT=EDGLST
+	IF(L.LT.EDGDW) LT=EDGDW
+	IF(L.GT.EDGUP) LT=EDGUP
+	CORECT=0.
+	DO    LL=LT-HDL,LT+HDL
+	   LSTART=MOD(LL-1,DL)*NROW*NSAM
+	   DO  JJ=JT-HDR,JT+HDR
+	      NI=LSTART+(JJ-1)*NSAM
+	      CORECT=CORECT+X(NI+K+HDS)-X(NI+K-HDS-1)
+	   ENDDO
+	ENDDO
+	XAVG=CORECT/FLOAT(DR*DS*DL)+XAVG
+	RETURN
+C	MOVE LEFT ONE PIXEL UPDATE XAVG
+3000	JT=J
+	LT=L
+	IF(K.LT.EDGLFT.OR.K.GE.EDGRT)RETURN
+	IF(J.LT.EDGFST)JT=EDGFST
+	IF(J.GT.EDGLST)JT=EDGLST
+	IF(L.LT.EDGDW) LT=EDGDW
+	IF(L.GT.EDGUP) LT=EDGUP
+	CORECT=0.
+	DO    LL=LT-HDL,LT+HDL
+	   LSTART=MOD(LL-1,DL)*NROW*NSAM
+	   DO  JJ=JT-HDR,JT+HDR
+	      NI=LSTART+(JJ-1)*NSAM
+	      CORECT=CORECT+X(NI+K-HDS)-X(NI+K+HDS+1)
+	   ENDDO
+	ENDDO
+	XAVG=CORECT/FLOAT(DR*DS*DL)+XAVG
+	RETURN
+
+C  J INCREMENTED ONE
+4000	IF(J.LE.EDGFST.OR.J.GT.EDGLST)RETURN
+	LT=L
+	KT=K
+	IF(K.LT.EDGLFT)KT=EDGLFT
+	IF(K.GT.EDGRT)KT=EDGRT
+	IF(L.LT.EDGDW) LT=EDGDW
+	IF(L.GT.EDGUP) LT=EDGUP
+	CORECT=0.
+	DO    LL=LT-HDL,LT+HDL
+	   LSTART=MOD(LL-1,DL)*NROW*NSAM
+	   DO  KK=KT-HDS,KT+HDS
+	      NI=LSTART+KK+(J-HDR-2)*NSAM
+	      NO=LSTART+KK+(J-1+HDR)*NSAM
+	      CORECT=CORECT+X(NO)-X(NI)
+	   ENDDO
+	ENDDO
+	XAVG=XAVG+CORECT/FLOAT(DS*DR*DL)
+	RETURN
+
+C  J DECREMENTED ONE
+5000	IF(J.LT.EDGFST.OR.J.GE.EDGLST)RETURN
+	LT=L
+	KT=K
+	IF(K.LT.EDGLFT)KT=EDGLFT
+	IF(K.GT.EDGRT)KT=EDGRT
+	IF(L.LT.EDGDW) LT=EDGDW
+	IF(L.GT.EDGUP) LT=EDGUP
+	CORECT=0.
+	DO    LL=LT-HDL,LT+HDL
+           LSTART=MOD(LL-1,DL)*NROW*NSAM
+           DO  KK=KT-HDS,KT+HDS
+              NI=LSTART+KK+(J+HDR)*NSAM
+              NO=LSTART+KK+(J-HDR-1)*NSAM
+              CORECT=CORECT+X(NO)-X(NI)
+           ENDDO
+	ENDDO
+	XAVG=XAVG+CORECT/FLOAT(DS*DR*DL)
+	RETURN
+
+C L INCREMENTED ONE
+6000	IF(L.LE.EDGDW.OR.L.GT.EDGUP)  RETURN
+	JT=J
+	IF(J.LT.EDGFST)JT=EDGFST
+	IF(J.GT.EDGLST)JT=EDGLST
+	KT=K
+	IF(K.LT.EDGLFT)KT=EDGLFT
+	IF(K.GT.EDGRT)KT=EDGRT
+	CORECT=0.0
+	LOLD=L-HDL-1
+	LSTART=MOD(LOLD-1,DL)*NSAM*NROW
+	DO    JJ=JT-HDR,JT+HDR
+	   NI=(JJ-1)*NSAM+LSTART
+	   DO  KK=KT-HDS,KT+HDS
+	      CORECT=CORECT-X(NI+KK)
+	   ENDDO
+	ENDDO
+
+	DO    JJ=1,NROW
+	   NL=L*NROW+JJ
+	   NI=LSTART+(JJ-1)*NSAM
+           CALL  REDLIN(LUN1,X(NI+1),NSAM,NL)
+	ENDDO
+
+	DO    JJ=JT-HDR,JT+HDR
+	   NI=(JJ-1)*NSAM+LSTART
+	   DO  KK=KT-HDS,KT+HDS
+	      CORECT=CORECT+X(NI+KK)
+	   ENDDO
+	ENDDO
+	XAVG=XAVG+CORECT/FLOAT(DS*DR*DL)
+d209 3
+a211 2
+	RETURN
+	END
+@
+
+
+1.7
+log
+@a
+@
+text
+@d3 1
+a3 1
+C AVERG3.FOR
+a17 6
+C--*******************************************************************
+
+	SUBROUTINE AVERG3(LUN1,XAVG,J,K,L,NSAM,NROW,NSLICE,DS,DR,DL,MOVWAY)
+
+
+
+d33 7
+a39 1
+	INTEGER DS,DR,DL,HDS,HDR,HDL,EDGFST,EDGLST,EDGLFT,EDGRT,EDGDW,EDGUP
+d46 2
+a47 1
+C   INITIALIZE PARM AND XAVG
+d58 1
+a58 1
+C   CHECK IF IN BORDER
+d69 1
+a69 1
+C   READ IN DL SLICES AND COMPUTE AVERAGE FROM SCRATCH
+d71 6
+a76 6
+	LSTART=(LL-1)*NSAM*NROW
+	DO    JJ=1,NROW
+	NL=MOD(LL-1,DL)*NROW+JJ
+	NI=LSTART+(JJ-1)*NSAM
+        CALL  REDLIN(LUN1,X(NI+1),NSAM,NL)
+	ENDDO
+d80 7
+a86 5
+	LSTART=MOD(LL-1,DL)*NSAM*NROW
+	DO  JJ=JT-HDR,JT+HDR
+	NI=LSTART+(JJ-1)*NSAM
+	DO  KK=KT-HDS,KT+HDS
+	XAVG=XAVG+X(NI+KK)
+a87 2
+	ENDDO
+	ENDDO
+d91 1
+a91 1
+C  MOVE RT ONE PIXEL, UPDATE XAVG
+d101 5
+a105 5
+	LSTART=MOD(LL-1,DL)*NROW*NSAM
+	DO  JJ=JT-HDR,JT+HDR
+	NI=LSTART+(JJ-1)*NSAM
+	CORECT=CORECT+X(NI+K+HDS)-X(NI+K-HDS-1)
+	ENDDO
+d119 5
+a123 4
+	LSTART=MOD(LL-1,DL)*NROW*NSAM
+	DO  JJ=JT-HDR,JT+HDR
+	NI=LSTART+(JJ-1)*NSAM
+	CORECT=CORECT+X(NI+K-HDS)-X(NI+K+HDS+1)
+a124 1
+	ENDDO
+d127 1
+d138 6
+a143 5
+	LSTART=MOD(LL-1,DL)*NROW*NSAM
+	DO  KK=KT-HDS,KT+HDS
+	NI=LSTART+KK+(J-HDR-2)*NSAM
+	NO=LSTART+KK+(J-1+HDR)*NSAM
+	CORECT=CORECT+X(NO)-X(NI)
+a144 1
+	ENDDO
+d147 1
+d158 6
+a163 5
+	LSTART=MOD(LL-1,DL)*NROW*NSAM
+	DO  KK=KT-HDS,KT+HDS
+	NI=LSTART+KK+(J+HDR)*NSAM
+	NO=LSTART+KK+(J-HDR-1)*NSAM
+	CORECT=CORECT+X(NO)-X(NI)
+a164 1
+	ENDDO
+d167 1
+d180 4
+a183 3
+	NI=(JJ-1)*NSAM+LSTART
+	DO  KK=KT-HDS,KT+HDS
+	CORECT=CORECT-X(NI+KK)
+d185 1
+a185 2
+	ENDDO
+C
+d187 3
+a189 3
+	NL=L*NROW+JJ
+	NI=LSTART+(JJ-1)*NSAM
+        CALL  REDLIN(LUN1,X(NI+1),NSAM,NL)
+d191 1
+a191 1
+C
+d193 4
+a196 4
+	NI=(JJ-1)*NSAM+LSTART
+	DO  KK=KT-HDS,KT+HDS
+	CORECT=CORECT+X(NI+KK)
+	ENDDO
+d199 1
+@
+
+
+1.6
+log
+@c nosave
+@
+text
+@d22 1
+a22 1
+CNO_SAVE
+@
+
+
+1.5
+log
+@*** empty log message ***
+@
+text
+@d3 1
+a3 1
+C $$ AVERG3.FOR
+d14 1
+a14 5
+C
+C
+C $$ AVERG3:
+C
+C      CALL AVERG3(LUN1,XAVG,J,K,L,NSAM,NROW,NSLICE,DS,DR,DL,MOVWAY)
+d19 1
+a19 2
+C
+C
+d21 3
+d44 1
+a44 1
+C
+d56 1
+@
+
+
+1.4
+log
+@add SAVE to make some variables static
+@
+text
+@d70 1
+a70 1
+	DO  1001  LL=1,DL
+d72 1
+a72 1
+	DO  1001  JJ=1,NROW
+d75 3
+a77 1
+ 1001   CALL  REDLIN(LUN1,X(NI+1),NSAM,NL)
+d79 1
+a79 1
+	DO 1010 LL=KL-HDL,KL+HDL
+d81 1
+a81 1
+	DO 1010 JJ=JT-HDR,JT+HDR
+d83 5
+a87 2
+	DO 1010 KK=KT-HDS,KT+HDS
+1010	XAVG=XAVG+X(NI+KK)
+d100 1
+a100 1
+	DO  2010  LL=LT-HDL,LT+HDL
+d102 1
+a102 1
+	DO 2010 JJ=JT-HDR,JT+HDR
+d104 3
+a106 1
+2010	CORECT=CORECT+X(NI+K+HDS)-X(NI+K-HDS-1)
+d118 1
+a118 1
+	DO  3010  LL=LT-HDL,LT+HDL
+d120 1
+a120 1
+	DO 3010 JJ=JT-HDR,JT+HDR
+d122 3
+a124 1
+3010	CORECT=CORECT+X(NI+K-HDS)-X(NI+K+HDS+1)
+d136 1
+a136 1
+	DO  4010  LL=LT-HDL,LT+HDL
+d138 1
+a138 1
+	DO 4010 KK=KT-HDS,KT+HDS
+d141 3
+a143 1
+4010	CORECT=CORECT+X(NO)-X(NI)
+d155 1
+a155 1
+	DO  5010  LL=LT-HDL,LT+HDL
+d157 1
+a157 1
+	DO 5010 KK=KT-HDS,KT+HDS
+d160 3
+a162 1
+5010	CORECT=CORECT+X(NO)-X(NI)
+d176 1
+a176 1
+	DO  6010  JJ=JT-HDR,JT+HDR
+d178 4
+a181 2
+	DO 6010 KK=KT-HDS,KT+HDS
+6010	CORECT=CORECT-X(NI+KK)
+d183 1
+a183 1
+	DO  6015  JJ=1,NROW
+d186 2
+a187 1
+ 6015    CALL  REDLIN(LUN1,X(NI+1),NSAM,NL)
+d189 1
+a189 1
+	DO  6020  JJ=JT-HDR,JT+HDR
+d191 4
+a194 2
+	DO 6020 KK=KT-HDS,KT+HDS
+6020	CORECT=CORECT+X(NI+KK)
+@
+
+
+1.3
+log
+@I restored old version, please don't change it !
+@
+text
+@d45 1
+@
+
+
+1.2
+log
+@clean up unused variables and hollerith warnings
+@
+text
+@d45 2
+d48 1
+a48 1
+	HDR=DR/2
+d57 1
+d59 1
+a59 4
+C
+	GO TO(1000,2000,3000,4000,5000,6000),MOVWAY
+C   CHECK IF IN BORDER
+1000	JT=J
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@a44 2
+C
+	GO TO(1000,2000,3000,4000,5000,6000),MOVWAY
+d46 1
+a46 1
+1000	HDR=DR/2
+d55 3
+d59 1
+a59 2
+	XAVG=0.
+	JT=J
+@

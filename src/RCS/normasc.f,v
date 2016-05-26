@@ -1,0 +1,482 @@
+head	1.10;
+access;
+symbols
+	pre_getangas:1.10
+	GPL2010:1.9
+	pre_GPL2010:1.8
+	pre_var_equation:1.8
+	pre_fftwrings:1.6
+	pre_opfiles:1.5
+	src:1.5
+	best-code:1.5
+	x-named-regs:1.5
+	x:1.5
+	v13-00:1.5
+	pre_GPL:1.3
+	prec_CA:1.3
+	noindx:1.3
+	Bproc:1.1
+	oct21:1.1;
+locks; strict;
+comment	@c @;
+
+
+1.10
+date	2010.06.29.17.48.24;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2010.06.24.13.26.22;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2008.07.28.14.35.27;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2008.05.19.12.02.46;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2008.03.28.18.03.59;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2005.10.17.20.41.57;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2005.10.17.18.32.20;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2001.10.09.17.00.14;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2000.10.03.20.13.36;	author bimal;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	99.08.05.13.24.35;	author pawel;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.10
+log
+@USE_OMP
+@
+text
+@C
+C++*********************************************************************
+C
+C NORMASC.F
+C                     SPEED-UP                    OCT 2001 ARDEAN LEITH
+C                     SQRT NEGATIVE TRAP          MAR 2008 ARDEAN LEITH
+C                     REWRITE                     MAR 2008 ARDEAN LEITH
+C **********************************************************************
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2008  Health Research Inc.                      *
+C=*                                                                    *
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+C=*                                                                    *
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* This program is distributed in the hope that it will be useful,    *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+C=* General Public License for more details.                           *
+C=*                                                                    *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+C=*                                                                    *
+C **********************************************************************
+C
+C NORMASC(X,Y,NS1,NS2,NR1,NR2,IR1,IR2)
+C
+C PURPOSE: DETERMINE NORMALIZATION PARAMETERS: AVG & VARIANCE
+C
+C  NOTE : FOR OMP PARALLEL USE NORMAS INSTEAD al Sept 01
+C
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C--*********************************************************************
+
+        SUBROUTINE NORMASC(X,NS1,NS2,NR1,NR2,IR1,IR2, AVT,VRINV,USE_OMP)
+
+        IMPLICIT NONE
+
+        REAL, INTENT(IN)              :: X(NS1:NS2,NR1:NR2)
+        INTEGER, INTENT(IN)           :: NS1,NS2,NR1,NR2,IR1,IR2
+        DOUBLE PRECISION, INTENT(OUT) :: AVT,VRINV
+        LOGICAL, INTENT(IN)           :: USE_OMP
+
+        DOUBLE PRECISION              :: AVG, VR, DTEMP
+        INTEGER                       :: N,I1SQ,I2SQ, J,JSQ,I,IR
+
+        I1SQ = IR1 * IR1
+        I2SQ = IR2 * IR2
+        AVG  = 0.0
+        VR   = 0.0
+        N    = 0
+
+        IF (USE_OMP) THEN
+c$omp     parallel do private(j,jsq,i,ir),reduction(+:n,avg,vr)
+          DO J=NR1,NR2
+              JSQ = J * J
+              DO I=NS1,NS2
+                 IR = JSQ + I*I
+                 IF (IR .GE. I1SQ .AND. IR .LE. I2SQ)  THEN
+                    N   = N + 1
+                    AVG = AVG + X(I,J)
+                    VR  = VR  + X(I,J) * X(I,J)
+                 ENDIF
+              ENDDO
+           ENDDO
+c$omp     end parallel do
+
+        ELSE
+           DO J=NR1,NR2
+              JSQ = J * J
+              DO I=NS1,NS2
+                 IR = JSQ + I*I
+                 IF (IR .GE. I1SQ .AND. IR .LE. I2SQ)  THEN
+                    N   = N + 1
+                    AVG = AVG + X(I,J)
+                    VR  = VR  + X(I,J) * X(I,J)
+                 ENDIF
+              ENDDO
+           ENDDO
+        ENDIF
+
+        AVT   = AVG / N
+        DTEMP = (VR - N * AVT * AVT)
+
+C       MULTIPLICATION IS FASTER
+        IF (DTEMP .GT. 0) THEN
+           VR    = DSQRT(DTEMP / DBLE(N-1))
+           VRINV = 1.0 / VR
+        ELSE
+C          TRAP FOR BLANK IMAGE AREA
+           VRINV = 0
+        ENDIF
+
+        END
+@
+
+
+1.9
+log
+@GPL_2010
+@
+text
+@d9 2
+d12 2
+a13 5
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+d15 3
+a17 1
+C=* SPIDER is free software; you can redistribute it and/or            *
+d22 1
+a22 1
+C=* SPIDER is distributed in the hope that it will be useful,          *
+d24 1
+a24 1
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+d26 1
+d28 3
+a30 1
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+d36 1
+a36 1
+C DETERMINE NORMALIZATION PARAMETERS BY VARIANCE
+d43 3
+a45 1
+        SUBROUTINE NORMASC(X,NS1,NS2,NR1,NR2,IR1,IR2, AVT,VRINV)
+d48 1
+a48 1
+        INTEGER, INTENT(IN)           :: IR1,IR2
+d50 1
+d52 2
+a53 2
+        DOUBLE PRECISION              :: VR,DTEMP
+        INTEGER                       :: N
+d55 3
+a57 3
+        R1SQ = IR1 * IR1
+        R2SQ = IR2 * IR2
+        AVT  = 0.0
+d61 26
+a86 8
+        DO J=NR1,NR2
+           DO I=NS1,NS2
+              R = FLOAT(J*J + I*I)
+              IF (R .GE. R1SQ .AND. R .LE. R2SQ)  THEN
+                 N  = N + 1
+                 AVT = AVT + X(I,J)
+                 VR  = VR + X(I,J ) * X(I,J)
+              ENDIF
+d88 1
+a88 1
+        ENDDO
+d90 1
+a90 1
+        AVT   = AVT / N
+@
+
+
+1.8
+log
+@DOUBLE PRECISION ,DTEMP
+@
+text
+@a8 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2008  Health Research Inc.                      *
+d10 5
+a14 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d16 1
+a16 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d21 1
+a21 1
+C=* This program is distributed in the hope that it will be useful,    *
+d23 1
+a23 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a24 1
+C=*                                                                    *
+d26 1
+a26 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.7
+log
+@FFTW3 plan changes, FFTW aprings
+@
+text
+@d43 1
+a43 1
+        SUBROUTINE  NORMASC(X,NS1,NS2,NR1,NR2,IR1,IR2, AVT,VRINV)
+d49 1
+a49 1
+        DOUBLE PRECISION              :: VR
+d74 1
+a74 1
+           VR    = DSQRT(DTEMP / (N-1))
+@
+
+
+1.6
+log
+@zero div. trap
+@
+text
+@d7 1
+d36 1
+a36 1
+C SERIALLY NORMALIZES X --> Y BY VARIANCE
+d43 1
+a43 1
+        SUBROUTINE  NORMASC(X,Y,NS1,NS2,NR1,NR2,IR1,IR2)
+d45 6
+a50 3
+        REAL    :: X(NS1:NS2,NR1:NR2),Y(NS1:NS2,NR1:NR2)
+        INTEGER :: IR1,IR2
+        REAL*8  :: AV,VR
+d54 1
+a54 1
+        AV   = 0.0
+d63 2
+a64 2
+                 AV = AV + X(I,J)
+                 VR = VR + X(I,J )* X(I,J)
+d69 2
+a70 2
+        AV    = AV / N
+        DTEMP = (VR - N * AV * AV)
+d72 1
+a75 1
+           Y     = (X - AV) * VRINV     ! ARRAY OPERATION ON Y
+d78 1
+a78 1
+           Y = 0.0    ! ARRAY OPERATION ON Y
+a80 2
+C       MULTIPLICATION IS FASTER
+
+@
+
+
+1.5
+log
+@GPL License fixed
+@
+text
+@d5 2
+a6 1
+C                         SPEED-UP                  OCT 01 ARDEAN LEITH
+d9 1
+a9 1
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d33 5
+a37 1
+C IMAGE_PROCESSING_ROUTINE
+d44 3
+a46 3
+        DIMENSION  X(NS1:NS2,NR1:NR2),Y(NS1:NS2,NR1:NR2)
+        INTEGER    IR1,IR2
+        REAL*8     AV,VR
+d65 12
+a76 1
+        AV = AV / N
+a77 3
+        VR = 1.0 / (DSQRT((VR-N*AV*AV) / (N-1)))
+
+        Y = (X - AV) * VR
+@
+
+
+1.4
+log
+@HRI GPL License used
+@
+text
+@a2 1
+C++************************************************************************
+a6 1
+C * SPIDER - MODULAR IMAGE PROCESSING SYSTEM.    AUTHOR: J.FRANK       *
+d10 1
+a10 1
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *  
+a29 6
+
+C * COPYRIGHT (C)1985, 1999. HEALTH RESEARCH INCORPORATED (HRI),       *
+C * ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+C * THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO HRI AND ARE NOT   *
+C * TO BE DISCLOSED TO OTHERS OR USED FOR PURPOSES OTHER THAN INTENDED *
+C * WITHOUT WRITTEN APPROVAL OF HRI.                                   *
+a35 1
+C--************************************************************************
+@
+
+
+1.3
+log
+@sped up
+@
+text
+@d2 1
+d9 24
+d43 1
+@
+
+
+1.2
+log
+@header & cosmetic
+@
+text
+@d4 10
+a13 1
+C $$ NORMASC.FOR
+a14 10
+C **************************************************************************
+C *  SPIDER - MODULAR IMAGE PROCESSING SYSTEM.  AUTHOR: J.FRANK            *
+C *  COPYRIGHT (C)1981,1987, WADSWORTH CENTER FOR LABORATORIES AND         *
+C *  RESEARCH, NEW YORK STATE DEPARTMENT OF HEALTH, ALBANY, NY 12201.      *
+C *  THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO THE CENTER FOR       *
+C *  LABORATORIES AND RESEARCH AND ARE NOT TO BE DISCLOSED TO OTHERS OR    *
+C *  USED FOR PURPOSES OTHER THAN INTENDED WITHOUT WRITTEN APPROVAL OF     *
+C *  THE CENTER FOR LABORATORIES AND RESEARCH                              *
+C **************************************************************************
+C
+a16 1
+C        1         2         3         4         5         6         7
+d19 1
+a19 3
+C
+C $$ NORMASC.FOR
+C
+d21 1
+d23 16
+a38 14
+        INTEGER  IR1,IR2
+        REAL*8  AV,VR
+        R1=IR1
+        R2=IR2
+        AV=0.0
+        VR=0.0
+        N=0
+        DO    J=NR1,NR2
+           DO    I=NS1,NS2
+              R=SQRT(FLOAT(J*J+I*I))
+              IF(R.GE.R1.AND.R.LE.R2)  THEN
+	         N=N+1
+                 AV=AV+X(I,J)
+                 VR=VR+X(I,J)*X(I,J)
+d43 5
+a47 2
+        AV=AV/N
+        VR=DSQRT((VR-N*AV*AV)/(N-1))
+a48 1
+        Y=(X-AV)/VR
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d16 1
+d18 1
+d34 8
+a41 7
+         DO    I=NS1,NS2
+          R=SQRT(FLOAT(J*J+I*I))
+          IF(R.GE.R1.AND.R.LE.R2)  THEN
+	   N=N+1
+           AV=AV+X(I,J)
+           VR=VR+X(I,J)*X(I,J)
+          ENDIF
+d43 1
+a43 2
+        ENDDO
+C
+d46 1
+a46 1
+C
+@

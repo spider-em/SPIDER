@@ -1,0 +1,827 @@
+head	1.15;
+access;
+symbols
+	pre_getangas:1.15
+	GPL2010:1.14
+	pre_GPL2010:1.13
+	pre_var_equation:1.13
+	pre_fftwrings:1.13
+	pre_opfiles:1.12
+	src:1.12
+	best-code:1.11
+	x-named-regs:1.11
+	x:1.11
+	v13-00:1.11
+	pre_GPL:1.9
+	prec_CA:1.6
+	noindx:1.4;
+locks; strict;
+comment	@c @;
+
+
+1.15
+date	2010.12.02.14.23.37;	author leith;	state Exp;
+branches;
+next	1.14;
+
+1.14
+date	2010.06.24.13.26.02;	author leith;	state Exp;
+branches;
+next	1.13;
+
+1.13
+date	2007.07.11.15.34.13;	author leith;	state Exp;
+branches;
+next	1.12;
+
+1.12
+date	2006.12.28.17.40.51;	author leith;	state Exp;
+branches;
+next	1.11;
+
+1.11
+date	2005.10.17.20.37.46;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2005.10.17.18.28.11;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2004.07.13.12.35.30;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2004.04.05.15.27.15;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2004.04.05.14.54.10;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2003.05.14.16.55.12;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2003.02.20.21.10.02;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2003.01.02.14.24.54;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2002.11.21.16.48.06;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2002.11.20.15.18.45;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2002.10.31.19.23.37;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.15
+log
+@blank image support
+@
+text
+@
+C++*********************************************************************
+C
+C  LABELSPI.F     NEW                              OCT 02 ARDEAN LEITH
+C                 NROWOUT BUG                      MAY 03 ARDEAN LEITH
+C                 ~9                               APR 04 ARDEAN LEITH
+C                 \ REMOVED FOR LINUX              JUN 07 ARDEAN LEITH
+C                 BLANK IMAGE SUPPORT              OCT 10 ARDEAN LEITH
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C   LABELSPI(LUN1,LUN2,LUN3,NSAM,NROW,NSLICE,FMIN1,FMAX1,BOTTEM)
+C
+C   PURPOSE: PATCH, OR INSERT LABEL IN IMAGE
+C
+C   PARAMETERS:
+C        LUN1,LUN2      INPUT IMAGE & FONT IMAGE 
+C        LUN3           OUTPUT IMAGE  
+C        NSAM,NROW      DIMENSIONS OF INPUT IMAGE
+C        NSAMF,NROWF    DIMENSIONS OF FONT IMAGE
+C        FMIN2,FMAX2    MIN & MAX FOR INPUT IMAGE
+C
+C   VARIABLES
+C        FMINF,FMAXF    MIN & MAX FOR FONT IMAGE
+C        WIDEF          WIDTH OF LETTER IN FONT IMAGE
+C        OFFCON         START OF LETTERS IN FONT IMAGE 
+C
+C--********************************************************************
+
+      SUBROUTINE LABELSPI(LUN1,LUN2,LUN3,NSAM,NROW,NSLICE,FMIN1,FMAX1,
+     &                     BOTTEM)
+
+      INCLUDE 'CMBLOCK.INC'    
+      INCLUDE 'CMLIMIT.INC'
+
+      CHARACTER(LEN=256)    :: LABELSTR
+      REAL, ALLOCATABLE     :: BUF(:,:),BUFFONT(:,:)
+      CHARACTER(LEN=1)      :: NULL = CHAR(0)
+      CHARACTER(LEN=93)     :: LETS
+      CHARACTER(LEN=MAXNAM) :: FONTDIR,FONTNAM
+      LOGICAL               :: BLACKFONT,BOTTEM
+
+C                    123456789 123456789 123456789 123456789 1234567
+      LETS(1:47)  = '! #$ & ()*+,-./0123456789:<=>?@@ABCDEFGHIJKLMNOP'
+C                    89 123456789 123456789 123456789 123456789 123
+C     LETS(48:93) = 'QRSTUVWXYZ[\]^_ abcdefghijklmnopqrstuvwxyz{|}~'
+      LETS(48:93) = 'QRSTUVWXYZ[ ]^_ abcdefghijklmnopqrstuvwxyz{|}~'
+
+CC    FONT WIDTH (DEPENDS ON FONT IN USE!!!
+CC    CALL RDPRM2S(WIDEF,OFFCON,NOT_USED,
+CC     &           'FONT WIDTH & OFFSET',IRTFLG)
+CC    IF (IRTFLG .NE. 0) GOTO 9999
+
+CC    FONT WIDTH (DEPENDS ON FONT IN USE!!!
+CC    CALL RDPRM2S(AA,AB,NOT_USED,
+CC     &          'OFFSET A & A',IRTFLG)
+CC     IF (IRTFLG .NE. 0) GOTO 9999
+
+C      KLUDGE TO GET WORKING FAST, FIX IT SOMETIME
+       WIDEF  = 12.3
+       OFFCON = 18.0
+       AA     = 385.5
+       AB     = 754.0
+
+       IXADD  = -1
+       IYADD  = -25
+
+       BLACKFONT = (FCHAR(4:4) .EQ. 'B' .OR. FCHAR(5:5) .EQ. 'B')  
+
+C      GET DIR FOR FONT INPUT IMAGE 
+       CALL MYGETENV('SPPROC_DIR',FONTDIR,NCHART,
+     &              'dir-for-proc-files',IER)
+       IF (IER .NE. 0) THEN
+         CALL ERRT(101,'NO ENVIRONMENT VARIABLE',NE)
+         GOTO 9999
+       ENDIF
+
+       IF (BLACKFONT) THEN 
+         FONTNAM = FONTDIR(:NCHART) // 'black_font.img' // CHAR(0)
+       ELSE 
+         FONTNAM = FONTDIR(:NCHART) // 'white_font.img' // CHAR(0) 
+       ENDIF
+
+C      OPEN FONT IMAGE, KEEP EXTENSION (~9)
+       MAXIM2 = 0
+       CALL OPFILEC(0,.FALSE.,FONTNAM,LUN2,'O',IFORM,
+     &              NSAMF,NROWF,NSLICEF, MAXIM2,'DUM~9',.FALSE.,IRTFLG)
+       IF (IRTFLG .NE. 0) GOTO 9999
+
+       IF (IMAMI .NE. 1)
+     &    CALL NORM3(LUN2,NSAMF,NROWF,NSLICEF,FMAX,FMIN,AV)
+       FMINF = FMIN
+       FMAXF = FMAX
+
+C      FIND OUTPUT IMAGE SIZE
+       NROWOUT = NROW
+       IF (BOTTEM) NROWOUT = NROW + NROWF
+
+C      ALLOCATE IMAGE & FONT BUFFERS
+       ALLOCATE (BUF(NSAM,NROWOUT), BUFFONT(NSAMF,NROWF), STAT=IRTFLG)
+       IF (IRTFLG .NE. 0)  THEN
+          MWANT = NSAM * NROWOUT + NSAMF * NROWF
+          CALL  ERRT(46,'BUF...',MWANT)
+          GOTO 9999
+       ENDIF
+
+       IF (BOTTEM) THEN
+C        MUST CLEAR REST OF OUTPUT IMAGE BUFFER 
+         FCLEAR = FMIN1
+         IF (BLACKFONT) FCLEAR = FMAX1
+
+         DO IROW = NROW+1,NROW+NROWF
+            DO ISAM = 1,NSAM
+               BUF(ISAM,IROW) = FCLEAR
+            ENDDO
+         ENDDO
+
+       ELSEIF (NSLICE .GT. 1) THEN
+C        FILL OUTPUT VOLUME WITH INPUT VOLUME
+         DO ISLICE = 1,NSLICE
+            CALL REDVOL(LUN1,NSAM,NROW,ISLICE,ISLICE,BUF,IRTFLG)
+            IF (IRTFLG .NE. 0) GOTO 9999
+            CALL WRTVOL(LUN3,NSAM,NROWOUT,ISLICE,ISLICE,BUF,IRTFLG)
+            IF (IRTFLG .NE. 0) GOTO 9999
+         ENDDO
+       ENDIF
+
+C      LOAD INPUT IMAGE INTO BUF
+       ISLICE = 1
+       CALL REDVOL(LUN1,NSAM,NROW,ISLICE,ISLICE,BUF,IRTFLG)
+       IF (IRTFLG .NE. 0)  GOTO 9999
+
+C      LOAD FONT IMAGE INTO BUFFONT
+       CALL REDVOL(LUN2,NSAMF,NROWF,1,1,BUFFONT,IRTFLG)
+       IF (IRTFLG .NE. 0) GOTO 9999
+
+C      SCALE FONT INTENSITY TO IMAGE RANGE
+C      BUF = FVAL * SCALE + FMIN1
+
+       IF (FMAX1 .EQ. FMIN1 .AND. BLACKFONT) THEN
+C         BLANK IMAGE WITH BLACK FONT
+
+          SCALE  = 1 
+          FMIN1  = -1
+          !write(6,91) 'Black: ',fmin1,fmax1,scale,fminf,fmaxf
+91        format(' ',A,f5.2,'...',f5.2,f9.2,f5.2,'..',f8.2)
+ 
+       ELSEIF (FMAX1 .EQ. FMIN1) THEN
+C         BLANK IMAGE WITH WHITE FONT
+          SCALE  = 255.0 / (FMAXF - FMINF)
+          !write(6,91) 'White: ',fmin1,fmax1,scale,fminf,fmaxf
+       ELSE
+C         NON-BLANK IMAGE
+          SCALE  = (FMAX1 - FMIN1) / (FMAXF - FMINF)
+          !write(6,91) 'Input: ',fmin1,fmax1,scale,fminf,fmaxf
+       ENDIF
+
+10     CONTINUE
+C      DO NOT UPPERCASE THE INPUT
+       IRTFLG = -999
+       CALL RDPRMC(LABELSTR,NLET,.TRUE.,'LABEL (<CR> TO END)',
+     &            NULL,IRTFLG)
+       IF (IRTFLG .NE. 0) GOTO 9999
+       IF (NLET .LE. 0) GOTO 20
+
+       IF (BOTTEM) THEN
+C        CHECK LABEL LENGTH & CENTER ACROSS WIDTH OF IMAGE
+         IXGO = ((NSAM - (NLET * WIDEF)) / 2.0) 
+         IF (IXGO .LE. 0) THEN
+            NLET = NSAM / WIDEF
+            WRITE(NOUT,*) ' LABEL TRUNCATED TO:',NLET,'  CHARACTERS'
+            IXGO = ((NSAM - (NLET * WIDEF)) / 2.0) 
+         ENDIF
+         IYGO = NROW + 1
+
+       ELSE
+C        LABELING INSIDE IMAGE, NEED TO GET LOCATION
+         IF (NSLICE .GT. 1) THEN
+C           VOLUME INPUT  
+15          CALL RDPRI3S(IX,IY,IZ,NOT_USED,'LOCATION, X, Y & Z',IRTFLG)
+            IF (IRTFLG .NE. 0) GOTO 9999
+
+            IF (IZ .LT. 1 .OR. IZ .GT. NSLICE) THEN
+               CALL ERRT(102,'ILLEGAL SLICE:',IZ)
+               GOTO 15
+
+            ELSEIF (IZ .NE. ISLICE) THEN
+C              MUST LOAD INPUT SLICE INTO BUFFER
+               ISLICE = IZ
+               CALL REDVOL(LUN1,NSAM,NROW,ISLICE,ISLICE,BUF,IRTFLG)
+            ENDIF
+         ELSE
+C           2D IMAGE
+            CALL RDPRIS(IX,IY,NOT_USED,'LOCATION, X & Y',IRTFLG)
+            IZ = 1
+         ENDIF
+         IF (IRTFLG .NE. 0) GOTO 9999
+
+C        FIND Y STARTING LOCATION IN IMAGE 
+         IF (IY .GT. NROW) THEN
+            IY = NROW
+            WRITE(NOUT,*)' LABEL OFF IMAGE, MOVED UP TO:',NROW
+         ENDIF
+
+         IF (IY .LT. 1) THEN
+            IY   = 1
+            WRITE(NOUT,*)' LABEL OFF IMAGE, MOVED DOWN TO:',IY
+         ENDIF
+
+C        CHECK X STARTING LOCATION FOR 1'ST CHAR. IN IMAGE
+         IXGO = IX + IXADD
+
+         NT =  (NSAM - IX) / WIDEF
+         NLETCAN = MIN(NLET,NT)
+         IF (NLETCAN .LT. NLET) THEN
+            WRITE(NOUT,*)' LABEL TRUNCATED TO:',NLETCAN,'  CHARACTERS'
+         ENDIF
+         IYGO = IY + IYADD
+      ENDIF
+      
+      DO I = 1, NLET
+         ILET = INDEX(LETS,LABELSTR(I:I))
+
+         IF (ILET .LE. 0) THEN
+            WRITE(NOUT,*) ' UNKNOWN CHARACTER: ',LABELSTR(I:I),
+     &                    'REPLACED WITH A BLANK.'
+            ILET = 2
+         ENDIF
+
+C        STARTING LOCATION OF ILET IN FONT IMAGE 
+         IF (ILET .LE. 30) THEN
+            IXF = (ILET - 1) * WIDEF + OFFCON
+         ELSEIF (ILET .GT. 30 .AND. ILET .LE. 60) THEN
+            IXF = (ILET - 31) * WIDEF + AA
+         ELSE
+            IXF = (ILET - 61) * WIDEF + AB
+         ENDIF
+
+         IYF = 1
+
+C        STARTING LOCATION FOR LETTER IN IMAGE 
+         IXI = IXGO + (I - 1) * WIDEF
+
+         DO IY = 0,NROWF-1
+            DO IX = 0,WIDEF-1
+               FVAL = BUFFONT(IXF+IX,IYF+IY)
+
+               IF (BOTTEM) THEN
+                  BUF(IXI+IX,IY+IYGO) = FVAL * SCALE + FMIN1
+
+               ELSE
+                  IYI = IY + IYGO
+                  IF (IYI .GT. 0 .AND. IYI .LE. NROW) THEN
+C                    INSIDE IMAGE
+ 
+                     IF (BLACKFONT .AND. FVAL .LE. 254) THEN
+                        BUF(IXI+IX,IY+IYGO) = FVAL * SCALE + FMIN1
+ 
+                     ELSEIF (.NOT. BLACKFONT .AND. FVAL .GT. 0) THEN
+                        BUF(IXI+IX,IY+IYGO) = FVAL * SCALE + FMIN1
+                     ENDIF 
+                  ENDIF
+               ENDIF
+            ENDDO
+         ENDDO
+      ENDDO
+      IF (.NOT. BOTTEM) GOTO 10
+
+20    CONTINUE
+C     DUMP IMAGE BUFFER TO FILE
+      !write(6,*)'  NSAM,NROWOUT,ISLICE:', NSAM,NROWOUT,ISLICE
+      CALL WRTVOL(LUN3,NSAM,NROWOUT,ISLICE,ISLICE,BUF,IRTFLG)
+      IF (IRTFLG .NE. 0)  GOTO 9999
+
+9999  IF (ALLOCATED(BUF))     DEALLOCATE(BUF)
+      IF (ALLOCATED(BUFFONT)) DEALLOCATE(BUFFONT)
+
+      END
+
+@
+
+
+1.14
+log
+@GPL_2010
+@
+text
+@d4 5
+a8 5
+C  LABELSPI.F              NEW                      OCT 02 ARDEAN LEITH
+C                          NROWOUT BUG              MAY 03 ARDEAN LEITH
+C                         ~9                        APR 04 ARDEAN LEITH
+C                          \ REMOVED FOR LINUX      JUN 07 ARDEAN LEITH
+C
+d55 6
+a60 6
+      CHARACTER(LEN=256) ::                LABELSTR
+      REAL, ALLOCATABLE, DIMENSION(:,:) :: BUF,BUFFONT
+      CHARACTER(LEN=1) ::                  NULL
+      CHARACTER(LEN=93) ::                 LETS
+      CHARACTER(LEN=MAXNAM) ::             FONTDIR,FONTNAM
+      LOGICAL ::                           BLACKFONT,BOTTEM
+d68 38
+a105 40
+CC         FONT WIDTH (DEPENDS ON FONT IN USE!!!
+CC         CALL RDPRM2S(WIDEF,OFFCON,NOT_USED,
+CC     &                'FONT WIDTH & OFFSET',IRTFLG)
+CC         IF (IRTFLG .NE. 0) GOTO 9999
+
+CC         FONT WIDTH (DEPENDS ON FONT IN USE!!!
+CC         CALL RDPRM2S(AA,AB,NOT_USED,
+CC     &               'OFFSET A & A',IRTFLG)
+CC         IF (IRTFLG .NE. 0) GOTO 9999
+
+           NULL = CHAR(0)
+
+C          KLUDGE TO GET WORKING FAST, FIX IT SOMETIME
+           WIDEF  = 12.3
+           OFFCON = 18.0
+           AA     = 385.5
+           AB     = 754.0
+
+           IXADD  = -1
+           IYADD  = -25
+
+           BLACKFONT = (FCHAR(4:4) .EQ. 'B' .OR. FCHAR(5:5) .EQ. 'B')  
+
+C          GET DIR FOR FONT INPUT IMAGE 
+           CALL MYGETENV('SPPROC_DIR',FONTDIR,NCHART,
+     &                 'dir-for-proc-files',IER)
+           IF (IER .NE. 0) THEN
+               CALL ERRT(101,'NO ENVIRONMENT VARIABLE',NE)
+               GOTO 9999
+           ENDIF
+
+           IF (BLACKFONT) THEN 
+              FONTNAM = FONTDIR(:NCHART) // 'black_font.img' // CHAR(0)
+           ELSE 
+              FONTNAM = FONTDIR(:NCHART) // 'white_font.img' // CHAR(0) 
+           ENDIF
+
+C          OPEN FONT IMAGE, KEEP EXTENSION (~9)
+           MAXIM2 = 0
+           CALL OPFILEC(0,.FALSE.,FONTNAM,LUN2,'O',IFORM,
+d107 1
+a107 1
+           IF (IRTFLG .NE. 0) GOTO 9999
+d109 16
+a124 14
+           IF (IMAMI.NE.1)
+     &         CALL NORM3(LUN2,NSAMF,NROWF,NSLICEF,FMAX,FMIN,AV)
+           FMINF = FMIN
+           FMAXF = FMAX
+
+C     FIND OUTPUT IMAGE SIZE
+      NROWOUT = NROW
+      IF (BOTTEM) NROWOUT = NROW + NROWF
+
+      ALLOCATE (BUF(NSAM,NROWOUT), STAT=IRTFLG)
+      IF (IRTFLG .NE. 0)  THEN
+         CALL  ERRT(43,'BUF',NE)
+         GOTO 9999
+      ENDIF
+d126 1
+a126 1
+      IF (BOTTEM) THEN
+d136 2
+a137 1
+      ELSEIF (NSLICE .GT. 1) THEN
+d141 1
+a141 1
+            IF (IRTFLG .NE. 0)  GOTO 9999
+d143 1
+a143 1
+            IF (IRTFLG .NE. 0)  GOTO 9999
+d145 1
+a145 1
+      ENDIF
+d147 34
+a180 23
+C     LOAD INPUT IMAGE INTO TOP PART OF BUFFER
+      ISLICE = 1
+      CALL REDVOL(LUN1,NSAM,NROW,ISLICE,ISLICE,BUF,IRTFLG)
+      IF (IRTFLG .NE. 0)  GOTO 9999
+
+C     ALLOCATE FONT IMAGE BUFFER
+      ALLOCATE (BUFFONT(NSAMF,NROWF), STAT=IRTFLG)
+      IF (IRTFLG .NE. 0)  THEN
+         CALL  ERRT(43,'BUFFONT',NE)
+         GOTO 9999
+      ENDIF
+
+C     LOAD FONT IMAGE BUFFER
+      CALL REDVOL(LUN2,NSAMF,NROWF,1,1,BUFFONT,IRTFLG)
+      IF (IRTFLG .NE. 0)  GOTO 9999
+
+C     SCALE FONT INTENSITY TO IMAGE RANGE
+      SCALE  = (FMAX1 - FMIN1) / (FMAXF - FMINF)
+
+10    CONTINUE
+C     DO NOT UPPERCASE THE INPUT
+      IRTFLG = -999
+      CALL RDPRMC(LABELSTR,NLET,.TRUE.,'LABEL (<CR> TO END)',
+d182 2
+a183 2
+      IF (IRTFLG .NE. 0) GOTO 9999
+      IF (NLET .LE. 0) GOTO 20
+d185 1
+a185 1
+      IF (BOTTEM) THEN
+d195 3
+a197 3
+      ELSE
+C       LABELING INSIDE IMAGE, NEED TO GET LOCATION
+        IF (NSLICE .GT. 1) THEN
+d290 1
+@
+
+
+1.13
+log
+@\ caused problems on linux
+@
+text
+@a9 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2007  Health Research Inc.                      *
+d11 5
+a15 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d17 1
+a17 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d22 1
+a22 1
+C=* This program is distributed in the hope that it will be useful,    *
+d24 1
+a24 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a25 1
+C=*                                                                    *
+d27 1
+a27 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.12
+log
+@blackfont
+@
+text
+@d7 1
+d11 1
+a11 1
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d69 2
+a70 1
+      LETS(48:93) = 'QRSTUVWXYZ[\]^_ abcdefghijklmnopqrstuvwxyz{|}~'
+@
+
+
+1.11
+log
+@GPL License fixed
+@
+text
+@d101 1
+a101 1
+           IF (FCHAR(4:4) .EQ. 'B' .OR. FCHAR(5:5) .EQ. 'B') THEN 
+@
+
+
+1.10
+log
+@HRI GPL License used
+@
+text
+@a2 1
+C++************************************************************************
+a8 1
+C * SPIDER - MODULAR IMAGE PROCESSING SYSTEM.    AUTHOR: J.FRANK       *
+d12 1
+a12 1
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *  
+a31 6
+
+C * COPYRIGHT (C)1985, 2002. HEALTH RESEARCH INCORPORATED (HRI),       *
+C * ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+C * THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO HRI AND ARE NOT   *
+C * TO BE DISCLOSED TO OTHERS OR USED FOR PURPOSES OTHER THAN INTENDED *
+C * WITHOUT WRITTEN APPROVAL OF HRI.                                   *
+@
+
+
+1.9
+log
+@undefined null
+@
+text
+@d2 1
+d11 24
+@
+
+
+1.8
+log
+@~9
+@
+text
+@d43 1
+d62 2
+@
+
+
+1.7
+log
+@unused irtflg line removed
+@
+text
+@d6 2
+d87 1
+a87 1
+C          OPEN FONT IMAGE, KEEP EXTENSION
+d90 1
+a90 1
+     &                NSAMF,NROWF,NSLICEF, MAXIM2,'DUM',.FALSE.,IRTFLG)
+@
+
+
+1.6
+log
+@*** empty log message ***
+@
+text
+@a85 1
+           IRTFLG = 9
+@
+
+
+1.5
+log
+@opfilec
+@
+text
+@d4 2
+a5 2
+C  LABELSPI.F              NEW            OCT 02 ARDEAN LEITH
+C                             
+a106 5
+C     LOAD INPUT IMAGE INTO TOP OF BUFFER
+      ISLICE = 1
+      CALL REDVOL(LUN1,NSAM,NROW,ISLICE,ISLICE,BUF,IRTFLG)
+      IF (IRTFLG .NE. 0)  GOTO 9999
+
+d117 8
+d127 5
+d259 1
+a259 1
+      CALL WRTVOL(LUN3,NSAM,NROW+NROWOUT,ISLICE,ISLICE,BUF,IRTFLG)
+@
+
+
+1.4
+log
+@*** empty log message ***
+@
+text
+@d88 1
+a88 1
+           CALL OPFILE(.FALSE.,FONTNAM,LUN2,'O',IFORM,
+@
+
+
+1.3
+log
+@la l
+@
+text
+@d141 1
+a141 1
+      CALL RDPRMC(LABELSTR,NLET,.TRUE.,'LABEL (<CR>) TO END',
+@
+
+
+1.2
+log
+@improved
+@
+text
+@d15 1
+a15 2
+C   LABELSPILABELSPI(LUN1,LUN2,LUN3,NSAM,NROW,ISLICE,FMIN1,FMAX1,
+C                    LABELSTR,NLET)
+d33 2
+a34 2
+      SUBROUTINE LABELSPI(LUN1,LUN2,LUN3,NSAM,NROW,ISLICE,FMIN1,FMAX1,
+     &                     LABELSTR,NLET)
+d39 1
+a39 1
+      CHARACTER(LEN=*) ::                  LABELSTR
+d43 1
+a43 1
+      LOGICAL ::                           BLACKFONT
+d53 1
+a53 1
+CC         IF (IRTFLG .NE. 0) GOTO 9000
+d58 1
+a58 1
+CC         IF (IRTFLG .NE. 0) GOTO 9000
+d66 3
+a70 1
+
+d97 5
+a101 1
+      ALLOCATE (BUF(NSAM,NROW+NROWF), STAT=IRTFLG)
+d108 1
+d112 9
+a120 7
+C     CLEAR REST OF OUTPUT IMAGE BUFFER 
+      FCLEAR = FMIN1
+      IF (BLACKFONT) FCLEAR = FMAX1
+
+      DO IROW = NROW+1,NROW+NROWF
+         DO ISAM = 1,NSAM
+            BUF(ISAM,IROW) = FCLEAR
+d122 1
+a122 1
+      ENDDO
+d138 61
+a198 7
+C     CHECK LABEL LENGTH & CENTER ACROSS WIDTH OF IMAGE
+      IOFF = ((NSAM - (NLET * WIDEF)) / 2.0) 
+      IF (IOFF .LE. 0) THEN
+         NLET = NSAM / WIDEF
+         WRITE(NOUT,*) 'LABEL TOO LONG, TRUNCATED TO:',
+     &                  NLET,'  CHARACTERS'
+         IOFF = ((NSAM - (NLET * WIDEF)) / 2.0) 
+a199 1
+
+d205 1
+a205 1
+            WRITE(NOUT,*) 'UNKNOWN LETTER: ',LABELSTR(I:I),
+d221 2
+a222 3
+C        STARTING LOCATION FOR LETTER IN IMAGE  
+         IXI = IOFF + (I - 1) * WIDEF
+         IYI = NROW + 1
+d226 18
+a243 2
+               BUF(IXI+IX,IYI+IY) = 
+     &                      BUFFONT(IXF+IX,IYF+IY) * SCALE + FMIN1 
+d247 1
+d249 1
+d251 1
+a251 1
+      CALL WRTVOL(LUN3,NSAM,NROW+NROWF,ISLICE,ISLICE,BUF,IRTFLG)
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d16 1
+a16 1
+C                    NSAMF,NROWF,WIDEF,LABELSTR,NLET)
+d26 2
+d35 1
+a35 2
+     &              NSAMF,NROWF,WIDEF,OFFCON,FMINF,FMAXF,LABELSTR,NLET,
+     &              aa,ab)
+d43 2
+d51 45
+d107 3
+d112 1
+a112 1
+            BUF(ISAM,IROW) = FMIN1
+d128 1
+a128 1
+      SCALE  = (FMAX1  - FMIN1) / (FMAXF - FMINF)
+d130 1
+d133 4
+a136 3
+         IT = NLET * WIDEF
+         CALL ERRT(102,'LABEL TOO WIDE',IT)
+         GOTO 9999
+d144 3
+a146 3
+            WRITE(NOUT,*) 'UNKNOWN LETTER:',LABELSTR(I:I)
+            CALL ERRT(100,'UNKNOWN LETTER',NE)
+            GOTO 9999
+d172 1
+a172 1
+C     DUMP IMAGE BUFFER
+@

@@ -1,0 +1,615 @@
+head	1.9;
+access;
+symbols
+	pre_getangas:1.7
+	GPL2010:1.7
+	pre_GPL2010:1.6
+	pre_var_equation:1.6
+	pre_fftwrings:1.6
+	pre_opfiles:1.6
+	src:1.6
+	best-code:1.6
+	x-named-regs:1.6
+	x:1.6
+	v13-00:1.6
+	pre_GPL:1.4
+	prec_CA:1.4
+	noindx:1.3
+	Bproc:1.2;
+locks; strict;
+comment	@c @;
+
+
+1.9
+date	2014.07.30.15.48.43;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2014.07.30.15.48.08;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2010.06.24.13.27.05;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2005.10.17.20.04.31;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2005.10.17.17.59.44;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2003.02.20.17.13.41;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2002.03.11.14.07.55;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2000.03.07.14.48.43;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2000.03.06.19.53.41;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.9
+log
+@*** empty log message ***
+@
+text
+@
+C **********************************************************************
+C
+C   SURFFIT.F   -- CREATED                         MAR 00 ARDEAN LEITH
+C                  MAXNAM                          JUL 14 ARDEAN LEITH
+C
+C **********************************************************************
+C=*  AUTHOR: ArDean Leith                                              *
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2014  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C SURFFIT()
+C
+C PURPOSE:     READS SPIDER 3-D PICTURE FILE, CREATES 3-D IMAGE 
+C              FILE CONTAINING NUMBERS FOR CONNECTED CLUSTERS
+C
+C PARAMETERS:  
+C
+C CALLS:       
+C
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C--*********************************************************************
+
+        SUBROUTINE SURFFIT()
+
+        INCLUDE 'CMBLOCK.INC'
+        INCLUDE 'CMLIMIT.INC'
+
+        REAL, ALLOCATABLE, DIMENSION(:) :: SLICES
+        REAL, ALLOCATABLE, DIMENSION(:) :: SURFACE
+        REAL, ALLOCATABLE, DIMENSION(:) :: BUF
+
+        REAL, PARAMETER                 :: BACKLEVEL = 0.0
+        REAL, PARAMETER                 :: SURFLEVEL = 1.0
+
+        CHARACTER(LEN=MAXNAM)           :: FILNAM
+        LOGICAL                         :: COMPARE
+
+        LUNIM    = 11
+        LUNOUT   = 12
+
+C       OPEN SPIDER VOLUME AS INPUT
+20      MAXIM    = 0
+        CALL OPFILEC(0,.TRUE.,FILNAM,LUNIM,'O',IFORM,NSAM,NROW,NSLICE,
+     &             MAXIM,'INPUT',.FALSE.,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+        IF (IMAMI.NE.1) CALL NORM3(LUNIM,NSAM,NROW,NSLICE,FMAX,FMIN,AV)
+ 
+C       DISPLAY MAX AND MIN VALUE OF PICTURE, ASK FOR THE LEVEL
+        WRITE(NOUT,91) FMIN,FMAX
+91      FORMAT(' IMAGE RANGE: ',1PG11.3,'....',1PG11.3)
+
+C       FIND THRESHOLD LEVEL FOR SURFACE            
+22      CALL RDPRM1S(THLEV,NOT_USED,'THRESHOLD LEVEL',IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 20
+
+C       OPEN NEW SPIDER VOLUME AS OUTPUT
+23      MAXIM = 0
+        CALL OPFILEC(LUNIM,.TRUE.,FILNAM,LUNOUT,'N',IFORM,
+     &             NSAM,NROW,NSLICE,
+     &             MAXIM,'SURFACE OUTPUT',.FALSE.,IRTFLG)
+        IF (IRTFLG .EQ. -1) GOTO 22
+        IF (IRTFLG .NE. 0) GOTO 9999
+
+        IF (ALLOCATED(SLICES)) DEALLOCATE(SLICES)
+        ALLOCATE (SLICES(NSAM * NROW * 2), SURFACE(NSAM * NROW * 2), 
+     &            STAT=IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 9999
+
+        IF (ALLOCATED(BUF)) DEALLOCATE(BUF)
+        ALLOCATE (BUF(NSAM), STAT=IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 9999
+
+        NUMSURFS = 0
+ 
+        DO ISLICE = 1,NSLICE
+
+           IF (MOD(ISLICE,2) .NE. 0) THEN
+C            CURRENT SLICE IS IN SLICE1
+             INOW  = 1
+             INEXT = NSAM*NROW+1
+           ELSE
+C            NEXT SLICE GOES INTO SLICE1 
+             INOW  = NSAM*NROW+1
+             INEXT = 1
+           ENDIF 
+
+           NREC1  = (ISLICE - 1) * NROW + 1
+           NREC2  = NREC1 + NROW - 1
+
+           IF (ISLICE .EQ. 1) THEN
+C             MUST LOAD FIRST SLICE 
+              CALL SURFFIT_RED(LUNIM,BUF,NSAM,NROW,NSLICE,
+     &           1,1,THLEV,SURFLEVEL,BACKLEVEL,SLICES(1),IRTFLG)
+           ENDIF
+
+           IF (ISLICE .LT. NSLICE) THEN
+C             LOAD NEW NEXT SLICE
+              ISLICEN = ISLICE + 1
+              CALL SURFFIT_RED(LUNIM,BUF,NSAM,NROW,NSLICE,ISLICEN,
+     &          ISLICEN, THLEV,SURFLEVEL,BACKLEVEL,SLICES(INEXT),IRTFLG)
+           ENDIF
+
+
+C          PROCESS CURRENT SLICE FOR SURFACE 
+           CALL SURFFIT_SET(NSAM,NROW,NSLICE,
+     &                  SLICES(INOW), SLICES(INEXT),
+     &                  ISLICE,SURFACE(INOW),SURFACE(INEXT),
+     &                  NUMSURFST,SURFLEVEL,BACKLEVEL,IRTFLG)
+
+
+           IF (IRTFLG .NE. 0) RETURN
+           NUMSURFS = NUMSURFS + NUMSURFST
+
+C          STORE CURRENT SLICE IN OUTPUT FILE
+           IPTR = 1
+           DO  IREC = (ISLICE-1) * NROW + 1,(ISLICE-1) * NROW + NROW 
+              CALL WRTLIN(LUNOUT,SURFACE(INOW + IPTR),NSAM,IREC)
+              IPTR = IPTR + NSAM
+           END DO
+
+cc           WRITE(NOUT,96) ISLICE,NUMSURFS
+96         FORMAT(' After slice:',I4,',  Surface voxels=',I10)
+
+        ENDDO
+
+        WRITE(NOUT,97) NUMSURFS
+97      FORMAT(' Total Surface voxels=',I10)
+
+9999    CONTINUE
+C       CLOSE THE FILES
+        CLOSE(LUNOUT)
+        CLOSE(LUNIM)
+        IF (ALLOCATED(BUF))     DEALLOCATE(BUF)
+        IF (ALLOCATED(SURFACE)) DEALLOCATE(SURFACE)
+        IF (ALLOCATED(SLICES))  DEALLOCATE(SLICES)
+
+        RETURN
+        END
+    
+
+C      ----------------------- SURFFIT_SET ------------------------
+
+       SUBROUTINE SURFFIT_SET(NSAM,NROW,NSLICE,SLICE1,SLICE2,
+     &                        ISLICE,SURFACE1,SURFACE2,NSURF,
+     &                        SURFLEVEL,BACKLEVEL,IRTFLG)
+
+ 
+       COMMON /UNITS/LUN,NIN,NOUT,NECHO,IFOUND,NPROC,NDAT
+
+       REAL, DIMENSION(NSAM*NROW) :: SLICE1,SLICE2
+       REAL, DIMENSION(NSAM*NROW) :: SURFACE1,SURFACE2
+       REAL, DIMENSION(NSAM) ::      BUF
+       LOGICAL ::                    ATSURF
+
+       DATA FLTZER/10E-10/
+       
+       THLEV  = BACKLEVEL
+
+       IRTFLG = 0
+
+       NMT    = 0
+       NOCC   = 0
+       NSURF  = 0
+
+C      ZERO SURFACE FOR NEXT SLICE DOWN
+       DO I = 1,NSAM * NROW 
+          SURFACE2(I) = 0.0
+       ENDDO
+
+       DO  IROW = 1, NROW
+          IPTR0 = (IROW-1) * NSAM
+
+       DO  ICOL = 1, NSAM
+          IPTR1 = IPTR0 + ICOL
+
+          IF (SLICE1(IPTR1) .LE. THLEV) THEN
+C            EMPTY VOXEL ON THIS SLICE
+             ATSURF = .FALSE.
+             NMT    = NMT + 1
+       
+             IF (ISLICE .LT. NSLICE .AND. SLICE2(IPTR1) .GT. THLEV)THEN
+C                WILL HAVE A VOXEL ON SLICE2 AT SURFACE
+                 SURFACE2(IPTR1) = SURFLEVEL
+                 NSURF           = NSURF + 1
+             ENDIF
+          ELSE
+C            OCCUPIED VOXEL
+             NOCC   = NOCC + 1
+
+             ATSURF = .FALSE.
+
+             IF (ICOL .GT. 1 .AND. SLICE1(IPTR1-1) .LE. THLEV) THEN
+                ATSURF = .TRUE.
+
+             ELSEIF (ICOL .LT. NSAM .AND. SLICE1(IPTR1+1) .LE. THLEV)
+     &          THEN
+                ATSURF = .TRUE.
+
+             ELSEIF (IROW .GT. 1 .AND. SLICE1(IPTR1-NSAM) .LE. THLEV)
+     &          THEN
+                ATSURF = .TRUE.
+
+             ELSEIF(IROW .LT. NSAM .AND. SLICE1(IPTR1+NSAM).LE. THLEV)
+     &          THEN
+                ATSURF = .TRUE.
+
+             ELSEIF (ISLICE .LT. NSLICE .AND. SLICE2(IPTR1) .LE. THLEV)
+     &          THEN
+                ATSURF = .TRUE.
+             ENDIF
+
+             IF (ATSURF) THEN
+C               VOXEL ON THIS SLICE1 IS AT SURFACE
+             
+                IF (SURFACE1(IPTR1) .NE. SLICE1(IPTR1)) THEN
+                   SURFACE1(IPTR1) = SURFLEVEL
+                   NSURF           = NSURF + 1
+                ENDIF
+             ENDIF
+          ENDIF
+
+         ENDDO
+         ENDDo
+
+         END
+
+
+C      ----------------------- SURFFIT_RED ------------------------
+
+         SUBROUTINE SURFFIT_RED(LUNIM,BUF,NSAM,NROW,NSLICE,
+     &                    ISLICE1,ISLICE2,THLEV,SURFLEVEL,BACKLEVEL,
+     &                     VOLUME,IRTFLG)
+ 
+         REAL, DIMENSION(NSAM*NROW) :: VOLUME
+         REAL, DIMENSION(NSAM) ::      BUF
+
+C        READ THE SPIDER FILE INTO SLICE ARRAY
+         NREC1 = (ISLICE1 - 1) * NROW + 1
+         NREC2 = (ISLICE2 - 1) * NROW + NROW 
+
+         IPTR = 0 
+
+           DO  I = NREC1,NREC2
+             CALL REDLIN(LUNIM,BUF,NSAM,I)
+
+             DO  J = 1,NSAM
+               IPTR = IPTR + 1
+
+               IF (BUF(J) .GT. THLEV) THEN
+C                 VOXEL IS ABOVE THRESHOLD
+                  VOLUME(IPTR) = SURFLEVEL
+               ELSE
+                  VOLUME(IPTR) = BACKLEVEL
+               ENDIF
+             END DO
+           END DO
+
+
+         RETURN
+         END
+    
+@
+
+
+1.8
+log
+@LEN=MAXNAM)           :: FILNAM
+@
+text
+@d1 1
+@
+
+
+1.7
+log
+@GPL_2010
+@
+text
+@d3 3
+a5 1
+C   SURFFIT.F   -- CREATED MAR 00
+d7 1
+a7 1
+C *  AUTHOR: ArDean Leith 
+d11 1
+a11 1
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+d29 1
+a29 1
+C      SURFFIT()
+d31 2
+a32 2
+C      PURPOSE:     READS SPIDER 3-D PICTURE FILE, CREATES 3-D IMAGE 
+C                   FILE CONTAINING NUMBERS FOR CONNECTED CLUSTERS
+d34 1
+a34 1
+C      PARAMETERS:  
+d36 1
+a36 1
+C      CALLS:       
+d44 1
+d50 5
+a54 4
+        REAL, PARAMETER ::   BACKLEVEL = 0.0
+        REAL, PARAMETER ::   SURFLEVEL = 1.0
+        CHARACTER(LEN=81) :: FILNAM
+        LOGICAL  ::          COMPARE
+@
+
+
+1.6
+log
+@GPL License fixed
+@
+text
+@a5 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d7 5
+a11 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d13 1
+a13 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d18 1
+a18 1
+C=* This program is distributed in the hope that it will be useful,    *
+d20 1
+a20 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a21 1
+C=*                                                                    *
+d23 1
+a23 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.5
+log
+@HRI GPL License used
+@
+text
+@a1 1
+C**************************************************************************
+a4 1
+C **************************************************************************
+d9 1
+a9 1
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *  
+a28 7
+
+C *  COPYRIGHT (C)2000 , WADSWORTH CENTER FOR LABORATORIES AND RESEARCH    *
+C *    NEW YORK STATE DEPARTMENT OF HEALTH, ALBANY, NY 12201.              *
+C *    THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO THE CENTER FOR     *
+C *    LABORATORIES AND RESEARCH AND ARE NOT TO BE DISCLOSED TO OTHERS OR  *
+C *    USED FOR PURPOSES OTHER THAN INTENDED WITHOUT WRITTEN APPROVAL OF   *
+C *    THE CENTER FOR LABORATORIES AND RESEARCH  			   *
+a29 1
+C **************************************************************************
+@
+
+
+1.4
+log
+@opfilec
+@
+text
+@d1 1
+d5 1
+d8 24
+d38 1
+@
+
+
+1.3
+log
+@nloop,iloop_removed
+@
+text
+@d44 1
+a44 1
+        CALL OPFILE(.TRUE.,FILNAM,LUNIM,'O',IFORM,NSAM,NROW,NSLICE,
+d60 2
+a61 1
+        CALL OPFILE(.TRUE.,FILNAM,LUNOUT,'N',IFORM,NSAM,NROW,NSLICE,
+@
+
+
+1.2
+log
+@*** empty log message ***
+@
+text
+@d55 1
+a55 1
+22      CALL RDPRM1S(THLEV,NLOOP,ILOOP,'THRESHOLD LEVEL',IRTFLG)
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d34 4
+a37 2
+        CHARACTER * 81 FILNAM
+        LOGICAL  ::    COMPARE
+a38 2
+        DATA FLTZER/10E-30/
+
+a41 1
+
+a47 5
+        IF (IFORM .NE. 3) THEN
+            CALL ERRT(102,'NOT A VOLUME',NE)
+            RETURN
+        ENDIF
+
+d50 1
+a50 1
+C       DISPLAY MAX AND MIN VALUE OF PICTURE , ASK FOR THE LEVEL
+d55 1
+a55 1
+22      CALL RDPRM2S(THLEV,FDUM,NLOOP,ILOOP,'THRESHOLD LEVEL',IRTFLG)
+a59 1
+        IFORM = 3          
+d92 3
+a94 3
+C             MUST LOAD FIRST SLICE ALSO
+              CALL REDSLI(LUNIM,BUF,NSAM,NROW,NSLICE,
+     &                 1,1,.TRUE.,THLEV,SLICES(1),IRTFLG)
+d100 2
+a101 2
+              CALL REDSLI(LUNIM,BUF,NSAM,NROW,NSLICE,
+     &              ISLICEN,ISLICEN,.TRUE.,THLEV,SLICES(INEXT),IRTFLG)
+a103 4
+C          ZERO SURFACE FOR NEXT SLICE DOWN
+           DO I = 0,NSAM * NROW - 1
+              SURFACE(INEXT+I) = 0.0
+           ENDDO
+d109 1
+a109 1
+     &                  NUMSURFST, IRTFLG)
+d122 1
+a122 1
+           WRITE(NOUT,96) ISLICE,NUMSURFS
+d145 2
+a146 1
+     &                        ISLICE,SURFACE1,SURFACE2,NSURF,IRTFLG)
+d153 2
+a154 2
+       REAL, DIMENSION(NSAM) :: BUF
+       LOGICAL        ATSURF
+d156 4
+d166 5
+d177 1
+a177 1
+          IF (SLICE1(IPTR1) .EQ. 0) THEN
+d182 3
+a184 3
+             IF (ISLICE .LT. NSLICE .AND. SLICE2(IPTR1) .GT. 0)THEN
+C               VOXEL ON SLICE2 IS AT SURFACE
+                 SURFACE2(IPTR1) = 1.0
+d193 1
+a193 1
+             IF (ICOL .GT. 1 .AND. SLICE1(IPTR1-1) .LE. 0) THEN
+d196 2
+a197 1
+             ELSEIF (ICOL .LT. NSAM .AND. SLICE1(IPTR1+1) .LE. 0) THEN
+d200 2
+a201 1
+             ELSEIF (IROW .GT. 1 .AND. SLICE1(IPTR1-NSAM) .LE. 0) THEN
+d204 2
+a205 2
+             ELSEIF(IROW .LT. NSAM .AND. SLICE1(IPTR1+NSAM).LE. 0)THEN
+ 
+d208 2
+a209 1
+             ELSEIF (ISLICE .LT. NSLICE .AND. SLICE2(IPTR1) .LE. 0)THEN
+d216 2
+a217 2
+                IF (SURFACE1(IPTR1) .LE. 0.0) THEN
+                   SURFACE1(IPTR1) = 1.0
+d229 1
+a229 1
+C      ----------------------- REDSLI ------------------------
+d231 3
+a233 2
+         SUBROUTINE REDSLI(LUNIM,BUF,NSAM,NROW,NSLICE,
+     &                    ISLICE1,ISLICE2,THRESH,THLEV,VOLUME,IRTFLG)
+a237 2
+         LOGICAL ::                    THRESH
+
+a243 1
+         IF (THRESH) THEN
+d252 1
+a252 1
+                  VOLUME(IPTR) = 1.0
+d254 1
+a254 1
+                  VOLUME(IPTR) = 0.0
+a258 8
+         ELSE
+           IPTR = 1
+           DO  I = NREC1,NREC2
+             CALL REDLIN(LUNIM,VOLUME(IPTR),NSAM,I)
+             IPTR = IPTR + NSAM
+           END DO
+
+         ENDIF
+@

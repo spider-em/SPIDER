@@ -1,0 +1,1145 @@
+head	1.10;
+access;
+symbols
+	pre_getangas:1.9
+	pre_GPL2010:1.9
+	pre_var_equation:1.9
+	pre_fftwrings:1.7
+	pre_opfiles:1.5
+	src:1.5
+	best-code:1.5
+	x-named-regs:1.5
+	x:1.5
+	v13-00:1.5
+	pre_GPL:1.4
+	prec_CA:1.4
+	noindx:1.2;
+locks; strict;
+comment	@c @;
+
+
+1.10
+date	2013.06.14.14.05.04;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2009.04.28.13.15.35;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2008.05.19.12.03.08;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2008.04.09.13.29.20;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2008.02.19.16.33.47;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2005.10.17.16.54.53;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2003.09.05.17.10.20;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2003.02.20.20.55.29;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2003.01.06.15.50.26;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2002.12.27.19.32.54;	author pawel;	state Exp;
+branches;
+next	;
+
+
+desc
+@OR A
+@
+
+
+1.10
+log
+@ccrs_2i bug fixed, rewrite
+@
+text
+@
+C **********************************************************************
+C *  ORACFMSK.F 
+C                  OPFILEC                         FEB 03 ARDEAN LEITH
+C                  FMRS_PLAN                       MAY 08 ARDEAN LEITH
+C                  CCRS_2I                         APR 09 ARDEAN LEITH
+C=**********************************************************************
+C=* From: SPIDER - MODULAR IMAGE PROCESSING SYSTEM                     *
+C=* Copyright (C)2002 & 2009, P. A. Penczek                            *
+C=*                                                                    *
+C=* University of Texas - Houston Medical School                       *
+C=* Email:  pawel.a.penczek@@uth.tmc.edu                                *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* This program is distributed in the hope that it will be useful,    *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+C=* General Public License for more details.                           *
+C=*                                                                    *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+C=*                                                                    *
+C=**********************************************************************
+C
+C ORACFMSK
+C
+C PURPOSE: ORIENTATION SEARCH - 2D
+C          DETERMINES ROTATIONAL AND TRANSLATIONAL ORIENTATION BETWEEN 
+C          TWO IMAGES USING SELF-CORRELATION FUNCTIONS. OPTIONALLY 
+C          WITH ADDITIONAL CHECK OF MIRROR TRANSFORMATION. 
+C    
+C NOTE:    SLOPPILY WRITTEN.  USES OBSOLETE DUPLICATED ROUTINES.
+C          APPEARS TO BE CLONED FROM : ORACFMSKM.F
+c
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C--*********************************************************************
+
+        SUBROUTINE ORACFMSK
+
+        INCLUDE 'CMBLOCK.INC'
+        INCLUDE 'CMLIMIT.INC'
+
+        CHARACTER(LEN=MAXNAM):: FINPIC,FINPAT
+
+        REAL, ALLOCATABLE    :: REF(:,:), ALIGNED(:,:)
+        INTEGER, ALLOCATABLE :: NUMR(:,:)
+        REAL, ALLOCATABLE    :: REFER_CIRC(:)
+        REAL, ALLOCATABLE    :: REFPAD(:,:)
+
+        LOGICAL              :: MIRROR
+        CHARACTER(LEN=1)     :: MODE,ASK
+        CHARACTER(LEN=3)     :: CMIR
+
+	INTEGER, PARAMETER   :: INPIC   = 77
+	INTEGER, PARAMETER   :: INREF   = 76
+
+C       ASK FOR DATA FILES
+        MAXIM = 0
+        CALL OPFILEC(0,.TRUE.,FINPIC,INPIC,'O',ITYPE,NX,NY,
+     &              NZ,MAXIM,'EXPERMENTAL IMAGE',.FALSE.,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+        MAXIM = 0
+        CALL OPFILEC(0,.TRUE.,FINPIC,INREF,'O',ITYPE,NX,NY,
+     &              NZ,MAXIM,'REFERENCE IMAGE',.FALSE.,IRTFLG)
+        IF (IRTFLG .NE. 0) THEN
+           CLOSE (INPIC)
+           RETURN
+        ENDIF
+
+        CALL RDPRI2S(MRA,MRR,NOT_USED,
+     &    'REAL SPACE MASK RADIUS FOR EXP. AND REF. IMAGES',IRTFLG)
+        IF (IRTFLG.NE.0)  GOTO 9999
+
+        IF (MRR <= 0 .OR. 
+     &      MRR >= MIN((NX/2),(NY/2))) THEN
+           CALL ERRT(102,'INVALID EXP. MASK RADIUS',MRR)
+           GOTO 9999
+        ENDIF
+
+        IF (MRA <= 0 .OR. 
+     &      MRA >= MIN((NX/2),(NY/2))) THEN
+           CALL ERRT(102,'INVALID REF MASK RADIUS',MRA)
+           GOTO 9999
+        ENDIF
+
+        CALL RDPRI2S(NRING,NSHIFT,NOT_USED,
+     &    'RADIUS OF THE ACF, MAXIMUM SHIFT',IRTFLG)
+        IF (IRTFLG.NE.0)  GOTO 9999
+
+        IF (NRING <= 0. OR.
+     &      NRING >= MIN((NX/2),(NY/2)) .OR.
+     &      NRING > 2*MIN(MRA,MRR) ) THEN
+           CALL ERRT(102,'INVALID ACF RADIUS',MRA)
+           GOTO 9999
+        ENDIF
+
+        CALL RDPRMC(ASK,NA,.TRUE.,
+     &          'CHECK MIRRORED POSITIONS? (Y/N)', NULL,IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 9999
+
+        MIRROR = (ASK == '1' .OR. ASK == 'Y')
+
+        MODE = 'H'
+C       PADDED DIMENSIONS FOR CCF AND SACF ARE ALWAYS EVEN
+
+C       CCF
+        I    = MAX(NX,MRA+MRR+NSHIFT)
+        NEWS = NEARESTFFTFRIEND(I)
+        I    = MAX(NY,MRA+MRR+NSHIFT)
+        NEWR = NEARESTFFTFRIEND(I)
+        WRITE(NOUT,*)  ' Dimensions for CCF:',NEWS,NEWR
+
+C       ACF
+        I     = MAX(4*MAX(MRA,MRR)+2,NX)
+        NAS   = NEARESTFFTFRIEND(I)
+        I     = MAX(4*MAX(MRA,MRR)+2,NY)
+        NAR   = NEARESTFFTFRIEND(I)
+        WRITE(NOUT,*) ' Dimensions for ACF:',NAS,NAR
+
+        ALLOCATE(NUMR(3,NRING),STAT=IRTFLG)
+        IF (IRTFLG .NE. 0) THEN
+           MWANT = 3 * NRING
+           CALL ERRT(46,'ORACFMSK;  NUMR',MWANT)
+           GOTO 9999
+        ENDIF
+
+        DO I=1,NRING
+           NUMR(1,I) = I
+        ENDDO
+
+C       PUTS CIRCULAR RINGS IN A LINEAR ARRAY, CONCATENATED TOGETHER.
+C       RETURNS NUMR & LCIRC.
+        CALL ALPRBS(NUMR,NRING,LCIRC,MODE)
+        MAXRIN = NUMR(3,NRING)
+
+        ALLOCATE(REF(NX,NY),
+     &           ALIGNED(NX,NY),
+     &           REFER_CIRC(LCIRC),
+     &           REFPAD(NEWS+2,NEWR),STAT=IRTFLG)
+        IF (IRTFLG .NE. 0) THEN
+            MWANT = NX*NY*2 + LCIRC + (NEWS+2)*NEWR
+            CALL ERRT(46,'ORACFMSK; REFER_CIRC',MWANT)
+            GOTO 9999
+        ENDIF 
+
+C       INPUT SAMPLE AND REFERENCE IMAGES
+        NSL = 1
+        CALL READV(INPIC,ALIGNED,NX,NY,NX,NY,NSL)
+        CALL READV(INREF,REF,    NX,NY,NX,NY,NSL)
+
+C       DETERMINE NUMBER OF OMP THREADS
+        CALL GETTHREADS(NUMTH)
+C       WRITE(NOUT,*) ' NUMBER OF OMP THREADS: ',NUMTH
+
+        CALL PREPREF1(REF,NX,NY,NEWS,NEWR,NAS,NAR,MRR,
+     &                LCIRC,NUMR,NRING,MAXRIN,NUMTH,
+     &                REFER_CIRC,REFPAD,IRTFLG)
+
+        IF (ALLOCATED(REF)) DEALLOCATE (REF)
+        IF (IRTFLG .NE. 0) GOTO 9999
+
+        CALL ORACFMSK_1(ALIGNED,NX,NY,
+     &          NEWS,NEWR,NAS,NAR,MRA,MRR,NSHIFT,MIRROR,
+     &          LCIRC,NUMR,NRING,MAXRIN,NUMTH,REFER_CIRC,REFPAD,
+     &          ALPHA,SX,SY,MR,CMA)
+
+        CMIR = 'No '
+        IF (MR > 0) CMIR = 'Yes' 
+        WRITE(NOUT,*)  ' '
+        WRITE(NOUT,90) ALPHA,SX,SY,CMIR,CMA
+90      FORMAT('  Rotation:',F7.2,'  Shifts: (',F7.3,',',F7.3,
+     &         ')   Mirror: ',A,'  CC:',F8.4)
+        IF (VERBOSE) WRITE(NOUT,*)  ' '
+ 
+        CALL  REG_SET_NSEL(1,5,ALPHA,SX,SY,REAL(MR),CMA,IRTFLG)
+
+9999    IF(ALLOCATED(REFER_CIRC)) DEALLOCATE(REFER_CIRC)
+        IF(ALLOCATED(REFPAD))     DEALLOCATE(REFPAD)
+        IF(ALLOCATED(ALIGNED))    DEALLOCATE(ALIGNED)
+        IF(ALLOCATED(NUMR))       DEALLOCATE(NUMR)
+
+        CALL FMRS_DEPLAN(IRTFLG)
+
+        CLOSE(INPIC)
+        CLOSE(INREF)
+
+        END
+
+C       ------------  PREPREF1 ----------------------------------
+
+        SUBROUTINE PREPREF1(REF,NX,NY,NEWS,NEWR,NAS,NAR,MRR,
+     &                LCIRC,NUMR,NRING,MAXRIN,NUMTH,
+     &                REFER_CIRC,REFPAD,IRTFLG)
+
+C       EXTERNAL ARRAYS
+        INTEGER :: NUMR(3,NRING)
+        REAL    :: REF(NX,NY),REFER_CIRC(LCIRC),REFPAD(NEWS+2,NEWR)
+
+        REAL, ALLOCATABLE :: BUF(:,:)
+
+C       AUTOMATIC ARRAYS
+        REAL              :: WR(NRING)
+
+        CHARACTER(LEN=1)  :: MODE = 'H'
+
+        ALLOCATE(BUF(NAS+2,NAR),  STAT=IRTFLG)   !FFTW PADDING
+        IF (IRTFLG .NE. 0) THEN
+            MWANT = (NAS+2)*NAR
+            CALL  ERRT(46,'PREPREF1; BUF',MWANT)
+            RETURN
+        ENDIF 
+
+        CALL FMRS_PLAN(.TRUE.,BUF, NAS,NAR,1, 0,+1,IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 9999
+        CALL FMRS_PLAN(.TRUE.,BUF, NAS,NAR,1, 0,-1,IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 9999
+        CALL FMRS_PLAN(.TRUE.,BUF, NAS,NAR,1, 1,+1,IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 9999
+        CALL FMRS_PLAN(.TRUE.,BUF, NAS,NAR,1, 1,-1,IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 9999
+
+C       FINDS WEIGHTS FOR RADIAL X-CORRELATION RINGS                                                            *
+        CALL RINGWE(WR,NUMR,NRING,MAXRIN)
+
+        BUF(1:NX,1:NY) = REF    ! WHOLE ARRAY COPY, PADDED
+
+C       HAS FORWARD & REVERSE FFT ON: NAS,NAR
+        CALL MACF_PL(NX,NY,BUF,NAS,NAR,MRR)
+
+        CALL ALRQ_LSD(BUF,NAS+2,NAS,NAR,NUMR,
+     &                REFER_CIRC,LCIRC,NRING,MODE)
+
+C       HAS SPIDER FFT
+        CALL FRNGS(REFER_CIRC,LCIRC,NUMR,NRING)
+
+        CALL APPLYWS(REFER_CIRC,LCIRC,NUMR,WR,NRING,MAXRIN)
+
+C       HAS: FORWARD FMRS2 on: NEWS,NEWR 
+        CALL PREPFORCCN(REF,REFPAD,NX,NY,NEWS,NEWR,MRR)
+
+9999    IF (ALLOCATED(BUF)) DEALLOCATE(BUF)
+
+        END
+
+
+C       ************************ ORACFMSK_1 ******************
+
+        SUBROUTINE ORACFMSK_1(ALIGNED,NX,NY,
+     &          NEWS,NEWR,NAS,NAR,MRA,MRR,NSHIFT,MIRROR,
+     &          LCIRC,NUMR,NRING,MAXRIN,NUMTH,REFER_CIRC,REFPAD,
+     &          ALPHA,SX,SY,MR,CMA)
+
+        INTEGER              :: NUMR(3,NRING)
+        REAL                 :: ALIGNED(NX,NY)
+        REAL                 :: REFER_CIRC(LCIRC)
+        REAL                 :: REFPAD(NEWS+2,NEWR)
+
+        REAL, ALLOCATABLE    :: CIRA(:,:),CIRR(:,:),DIVIS(:,:)
+        DOUBLE PRECISION     :: TT(1)
+
+        LOGICAL              :: MIRROR
+
+C       PREPARE THE NORMALIZATION FILE FOR THE CCC
+        ICPX = INT(NEWS/2)+1
+        ICPY = INT(NEWR/2)+1
+        MRR2 = MRR**2
+        MRA2 = MRA**2
+
+        ALLOCATE(CIRA(NEWS+2,NEWR),
+     &           CIRR(NEWS+2,NEWR),
+     &           DIVIS(-NSHIFT:NSHIFT,-NSHIFT:NSHIFT),STAT=IRTFLG)
+        IF (IRTFLG .NE. 0) THEN
+            MWANT = 2*(NEWS+2)*NEWR + 2*(NSHIFT+1)*2*(NSHIFT+1)
+            CALL  ERRT(46,'ORACFMSK_1; CIRA...',MWANT)
+            GOTO 9999
+        ENDIF
+
+        CALL FMRS_PLAN(.TRUE.,CIRA, NEWS,NEWR,1, 0,+1,IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 9999
+        CALL FMRS_PLAN(.TRUE.,CIRA, NEWS,NEWR,1, 0,-1,IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 9999
+        CALL FMRS_PLAN(.TRUE.,CIRA, NEWS,NEWR,1, 1,+1,IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 9999
+        CALL FMRS_PLAN(.TRUE.,CIRA, NEWS,NEWR,1, 1,-1,IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 9999
+
+c$omp   parallel do private (i,j,j2,i2)
+        DO J=1,NEWS
+          J2 = (J-ICPY)**2
+          DO I=1,NEWR
+            I2 = J2+(I-ICPX)**2
+            IF (I2 > MRA2) THEN
+               CIRA(I,J) = 0.0
+            ELSE
+               CIRA(I,J) = 1.0
+            ENDIF
+
+            IF (I2 > MRR2) THEN
+                CIRR(I,J) = 0.0
+            ELSE
+                CIRR(I,J) = 1.0
+            ENDIF
+          ENDDO
+        ENDDO
+
+C       FORWARD FOURIER TRANSFORMS OF: CIRA & CIRR ON: NEWS,NEWR
+        INV = +1
+        CALL FMRS_2(CIRA,NEWS,NEWR,INV)
+        INV = +1
+        CALL FMRS_2(CIRR,NEWS,NEWR,INV)
+
+C       CROSS-CORRELATE: CIRA x CIRR, REVERSE FFT: CIRA, RETURNS: CIRA
+        LSC = NEWS+2-MOD(NEWS,2)
+
+        CALL CCRS_2(CIRA,CIRR,CIRA, LSC,NEWS,NEWR)
+        !!CALL CCRS_2I(CIRA,CIRR, LSC,NEWS,NEWR)
+
+C       divis is only use of cross-correlation step?? al
+
+        TMP   = 1.0 / CIRA(ICPX,ICPY)
+        DIVIS = CIRA(ICPX-NSHIFT:ICPX+NSHIFT, 
+     &               ICPY-NSHIFT:ICPY+NSHIFT) * TMP
+
+        NIMA = 1
+        IDI  = 1
+
+C       OUTPUT PARAMETERS ARE:
+C       NUMBER OF THE MOST SIMILAR REFERENCE PROJECTION.
+C       CORR COEFF.(D5), ANGLE (D4), SHIFT: XSHSUM, YSHSUM
+
+C       HAS FORWARD & REVERSE FFT ON: NAS,NAR, & ON: NEWS,NEWR
+        CALL ORA2D(ALIGNED,REFER_CIRC,REFPAD,TT,NUMR,
+     &           NX,NY,NEWS,NEWR, NAS,NAR,MRA,DIVIS,NSHIFT,
+     &           LCIRC,NRING,MAXRIN,NIMA,MIRROR,
+     &           IDI, CMA,ALPHA,SX,SY)
+
+        IF (IDI > 0) THEN
+           MR = 0
+        ELSE
+           MR = 1
+        ENDIF
+
+C       DEALLOCATE LOCAL ARRAYS
+9999    IF (ALLOCATED(CIRA)) DEALLOCATE(CIRA)
+        IF (ALLOCATED(CIRR)) DEALLOCATE(CIRR)
+
+        END
+@
+
+
+1.9
+log
+@*** empty log message ***
+@
+text
+@a11 1
+C=*                                                                    *
+d47 3
+a49 2
+        COMMON  /F_SPEC/  FINPAT,NLET,FINPIC
+        CHARACTER*80  FINPIC,FINPAT
+d51 4
+a54 8
+        REAL, ALLOCATABLE, DIMENSION(:,:)    :: REF,ALIGNED
+        INTEGER, ALLOCATABLE, DIMENSION(:,:) :: NUMR
+        REAL, ALLOCATABLE, DIMENSION(:)      :: REFER_CIRC
+        REAL, ALLOCATABLE, DIMENSION(:,:)    :: REFPAD
+
+        COMMON /MXR/ MAXRIN                  ! USED BY ANGMOR, bug-prone! al
+        LOGICAL                              :: MIRROR
+        CHARACTER(LEN=1)                     :: MODE
+d56 6
+a61 1
+        DATA  INPIC/77/,INREF/76/
+d65 2
+a66 2
+        CALL OPFILEC(0,.TRUE.,FINPIC,INPIC,'O',ITYPE,NSAM,NROW,
+     &              NSLICE,MAXIM,'INPUT',.FALSE.,IRTFLG)
+d70 2
+a71 2
+        CALL OPFILEC(0,.TRUE.,FINPIC,INREF,'O',ITYPE,NSAM,NROW,
+     &              NSLICE,MAXIM,'REFERENCE',.FALSE.,IRTFLG)
+d77 9
+a85 2
+        CALL  RDPRMI(MRA,MRR,NOT_USED,
+     &    'REAL SPACE MASK RADIUS FOR THE ALIGNED AND REFERENCE IMAGES')
+d87 4
+a90 4
+        IF (MRR .LE. 0 .OR.
+     &      MRR. GE. MIN((NSAM/2),(NROW/2))) THEN
+           CALL ERRT(31,'OR A',NE)
+           RETURN
+d93 10
+a102 2
+        CALL  RDPRMI(NRING,NSHIFT,NOT_USED,
+     &              'RADIUS OF ACF, MAXIMUM SHIFT')
+d104 3
+a106 6
+        IF (NRING .LE. 0 .OR. 
+     &      NRING .GE. MIN((NSAM/2),(NROW/2)) .OR. 
+     &      NRING .GT. 2*MIN(MRA,MRR) ) THEN
+           CALL ERRT(31,'OR A',NE)
+           RETURN
+        ENDIF
+d108 1
+a108 4
+        CALL RDPRI1S(IMIRROR,NOT_USED,
+     &        'CHECK MIRRORED POSITIONS (0=NOCHECK / 1=CHECK)?',IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+        MIRROR = (IMIRROR .NE. 0)
+d114 1
+a114 1
+        I    = MAX(NSAM,MRA+MRR+NSHIFT)
+d116 1
+a116 1
+        I    = MAX(NROW,MRA+MRR+NSHIFT)
+d118 1
+a118 1
+        WRITE(NOUT,*)  ' DIMENSIONS FOR CCF',NEWS,NEWR
+d121 1
+a121 1
+        I     = MAX(4*MAX(MRA,MRR)+2,NSAM)
+d123 1
+a123 1
+        I     = MAX(4*MAX(MRA,MRR)+2,NROW)
+d125 1
+a125 1
+        WRITE(NOUT,*)  ' DIMENSIONS FOR ACF',NAS,NAR
+d130 1
+a130 1
+           CALL ERRT(46,'OR A,  NUMR',MWANT)
+d140 1
+a140 1
+        CALL  ALPRBS(NUMR,NRING,LCIRC,MODE)
+d143 2
+a144 2
+        ALLOCATE(REF(NSAM,NROW),
+     &           ALIGNED(NSAM,NROW),
+d148 2
+a149 2
+            MWANT = NSAM*NROW*2 + LCIRC + (NEWS+2)*NEWR
+            CALL  ERRT(46,'OR A, REFER_CIRC',MWANT)
+d154 3
+a156 6
+        NSL=1
+        CALL  READV(INPIC,ALIGNED,NSAM,NROW,NSAM,NROW,NSL)
+        CLOSE(INPIC)
+
+        CALL  READV(INREF,REF,NSAM,NROW,NSAM,NROW,NSL)
+        CLOSE(INREF)
+d162 1
+a162 1
+        CALL PREPREF1(REF,NSAM,NROW,NEWS,NEWR,NAS,NAR,MRR,
+d169 1
+a169 1
+        CALL ORACFMSK_1(ALIGNED,NSAM,NROW,
+d174 8
+a181 2
+        WRITE(NOUT,*)  ALPHA,SX,SY,MR,CMA
+
+d191 3
+d198 1
+a198 1
+        SUBROUTINE PREPREF1(REF,NSAM,NROW,NEWS,NEWR,NAS,NAR,MRR,
+d204 1
+a204 1
+	REAL    :: REF(NSAM,NROW),REFER_CIRC(LCIRC),REFPAD(NEWS+2,NEWR)
+d206 1
+a206 1
+	REAL, ALLOCATABLE, DIMENSION(:,:) :: BUF
+d209 1
+a209 1
+	REAL             :: WR(NRING)
+d211 1
+a211 1
+        CHARACTER(LEN=1) :: MODE
+d213 2
+a214 4
+	MODE = 'H'
+
+	ALLOCATE(BUF(NAS+2,NAR),STAT=IRTFLG)
+	IF (IRTFLG .NE. 0) THEN
+d216 1
+a216 1
+            CALL  ERRT(46,'OR A, BUF',MWANT)
+d221 1
+a221 1
+        IF (IRTFLG .NE. 0) RETURN
+d223 1
+a223 1
+        IF (IRTFLG .NE. 0) RETURN
+d225 1
+a225 1
+        IF (IRTFLG .NE. 0) RETURN
+d227 1
+a227 1
+        IF (IRTFLG .NE. 0) RETURN
+d229 2
+a230 1
+	CALL RINGWE(WR,NUMR,NRING,MAXRIN)
+d232 1
+a232 1
+	BUF(1:NSAM,1:NROW) = REF
+d235 1
+a235 1
+	CALL MACF_PL(NSAM,NROW,BUF,NAS,NAR,MRR)
+d238 1
+a238 1
+     &	              REFER_CIRC,LCIRC,NRING,MODE)
+d241 1
+a241 1
+	CALL FRNGS(REFER_CIRC,LCIRC,NUMR,NRING)
+d243 1
+a243 1
+	CALL APPLYWS(REFER_CIRC,LCIRC,NUMR,WR,NRING,MAXRIN)
+d246 1
+a246 1
+	CALL PREPFORCCN(REF,REFPAD,NSAM,NROW,NEWS,NEWR,MRR)
+d248 1
+a248 1
+	IF (ALLOCATED(BUF)) DEALLOCATE(BUF)
+d250 1
+a250 1
+	END
+d255 2
+a256 2
+        SUBROUTINE ORACFMSK_1(ALIGNED,NSAM,NROW,
+     &		NEWS,NEWR,NAS,NAR,MRA,MRR,NSHIFT,MIRROR,
+d258 9
+a266 1
+     &		ALPHA,SX,SY,MR,CMA)
+d268 1
+a268 26
+	INTEGER, DIMENSION(3,NRING)                 :: NUMR
+	REAL,  DIMENSION(NSAM,NROW)                 :: ALIGNED
+	REAL, DIMENSION(LCIRC)                      :: REFER_CIRC
+	REAL, DIMENSION(NEWS+2,NEWR)                :: REFPAD
+
+	REAL, ALLOCATABLE, DIMENSION(:,:)           :: CIRA,CIRR,DIVIS
+	DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:) :: TT
+
+	LOGICAL                                     :: MIRROR
+
+#ifdef  SP_LIBFFT
+	ALLOCATE(TT(MAXRIN+15),STAT=IRTFLG)
+	IF (IRTFLG.NE.0) THEN
+           MWANT = MAXRIN+15
+           CALL  ERRT(46,'OR A, TT',MWANT)
+           GOTO 9999
+        ENDIF 
+	CALL DZFFT1DUI(MAXRIN,TT)
+#else
+	ALLOCATE(TT(1),STAT=IRTFLG)
+	IF (IRTFLG.NE.0) THEN
+           MWANT = 1
+           CALL ERRT(46,'OR A, TT',MWANT)
+           GOTO 9999
+        ENDIF 
+#endif
+d271 4
+a274 4
+	ICPX = INT(NEWS/2)+1
+	ICPY = INT(NEWR/2)+1
+	MRR2 = MRR**2
+	MRA2 = MRA**2
+d276 1
+a276 1
+	ALLOCATE(CIRA(NEWS+2,NEWR),
+d278 2
+a279 2
+     &		 DIVIS(-NSHIFT:NSHIFT,-NSHIFT:NSHIFT),STAT=IRTFLG)
+	IF (IRTFLG .NE. 0) THEN
+d281 1
+a281 1
+            CALL  ERRT(46,'OR A, CIRA...',MWANT)
+d286 1
+a286 1
+        IF (IRTFLG .NE. 0) RETURN
+d288 1
+a288 1
+        IF (IRTFLG .NE. 0) RETURN
+d290 1
+a290 1
+        IF (IRTFLG .NE. 0) RETURN
+d292 1
+a292 1
+        IF (IRTFLG .NE. 0) RETURN
+d295 5
+a299 5
+	DO J=1,NEWS
+	  J2 = (J-ICPY)**2
+	  DO I=1,NEWR
+	    I2 = J2+(I-ICPX)**2
+	    IF (I2 .GT. MRA2) THEN
+d301 1
+a301 1
+	    ELSE
+d303 1
+a303 1
+	    ENDIF
+d305 7
+a311 7
+	    IF (I2 .GT. MRR2) THEN
+		CIRR(I,J) = 0.0
+	    ELSE
+	        CIRR(I,J) = 1.0
+	    ENDIF
+	  ENDDO
+	ENDDO
+d314 4
+a317 3
+	INV = +1
+	CALL FMRS_2(CIRA,NEWS,NEWR,INV)
+	CALL FMRS_2(CIRR,NEWS,NEWR,INV)
+d319 1
+a319 2
+C       CROSS-CORRELATE: CIRA x CIRR, RETURNS: CIRA
+C       HAS REVERSE FFT ON: NEWS,NEWR
+a320 1
+	CALL CCRS_2I(CIRA,CIRR, LSC,NEWS,NEWR)
+d322 2
+a323 2
+	TMP = 1.0 / CIRA(ICPX,ICPY)
+	DIVIS=CIRA(ICPX-NSHIFT:ICPX+NSHIFT,ICPY-NSHIFT:ICPY+NSHIFT)*TMP
+d325 5
+a329 3
+C       DEALLOCATE LOCAL ARRAYS
+        IF (ALLOCATED(CIRA)) DEALLOCATE(CIRA)
+        IF (ALLOCATED(CIRR)) DEALLOCATE(CIRR)
+d331 2
+a332 2
+	NIMA = 1
+	IDI  = 1
+d340 9
+a348 9
+     &	         NSAM,NROW,NEWS,NEWR, NAS,NAR,MRA,DIVIS,NSHIFT,
+     &	         LCIRC,NRING,MAXRIN,NIMA,MIRROR,
+     &	         IDI, CMA,ALPHA,SX,SY)
+
+	IF (IDI .GT. 0) THEN
+	   MR = 0
+	ELSE
+	   MR = 1
+	ENDIF
+d351 2
+a352 1
+9999    IF (ALLOCATED(TT)) DEALLOCATE(TT)
+d354 1
+a354 1
+	END
+@
+
+
+1.8
+log
+@FFTW3 plan changes
+@
+text
+@d6 1
+d9 1
+a9 1
+C=* Copyright (C)2002 & 2008, P. A. Penczek                            *
+d323 1
+a323 1
+	CALL CCRS_2(CIRA,CIRR,CIRA, LSC,NEWS,NEWR)
+d325 1
+a325 1
+	TMP = 1.0/CIRA(ICPX,ICPY)
+@
+
+
+1.7
+log
+@reverted to pre aprings change
+@
+text
+@d1 1
+d4 2
+d8 1
+a8 1
+C=* Copyright (C)2002, P. A. Penczek                                   *
+d31 1
+a31 1
+C IMAGE_PROCESSING_ROUTINE
+d33 8
+a40 1
+C                  OPFILEC                         FEB 03 ARDEAN LEITH
+d44 1
+a44 1
+        SUBROUTINE ORACFMSK(MIRROR)
+d49 9
+a57 7
+        REAL, ALLOCATABLE, DIMENSION(:,:) :: REF,ALIGNED
+	INTEGER, ALLOCATABLE, DIMENSION(:,:) ::  NUMR
+	REAL, ALLOCATABLE, DIMENSION(:) ::     REFER_CIRC
+	REAL, ALLOCATABLE, DIMENSION(:,:) ::     REFPAD
+        COMMON /MXR/ MAXRIN
+	LOGICAL  MIRROR
+        CHARACTER(LEN=1)  :: MODE
+d69 1
+a69 2
+     &  NSLICE,MAXIM,'REFERENCE',.FALSE.,IRTFLG)
+       
+d76 1
+a76 4
+     &	  'REAL SPACE MASK RADIUS FOR THE ALIGNED AND REFERENCE IMAGES')
+	CALL  RDPRMI(NRING,NSHIFT,NOT_USED,
+     &	  'RADIUS OF THE ACF, MAXIMUM SHIFT')
+
+d78 2
+a79 1
+        IF(MRR.LE.0.OR.MRR.GE.MIN0((NSAM/2),(NROW/2))) THEN
+d84 2
+a85 4
+        IF(MRA.LE.0.OR.MRA.GE.MIN0((NSAM/2),(NROW/2))) THEN
+           CALL ERRT(31,'OR A',NE)
+           RETURN
+        ENDIF
+d87 3
+a89 2
+        IF(NRING.LE.0.OR.NRING.GE.MIN0((NSAM/2),(NROW/2))
+     &		.OR.  NRING.GT.2*MIN0(MRA,MRR) ) THEN
+d94 4
+a97 4
+        IF(NRING.LE.0.OR.NRING.GE.MIN0((NSAM/2),(NROW/2))) THEN
+           CALL ERRT(31,'OR A',NE)
+           RETURN
+        ENDIF
+d99 2
+a100 2
+	MODE='H'
+C       Padded dimensions for CCF and SACF are always even
+d103 5
+a107 5
+	I=MAX0(NSAM,MRA+MRR+NSHIFT)
+	NEWS=NEARESTFFTFRIEND(I)
+	I=MAX0(NROW,MRA+MRR+NSHIFT)
+	NEWR=NEARESTFFTFRIEND(I)
+	WRITE(NOUT,*)  ' DIMENSIONS FOR CCF',NEWS,NEWR
+d110 5
+a114 5
+	I=MAX0(4*MAX0(MRA,MRR)+2,NSAM)
+	NAS=NEARESTFFTFRIEND(I)
+	I=MAX0(4*MAX0(MRA,MRR)+2,NROW)
+	NAR=NEARESTFFTFRIEND(I)
+	WRITE(NOUT,*)  ' DIMENSIONS FOR ACF',NAS,NAR
+d116 4
+a119 3
+	ALLOCATE(NUMR(3,NRING),STAT=IRTFLG)
+	IF (IRTFLG.NE.0) THEN
+           CALL ERRT(46,'OR A  NUMR',IER)
+d124 1
+a124 1
+           NUMR(1,I)=I
+a126 1
+
+d132 8
+a139 6
+C       ALLOCATE SPACE 
+	ALLOCATE(REF(NSAM,NROW),ALIGNED(NSAM,NROW),
+     &     REFER_CIRC(LCIRC),REFPAD(NEWS+2,NEWR),STAT=IRTFLG)
+	IF (IRTFLG .NE. 0) THEN
+            CALL  ERRT(46,'OR A, REFER_CIRC',IER)
+            RETURN
+d141 4
+a144 2
+	NSL=1
+	CALL  READV(INPIC,ALIGNED,NSAM,NROW,NSAM,NROW,NSL)
+d146 2
+a147 1
+	CALL  READV(INREF,REF,NSAM,NROW,NSAM,NROW,NSL)
+a149 1
+
+d152 1
+a152 1
+C        WRITE(NOUT,*) ' NUMBER OF OMP THREADS: ',NUMTH
+d156 3
+a158 2
+     &                 REFER_CIRC,REFPAD,IRTFLG)
+        IF(ALLOCATED(REF)) DEALLOCATE (REF)
+d162 1
+a162 1
+     &		NEWS,NEWR,NAS,NAR,MRA,MRR,NSHIFT,MIRROR,
+d164 12
+a175 1
+     &		ALPHA,SX,SY,MR,CMA)
+a176 6
+	WRITE(NOUT,*)  ALPHA,SX,SY,MR,CMA
+	CALL  REG_SET_NSEL(1,5,ALPHA,SX,SY,REAL(MR),CMA,IRTFLG)
+9999    IF(ALLOCATED(REFER_CIRC)) DEALLOCATE (REFER_CIRC)
+	IF(ALLOCATED(REFPAD)) DEALLOCATE (REFPAD)
+        IF(ALLOCATED(ALIGNED)) DEALLOCATE (ALIGNED)
+        IF(ALLOCATED(NUMR)) DEALLOCATE (NUMR)
+d179 1
+a179 1
+
+d185 3
+d189 1
+a189 3
+C       EXTERNAL ARRAYS
+        INTEGER    NUMR(3,NRING)
+	DIMENSION  REF(NSAM,NROW),REFER_CIRC(LCIRC),REFPAD(NEWS+2,NEWR)
+a190 1
+	REAL, ALLOCATABLE, DIMENSION(:,:) ::   BUF
+d192 1
+a192 1
+	DIMENSION  WR(NRING)
+d196 2
+a197 2
+        IRTFLG = 0
+	MODE='H'
+d199 3
+a201 2
+	IF (IRTFLG.NE.0) THEN
+            CALL  ERRT(46,'OR A, BUF',IER)
+d205 10
+a214 1
+	CALL  RINGWE(WR,NUMR,NRING,MAXRIN)
+d216 3
+a218 2
+   
+	BUF(1:NSAM,1:NROW)=REF
+d220 5
+a224 2
+        CALL  ALRQ_LSD(BUF,NAS+2,NAS,NAR,NUMR,
+     &			REFER_CIRC,LCIRC,NRING,MODE)
+d226 1
+d228 2
+d232 2
+a233 1
+	IF (ALLOCATED(BUF))        DEALLOCATE(BUF)
+d236 2
+a237 5
+C **********************************************************************
+C
+C  ORACFMSK_1
+C
+C--*********************************************************************
+d244 4
+d249 2
+a250 13
+	INTEGER, DIMENSION(3,NRING) ::    NUMR
+	DIMENSION  ALIGNED(NSAM,NROW)
+	REAL, DIMENSION(LCIRC) ::    REFER_CIRC
+	REAL, DIMENSION(NEWS+2,NEWR) ::    REFPAD
+
+
+	REAL, ALLOCATABLE, DIMENSION(:,:) ::  CIRA,CIRR,DIVIS
+	DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:) ::  TT
+
+	LOGICAL  MIRROR
+
+        CHARACTER*80     FINPAT,FINPIC,FILTOA
+        COMMON  /FISPEC/ FINPAT,FINPIC,FILTOA,NLET,NLETI
+d252 1
+a252 6
+        DATA  NDOC/56/,INPIC/58/
+
+
+C       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+C       ALIGNMENT
+C       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+d257 2
+a258 1
+           CALL  ERRT(46,'OR A, TT',IER)
+d265 2
+a266 1
+           CALL ERRT(46,'OR A, TT',IER)
+d270 14
+a283 10
+C  PREPARE THE NORMALIZATION FILE FOR THE CCC
+	ICPX=INT(NEWS/2)+1
+	ICPY=INT(NEWR/2)+1
+	MRR2=MRR**2
+	MRA2=MRA**2
+	ALLOCATE(CIRA(NEWS+2,NEWR),CIRR(NEWS+2,NEWR),
+     &		DIVIS(-NSHIFT:NSHIFT,-NSHIFT:NSHIFT),STAT=IRTFLG)
+	IF (IRTFLG.NE.0) THEN
+            CALL  ERRT(46,'OR A, CIRA',IER)
+            RETURN
+d285 26
+a310 15
+c$omp   parallel do private (i,j)
+	DO  J=1,NEWS
+	 J2=(J-ICPY)**2
+	  DO  I=1,NEWR
+	   I2=J2+(I-ICPX)**2
+	   IF(I2.GT.MRA2)  THEN
+		CIRA(I,J)=0.0
+	   ELSE
+	        CIRA(I,J)=1.0
+	   ENDIF
+	   IF(I2.GT.MRR2)  THEN
+		CIRR(I,J)=0.0
+	   ELSE
+	        CIRR(I,J)=1.0
+	   ENDIF
+d314 11
+a324 5
+	INV=+1
+	CALL  FMRS_2(CIRA,NEWS,NEWR,INV)
+	CALL  FMRS_2(CIRR,NEWS,NEWR,INV)
+	CALL  CCRS_2(CIRA,CIRR,CIRA,NEWS,NEWR)
+	TMP=1.0/CIRA(ICPX,ICPY)
+a325 1
+	DEALLOCATE(CIRA,CIRR)
+d327 14
+a340 4
+	NIMA=1
+	IDI=1
+	      CALL ORA2D(ALIGNED,REFER_CIRC,REFPAD,TT,NUMR,
+     &	         NSAM,NROW,NEWS,NEWR,NAS,NAR,MRA,DIVIS,NSHIFT,
+d342 4
+a345 7
+C                OUTPUT PARAMETERS ARE:
+C                NUMBER OF THE MOST SIMILAR REFERENCE PROJECTION.
+C                CORR COEFF.(D5), ANGLE (D4), SHIFT: XSHSUM, YSHSUM
+     &	         IDI,
+     &	         CMA,ALPHA,SX,SY)
+	IF(IDI.GT.0) THEN
+	  MR=0
+d347 1
+a347 1
+	  MR=1
+a349 1
+
+d351 1
+a351 1
+9999    IF (ALLOCATED(TT))         DEALLOCATE(TT)
+@
+
+
+1.6
+log
+@ccrs_ added parameter
+@
+text
+@a2 1
+C                  OPFILEC                         FEB 03 ARDEAN LEITH
+d28 3
+d279 1
+a279 4
+
+        LSC = NEWS+2-MOD(NEWS,2)
+	CALL  CCRS_2(CIRA,CIRR,CIRA, LSC,NEWS,NEWR)
+
+@
+
+
+1.5
+log
+@Pawels GPL License used
+@
+text
+@d3 1
+a28 3
+C IMAGE_PROCESSING_ROUTINE
+C
+C                  OPFILEC                         FEB 03 ARDEAN LEITH
+d277 4
+a280 1
+	CALL  CCRS_2(CIRA,CIRR,CIRA,NEWS,NEWR)
+@
+
+
+1.4
+log
+@mode was undefined
+@
+text
+@d1 1
+a1 2
+C **************************************************************************
+C *  SPIDER - MODULAR IMAGE PROCESSING SYSTEM.
+d3 24
+a26 5
+C *  COPYRIGHT (C)2002, Pawel A. Penczek
+C *  University of Texas - Houston Medical School
+C *  pawel.a.penczek@@uth.tmc.edu
+C *    THE CONTENTS OF THIS DOCUMENT CANNOT BE CHANGED WITHOUT WRITTEN
+C *    PERMISSION OF THE AUTHOR
+d32 1
+a32 1
+C--************************************************************************
+d200 1
+a200 1
+C **************************************************************************
+d204 1
+a204 1
+C--************************************************************************
+@
+
+
+1.3
+log
+@opfilec
+@
+text
+@d27 1
+d92 1
+a92 1
+           CALL ERRT(46,'OR A',' NUMR',IER)
+@
+
+
+1.2
+log
+@CCRS call does not use phase flag
+@
+text
+@d12 1
+a27 1
+
+d30 5
+a34 11
+C  ASK FOR DATA FILES
+
+
+       MAXIM = 0
+        CALL OPFILE(.TRUE.,FINPIC,INPIC,'O',ITYPE,NSAM,NROW,
+     &  NSLICE,MAXIM,'INPUT',.FALSE.,IRTFLG)
+        IF (IRTFLG .NE. 0) THEN
+           CALL ERRT(4,'OR A',NE)
+           RETURN
+        ENDIF
+
+d36 2
+a37 2
+      MAXIM = 0
+        CALL OPFILE(.TRUE.,FINPIC,INREF,'O',ITYPE,NSAM,NROW,
+a40 1
+           CALL ERRT(4,'OR A',NE)
+d46 1
+a46 1
+     &	  'Real space mask radius for the aligned and reference images')
+d73 3
+a75 2
+C  Padded dimensions for CCF and SACF are always even
+C   CCF
+d81 2
+a82 1
+C   ACF
+d95 1
+a95 1
+        DO    I=1,NRING
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d265 1
+a265 1
+	CALL  CCRS_2(CIRA,CIRR,CIRA,NEWS,NEWR,.FALSE.)
+@

@@ -1,0 +1,399 @@
+head	1.10;
+access;
+symbols
+	pre_getangas:1.9
+	GPL2010:1.9
+	pre_GPL2010:1.8
+	pre_var_equation:1.8
+	pre_fftwrings:1.8
+	pre_opfiles:1.8
+	src:1.8
+	best-code:1.8
+	named-reg:1.8
+	x-named-regs:1.7
+	x:1.7
+	v13-00:1.7
+	pre_GPL:1.5
+	prec_CA:1.5
+	noindx:1.5
+	Bproc:1.4
+	oct21:1.3
+	last77:1.3;
+locks; strict;
+comment	@c @;
+
+
+1.10
+date	2011.12.06.14.17.31;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2010.06.24.13.25.56;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2005.12.12.15.27.48;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2005.10.17.20.23.49;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2005.10.17.18.15.59;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2001.01.05.20.49.06;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	99.11.10.23.09.22;	author yuchen;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	98.06.16.16.04.41;	author pawel;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	98.06.01.13.35.17;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	98.06.01.13.11.39;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@used in arithl
+@
+
+
+1.10
+log
+@! COMMENT DELIMITER
+@
+text
+@
+C++*********************************************************************
+C
+C IFTORPN.F    ADAPTED FROM LOGIF.F FOR CHAR. VARIABLES   AUG 1989  al
+C              UNCONDITIONAL JUMP ADDED                  SEPT 1996  al
+C              IF (...) THEN IMPLEMENTED                 SEPT 1997  al
+C              CHARINSIDE PARAMETERS CHANGED             JAN  2001  al
+C              POLISH PARAMETERS                         DEC  2005  al
+C              ! COMMENT DELIMITER                       DEC  2011  aL
+C
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2011  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C     SUBROUTINE IFTORPN(STRING,ICOMPREP,
+C             IRPN1,NRPN1,VAL1, IRPN2,NRPN2,VAL2, IRPN3,NRPN3,VAL3,
+C             IRTFLG)
+C
+C    PURPOSE:     EVALUATES STRING SUCH AS: IF(X.LE.5) P2 = F(P1)
+C                 RETURNS THE LB77, RETURNS RPN AND VAL ARRAY 
+C                 FOR ALL 3 EXPRESSIONS.
+C
+C    PARAMETERS:  STRING       INPUT LINE                     (SENT)
+C                 ICOMPREP     COMPARISION INDICATOR (.GT.)   (RETURNED)
+C                 IRPN?        RPN STRING                     (RETURNED)
+C                 NRPN?        NO. ELEMENTS IN RPN STRING     (RETURNED)
+C                 VAL?         VALUES POINTED TO BY RPN       (RETURNED)
+C                 IRTFLG       ERROR FLAG (0 IS NORMAL)       (RETURNED)
+C
+C--*********************************************************************
+
+      SUBROUTINE IFTORPN(STRING,ICOMPREP,
+     &      IRPN1,NRPN1,VAL1, IRPN2,NRPN2,VAL2, IRPN3,NRPN3,VAL3,
+     &      IRTFLG)
+
+      INCLUDE 'CMBLOCK.INC'
+
+
+      PARAMETER      (IVALEN = 40)
+      PARAMETER      (IRPNLEN = 80)
+
+      INTEGER        RHEXP
+      CHARACTER *(*) STRING
+      CHARACTER *80  ST
+      CHARACTER *2   COMP(6),COMPRET
+      DIMENSION      VAL1(IVALEN),   VAL2(IVALEN),   VAL3(IVALEN)
+      INTEGER        IRPN1(IRPNLEN), IRPN2(IRPNLEN), IRPN3(IRPNLEN)
+      LOGICAL        ISCHAR
+      EXTERNAL       ISCHAR
+
+      DATA COMP/'EQ', 'GE', 'LE', 'NE', 'GT', 'LT'/
+
+C     SET ERROR FLAG
+      IRTFLG   = 1
+
+C     REMOVE BLANKS FROM INPUT STRING, PUT OUTPUT IN ST
+      CALL SHRINKQ(STRING,80,ST,MAXCH)
+
+C     REMOVE ANY COMMENT FROM INPUT STRING
+      ISEMICOL = SCAN(ST,';!')
+      IF (ISEMICOL .GT. 0) MAXCH = ISEMICOL - 1
+
+C     LOOK FOR FIRST '('
+      NLP = INDEX(ST(:MAXCH),'(')
+      IF (NLP .LE. 0) GOTO 900
+
+C     ICHAR IS THE CURRENT POSITION IN ST
+
+C     FIND LEFT-HAND-EXPRESSION (FOLLOWED BY .LOGICAL. COMPARATOR)
+      ICOMPREP = 0 
+      DO ICHAR = NLP + 1, MAXCH - 3
+C        CONTINUE STEPPING THRU EXPRESSION TILL .LOGICAL. FOUND
+         IF (ST(ICHAR:ICHAR) .EQ. '.' .AND. 
+     &       ISCHAR(ST(ICHAR+1:ICHAR+1)) .AND.
+     &       ISCHAR(ST(ICHAR+2:ICHAR+2))) THEN
+
+C           PERIOD FOUND, FOLLOWED BY .LOGICAL. COMPARATOR 
+            ICOMPREP = 0
+            DO IFUNC = 1,6
+               IF (ST(ICHAR+1:ICHAR+2) .EQ. COMP(IFUNC)(1:2)) THEN
+                  ICOMPREP = IFUNC
+                  GOTO 60
+               ENDIF
+            ENDDO
+         ENDIF
+      ENDDO
+
+C     ERROR IF LOGICAL COMPARATOR NOT FOUND AND IDENTIFED
+60    IF (ICOMPREP .EQ. 0) GOTO 900
+
+C     LOGICAL COMPARATOR IDENTIFIED, CONVERT LHEXP TO RPN
+      CALL POLISH(0,ST(NLP+1:ICHAR-1),ICHAR-NLP-1,
+     &            IRPN1,NRPN1,VAL1,NVAL1,IRTFLG)
+      IF (IRTFLG .NE. 0) GOTO 900
+
+C     FIND RIGHT HAND EXPRESSION (RHE)
+      IGO  = ICHAR + 4
+      IEND = INDEX(ST,')THEN') - 1
+
+C     LOGICAL COMPARATOR IDENTIFIED, CONVERT RHE TO RPN
+      CALL POLISH(0,ST(IGO:IEND),IEND-IGO+1,
+     &            IRPN2,NRPN2,VAL2,NVAL2,IRTFLG)
+      IF (IRTFLG .NE. 0) GOTO 900
+
+C     FIND ASSIGNMENT WHICH FOLLOWS RIGHT-HAND-EXPRESSION 
+      CALL CHARINSIDE(ST,')THEN','=',.TRUE.,.FALSE.,IGO,IEND,NCHAR)
+      IF (NCHAR .LE. 0) GOTO 900
+
+C     CONVERT OPERATIONAL EXPRESSION FOLLOWING ASSIGNMENT TO RPN
+      CALL POLISH(0,ST(IEND+2:MAXCH),MAXCH-IEND-1,
+     &            IRPN3,NRPN3,VAL3,NVAL3,IRTFLG)
+      IF (IRTFLG .NE. 0) GOTO 900
+
+      IRTFLG = 0
+      RETURN
+
+C     ERROR HANDLER --------------------------------------------
+900   WRITE(NOUT,901) ST(ICHAR:MAXCH)
+901   FORMAT(' *** IF STATEMENT SYNTAX ERROR STARTING AT: ',A)
+      CALL ERRT(100,'LOGIFQ',NE)
+      IRTFLG = 1
+      RETURN
+
+      END
+@
+
+
+1.9
+log
+@GPL_2010
+@
+text
+@d4 6
+a9 5
+C IFTORPN.F    ADAPTED FROM LOGIF.F FOR CHAR. VARIABLES AUG 89  al
+C              UNCONDITIONAL JUMP ADDED                SEPT 96  al
+C              IF (...) THEN IMPLEMENTED               SEPT 97  al
+C              CHARINSIDE PARAMETERS CHANGED           JAN 2001 AL
+C              POLISH PARAMETERS                       DEC 2005 AL
+d15 1
+a15 1
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+d34 2
+a35 2
+C           IRPN1,NRPN1,VAL1, IRPN2,NRPN2,VAL2, IRPN3,NRPN3,VAL3,
+C          IRTFLG)
+d78 1
+a78 1
+      ISEMICOL = INDEX(ST,';')
+@
+
+
+1.8
+log
+@native named registers
+@
+text
+@a10 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d12 5
+a16 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d18 1
+a18 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d23 1
+a23 1
+C=* This program is distributed in the hope that it will be useful,    *
+d25 1
+a25 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a26 1
+C=*                                                                    *
+d28 1
+a28 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.7
+log
+@GPL License fixed
+@
+text
+@d4 5
+a8 4
+C IFTORPN.F    ADAPTED FROM LOGIF.F FOR CHAR. VARIABLES AUG 89 al
+C              UNCONDITIONAL JUMP ADDED SEPT 96                al
+C              IF (...) THEN IMPLEMENTED SEPT 97               al
+C              CHARINSIDE PARAMETERS CHANGED JAN 2001          AL
+d113 1
+a113 1
+      CALL POLISH(ST(NLP+1:ICHAR-1),ICHAR-NLP-1,
+d122 1
+a122 1
+      CALL POLISH(ST(IGO:IEND),IEND-IGO+1,
+d131 1
+a131 1
+      CALL POLISH(ST(IEND+2:MAXCH),MAXCH-IEND-1,
+@
+
+
+1.6
+log
+@HRI GPL License used
+@
+text
+@a2 1
+C++************************************************************************
+a9 3
+C **************************************************************************
+C * SPIDER - MODULAR IMAGE PROCESSING SYSTEM.  AUTHOR: J.FRANK         *
+C *  SPIDER - MODULAR IMAGE PROCESSING SYSTEM.  AUTHOR: J.FRANK            *
+d13 1
+a13 1
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *  
+a32 7
+
+C *  COPYRIGHT (C)1981,1987, WADSWORTH CENTER FOR LABORATORIES AND         *
+C *  RESEARCH, NEW YORK STATE DEPARTMENT OF HEALTH, ALBANY, NY 12201.      *
+C *    THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO THE CENTER FOR     *
+C *    LABORATORIES AND RESEARCH AND ARE NOT TO BE DISCLOSED TO OTHERS OR  *
+C *    USED FOR PURPOSES OTHER THAN INTENDED WITHOUT WRITTEN APPROVAL OF   *
+C *    THE CENTER FOR LABORATORIES AND RESEARCH 			   *
+a33 1
+C **************************************************************************
+a50 1
+C--*************************************************************************
+@
+
+
+1.5
+log
+@charinside parameter added
+@
+text
+@d2 1
+d10 1
+d12 1
+d14 24
+d44 1
+d62 1
+@
+
+
+1.4
+log
+@a
+@
+text
+@d7 1
+d110 1
+a110 1
+      CALL CHARINSIDE(ST,')THEN','=',.TRUE.,IGO,IEND,NCHAR)
+@
+
+
+1.3
+log
+@logical ischar
+@
+text
+@d40 1
+a40 1
+CNO_SAVE
+@
+
+
+1.2
+log
+@unused LABEL removed
+@
+text
+@d51 2
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d18 3
+a20 1
+C    IFTORPN(STRING,LABEL,JUMP,IER)
+d46 1
+a46 1
+      CHARACTER *(*) STRING,LABEL
+@

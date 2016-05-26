@@ -1,0 +1,433 @@
+head	1.10;
+access;
+symbols
+	pre_getangas:1.8
+	pre_GPL2010:1.8
+	pre_var_equation:1.8
+	pre_fftwrings:1.8
+	pre_opfiles:1.8
+	src:1.8
+	best-code:1.8
+	x-named-regs:1.8
+	x:1.8
+	v13-00:1.8
+	pre_GPL:1.7
+	prec_CA:1.6
+	noindx:1.5;
+locks; strict;
+comment	@c @;
+
+
+1.10
+date	2014.07.29.16.23.27;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2013.01.07.15.21.32;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2005.10.17.16.55.16;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2004.09.30.16.25.08;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2003.07.18.16.34.15;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2002.03.11.14.08.09;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2001.01.26.18.52.24;	author pawel;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2001.01.16.17.02.02;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2001.01.12.01.38.33;	author pawel;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2001.01.11.14.11.40;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.10
+log
+@MAXNAM
+@
+text
+@C **********************************************************************
+C *  TFCRF
+C=**********************************************************************
+C=* From: SPIDER - MODULAR IMAGE PROCESSING SYSTEM                     *
+C=* Copyright (C)2001, P. A. Penczek                                   *
+C=*                                                                    *
+C=* University of Texas - Houston Medical School                       *
+C=*                                                                    *
+C=* Email:  pawel.a.penczek@@uth.tmc.edu                                *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* This program is distributed in the hope that it will be useful,    *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+C=* General Public License for more details.                           *
+C=*                                                                    *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+C=*                                                                    *
+C=**********************************************************************
+C
+C  PURPOSE:  DETERMINE DEFOCUS AND AMPL CONTR. RATIO BASED ON 
+C            CROSS-RESOLUTION CURVE
+C
+C  PARAMETERS: NONE    
+C
+C **********************************************************************
+
+        SUBROUTINE  TFCRF
+
+        INCLUDE 'CMBLOCK.INC'
+        INCLUDE 'F90ALLOC.INC'
+        INCLUDE 'CMLIMIT.INC'
+
+        REAL, DIMENSION(:,:), POINTER   :: PANG
+        REAL, ALLOCATABLE, DIMENSION(:) :: FREQ,CCF,OCCF
+        REAL ::                            LAMBDA
+
+        CHARACTER(LEN=MAXNAM)           :: FILE
+
+        PARAMETER (QUADPI = 3.141592653589793238462643383279502884197)
+
+        CALL RDPRM2(P,CS,NOT_USED,
+     &      'PIXEL SIZE[A] & SPHERICAL ABERRATION CS[MM]')
+
+        IF (CS < 0.0001)    CS = 0.0001
+
+C       CONVERT CS TO [A]
+        CS = CS*1.0E07
+
+        CALL RDPRM2(DZ,LAMBDA,NOT_USED,
+     &    'DEFOCUS(ANGSTROEMS), WAVELENGTH LAMBDA(ANGSTROMS)[A]')
+
+        CALL RDPRM(WGH,NOT_USED,'AMPL. CONTRAST RATIO [0-1]')
+
+C       RETRIEVE ARRAY WITH ANGLES DATA IN IT
+        MAXXT = 0
+        MAXYT = 0
+        CALL GETDOCDAT('CROSS-RESOLUTION DOC',.TRUE.,FILE,
+     &                       77,.TRUE.,MAXXT,MAXYT,PANG,IRTFLG)
+ 
+        IF (IRTFLG .NE. 0) THEN
+           CALL ERRT(4,'TF CRF ',NE)
+           RETURN
+        ENDIF    
+   
+        ALLOCATE (FREQ(MAXYT),CCF(MAXYT),OCCF(MAXYT), STAT=IRTFLG)
+        IF (IRTFLG.NE.0) THEN 
+           CALL ERRT(46,'TF CRF; FREQ, CCF & OCCF',IER)
+           RETURN
+        ENDIF
+
+C       RETAIN SIGNS OF THE CCF
+	L=0
+        DO  I=1,MAXYT
+	  IF(PANG(1,I) .GT. 0.0)  THEN
+	     L       = L+1
+             FREQ(L) = PANG(2,I)/P
+             CCF(L)  = SIGN(1.0,PANG(4,I))
+             OCCF(L) = PANG(4,I)**2
+	  ENDIF
+        ENDDO
+
+        DEALLOCATE(PANG)
+
+C       DETERMINE DEFOCUS AND PHASE BY MATCHING SIGNS
+        AA   = 0.5*QUADPI*CS*LAMBDA**3
+        BB   = QUADPI*LAMBDA
+        CZRM = 0.0
+        
+C       WAS ESTIMATION OF THE AMPLITUDE CONTRAST REQUESTED?
+        IF (WGH .EQ. 0.0)  THEN
+           LAN = 199
+        ELSE
+           LAN = 0
+        ENDIF
+
+C       WAS ESTIMATION OF THE DEFOCUS REQUESTED?
+        IF (DZ .EQ. 0.0)  THEN
+           MDZN = 50000
+        ELSE
+           MDZN=0
+        ENDIF
+
+        DO  LA=0,LAN
+           IF(LA.EQ.0)  THEN
+              WGHT=WGH
+           ELSE
+              WGHT=REAL(LA)/200
+           ENDIF
+C          GET OFFSET A
+           A=ATAN(WGHT/(1.0-WGHT))
+        
+           DO  MDZ=0,MDZN,10
+              IF(MDZ.EQ.0)  THEN
+                 DZT=DZ
+              ELSE
+                 DZT=MDZ 
+              ENDIF
+C
+              CZR=0.0
+              DO  I=1,L
+                AK=FREQ(I)
+                CZR=CZR+OCCF(I)*
+     &          ABS(CCF(I)-SIGN(1.0,SIN((AA*AK**2-BB*DZT)*AK**2-A)))/2.0
+              ENDDO
+              IF (CZR.GT.CZRM)  THEN
+                 CZRM=CZR
+                 DEFOCUS=DZT
+                 WGHM=WGHT
+                 DEFOCUSN=DZT
+                 WGHN=WGHT
+              ELSEIF (CZR.EQ.CZRM)  THEN
+C                CATCH THE UPPER LIMIT OF BOTH VALUES
+                 DEFOCUSN=DZT
+                 WGHN=WGHT
+              ENDIF
+          ENDDO
+        ENDDO
+
+C        CONTROL PRINTOUT, NOT NEEDED
+C        A=ATAN(WGHM/(1.0-WGHM))
+C        RAT=SQRT((1.0-WGHM)**2+WGHM**2)
+C          DO  I=1,L
+C         AK=FREQ(I)
+C        PRINT  541,I,CCF(I)
+C     &  ,SIGN(1.0,SIN((AA*AK**2-BB*DEFOCUS)*AK**2-A))
+C     &  ,SIN((AA*AK**2-BB*DEFOCUS)*AK**2-A)*RAT
+C     & ,(1-WGHM)*SIN((AA*AK**2-BB*DEFOCUS)*AK**2)-
+C     &  WGHM*COS((AA*AK**2-BB*DEFOCUS)*AK**2)
+C 541	FORMAT(1X,I4,4F10.6)
+C        ENDDO
+
+        DEALLOCATE(FREQ,CCF,OCCF)
+
+C       RETURN IN REGISTERS DEFOCUS, WGHM, DEFOCUSN, WGHN, AND CZRM
+        CALL REG_SET_NSEL(1,5,DEFOCUS,WGHM,DEFOCUSN,WGHN,CZRM,IRTFLG)
+
+        WRITE(NOUT,654)  DEFOCUS,WGHM,DEFOCUSN,WGHN,CZRM
+654     FORMAT(2('DEFOCUS: ',F10.2,' AMPL. CONTRAST RATIO: ',F4.2,/),
+     &          ' ERROR: ',F14.6)
+
+        END
+@
+
+
+1.9
+log
+@CS_zero
+@
+text
+@a26 1
+C **********************************************************************
+d31 1
+a31 1
+C  PARAMETERS: none    
+d39 1
+d41 1
+a41 1
+        REAL, DIMENSION(:,:), POINTER ::   PANG
+d45 2
+a46 1
+        CHARACTER*80  FILE
+d51 2
+a52 1
+           IF (CS < 0.0001)    CS = 0.0001
+d58 1
+a58 1
+     &    'DEFOCUS(ANGSTROEMS), WAVELENGTH LAMBDA(ANGSTROEMS)[A]')
+@
+
+
+1.8
+log
+@Pawels GPL License used
+@
+text
+@d49 2
+a50 1
+     &		'PIXEL SIZE[A], SPHERICAL ABBERATION CS [MM]')
+@
+
+
+1.7
+log
+@format lacked ,
+@
+text
+@d1 1
+a1 2
+C**************************************************************************
+C *  SPIDER - MODULAR IMAGE PROCESSING SYSTEM.
+d3 25
+a27 6
+C *  COPYRIGHT (C)2001, P.A.Penczek
+C *  University of Texas - Houston Medical School
+C *  pawel.a.penczek@@uth.tmc.edu
+C *    THE CONTENTS OF THIS DOCUMENT CANNOT BE CHANGED WITHOUT WRITTEN
+C *    PERMISSION OF THE AUTHOR                          *
+C **************************************************************************
+d34 1
+a34 1
+C **************************************************************************
+@
+
+
+1.6
+log
+@icount in getdocdat return
+@
+text
+@d145 1
+a145 1
+654     FORMAT(2('DEFOCUS: ',F10.2,' AMPL. CONTRAST RATIO: ',F4.2,/)
+@
+
+
+1.5
+log
+@nloop,iloop_removed
+@
+text
+@d50 2
+a51 1
+        ENDIF       
+d61 5
+a65 5
+	  IF(PANG(1,I).NE.0.0)  THEN
+	   L=L+1
+           FREQ(L) = PANG(2,I)/P
+           CCF(L)  = SIGN(1.0,PANG(4,I))
+           OCCF(L) = PANG(4,I)**2
+@
+
+
+1.4
+log
+@header added
+@
+text
+@d30 1
+a30 1
+        CALL RDPRM2(P,CS,NLOOP,ILOOP,
+d36 1
+a36 1
+        CALL RDPRM2(DZ,LAMBDA,NLOOP,ILOOP,
+d39 1
+a39 1
+        CALL RDPRM(WGH,NLOOP,ILOOP,'AMPL. CONTRAST RATIO [0-1]')
+@
+
+
+1.3
+log
+@NT did not like trailing , in format
+@
+text
+@d1 8
+a10 6
+C   AUTHOR: PAWEL PENCZEK      
+C
+C **************************************************************************
+C
+C  TFCRF
+C
+d14 1
+a14 1
+C  PARAMETERS:     
+@
+
+
+1.2
+log
+@OK
+@
+text
+@d142 1
+a142 1
+654     FORMAT(2('DEFOCUS: ',F10.2,' AMPL. CONTRAST RATIO: ',F4.2,/,)
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d28 2
+a29 1
+        CALL RDPRM2(P,CS,NLOOP,ILOOP,'PIXEL SIZE[A], IMAGE SIZE (NSAM)')
+a30 1
+        CALL RDPRM(CS,NLOOP,ILOOP,'SPHERICAL ABBERATION CS [MM]')
+a38 11
+C       READ 101,FILE
+C       101 FORMAT(A50)
+C       OPEN(21,FILE=FILE)
+C       READ(*,*)
+C       L=1
+C       554 READ(*,102,END=555)  OCCF(L),FREQ(L)
+C       102 FORMAT(7X,12X,F12.3,F12.3)
+C       L=L+1
+C       GOTO 554
+C       555 L=L-1
+
+d43 1
+a43 1
+     &                       77,.FALSE.,MAXXT,MAXYT,PANG,IRTFLG)
+d56 8
+a63 4
+        DO  I=1,L
+           FREQ(I) = PANG(2,I)/P
+           CCF(I)  = SIGN(1.0,PANG(4,I))
+           OCCF(I) = PANG(4,I)**2
+d125 1
+a125 1
+C        BB=SQRT((1.0-WGHM)**2+WGHM**2)
+d130 1
+a130 1
+C     &  ,SIN((AA*AK**2-BB*DEFOCUS)*AK**2-A)*BB
+d133 1
+a133 1
+C        541 FORMAT(1X,I4,4F10.6)
+d141 2
+a142 2
+        WRITE(NOUT,654)  DEFOCUS,WGHM,CZRM
+654     FORMAT('DEFOCUS: ',F10.2,' AMPL. CONTRAST RATIO: ',F4.2,
+@

@@ -1,0 +1,559 @@
+head	1.16;
+access;
+symbols
+	pre_getangas:1.16
+	GPL2010:1.16
+	pre_GPL2010:1.15
+	pre_var_equation:1.15
+	pre_fftwrings:1.11
+	pre_opfiles:1.10
+	src:1.10
+	best-code:1.10
+	x-named-regs:1.10
+	x:1.10
+	v13-00:1.10
+	pre_GPL:1.9
+	prec_CA:1.9
+	noindx:1.9
+	Bproc:1.9
+	oct21:1.4
+	last77:1.4;
+locks; strict;
+comment	@c @;
+
+
+1.16
+date	2010.06.24.13.25.01;	author leith;	state Exp;
+branches;
+next	1.15;
+
+1.15
+date	2008.07.02.12.00.36;	author leith;	state Exp;
+branches;
+next	1.14;
+
+1.14
+date	2008.07.01.18.10.20;	author leith;	state Exp;
+branches;
+next	1.13;
+
+1.13
+date	2008.06.19.12.53.33;	author leith;	state Exp;
+branches;
+next	1.12;
+
+1.12
+date	2008.06.10.14.40.47;	author leith;	state Exp;
+branches;
+next	1.11;
+
+1.11
+date	2008.04.02.16.20.52;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2005.10.17.21.00.12;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2000.08.04.20.38.43;	author bimal;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2000.08.03.21.08.18;	author bimal;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2000.05.15.20.33.04;	author pawel;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2000.03.21.16.58.35;	author bimal;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	99.11.10.23.09.07;	author yuchen;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	99.02.26.21.58.18;	author pawel;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	99.02.26.21.55.56;	author pawel;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	97.10.01.20.16.40;	author pawel;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	97.09.30.14.30.32;	author pawel;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.16
+log
+@GPL_2010
+@
+text
+@C++*********************************************************************
+C
+C ALPRBS_Q.F
+C                 FOR FFTW3                      MAR. 2008 ARDEAN LEITH
+C                 ALPRBS_Q_NEW                   JUN. 2008 ARDEAN LEITH
+C
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C ALPRBS_Q(NUMR,NRING,LCIRC,MODE)
+C
+C PURPOSE: CREATES NUMR ARRAY HOLDING THE SPECIFICATIONS FOR THE 
+C          RADIAL RINGS, FOR USE WITH NON-SPIDER (e.g. FFTW3) FFT.
+C
+C PARAMETERS:   NRING       NUMBER OF RINGS                     SENT
+C               NUMR(1,I)   RING NUMBER = RADIUS                SENT
+C               NUMR(2,I)   BEGINNING IN CIRC                    RET.
+C               NUMR(3,I)   LENGTH IN CIRC                       RET.
+C               LCIRC       TOTAL LENGTH OF CIRC                 RET.
+C               IRAY        RAY SKIP INCREMENT (1,2,4,8...)     SENT.
+C   
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C--*********************************************************************
+
+        SUBROUTINE ALPRBS_Q(NUMR,NRING,LCIRC,MODE)
+
+        INTEGER, INTENT(INOUT)   :: NUMR(3,NRING)
+        CHARACTER*1, INTENT(IN)  :: MODE
+
+        REAL*8                   :: PI
+        INTEGER                  :: MAXFFTT
+
+#ifndef SP_LIBFFTW3
+C       FOR MAXFFT
+        INCLUDE 'CMLIMIT.INC'
+
+        MAXFFTT = MAXFFT
+#else
+        MAXFFTT = HUGE(MAXFFTT)
+#endif
+
+C       PREPARATION OF PARAMETERS
+        PI = 4.0 * DATAN(1.0D0)
+        IF (MODE .EQ. 'F')  PI = 2 * PI
+
+        LCIRC = 0              ! TOTAL LENGTH OF CIRCLE ARRAYS
+
+        DO I=1,NRING
+           JP = PI * NUMR(1,I)     ! CIRCUMFERENCE OF CIRCLE
+           IP = 2 ** LOG2(JP)      ! LENGTH IS POWER OF 2: 8,16,32,64....
+
+C          IF CLOSE TO BOUNDARY OF POWER OF TWO, GOTO NEXT POWER
+           IF (I .LT. NRING .AND. JP .GT. IP+IP/2)IP = MIN(MAXFFTT,2*IP)
+
+C          LAST RING OVERSAMPLED TO IMPROVE ACCURACY OF PEAK LOCATION (?).
+           IF (I.EQ. NRING .AND. JP .GT. IP+IP/5) IP = MIN(MAXFFTT,2*IP)
+
+C          ALL THE RINGS ARE POWER-OF-TWO. ADD 2 TO LEN TO USE NEW FFT.
+           IP        = IP + 2
+           NUMR(3,I) = IP                ! LENGTH OF CIRCLE + PAD
+           LCIRC     = LCIRC + IP        ! TOTAL LENGTH OF CIRCLE ARRAYS
+
+           IF (I .EQ. 1) THEN
+              NUMR(2,1) = 1
+           ELSE
+              NUMR(2,I) = NUMR(2,I-1) + NUMR(3,I-1)
+           ENDIF
+
+        ENDDO
+
+        END
+
+C       ----------- ALPRBS_Q_NEW ------------------------------------
+
+        SUBROUTINE ALPRBS_Q_NEW(NUMR,NRING,LCIRC,MODE,IRAY)
+
+        INTEGER, INTENT(INOUT)   :: NUMR(3,NRING)
+        CHARACTER*1, INTENT(IN)  :: MODE
+
+        REAL*8                   :: PI
+        INTEGER                  :: MAXFFTT
+
+#ifndef SP_LIBFFTW3
+C       FOR MAXFFT
+        INCLUDE 'CMLIMIT.INC'
+
+        MAXFFTT = MAXFFT
+#else
+        MAXFFTT = HUGE(MAXFFTT)
+#endif
+
+C       PREPARATION OF PARAMETERS
+        PI = 4.0 * DATAN(1.0D0)
+        IF (MODE .EQ. 'F')  PI = 2 * PI
+
+        LCIRC = 0              ! TOTAL LENGTH OF CIRCLE ARRAYS
+
+        DO I=1,NRING
+           JP = PI * NUMR(1,I)
+           IP = 2 ** LOG2(JP)
+           IF (I .LT. NRING .AND. JP .GT. IP+IP/2)IP = MIN(MAXFFTT,2*IP)
+      
+C          LAST RING OVERSAMPLED TO IMPROVE ACCURACY OF PEAK LOCATION (?).
+           IF (I.EQ. NRING .AND. JP .GT. IP+IP/5) IP = MIN(MAXFFTT,2*IP)
+
+           IF (IRAY .GT. 1) THEN
+               !IPT = IP / IRAY 
+               !write(6,*) ' ring,jp,ip --> ip:',i,jp,ip,ipt
+               IP = IP / IRAY 
+           ENDIF
+
+C          ALL THE RINGS ARE POWER-OF-TWO. ADD 2 TO LEN TO USE NEW FFT.
+           IP        = IP + 2
+           NUMR(3,I) = IP                ! LENGTH OF CIRCLE + PAD
+           LCIRC     = LCIRC + IP        ! TOTAL LENGTH OF CIRCLE ARRAYS
+
+           IF (I .EQ. 1) THEN
+              NUMR(2,1) = 1
+           ELSE
+              NUMR(2,I) = NUMR(2,I-1) + NUMR(3,I-1)
+           ENDIF
+
+        ENDDO
+
+        END
+@
+
+
+1.15
+log
+@duplicate: INCLUDE 'CMLIMIT.INC'
+@
+text
+@a7 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2008  Health Research Inc.                      *
+d9 5
+a13 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d15 1
+a15 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d20 1
+a20 1
+C=* This program is distributed in the hope that it will be useful,    *
+d22 1
+a22 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a23 1
+C=*                                                                    *
+d25 1
+a25 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.14
+log
+@*** empty log message ***
+@
+text
+@a55 3
+C       FOR MAXFFT
+        INCLUDE 'CMLIMIT.INC'
+
+@
+
+
+1.13
+log
+@ fast quadri
+@
+text
+@d128 1
+a128 2
+
+#          
+@
+
+
+1.12
+log
+@undefined maxfft bug
+@
+text
+@d4 2
+a5 1
+C                        FOR FFTW3              MAR. 2008 ARDEAN LEITH
+d43 2
+a44 1
+C     
+d68 49
+d129 1
+d133 6
+@
+
+
+1.11
+log
+@rewrite
+@
+text
+@d52 14
+d76 1
+a76 1
+           IF (I .LT. NRING .AND. JP .GT. IP+IP/2)IP = MIN(MAXFFT,2*IP)
+d79 1
+a79 1
+           IF (I.EQ. NRING .AND. JP .GT. IP+IP/5) IP = MIN(MAXFFT,2*IP)
+@
+
+
+1.10
+log
+@GPL License fixed
+@
+text
+@d3 2
+a4 1
+C $$ ALPRBS_Q.FOR
+d8 1
+a8 1
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d32 1
+d34 2
+a35 1
+C IMAGE_PROCESSING_ROUTINE
+d37 6
+a42 1
+C        1         2         3         4         5         6         7
+a44 7
+        SUBROUTINE  ALPRBS_Q(NUMR,NRING,LCIRC,MODE)
+C
+C  NUMR(1,I) - ring number
+C  NUMR(2,I) - beginning in CIRC
+C  NUMR(3,I) - length in CIRC +2
+C  LCIRC - total length of CIRC
+C
+d46 13
+a58 10
+        INCLUDE 'CMLIMIT.INC'
+        INTEGER  NUMR(3,NRING)
+        REAL*8  PI
+        CHARACTER*1  MODE
+C
+C  PREPARATION OF PARAMETERS
+C
+        PI=4.0*DATAN(1.0D0)
+        IF(MODE.EQ.'F')  PI=2*PI
+        LCIRC=0
+d60 14
+a73 13
+           JP=PI*NUMR(1,I)
+           IP=2**LOG2(JP)
+           IF(I.LT.NRING.AND.JP.GT.IP+IP/2)  IP=MIN0(MAXFFT,2*IP)
+C
+C  Last ring should be oversampled to allow higher accuracy
+C  of peak location (?).
+C
+        IF(I.EQ.NRING.AND.JP.GT.IP+IP/5)  IP=MIN0(MAXFFT,2*IP)
+C  All the rings are power-of-two.  Increase by 2 to be able
+C  to use new FFT.
+           NUMR(3,I)=IP+2
+           IF(I.EQ.1)  THEN
+              NUMR(2,1)=1
+d75 1
+a75 1
+              NUMR(2,I)=NUMR(2,I-1)+NUMR(3,I-1)
+d77 1
+a77 1
+           LCIRC=LCIRC+IP+2
+d79 1
+@
+
+
+1.9
+log
+@replaced log2_p with log2
+@
+text
+@d1 1
+a1 1
+C++************************************************************************
+d5 25
+a29 9
+C **************************************************************************
+C *  SPIDER - MODULAR IMAGE PROCESSING SYSTEM.  AUTHOR: J.FRANK            *
+C *  COPYRIGHT (C)1981,1987, WADSWORTH CENTER FOR LABORATORIES AND         *
+C *  RESEARCH, NEW YORK STATE DEPARTMENT OF HEALTH, ALBANY, NY 12201.      *
+C *  THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO THE CENTER FOR       *
+C *  LABORATORIES AND RESEARCH AND ARE NOT TO BE DISCLOSED TO OTHERS OR    *
+C *  USED FOR PURPOSES OTHER THAN INTENDED WITHOUT WRITTEN APPROVAL OF     *
+C *  THE CENTER FOR LABORATORIES AND RESEARCH                              *
+C **************************************************************************
+d36 1
+a36 1
+C--************************************************************************
+@
+
+
+1.8
+log
+@used maxfft
+@
+text
+@d41 1
+a41 1
+           IP=2**LOG2_P(JP)
+@
+
+
+1.7
+log
+@*** empty log message ***
+@
+text
+@d28 2
+d42 1
+a42 1
+           IF(I.LT.NRING.AND.JP.GT.IP+IP/2)  IP=MIN0(8192,2*IP)
+d47 1
+a47 1
+        IF(I.EQ.NRING.AND.JP.GT.IP+IP/5)  IP=MIN0(8192,2*IP)
+@
+
+
+1.6
+log
+@cosmetic
+@
+text
+@a20 3
+
+
+
+a30 1
+
+a55 1
+
+@
+
+
+1.5
+log
+@a
+@
+text
+@d16 1
+d18 1
+d21 3
+a23 3
+C
+C $$ ALPRBS_Q.FOR
+C
+d42 3
+a44 3
+        JP=PI*NUMR(1,I)
+        IP=2**LOG2_P(JP)
+        IF(I.LT.NRING.AND.JP.GT.IP+IP/2)  IP=MIN0(8192,2*IP)
+d52 9
+a60 9
+        NUMR(3,I)=IP+2
+        IF(I.EQ.1)  THEN
+        NUMR(2,1)=1
+        ELSE
+        NUMR(2,I)=NUMR(2,I-1)+NUMR(3,I-1)
+        ENDIF
+        LCIRC=LCIRC+IP+2
+	ENDDO
+c 1     CONTINUE
+@
+
+
+1.4
+log
+@ff
+@
+text
+@d32 1
+a32 1
+CNO_SAVE
+@
+
+
+1.3
+log
+@ff
+@
+text
+@d42 1
+a42 1
+        IF(I.LT.NRING.AND.JP.GT.IP+IP/2)  IP=MIN0(1024,2*IP)
+d47 1
+a47 1
+        IF(I.EQ.NRING.AND.JP.GT.IP+IP/5)  IP=MIN0(1024,2*IP)
+@
+
+
+1.2
+log
+@*** empty log message ***
+@
+text
+@d29 1
+a29 1
+        INTEGER*2  NUMR(3,NRING)
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d39 1
+a39 1
+        DO  1  I=1,NRING
+d57 2
+a58 1
+ 1      CONTINUE
+@

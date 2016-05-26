@@ -1,0 +1,692 @@
+head	1.7;
+access;
+symbols
+	pre_getangas:1.6
+	GPL2010:1.6
+	pre_GPL2010:1.5
+	pre_var_equation:1.5
+	pre_fftwrings:1.5
+	pre_opfiles:1.5
+	src:1.5
+	best-code:1.5
+	x-named-regs:1.5
+	x:1.5
+	v13-00:1.5
+	pre_GPL:1.4
+	prec_CA:1.2;
+locks; strict;
+comment	@c @;
+
+
+1.7
+date	2011.11.08.15.46.08;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2010.06.24.13.27.18;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2005.10.17.21.07.10;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2005.03.24.15.11.43;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2005.03.24.14.55.58;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2003.09.17.16.20.36;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2003.09.17.14.37.27;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.7
+log
+@LDPX,LDPY,LDPZ sent from caller not in common
+@
+text
+@C++*********************************************************************
+C                                                                      *
+C WPRO_N.F    SPEEDED UP                         FEB 2000 ARDEAN LEITH *
+C             LDPX,LDPY,LDPZ                     NOV 2011 ARDEAN LEITH *
+C                                                                      *
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2011  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C                                                                      *
+C WPRO_N(B,NSAM,NROW,CUBE,LTB,IPCUBE,NN,                               *
+C        PHI,THETA,PSI,RI,LDPX,LDPY,LDPZ)                              *
+C                                                                      *
+C PURPOSE: COMPUTES PROJECTION(S) OF VOLUME ACCORDING TO EULERIAN ANGLES. 
+C                                                                      *
+C IPCUBE: A RUN LENGTH LIST OF VOXELS ON EACH LINE IN THE              *
+C         VOLUME  WHICH ARE WITHIN A SPECIFED RADIUS SPHERE IN VOL.    *
+C                1 - BEGINNING VOXEL ON LINE                           *
+C                2 - LENGTH OF RUN                                     *
+C                3 - IX FOR VOXEL                                      *
+C                4 - IY FOR VOXEL                                      *
+C                5 - IZ FOR VOXEL                                      *
+C                                                                      *
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C--*********************************************************************
+
+         SUBROUTINE WPRO_N(B,NSAM,NROW,NSLICE,CUBE,LTB,IPCUBE,
+     &                     NN,PHI,THETA,PSI,RI,LDPX,LDPY,LDPZ)
+
+         REAL,DIMENSION(NSAM,NROW)        :: B
+         INTEGER                          :: NSAM,NROW,NSLICE
+         REAL,DIMENSION(NSAM,NROW,NSLICE) :: CUBE
+         INTEGER                          :: LTB
+         INTEGER,DIMENSION(5,NN)          :: IPCUBE
+         INTEGER                          :: NN
+         REAL                             :: PHI,THETA,PSI,RI
+         INTEGER                          :: LDPX,LDPY,LDPZ
+
+         REAL,DIMENSION(9)                :: DM
+         DOUBLE PRECISION                 :: CPHI,SPHI,CTHE,STHE
+         DOUBLE PRECISION                 :: CPSI,SPSI
+
+         DOUBLE PRECISION                 :: QUADPI,DGR_TO_RAD
+
+         PARAMETER (QUADPI = 3.1415926535897932384626)
+         PARAMETER (DGR_TO_RAD = (QUADPI/180))
+
+         CPHI = DCOS(DBLE(PHI)  *DGR_TO_RAD)
+         SPHI = DSIN(DBLE(PHI)  *DGR_TO_RAD)
+         CTHE = DCOS(DBLE(THETA)*DGR_TO_RAD)
+         STHE = DSIN(DBLE(THETA)*DGR_TO_RAD)
+         CPSI = DCOS(DBLE(PSI)  *DGR_TO_RAD)
+         SPSI = DSIN(DBLE(PSI)  *DGR_TO_RAD)
+
+         DM(1) = CPHI*CTHE*CPSI-SPHI*SPSI
+         DM(2) = SPHI*CTHE*CPSI+CPHI*SPSI
+         DM(3) = -STHE*CPSI
+         DM(4) = -CPHI*CTHE*SPSI-SPHI*CPSI
+         DM(5) = -SPHI*CTHE*SPSI+CPHI*CPSI
+         DM(6) = STHE*SPSI
+
+         DM(7) = STHE*CPHI
+         DM(8) = STHE*SPHI
+         DM(9) = CTHE
+
+         DM1   = DM(1)
+         DM2   = DM(2)
+         DM3   = DM(3)
+
+C        ZERO THE WHOLE B ARRAY
+         B  = 0.0
+
+         DIM  = MIN(NSAM,NROW,NSLICE)
+
+         IF ((2*(RI+1) + 1) .LE. DIM) THEN
+C            NO NEED TO CHECK IQX & IQY BOUNDARIES
+             DO I=1,NN
+
+               K=IPCUBE(4,I)+LDPY
+
+               XB = IPCUBE(3,I)*DM(1) + IPCUBE(4,I)*DM(4) +
+     &              IPCUBE(5,I)*DM(7) + LDPX
+
+               YB = IPCUBE(3,I)*DM(2) + IPCUBE(4,I)*DM(5) +
+     &              IPCUBE(5,I)*DM(8) + LDPY
+
+               ZB = IPCUBE(3,I)*DM(3) + IPCUBE(4,I)*DM(6) +
+     &              IPCUBE(5,I)*DM(9) + LDPZ
+
+               DO J=IPCUBE(1,I),IPCUBE(2,I)
+
+                 IOX = IFIX(XB)
+                 IOY = IFIX(YB)
+                 IOZ = IFIX(ZB)
+		 DX  = XB-IOX
+		 DY  = YB-IOY
+		 DZ  = ZB-IOZ
+
+                 A1 = CUBE(IOX,IOY,IOZ)
+                 A2 = CUBE(IOX+1,IOY,IOZ) - A1
+                 A3 = CUBE(IOX,IOY+1,IOZ) - A1
+                 A4 = CUBE(IOX,IOY,IOZ+1) - A1
+                 A5 = -A2 - CUBE(IOX,IOY+1,IOZ) + CUBE(IOX+1,IOY+1,IOZ)
+                 A61= - CUBE(IOX,IOY,IOZ+1) + CUBE(IOX+1,IOY,IOZ+1)
+                 A6 = -A2 + A61
+                 A7 = -A3 - CUBE(IOX,IOY,IOZ+1) + CUBE(IOX,IOY+1,IOZ+1)
+                 A8 = -A5 - A61 - CUBE(IOX,IOY+1,IOZ+1) + 
+     &                CUBE(IOX+1,IOY+1,IOZ+1)
+
+                 B(J,K) = B(J,K) +
+     &              A1 + DZ*(A4 + A6*DX + (A7 + A8*DX)*DY) + A3*DY +
+     &              DX*(A2 + A5*DY)
+
+                  XB = XB + DM1
+                  YB = YB + DM2
+                  ZB = ZB + DM3
+               ENDDO
+            ENDDO
+         ELSE
+C            MUST CHECK IQX & IQY BOUNDARIES
+
+            DO    I=1,NN
+
+               K=IPCUBE(4,I)+LDPY
+
+               XB = IPCUBE(3,I)*DM(1) + IPCUBE(4,I)*DM(4) +
+     &              IPCUBE(5,I)*DM(7) + LDPX
+
+               YB = IPCUBE(3,I)*DM(2) + IPCUBE(4,I)*DM(5) +
+     &              IPCUBE(5,I)*DM(8) + LDPY
+
+               ZB = IPCUBE(3,I)*DM(3) + IPCUBE(4,I)*DM(6) +
+     &              IPCUBE(5,I)*DM(9) + LDPZ
+
+               DO J=IPCUBE(1,I),IPCUBE(2,I)
+
+C                 CHECK FOR PIXELS OUT OF BOUNDS 
+                  IOX = IFIX(XB)
+                  IF (IOX.LT.1 .OR. IOX.GE.NSAM) GOTO 2
+                  IOY = IFIX(YB)
+                  IF (IOY.LT.1 .OR. IOY.GE.NROW) GOTO 2
+                  IOZ    = IFIX(ZB)
+                  IF (IOZ.LT.1 .OR. IOZ.GE.NSLICE) GOTO 2
+
+                  IOX = IFIX(XB)
+                  IOY = IFIX(YB)
+                  IOZ = IFIX(ZB)
+		  DX  = XB-IOX
+		  DY  = YB-IOY
+		  DZ  = ZB-IOZ
+
+                  A1 = CUBE(IOX,IOY,IOZ)
+                  A2 = CUBE(IOX+1,IOY,IOZ) - A1
+                  A3 = CUBE(IOX,IOY+1,IOZ) - A1
+                  A4 = CUBE(IOX,IOY,IOZ+1) - A1
+                  A5 = -A2 - CUBE(IOX,IOY+1,IOZ) +CUBE(IOX+1,IOY+1,IOZ)
+                  A61= -CUBE(IOX,IOY,IOZ+1) + CUBE(IOX+1,IOY,IOZ+1)
+                  A6 = -A2 + A61
+                  A7 = -A3 - CUBE(IOX,IOY,IOZ+1) +CUBE(IOX,IOY+1,IOZ+1)
+                  A8 = -A5 - A61 - CUBE(IOX,IOY+1,IOZ+1) + 
+     &                CUBE(IOX+1,IOY+1,IOZ+1) 
+
+                  B(J,K) = B(J,K)+ A1 + DZ*(A4 + A6*DX +
+     &                     (A7 + A8*DX)*DY) + A3*DY + DX*(A2 + A5*DY)
+
+2                 XB = XB + DM1
+                  YB = YB + DM2
+                  ZB = ZB + DM3
+               ENDDO
+            ENDDO
+          ENDIF
+
+         END
+
+#ifdef NEVER
+         A1 = CUBE(IOX,IOY,IOZ)
+         A2 = CUBE(IOX+1,IOY,IOZ) - CUBE(IOX,IOY,IOZ)
+         A3 = CUBE(IOX,IOY+1,IOZ) - CUBE(IOX,IOY,IOZ)
+         A4 = CUBE(IOX,IOY,IOZ+1) - CUBE(IOX,IOY,IOZ)
+         A5 = CUBE(IOX,IOY,IOZ) - CUBE(IOX+1,IOY,IOZ) 
+     &   - CUBE(IOX,IOY+1,IOZ)+ CUBE(IOX+1,IOY+1,IOZ)
+         A6 = CUBE(IOX,IOY,IOZ) - CUBE(IOX+1,IOY,IOZ) 
+     &   - CUBE(IOX,IOY,IOZ+1)+ CUBE(IOX+1,IOY,IOZ+1)
+         A7 = CUBE(IOX,IOY,IOZ) - CUBE(IOX,IOY+1,IOZ) 
+     &   - CUBE(IOX,IOY,IOZ+1)+ CUBE(IOX,IOY+1,IOZ+1)
+         A8 = CUBE(IOX+1,IOY,IOZ) + CUBE(IOX,IOY+1,IOZ)
+     &   + CUBE(IOX,IOY,IOZ+1)
+     &   - CUBE(IOX,IOY,IOZ)- CUBE(IOX+1,IOY+1,IOZ) 
+     &   - CUBE(IOX+1,IOY,IOZ+1)
+     &   - CUBE(IOX,IOY+1,IOZ+1) + CUBE(IOX+1,IOY+1,IOZ+1)
+         B(J,K)=B(J,K)+
+     &    A1 + DZ*(A4 + A6*DX + (A7 + A8*DX)*DY) + A3*DY
+     &   + DX*(A2 + A5*DY)
+#endif
+@
+
+
+1.6
+log
+@GPL_2010
+@
+text
+@d2 4
+a5 3
+C
+C WPRO_N.F                              SPEEDED UP FEB 2000 ARDEAN LEITH
+C
+d10 1
+a10 1
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+d27 4
+a30 3
+C
+C WPRO_N(B,NSAM,NROW,CUBE,LTB,IPCUBE,NN,PHI,THETA,PSI,RI)
+C
+d32 9
+a40 7
+C
+C IPCUBE: 1 - BEGINNING
+C         2 - END
+C         3 - IX
+C         4 - IY
+C         5 - IZ
+C
+d45 1
+a45 1
+     &                     NN,PHI,THETA,PSI,RI)
+d48 1
+d50 1
+d52 4
+d59 1
+a60 3
+         DOUBLE PRECISION                 :: RAD_TO_DGR
+
+         COMMON /PAR/      LDPX,LDPY,LDPZ
+d65 2
+a66 2
+         CPHI = DCOS(DBLE(PHI)*DGR_TO_RAD)
+         SPHI = DSIN(DBLE(PHI)*DGR_TO_RAD)
+d69 2
+a70 2
+         CPSI = DCOS(DBLE(PSI)*DGR_TO_RAD)
+         SPSI = DSIN(DBLE(PSI)*DGR_TO_RAD)
+@
+
+
+1.5
+log
+@GPL License fixed
+@
+text
+@a5 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d7 5
+a11 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d13 1
+a13 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d18 1
+a18 1
+C=* This program is distributed in the hope that it will be useful,    *
+d20 1
+a20 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a21 1
+C=*                                                                    *
+d23 1
+a23 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.4
+log
+@different slight speedup
+@
+text
+@d1 1
+a1 1
+C++************************************************************************
+d5 25
+a29 9
+C **************************************************************************
+C *  SPIDER - MODULAR IMAGE PROCESSING SYSTEM.  AUTHOR: J.FRANK            *
+C *  COPYRIGHT (C)1981,1987, WADSWORTH CENTER FOR LABORATORIES AND         *
+C *  RESEARCH, NEW YORK STATE DEPARTMENT OF HEALTH, ALBANY, NY 12201.      *
+C *  THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO THE CENTER FOR       *
+C *  LABORATORIES AND RESEARCH AND ARE NOT TO BE DISCLOSED TO OTHERS OR    *
+C *  USED FOR PURPOSES OTHER THAN INTENDED WITHOUT WRITTEN APPROVAL OF     *
+C *  THE CENTER FOR LABORATORIES AND RESEARCH                              *
+C **************************************************************************
+d42 1
+a42 1
+C--************************************************************************
+@
+
+
+1.3
+log
+@slight sppedup
+@
+text
+@d3 1
+a3 2
+C WPRO_N.F                             SPEEDED UP FEB 2000 ARDEAN LEITH
+C                                      SPEEDED UP FEB 2005 ARDEAN LEITH
+d45 6
+a50 6
+         CPHI  = DCOS(DBLE(PHI)  *DGR_TO_RAD)
+         SPHI  = DSIN(DBLE(PHI)  *DGR_TO_RAD)
+         CTHE  = DCOS(DBLE(THETA)*DGR_TO_RAD)
+         STHE  = DSIN(DBLE(THETA)*DGR_TO_RAD)
+         CPSI  = DCOS(DBLE(PSI)  *DGR_TO_RAD)
+         SPSI  = DSIN(DBLE(PSI)  *DGR_TO_RAD)
+d52 2
+a53 2
+         DM(1) = CPHI*CTHE*CPSI  - SPHI*SPSI
+         DM(2) = SPHI*CTHE*CPSI  + CPHI*SPSI
+d55 2
+a56 2
+         DM(4) = -CPHI*CTHE*SPSI - SPHI*CPSI
+         DM(5) = -SPHI*CTHE*SPSI + CPHI*CPSI
+a71 2
+ccc       write(6,*)'(2*(RI+1) + 1),dim: ',(2*(RI+1) + 1),dim
+
+d73 1
+a73 1
+C            NO NEED TO CHECK IQX & IQY BOUNDARIES (FASTER)
+d76 1
+a76 1
+               K = IPCUBE(4,I) + LDPY
+d89 21
+a109 27
+                  IOX  = IFIX(XB)
+                  IOY  = IFIX(YB)
+                  IOZ  = IFIX(ZB)
+
+		  DX   = XB - IOX
+		  DY   = YB - IOY
+		  DZ   = ZB - IOZ
+
+                  A000 = CUBE(IOX,IOY,IOZ)
+                  A010 = CUBE(IOX,IOY+1,IOZ)
+                  A001 = CUBE(IOX,IOY,IOZ+1)
+                  A011 = CUBE(IOX,IOY+1,IOZ+1)
+
+                  A2   = CUBE(IOX+1,IOY,IOZ) - A000
+                  A3   = A010 - A000
+                  A4   = A001 - A000
+                  A5   = CUBE(IOX+1,IOY+1,IOZ) - A2 - A010 
+                  A61  = CUBE(IOX+1,IOY,IOZ+1) - A001
+                  A6   = A61  - A2
+                  A7   = A011 - A3 - A001
+                  A8   = CUBE(IOX+1,IOY+1,IOZ+1) - A5 - A61 - A011 
+
+                  B(J,K) = B(J,K) +
+     &                  A000 + 
+     &                  DY*A3 +
+     &                  DX*(A2 + DY*A5) +
+     &                  DZ*(A4 + DX*A6 + DY*(A7 + DX*A8))
+a115 1
+
+d120 2
+a121 1
+               K  = IPCUBE(4,I) + LDPY
+a136 1
+
+a138 1
+
+d145 3
+a147 3
+		  DX  = XB - IOX
+		  DY  = YB - IOY
+		  DZ  = ZB - IOZ
+d158 2
+a159 2
+     &                CUBE(IOX+1,IOY+1,IOZ+1)
+ 
+d168 1
+a168 1
+         ENDIF
+a171 2
+
+
+d177 14
+a190 15
+         A5 = CUBE(IOX,IOY,IOZ)   - CUBE(IOX+1,IOY,IOZ) -
+     &        CUBE(IOX,IOY+1,IOZ) + CUBE(IOX+1,IOY+1,IOZ)
+         A6 = CUBE(IOX,IOY,IOZ)   - CUBE(IOX+1,IOY,IOZ) -
+     &        CUBE(IOX,IOY,IOZ+1) + CUBE(IOX+1,IOY,IOZ+1)
+         A7 = CUBE(IOX,IOY,IOZ)   - CUBE(IOX,IOY+1,IOZ) -
+     &        CUBE(IOX,IOY,IOZ+1) + CUBE(IOX,IOY+1,IOZ+1)
+         A8 = CUBE(IOX+1,IOY,IOZ) + CUBE(IOX,IOY+1,IOZ) +
+     &        CUBE(IOX,IOY,IOZ+1) -
+     &        CUBE(IOX,IOY,IOZ)   - CUBE(IOX+1,IOY+1,IOZ) - 
+     &        CUBE(IOX+1,IOY,IOZ+1)-
+     &        CUBE(IOX,IOY+1,IOZ+1) + CUBE(IOX+1,IOY+1,IOZ+1)
+
+         B(J,K) = B(J,K)+
+     &       A1 + DZ*(A4 + A6*DX + (A7 + A8*DX)*DY) + A3*DY +
+     &       DX*(A2 + A5*DY)
+@
+
+
+1.2
+log
+@aliasing
+@
+text
+@d3 2
+a4 1
+C WPRO_N.F                              SPEEDED UP FEB 2000 ARDEAN LEITH
+d18 2
+a25 2
+C IMAGE_PROCESSING_ROUTINE
+C
+d32 9
+a40 4
+         DIMENSION         B(NSAM,NROW),CUBE(NSAM,NROW,NSLICE)
+         INTEGER           IPCUBE(5,NN)
+         DIMENSION         DM(9)
+         DOUBLE PRECISION  CPHI,SPHI,CTHE,STHE,CPSI,SPSI
+a41 1
+         DOUBLE PRECISION  QUADPI,DGR_TO_RAD,RAD_TO_DGR
+d43 1
+a43 1
+         PARAMETER (QUADPI = 3.141592653589793238462643383279502884197)
+d46 6
+a51 8
+         R    = RI * RI
+
+         CPHI = DCOS(DBLE(PHI)*DGR_TO_RAD)
+         SPHI = DSIN(DBLE(PHI)*DGR_TO_RAD)
+         CTHE = DCOS(DBLE(THETA)*DGR_TO_RAD)
+         STHE = DSIN(DBLE(THETA)*DGR_TO_RAD)
+         CPSI = DCOS(DBLE(PSI)*DGR_TO_RAD)
+         SPSI = DSIN(DBLE(PSI)*DGR_TO_RAD)
+d53 2
+a54 2
+         DM(1) = CPHI*CTHE*CPSI-SPHI*SPSI
+         DM(2) = SPHI*CTHE*CPSI+CPHI*SPSI
+d56 2
+a57 2
+         DM(4) = -CPHI*CTHE*SPSI-SPHI*CPSI
+         DM(5) = -SPHI*CTHE*SPSI+CPHI*CPSI
+d64 3
+a66 3
+         DM1 = DM(1)
+         DM2 = DM(2)
+         DM3 = DM(3)
+d72 55
+a126 1
+         IF ((2*(RI+1) + 1) .GT. DIM) THEN
+d130 1
+a130 2
+
+               K=IPCUBE(4,I)+LDPY
+d146 1
+d149 1
+d153 6
+a158 6
+                  IOX    = IFIX(XB)
+                  IOY    = IFIX(YB)
+                  IOZ    = IFIX(ZB)
+		  DX = XB-IOX
+		  DY = YB-IOY
+		  DZ = ZB-IOZ
+d169 2
+a170 1
+     &                CUBE(IOX+1,IOY+1,IOZ+1) 
+d179 1
+d181 1
+a181 3
+         ELSE
+C            NO NEED TO CHECK IQX & IQY BOUNDARIES
+             DO I=1,NN
+a182 1
+               K=IPCUBE(4,I)+LDPY
+a183 31
+               XB = IPCUBE(3,I)*DM(1) + IPCUBE(4,I)*DM(4) +
+     &              IPCUBE(5,I)*DM(7) + LDPX
+
+               YB = IPCUBE(3,I)*DM(2) + IPCUBE(4,I)*DM(5) +
+     &              IPCUBE(5,I)*DM(8) + LDPY
+
+               ZB = IPCUBE(3,I)*DM(3) + IPCUBE(4,I)*DM(6) +
+     &              IPCUBE(5,I)*DM(9) + LDPZ
+
+               DO J=IPCUBE(1,I),IPCUBE(2,I)
+
+                 IOX = IFIX(XB)
+                 IOY = IFIX(YB)
+                 IOZ = IFIX(ZB)
+		 DX  = XB-IOX
+		 DY  = YB-IOY
+		 DZ  = ZB-IOZ
+
+                 A1 = CUBE(IOX,IOY,IOZ)
+                 A2 = CUBE(IOX+1,IOY,IOZ) - A1
+                 A3 = CUBE(IOX,IOY+1,IOZ) - A1
+                 A4 = CUBE(IOX,IOY,IOZ+1) - A1
+                 A5 = -A2 - CUBE(IOX,IOY+1,IOZ) + CUBE(IOX+1,IOY+1,IOZ)
+                 A61= - CUBE(IOX,IOY,IOZ+1) + CUBE(IOX+1,IOY,IOZ+1)
+                 A6 = -A2 + A61
+                 A7 = -A3 - CUBE(IOX,IOY,IOZ+1) + CUBE(IOX,IOY+1,IOZ+1)
+                 A8 = -A5 - A61 - CUBE(IOX,IOY+1,IOZ+1) + 
+     &                CUBE(IOX+1,IOY+1,IOZ+1)
+                 B(J,K)=B(J,K)+
+     &              A1 + DZ*(A4 + A6*DX + (A7 + A8*DX)*DY) + A3*DY +
+     &              DX*(A2 + A5*DY)
+d190 15
+a204 14
+         A5 = CUBE(IOX,IOY,IOZ) - CUBE(IOX+1,IOY,IOZ) 
+     &   - CUBE(IOX,IOY+1,IOZ)+ CUBE(IOX+1,IOY+1,IOZ)
+         A6 = CUBE(IOX,IOY,IOZ) - CUBE(IOX+1,IOY,IOZ) 
+     &   - CUBE(IOX,IOY,IOZ+1)+ CUBE(IOX+1,IOY,IOZ+1)
+         A7 = CUBE(IOX,IOY,IOZ) - CUBE(IOX,IOY+1,IOZ) 
+     &   - CUBE(IOX,IOY,IOZ+1)+ CUBE(IOX,IOY+1,IOZ+1)
+         A8 = CUBE(IOX+1,IOY,IOZ) + CUBE(IOX,IOY+1,IOZ)
+     &   + CUBE(IOX,IOY,IOZ+1)
+     &   - CUBE(IOX,IOY,IOZ)- CUBE(IOX+1,IOY+1,IOZ) 
+     &   - CUBE(IOX+1,IOY,IOZ+1)
+     &   - CUBE(IOX,IOY+1,IOZ+1) + CUBE(IOX+1,IOY+1,IOZ+1)
+         B(J,K)=B(J,K)+
+     &    A1 + DZ*(A4 + A6*DX + (A7 + A8*DX)*DY) + A3*DY
+     &   + DX*(A2 + A5*DY)
+a205 8
+
+                  XB = XB + DM1
+                  YB = YB + DM2
+                  ZB = ZB + DM3
+               ENDDO
+            ENDDO
+         ENDIF
+         END
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d3 1
+a3 1
+C WPRO.F                              SPEEDED UP FEB 2000 ARDEAN LEITH
+d15 1
+a15 1
+C WPRO(B,NSAM,NROW,CUBE,LTB,IPCUBE,NN,PHI,THETA,PSI,RI)
+a24 1
+C        1         2         3         4         5         6         7
+d28 2
+a29 2
+         SUBROUTINE WPRO
+     &        (B,NSAM,NROW,NSLICE,CUBE,LTB,IPCUBE,NN,PHI,THETA,PSI,RI)
+d85 1
+a85 1
+              DO    J=IPCUBE(1,I),IPCUBE(2,I)
+d102 12
+a113 13
+         A1 = CUBE(IOX,IOY,IOZ)
+         A2 = CUBE(IOX+1,IOY,IOZ) - A1
+         A3 = CUBE(IOX,IOY+1,IOZ) - A1
+         A4 = CUBE(IOX,IOY,IOZ+1) - A1
+         A5 = -A2 - CUBE(IOX,IOY+1,IOZ) + CUBE(IOX+1,IOY+1,IOZ)
+	 A61= - CUBE(IOX,IOY,IOZ+1) + CUBE(IOX+1,IOY,IOZ+1)
+         A6 = -A2 + A61
+         A7 = -A3 - CUBE(IOX,IOY,IOZ+1) + CUBE(IOX,IOY+1,IOZ+1)
+         A8 = -A5 - A61
+     &   - CUBE(IOX,IOY+1,IOZ+1) + CUBE(IOX+1,IOY+1,IOZ+1)
+         B(J,K)=B(J,K)+
+     &    A1 + DZ*(A4 + A6*DX + (A7 + A8*DX)*DY) + A3*DY
+     &   + DX*(A2 + A5*DY)
+d123 1
+a124 2
+            DO    I=1,NN
+
+d136 1
+a136 8
+              DO    J=IPCUBE(1,I),IPCUBE(2,I)
+
+                  IOX    = IFIX(XB)
+                  IOY    = IFIX(YB)
+                  IOZ    = IFIX(ZB)
+		  DX = XB-IOX
+		  DY = YB-IOY
+		  DZ = ZB-IOZ
+d138 20
+a158 13
+         A1 = CUBE(IOX,IOY,IOZ)
+         A2 = CUBE(IOX+1,IOY,IOZ) - A1
+         A3 = CUBE(IOX,IOY+1,IOZ) - A1
+         A4 = CUBE(IOX,IOY,IOZ+1) - A1
+         A5 = -A2 - CUBE(IOX,IOY+1,IOZ) + CUBE(IOX+1,IOY+1,IOZ)
+	 A61= - CUBE(IOX,IOY,IOZ+1) + CUBE(IOX+1,IOY,IOZ+1)
+         A6 = -A2 + A61
+         A7 = -A3 - CUBE(IOX,IOY,IOZ+1) + CUBE(IOX,IOY+1,IOZ+1)
+         A8 = -A5 - A61
+     &   - CUBE(IOX,IOY+1,IOZ+1) + CUBE(IOX+1,IOY+1,IOZ+1)
+         B(J,K)=B(J,K)+
+     &    A1 + DZ*(A4 + A6*DX + (A7 + A8*DX)*DY) + A3*DY
+     &   + DX*(A2 + A5*DY)
+@

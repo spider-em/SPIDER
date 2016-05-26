@@ -1,0 +1,712 @@
+head	1.13;
+access;
+symbols
+	pre_getangas:1.12
+	GPL2010:1.12
+	pre_GPL2010:1.11
+	pre_var_equation:1.11
+	pre_fftwrings:1.10
+	pre_opfiles:1.10
+	src:1.10
+	best-code:1.10
+	x-named-regs:1.10
+	x:1.10
+	v13-00:1.10
+	pre_GPL:1.8
+	prec_CA:1.7
+	noindx:1.6
+	Bproc:1.5
+	oct21:1.5
+	last77:1.4;
+locks; strict;
+comment	@c @;
+
+
+1.13
+date	2014.01.12.19.32.18;	author leith;	state Exp;
+branches;
+next	1.12;
+
+1.12
+date	2010.06.24.13.25.53;	author leith;	state Exp;
+branches;
+next	1.11;
+
+1.11
+date	2009.06.11.12.49.40;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2005.10.17.20.35.04;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2005.10.17.18.25.38;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2003.10.16.16.46.24;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2003.04.16.15.51.11;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2002.03.11.14.08.24;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	99.07.06.16.08.26;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	96.01.16.15.45.47;	author pawel;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	95.07.28.16.12.36;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	94.05.13.14.06.16;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	94.05.13.12.49.31;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@unix specific source code with preprocessor lines
+@
+
+
+1.13
+log
+@enter
+@
+text
+@C++*********************************************************************
+C
+C    HELS.F
+C                       REWRITE                    JUN 2009 ARDEAN LEITH
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C  HELS(NDOC,NDOUT)
+C
+C  PURPOSE:  CREATES SELECTION DOCUMENT FILES FOR A GIVEN THRESHOLD 
+C            FROM A DENDROGRAM. 
+C            ONLY WORKS IN CONJUNCTION WITH HIERARCHICAL 
+C            CLUSTERING OUTPUT FROM 'CL HC' OR 'CL CLA'.  
+C
+C--*********************************************************************
+
+        SUBROUTINE HELS(NDOC,NDOUT)
+
+        INCLUDE 'CMBLOCK.INC'
+        INCLUDE 'CMLIMIT.INC'
+
+        INTEGER, PARAMETER       :: NDLI = 4
+        REAL                     :: DLISTIN(NDLI),DLISTOUT(NDLI)
+
+        CHARACTER(LEN=MAXNAM)    :: DOCNAM,OUTDOC,FILPAT
+        CHARACTER(LEN=23)        :: COMMENT
+        CHARACTER(LEN=1)         :: NULL
+        LOGICAL                  :: EMPTY,TRUNCIT,NEEDNEW
+
+        NULL = CHAR(0)
+C                  123456789 123456789 1234
+        COMMENT = 'THRESHOLD LEVEL:       '
+    
+        THRESH = 0.0
+        CALL RDPRM1S(THRESH,NOT_USED,'THRESHOLD % (0 .. 100)', IRTFLG)
+	IF (IRTFLG .NE. 0)  RETURN
+        TRUNCIT  = (THRESH .GT. 0)   
+
+C       OPEN INPUT DOC FILE NAME
+        CALL OPENDOC(DOCNAM,.TRUE.,NLET,NDOC,NICDOC,.TRUE.,
+     &               'DENDROGRAM DOCUMENT',
+     &               .TRUE.,.FALSE.,.FALSE.,NEWFILE,IRTFLG)
+        IF (IRTFLG .NE. 0)  RETURN
+  
+C       GET TEMPLATE FOR OUTPUT DOC FILE NAME      
+        NMAX = 0
+        CALL  FILSEQP(FILPAT,NLET,IDUM,NMAX,IDUM2,
+     &                'TEMPLATE FOR SELECTION DOC',IRTFLG)
+        IF (IRTFLG .NE. 0)  RETURN
+
+        NTOTAL    = 0
+        ICOL      = 2
+        EMPTY     = .TRUE.
+        NCLAS     = 0
+        NOBJ      = 0
+        NEEDNEW   = .TRUE.
+        LASTCLASS = -1
+
+        DO    ! ENDLESS LOOP
+           CALL LUNDOCREDNXT(NICDOC,IKEYGOT,DLISTIN,NDLI-1,
+     &                       IGO,ICOUNT,IRTFLG)
+           !write(6,*) ikeygot,icount,dlistin(1),irtflg
+ 
+           IF (IRTFLG .EQ. 1)  THEN
+              CALL ERRT(101,'ERROR READING DOC. FILE',NE)
+              GOTO 9999
+
+           ELSEIF (IRTFLG .EQ. 2 .AND. EMPTY) THEN
+C             END OF DOC FILE AND NO KEYS FOUND
+              CALL ERRT(101,'DID NOT FIND ANY KEYS IN DOC. FILE',NE)
+              GOTO 9999
+
+           ELSEIF (IRTFLG .NE. 0) THEN
+C             HAVE FINISHED ALL KEYS IN DOC FILE
+              EXIT
+
+           ELSEIF (ICOUNT .LT. ICOL) THEN
+              CALL ERRT(102,'REGISTER MISSING IN DOC. FILE',ICOL)
+              GOTO 9999
+           ENDIF
+           EMPTY  = .FALSE.
+
+           ICLASS = DLISTIN(1)
+           HITE   = DLISTIN(2)
+           IMGNUM = DLISTIN(3)
+           NTOTAL = NTOTAL + 1
+           NOBJ   = NOBJ + 1
+
+           IF (.NOT. TRUNCIT .AND. ICLASS .NE. LASTCLASS) THEN
+              NEEDNEW   = .TRUE.
+              NOBJ      = 1
+              LASTCLASS = ICLASS
+           ENDIF
+           
+           IF (NEEDNEW) THEN
+C             CREATE NEW OUTPUT DOC FILE 
+              NCLAS = NCLAS + 1
+              IF (TRUNCIT) THEN
+                 NFILE = NCLAS
+                 CALL HELS_NEWDOC(NCLAS,NFILE,FILPAT,NLET,
+     &                         NDOUT,NICDOCO,THRESH,IRTLFG)
+              ELSE
+                 NFILE = ICLASS
+                 CALL HELS_NEWDOC(NFILE,NFILE,FILPAT,NLET,
+     &                         NDOUT,NICDOCO,THRESH,IRTLFG)
+              ENDIF
+              IF (IRTFLG .NE. 0)  GOTO 9999
+              NEEDNEW = .FALSE.
+           ENDIF
+
+           IHITE = HITE
+           NC    = ICLASS
+           IF (TRUNCIT) NC = NCLAS
+           IF (VERBOSE) WRITE(NOUT,90) NC,NFILE,NOBJ,IHITE,IMGNUM
+ 90        FORMAT('  Class:',  I4,'   File: ',I5,
+     &            '   Element:',I5,'   Index:',I4,
+     &            '   ID:', I7)
+
+C          WRITE CURRENT DATA TO DOC FILE
+           DLISTOUT(1) = IMGNUM
+           DLISTOUT(2) = HITE
+           CALL LUNDOCWRTDAT(NICDOCO,NOBJ, DLISTOUT,2,IRTFLG)
+
+           IF (HITE .GE. THRESH .AND. TRUNCIT) THEN          
+C              START A NEW CLASS FOR FURTHER BRANCHES
+               NOBJ    = 0                   ! RESET OBJECT COUNTER
+
+C              CREATE NEW OUTPUT DOC FILE FOR NEXT LINE
+               NEEDNEW = .TRUE.
+               CLOSE(NDOUT)
+           ENDIF 
+        ENDDO
+
+        WRITE(NOUT,93)  NTOTAL,NCLAS
+93      FORMAT('  Total number of objects=',I7,
+     &         '  Number of classes=',I5)
+
+9999    CLOSE(NDOC)
+        CLOSE(NDOUT)
+        END
+
+C       ------------------- HELS_NEWDOC ------------------------------
+
+        SUBROUTINE HELS_NEWDOC(NCLAS,NFILE,FILPAT,NLET,
+     &                         NDOUT,NICDOCO,THRESH,IRTLFG)
+
+        INCLUDE 'CMBLOCK.INC'
+        INCLUDE 'CMLIMIT.INC'
+
+        CHARACTER(LEN=*)         :: FILPAT
+        CHARACTER(LEN=MAXNAM)    :: OUTDOC
+        CHARACTER(LEN=34)        :: COMMENT
+
+
+C       CREATE NEW OUTPUT DOC FILE NAME USING FILE
+        CALL  FILGET(FILPAT,OUTDOC,NLET,NFILE,IRTFLG)
+        IF (IRTFLG .NE. 0)  RETURN
+
+C       OPEN OUTPUT DOC FILE 
+        IRTFLG = -9    ! QUIET
+        CALL OPENDOC(OUTDOC,.TRUE.,NLET,NDOUT,NICDOCO,.FALSE.,
+     &                   '',.FALSE.,.FALSE.,.TRUE.,NEWFILE,IRTFLG)
+        IF (IRTFLG .NE. 0)  RETURN
+
+C                  123456789 123456789 123456789 123456
+        COMMENT = 'THRESHOLD LEVEL:        CLASS:    '
+
+        WRITE(COMMENT(18:23),FMT='(F6.2)') THRESH
+        WRITE(COMMENT(31:34),FMT='(I4)') NCLAS
+        CALL LUNDOCPUTCOM(NICDOCO,COMMENT,IRTFLG)
+        CALL LUNDOCPUTCOM(NICDOCO,'KEY,     ID,        INDEX', IRTFLG)
+
+        IRTFLG = 0
+        END
+@
+
+
+1.12
+log
+@GPL_2010
+@
+text
+@d67 1
+a67 1
+     &                'ENTER TEMPLATE FOR SELECTION DOC',IRTFLG)
+@
+
+
+1.11
+log
+@rewrite of dendrogram
+@
+text
+@a5 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2009  Health Research Inc.                      *
+d7 5
+a11 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d13 1
+a13 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d18 1
+a18 1
+C=* This program is distributed in the hope that it will be useful,    *
+d20 1
+a20 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *   *
+a21 1
+C=*                                                                    *
+d23 1
+a23 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.10
+log
+@GPL License fixed
+@
+text
+@d4 1
+a4 1
+C
+d7 1
+a7 1
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d21 1
+a21 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+d33 5
+d45 2
+a46 2
+        PARAMETER     (NDLI = 2)
+        DIMENSION     DLIST(NDLI)
+d48 4
+a51 4
+        COMMON        Q(1024)
+        INTEGER       X41,X42,TOTEL
+        CHARACTER(LEN=MAXNAM) :: FINP,FINPAT,DOCFIL
+        CHARACTER*1   NULL
+d54 12
+a65 4
+        
+        CALL  RDPRM(THRESHOLD,NOT_USED,'THRESHOLD')
+
+        CALL  FILERD(DOCFIL,NLETI,NULL,'DENDROGRAM DOCUMENT',IRTFLG)
+d67 2
+a68 1
+        
+d70 1
+a70 1
+        CALL  FILSEQP(FINPAT,NLET,ILIST,NMAX,NIMA,
+d72 1
+d74 86
+a159 1
+C	# OF OBJECTS IN A GROUP
+d161 5
+a165 2
+        X41   = 0
+        TOTEL = 0.0
+d167 2
+a168 1
+C	# OF GROUPS
+d170 2
+a171 63
+        X42   = 1
+        NLIST = 2
+        K     = 0
+        K2    = 1
+
+778     CONTINUE
+
+        LERR = -1
+        KP1  = K+1
+        CALL  UNSAV(DOCFIL,K,NDOC,KP1,Q,2,LERR,K2)
+        IF (LERR.EQ.0)  THEN
+
+          IF(K.EQ.0)  THEN
+            X31 = Q(1)
+            X32 = Q(2)
+            K   = K+1
+            X41 = X41+1
+            CALL  FILGET(FINPAT,FINP,NLET,X42,INTFLAG)
+            DLIST(1) = X41
+            DLIST(2) = X31
+            IAP      = 0
+            CALL SAVDN1(NDOUT,FINP,DLIST,NDLI,X41-1,IAP)
+            GOTO  778
+          ENDIF
+
+          X21 = Q(1)
+          X22 = Q(2)
+          K   = K+1
+
+          IF (X32 .LT. THRESHOLD) THEN
+            X41      = X41+1
+            DLIST(1) = X41
+            DLIST(2) = X21
+            IAP      = 1
+            CALL SAVDN1(NDOUT,FINP,DLIST,NDLI,K,IAP)
+            X32 = X22
+
+          ELSE
+            CLOSE(NDOUT)
+            IF (X42.EQ.1)  WRITE(NOUT,122)
+122         FORMAT(' Group number      ','Number of elements')
+
+            WRITE(NOUT,123)  X42,X41
+123         FORMAT(1X,I5,14X,I10)
+            TOTEL = TOTEL + X41
+            X42   = X42 + 1
+            CALL  FILGET(FINPAT,FINP,NLET,X42,INTFLAG)
+            X41      = 1
+            X32      = X22
+            DLIST(1) = X41
+            DLIST(2) = X21
+            IAP      = 0
+            CALL SAVDN1(NDOUT,FINP,DLIST,NDLI,X41-1,IAP)
+          ENDIF
+
+          GOTO 778
+        ENDIF
+
+        WRITE(NOUT,123)  X42,X41
+        TOTEL = TOTEL+X41
+        WRITE(NOUT,33)  TOTEL,X42
+33      FORMAT('   Total number of objects  = ',I10,
+     &         ' Number of classes  = ',I10)
+d173 22
+a194 2
+5       CLOSE(NDOC)
+        CLOSE(NDOUT)
+d196 1
+a196 1
+        RETURN
+@
+
+
+1.9
+log
+@HRI GPL License used
+@
+text
+@a1 1
+C++************************************************************************
+a5 1
+C * SPIDER - MODULAR IMAGE PROCESSING SYSTEM.    AUTHOR: J.FRANK       *
+d9 1
+a9 1
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *  
+a28 6
+
+C * COPYRIGHT (C)1985, 2003. HEALTH RESEARCH INCORPORATED (HRI),       *
+C * ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+C * THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO HRI AND ARE NOT   *
+C * TO BE DISCLOSED TO OTHERS OR USED FOR PURPOSES OTHER THAN INTENDED *
+C * WITHOUT WRITTEN APPROVAL OF HRI.                                   *
+a33 1
+C--************************************************************************
+@
+
+
+1.8
+log
+@CA & CL rewrite
+@
+text
+@d1 1
+d8 24
+d41 1
+@
+
+
+1.7
+log
+@1024 for q for altix
+@
+text
+@d5 8
+a12 9
+C **************************************************************************
+C *  SPIDER - MODULAR IMAGE PROCESSING SYSTEM.  AUTHOR: J.FRANK            *
+C *  COPYRIGHT (C)1981,1987, WADSWORTH CENTER FOR LABORATORIES AND         *
+C *  RESEARCH, NEW YORK STATE DEPARTMENT OF HEALTH, ALBANY, NY 12201.      *
+C *  THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO THE CENTER FOR       *
+C *  LABORATORIES AND RESEARCH AND ARE NOT TO BE DISCLOSED TO OTHERS OR    *
+C *  USED FOR PURPOSES OTHER THAN INTENDED WITHOUT WRITTEN APPROVAL OF     *
+C *  THE CENTER FOR LABORATORIES AND RESEARCH   			   *
+C **************************************************************************
+d14 2
+d18 1
+a18 1
+        SUBROUTINE HELS(MAXMEM)
+d21 1
+d26 1
+a26 1
+        COMMON        DUMMY(1024),Q(1024)
+d28 1
+a28 1
+        CHARACTER*80  FINP,FINPAT,DOCFIL
+a30 2
+        DATA  NDOC,NDOUT/55,56/
+
+d33 1
+a33 1
+        CALL  RDPRM(X51,NOT_USED,'THRESHOLD')
+d69 2
+a70 2
+            IAP = 0
+            CALL  SAVDN1(NDOUT,FINP,DLIST,NDLI,X41-1,IAP)
+d78 1
+a78 1
+          IF (X32 .LT. X51) THEN
+d83 1
+a83 1
+            CALL  SAVDN1(NDOUT,FINP,DLIST,NDLI,K,IAP)
+d90 1
+d101 1
+a101 1
+            CALL  SAVDN1(NDOUT,FINP,DLIST,NDLI,X41-1,IAP)
+@
+
+
+1.6
+log
+@nloop,iloop_removed
+@
+text
+@d24 1
+a24 1
+        COMMON        DUMMY(1024),Q(1)
+@
+
+
+1.5
+log
+@spelling and cosmentic
+@
+text
+@d33 1
+a33 1
+        CALL  RDPRM(X51,NLOOP,ILOOP,'THRESHOLD')
+@
+
+
+1.4
+log
+@nosave
+@
+text
+@d3 1
+a3 1
+C    HELS.FOR
+a14 3
+C
+C
+C23456789012345678901234567890123456789012345678901234567890123456789012
+d17 1
+d19 1
+a19 1
+        SUBROUTINE HELS(MAXMEM)
+d21 2
+a22 1
+        PARAMETER (NDLI = 2)
+d24 2
+a25 9
+#ifdef SP_UNIX
+        INCLUDE 'CMBLOCK.INC'
+#else
+        INCLUDE 'COMMON1:CMBLOCK.INC'
+#endif
+        DIMENSION DLIST(NDLI)
+        COMMON  DUMMY(1024),Q(1)
+        integer  x41,x42
+        integer  totel
+d27 2
+a28 1
+        CHARACTER*1  NULL
+d30 1
+a30 1
+CNO_SAVE        
+d33 4
+a36 3
+        CALL  RDPRM(X51,NLOOP,ILOOP,'Threshold')
+        CALL  FILERD(DOCFIL,NLETI,NULL,'Dedrogram document',IRTFLG)
+        IF(IRTFLG.EQ.-1)  RETURN
+d40 1
+a40 1
+     &                'Enter template for selection doc',IRTFLG)
+d44 2
+a45 2
+        X41 = 0
+        totel = 0.0
+d49 1
+a49 1
+        X42 = 1
+d51 2
+a52 2
+        K = 0
+        K2 = 1
+d54 1
+a54 1
+778     continue
+d57 1
+a57 1
+        KP1 = K+1
+d59 1
+a59 1
+        IF(LERR.EQ.0)  THEN
+d64 1
+a64 1
+            K = K+1
+d76 1
+a76 1
+          K = K+1
+d78 2
+a79 2
+          IF(X32.LT.X51) THEN
+            X41 = X41+1
+d82 1
+a82 1
+            IAP = 1
+d88 2
+a89 2
+            IF(X42.EQ.1)  WRITE(NOUT,122)
+122         FORMAT(1X,'Group number      ','Number of elements')
+d92 2
+a93 2
+            totel = totel+x41
+            X42 = X42+1
+d95 2
+a96 2
+            X41 = 1
+            X32 = X22
+d99 1
+a99 1
+            IAP = 0
+d107 3
+a109 3
+        totel = totel+x41
+        write(nout,33)  totel,x42
+33      FORMAT('   Total number of objects  = ',i10,
+d111 1
+d115 1
+a115 1
+        return
+@
+
+
+1.3
+log
+@added () in PARAMETER STATEMENT
+@
+text
+@d37 1
+a37 1
+        
+@
+
+
+1.2
+log
+@cpp_lines_added
+@
+text
+@d3 1
+a3 1
+C $$ HELS.FOR
+d19 2
+a20 3
+C
+C $$ HELS.FOR
+C
+d22 2
+a23 1
+        PARAMETER NDLI = 2
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d25 3
+d29 1
+@

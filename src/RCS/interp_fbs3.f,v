@@ -1,0 +1,892 @@
+head	1.9;
+access;
+symbols;
+locks; strict;
+comment	@c @;
+
+
+1.9
+date	2012.03.07.20.03.35;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2011.12.23.17.47.43;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2011.12.19.17.32.59;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2011.12.15.13.38.21;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2011.12.08.17.09.15;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2011.12.08.17.07.50;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2011.10.31.19.46.27;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2011.09.28.16.45.07;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2011.09.28.16.18.54;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@gpk's orig
+@
+
+
+1.9
+log
+@omp parallel
+@
+text
+@C ++********************************************************************
+C                                                                      *
+C  INTERP_FBS3      NEW             SEPTEMBER 2011  GREGORY KISHCHENKO *                                                                           *
+C                                                                      *
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C                                                                      *
+C   INTERP_FBS3(BUFIN,BUFOUT, NX, NY, NZ, NX2,NY2,NZ2, NXLD)           *                                                        *
+C                                                                      *
+C   PURPOSE: RESAMPLING OF 3D IMAGES BY FOUIER-BASED TRICUBIC SPLINE   *
+C            INTERPOLATION BETWEEN VOXELS.                             *
+C            ALGORITHM IS FAIRLY FAST AND PRESERVES FINE DETAILS       *
+C            OF  IMAGES                                                *
+C                                                                      *
+C            SUBROUTINES FBS3_PREP and FUNCTION FBS3 are used          *
+C                                                                      *
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C***********************************************************************
+
+       SUBROUTINE INTERP_FBS3(BUFIN,BUFOUT,
+     &                        NX,NY,NZ, NX2,NY2,NZ2, NXLD)
+
+       IMPLICIT NONE
+
+       INCLUDE 'CMBLOCK.INC'
+
+       REAL              :: BUFIN (NXLD, NY,  NZ)
+       REAL              :: BUFOUT(NX2,  NY2, NZ2)
+       REAL, ALLOCATABLE :: XYZ(:,:,:)
+       REAL, ALLOCATABLE :: X1 (:,:,:)
+       REAL, ALLOCATABLE :: Y1 (:,:,:)
+       REAL, ALLOCATABLE :: Z1 (:,:,:)
+       REAL, ALLOCATABLE :: XY2(:,:,:)
+       REAL, ALLOCATABLE :: XZ2(:,:,:)
+       REAL, ALLOCATABLE :: YZ2(:,:,:)
+
+       INTEGER           :: NXLD, NX, NY, NZ
+       INTEGER           :: NX2,  NY2, NZ2
+       INTEGER           :: I, J, L
+       INTEGER           :: K1,K2,K3
+       INTEGER           :: K11,K21,K31
+       INTEGER           :: INV,MWANT,IRTFLG
+       REAL              :: SCALEX,SCALEY,SCALEZ
+       REAL              :: X, Y, Z
+
+       REAL              :: fbs3
+
+       WRITE(NOUT,*) ' Fourier based spline 3D interpolation'
+
+       ALLOCATE (XYZ (NXLD, NY, NZ),
+     &           X1  (NXLD, NY, NZ),
+     &           Y1  (NXLD, NY, NZ),
+     &           Z1  (NXLD, NY, NZ),
+     &           XY2 (NXLD, NY, NZ),
+     &           XZ2 (NXLD, NY, NZ),
+     &           YZ2 (NXLD, NY, NZ), STAT=IRTFLG)
+       IF (IRTFLG .NE. 0) THEN 
+           MWANT = 7*NXLD*NX*NY*NZ 
+          CALL ERRT(46,'INTERP_FSB; XYZ...',MWANT)
+          GOTO 9999
+       ENDIF 
+
+       SCALEX = FLOAT(NX) / FLOAT(NX2)
+       SCALEY = FLOAT(NY) / FLOAT(NY2)
+       SCALEZ = FLOAT(NZ) / FLOAT(NZ2)
+
+       XYZ = BUFIN  ! ARRAY ASSIGNMENT
+
+C      RETURNS XYZ = XYZ3
+
+       CALL FBS3_PREP(XYZ, NXLD, NX, NY, NZ,
+     &                X1, Y1, Z1, XY2, XZ2, YZ2)
+       IF (IRTFLG .NE. 0) GOTO 9999
+
+c$omp  parallel do private(k3,z,k31, k2,y,k21, k1,x,k11)
+       DO K3 = 0,NZ2-1
+          Z   = K3 * SCALEZ + 1
+          K31 = K3 + 1
+
+          DO K2 = 0,NY2-1
+             Y   = K2 * SCALEY + 1
+             K21 = K2 + 1
+
+             DO K1 = 0,NX2-1
+             X   = K1 * SCALEX + 1
+             K11 = K1 + 1
+
+             BUFOUT(K11,K21,K31) = FBS3(X,Y,Z,
+     &              NXLD, NX, NY, NZ,
+     &              BUFIN,NXLD, XYZ,
+     &              X1, Y1, Z1,
+     &              XY2,XZ2,YZ2)
+             ENDDO
+          ENDDO
+       ENDDO
+       IRTFLG = 0
+
+9999   IF (ALLOCATED(XYZ)) DEALLOCATE(XYZ)
+       IF (ALLOCATED(X1))  DEALLOCATE(X1)
+       IF (ALLOCATED(Y1))  DEALLOCATE(Y1)
+       IF (ALLOCATED(Z1))  DEALLOCATE(Z1)
+       IF (ALLOCATED(XY2)) DEALLOCATE(XY2)
+       IF (ALLOCATED(XZ2)) DEALLOCATE(XZ2)
+       IF (ALLOCATED(YZ2)) DEALLOCATE(YZ2)
+
+       END
+@
+
+
+1.8
+log
+@typos
+@
+text
+@d44 2
+d67 2
+d82 3
+a84 3
+       SCALEX = FLOAT(NX)/FLOAT(NX2)
+       SCALEY = FLOAT(NY)/FLOAT(NY2)
+       SCALEZ = FLOAT(NZ)/FLOAT(NZ2)
+d89 1
+d92 1
+d94 1
+d115 1
+@
+
+
+1.7
+log
+@fbs3 nxp parameter
+@
+text
+@d10 1
+a10 1
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NROW 12204.    *
+d16 1
+a16 1
+C=* License, or (at your option) aNROW later version.                  *
+d19 1
+a19 1
+C=* but WITHOUT ANROW WARRANTY; without even the implied warranty of   *
+@
+
+
+1.6
+log
+@vars renamed, alloc fail trap added
+@
+text
+@d40 1
+a40 1
+     &                        NX, NY, NZ, NX2,NY2,NZ2, NXLD)
+d102 1
+a102 1
+     &              BUFIN, XYZ,
+@
+
+
+1.5
+log
+@cosmetic
+@
+text
+@d27 1
+a27 1
+C   INTERP_FBS3                                                        *
+d39 2
+a40 3
+       SUBROUTINE INTERP_FBS3(F1,F2,NX, NY, NZ,
+     &                              NX2,NY2,NZ2,
+     &                              NXLD)
+d44 3
+a46 3
+       REAL              :: F1 (NXLD, NY, NZ)
+       REAL              :: F2 (NX2, NY2, NZ2)
+       REAL, ALLOCATABLE :: F0 (:,:,:)
+d59 1
+a59 1
+       INTEGER           :: INV
+d63 1
+a63 1
+       REAL               :: FBS3
+d65 1
+a65 1
+       ALLOCATE (F0  (NXLD, NY, NZ),
+d71 6
+a76 1
+     &           YZ2 (NXLD, NY, NZ))
+d82 1
+a82 1
+       F0 = F1  ! ARRAY ASSIGNMENT
+d84 2
+a85 1
+       CALL FBS3_PREP(F0, NXLD, NX, NY, NZ,
+a86 1
+C     return F0(:,:) = XYZ3(:,:)
+d89 1
+a89 1
+          Z = K3*SCALEZ + 1
+d93 1
+a93 1
+             Y  = K2*SCALEY + 1
+d97 1
+a97 1
+             X  = K1*SCALEX + 1
+d100 5
+a104 5
+             F2(K11,K21,K31) = FBS3(X,Y,Z,
+     &               NXLD, NX, NY, NZ,
+     &               F1, F0,
+     &               X1, Y1, Z1,
+     &               XY2,XZ2,YZ2)
+d109 1
+a109 1
+       IF (ALLOCATED(F0))  DEALLOCATE(F0)
+@
+
+
+1.4
+log
+@gpks changes
+@
+text
+@d31 2
+a32 2
+C               ALGORITHM IS FAIRLY FAST AND PRESERVES FINE DETAILS    *
+C               OF  IMAGES                                             *
+d82 1
+a82 1
+C         return F0(:,:) = XYZ3(:,:)
+@
+
+
+1.3
+log
+@omp added , fbs3_prep used
+@
+text
+@d3 1
+a3 2
+C  INTERP_FBS3   NEW                       SEP 2011 GREGORY KISHCHENKO *                                                                           *
+C                FBS3_PREP                OCT 2011  ARDEAN LEITH       *                                                                           *
+d10 1
+a10 1
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+d16 1
+a16 1
+C=* License, or (at your option) any later version.                    *
+d19 1
+a19 1
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of   *
+d27 1
+a27 1
+C   INTERP_FBS3(F1,F2, NX,NY,NZ, NX2,NY2,NZ2, NXLD)                                                        *
+d31 2
+a32 2
+C            ALGORITHM IS FAIRLY FAST AND PRESERVES FINE DETAILS       *
+C            OF  IMAGES                                                *
+d34 1
+a34 27
+C   If the values of a function F(X) and its first derivatives F'(X)   *
+C   are known at X=0 and X=1, the function can be interpolated on the  *
+C   interval [0,1] as a third degree polynomial (cubic                 *
+C   interpolation formula):                                            *
+C                                                                      *
+C      F(X)=A0 + A1*X + A2*X**2 + A3*X**3                              *
+C                                                                      *
+C       where A0, A1, A2, and A3 are given by                          *
+C       A0 = F(0)                                                      *
+C       A1 = F'(0)                                                     *
+C       A2 = 3*(F(1)-F(0) - 2*F'(0) - F'(1)                            *
+C       A3 = 2*(F(0)-F(1)) + F'(0) + F'(1)                             *
+C                                                                      *
+C   In order to interpolate a three-dimensional grid [0,1]×[0,1]×[0,1] *
+C   we used a particular sequential combination of three               *
+C   one-dimensional cubic interpolations.                              *
+C       The following derivatives were used for interpolation:         *
+C   dF/dX, dF/dY, dF/dZ, d2F/dXdY, d2F/dXdZ, d2F/dYdZ, d3F/dXdYdZ.     *
+C      The use of this set satisfies the isotropic requirement of      *
+C   interpolation                                                      *
+C      All mentioned above derivatives for 8 grid nodes were obtained  *
+C   by formula for derivatives' calculation using 3D Fourier transform.*         .    *
+C   This approach is computationally efficient and very convenient     *
+C   for calculating the derivatives of a  function defined as a        *
+C   discrete data set, and allows to calculate the derivative in any   *
+C   local point without the finite difference approximation involving  *
+C   the data from neighboring points.                                  *                        *
+a43 2
+       REAL              :: F1 (0:NXLD-1,0:NY-1, 0:NZ-1)
+       REAL              :: F2 (0:NX2-1, 0:NY2-1,0:NZ2-1)
+d45 2
+d57 20
+d78 1
+a78 30
+       INTEGER           :: I, J, L
+       INTEGER           :: I2,J2,L2
+       INTEGER           :: I3,J3,L3
+       INTEGER           :: K1,K2,K3, INV
+
+       REAL              :: SCALEX, SCALEY, SCALEZ
+       REAL              :: SCALEX2,SCALEY2,SCALEZ2
+       REAL              :: DX, DY, DZ
+       REAL              :: A0, A1, A2, A3
+       REAL              :: C0, DC0, C1, DC1
+       REAL              :: ADX, BDX, DADX, DBDX
+
+       ALLOCATE (F0  (0:NXLD-1, 0:NY-1,0:NZ-1),
+     &           X1  (0:NXLD-1, 0:NY-1,0:NZ-1),
+     &           Y1  (0:NXLD-1, 0:NY-1,0:NZ-1),
+     &           Z1  (0:NXLD-1, 0:NY-1,0:NZ-1),
+     &           XY2 (0:NXLD-1, 0:NY-1,0:NZ-1),
+     &           XZ2 (0:NXLD-1, 0:NY-1,0:NZ-1),
+     &           YZ2 (0:NXLD-1, 0:NY-1,0:NZ-1))
+C      XYZ3(:,:) = F0(:,:)
+
+
+       !write(6,*) 'NX2 =', NX2
+
+       SCALEX  = FLOAT(NX2) / FLOAT(NX)
+       SCALEY  = FLOAT(NY2) / FLOAT(NY)
+       SCALEZ  = FLOAT(NZ2) / FLOAT(NZ)
+       SCALEX2 = 1 / SCALEX
+       SCALEY2 = 1 / SCALEY
+       SCALEZ2 = 1 / SCALEZ
+a79 2
+       F0  = F1   ! ARRAY ASSIGNMENT
+		
+d81 6
+a86 1
+     &                      X1, Y1, Z1, XY2, XZ2, YZ2)
+a87 14
+C      FOR 400x400x400 --> 250x250x250 volume Nov 2011 al
+C      'IP   ' OMP GAVE TIME:   1 ON 8 PROCS VS   1 ON 1
+C      'IP FS' OMP GAVE TIME:  51 ON 8 PROCS VS  69 ON 1
+
+c$omp  parallel do private(k1,i,dx,i2,i3,k2,j,dy,j2,j3,k3,l,dz,l2,l3,
+c$omp&                   a0,a1,a2,a3,adx,bdx,dadx,dbdx,c0,dc0,c1,dc1)
+       DO K1 = 0,NX2-1
+          I  = INT(K1*SCALEX2)
+          DX = K1*SCALEX2 - I
+          I2 = MODULO(I,NX)
+          I3 = MODULO(I+1,NX)
+C         I2 = MODULO(I,NXLD)
+C         I3 = MODULO(I+1,NXLD)
+	     
+d89 2
+a90 159
+             J  = INT(K2 * SCALEY2)
+             DY = K2 * SCALEY2 - J
+             J2 = MODULO(J,NY)
+             J3 = MODULO(J+1,NY)
+	     
+             DO K3 = 0,NZ2-1
+             L  = INT(K3 * SCALEZ2)
+             DZ = K3 * SCALEZ2 - L
+             L2 = MODULO(L,NZ)
+             L3 = MODULO(L+1,NZ)
+
+             !write(6,*) '(Nmax - N) =', NX2-1-K1
+
+C            1ST PLANE - FUNCTION
+             A0  = F1(I2,J2,L2)
+             A1  = X1(I2,J2,L2)
+             A2  = 3*(F1(I3,J2,L2)-A0)-2*A1-X1(I3,J2,L2)
+             A3  = 2*(A0-F1(I3,J2,L2))+A1+X1(I3,J2,L2)
+             ADX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0 = F1(I2,J3,L2)
+             A1 = X1(I2,J3,L2)
+             A2 = 3*(F1(I3,J3,L2)-A0) - 2*A1 - X1(I3,J3,L2)
+             A3 = 2*(A0-F1(I3,J3,L2)) +   A1 + X1(I3,J3,L2)
+             BDX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0  = Y1(I2,J2,L2)
+             A1  = XY2(I2,J2,L2)
+             A2  = 3*(Y1(I3,J2,L2)-A0) -2*A1 - XY2(I3,J2,L2)
+             A3  = 2*(A0-Y1(I3,J2,L2)) +  A1 + XY2(I3,J2,L2)
+             DADX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0 = Y1(I2,J3,L2)
+             A1 = XY2(I2,J3,L2)
+             A2 = 3*(Y1(I3,J3,L2)-A0) - 2*A1 - XY2(I3,J3,L2)
+             A3 = 2*(A0-Y1(I3,J3,L2)) +   A1 + XY2(I3,J3,L2)
+             DBDX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0 = ADX
+             A1 = DADX
+             A2 = 3*(BDX - ADX) - 2*DADX - DBDX
+             A3 = 2*(ADX - BDX) +   DADX + DBDX
+
+             C0 = A0+A1*DY+A2*DY**2+A3*DY**3
+
+
+C            1ST PLANE - Z-DERIVATIVE
+             A0  = Z1(I2,J2,L2)
+             A1  = XZ2(I2,J2,L2)
+             A2  = 3*(Z1(I3,J2,L2)-A0)-2*A1-XZ2(I3,J2,L2)
+             A3  = 2*(A0-Z1(I3,J2,L2))+A1+XZ2(I3,J2,L2)
+             ADX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0 = Z1(I2,J3,L2)
+             A1 = XZ2(I2,J3,L2)
+             A2 = 3*(Z1(I3,J3,L2)-A0) - 2*A1 - XZ2(I3,J3,L2)
+             A3 = 2*(A0-Z1(I3,J3,L2)) +   A1 + XZ2(I3,J3,L2)
+             BDX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0  = YZ2(I2,J2,L2)
+             A1  = F0(I2,J2,L2)
+             A2  = 3*(YZ2(I3,J2,L2)-A0) -2*A1 - F0(I3,J2,L2)
+             A3  = 2*(A0-YZ2(I3,J2,L2)) +  A1 + F0(I3,J2,L2)
+             DADX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0 = YZ2(I2,J3,L2)
+             A1 = F0(I2,J3,L2)
+             A2 = 3*(YZ2(I3,J3,L2)-A0) - 2*A1 - F0(I3,J3,L2)
+             A3 = 2*(A0-YZ2(I3,J3,L2)) +   A1 + F0(I3,J3,L2)
+             DBDX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0 = ADX
+             A1 = DADX
+             A2 = 3*(BDX - ADX) - 2*DADX - DBDX
+             A3 = 2*(ADX - BDX) +   DADX + DBDX
+
+             DC0 = A0+A1*DY+A2*DY**2+A3*DY**3
+
+C            2nd PLANE - FUNCTION
+             A0  = F1(I2,J2,L3)
+             A1  = X1(I2,J2,L3)
+             A2  = 3*(F1(I3,J2,L3)-A0)-2*A1-X1(I3,J2,L3)
+             A3  = 2*(A0-F1(I3,J2,L3))+A1+X1(I3,J2,L3)
+             ADX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0 = F1(I2,J3,L3)
+             A1 = X1(I2,J3,L3)
+             A2 = 3*(F1(I3,J3,L3)-A0) - 2*A1 - X1(I3,J3,L3)
+             A3 = 2*(A0-F1(I3,J3,L3)) +   A1 + X1(I3,J3,L3)
+             BDX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0  = Y1(I2,J2,L3)
+             A1  = XY2(I2,J2,L3)
+             A2  = 3*(Y1(I3,J2,L3)-A0) -2*A1 - XY2(I3,J2,L3)
+             A3  = 2*(A0-Y1(I3,J2,L3)) +  A1 + XY2(I3,J2,L3)
+             DADX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0 = Y1(I2,J3,L3)
+             A1 = XY2(I2,J3,L3)
+             A2 = 3*(Y1(I3,J3,L3)-A0) - 2*A1 - XY2(I3,J3,L3)
+             A3 = 2*(A0-Y1(I3,J3,L3)) +   A1 + XY2(I3,J3,L3)
+             DBDX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0 = ADX
+             A1 = DADX
+             A2 = 3*(BDX - ADX) - 2*DADX - DBDX
+             A3 = 2*(ADX - BDX) +   DADX + DBDX
+
+             C1 = A0+A1*DY+A2*DY**2+A3*DY**3
+
+
+C            2nd PLANE - Z-DERIVATIVE
+             A0  = Z1(I2,J2,L3)
+             A1  = XZ2(I2,J2,L3)
+             A2  = 3*(Z1(I3,J2,L3)-A0)-2*A1-XZ2(I3,J2,L3)
+             A3  = 2*(A0-Z1(I3,J2,L3))+A1+XZ2(I3,J2,L3)
+             ADX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0 = Z1(I2,J3,L3)
+             A1 = XZ2(I2,J3,L3)
+             A2 = 3*(Z1(I3,J3,L3)-A0) - 2*A1 - XZ2(I3,J3,L3)
+             A3 = 2*(A0-Z1(I3,J3,L3)) +   A1 + XZ2(I3,J3,L3)
+             BDX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0  = YZ2(I2,J2,L3)
+             A1  = F0(I2,J2,L3)
+             A2  = 3*(YZ2(I3,J2,L3)-A0) -2*A1 - F0(I3,J2,L3)
+             A3  = 2*(A0-YZ2(I3,J2,L3)) +  A1 + F0(I3,J2,L3)
+             DADX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0 = YZ2(I2,J3,L3)
+             A1 = F0(I2,J3,L3)
+             A2 = 3*(YZ2(I3,J3,L3)-A0) - 2*A1 - F0(I3,J3,L3)
+             A3 = 2*(A0-YZ2(I3,J3,L3)) +   A1 + F0(I3,J3,L3)
+             DBDX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0 = ADX
+             A1 = DADX
+             A2 = 3*(BDX - ADX) - 2*DADX - DBDX
+             A3 = 2*(ADX - BDX) +   DADX + DBDX
+
+             DC1 = A0+A1*DY+A2*DY**2+A3*DY**3
+
+C            FINAL LINE INSIDE CUBE
+
+C            F(Z)=A0 + A1*DZ + A2*DZ**2 + A3*DZ**3
+C
+C            where A0, A1, A2, and A3 are given by
+C            A0 = F(0)
+C            A1 = F'(0)
+C            A2 = 3*(F(1)-F(0)) - 2*F'(0) - F'(1)
+C            A3 = 2*(F(0)-F(1)) + F'(0) + F'(1)
+
+C            A0 = C0
+C            A1 = DC0
+             A2 = 3*(C1-C0) - 2*DC0 - DC1
+             A3 = 2*(C0-C1) + DC0 + DC1
+
+             F2(K1,K2,K3) = C0 + DC0*DZ + A2*DZ**2 + A3*DZ**3
+d92 9
+d113 1
+a113 3
+C      XYZ3(:,:) = F0(:,:)
+
+999       END
+@
+
+
+1.2
+log
+@my cosmetic, implicit
+@
+text
+@d3 2
+a4 1
+C  INTERP_FBS3      NEW             SEPTEMBER 2011  GREGORY KISHCHENKO *                                                                           *
+d11 1
+a11 1
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NROW 12204.    *
+d17 1
+a17 1
+C=* License, or (at your option) aNROW later version.                  *
+d20 1
+a20 1
+C=* but WITHOUT ANROW WARRANTY; without even the implied warranty of   *
+d28 1
+a28 1
+C   INTERP_FBS3                                                        *
+d32 2
+a33 2
+C               ALGORITHM IS FAIRLY FAST AND PRESERVES FINE DETAILS    *
+C               OF  IMAGES                                             *
+a89 3
+       REAL              :: WX(0:NXLD-1)
+       REAL              :: WY(0:NY-1)
+       REAL              :: WZ(0:NZ-1)
+d93 1
+a93 1
+       REAL              :: A0, A1, A2, A3, A4
+a96 2
+       REAL, PARAMETER   :: PI = 3.14159265358979323846
+
+a108 1
+
+d116 1
+a116 1
+       F0  = F1
+d118 2
+a119 84
+       INV= +1
+       CALL  FMRS_3(F0,NX,NY,NZ,INV)
+
+
+       A4 = 2*PI/NXLD
+       DO K1=0,NXLD/2-1
+          WX(K1) = K1 * A4
+       ENDDO
+       WX(NXLD/2) = 0
+
+       A4 = 2*PI/NY
+       DO J=0,NY/2-1
+          WY(J) = J * A4
+       ENDDO
+       WY(NY/2) = 0
+       DO J=NY/2+1,NY-1
+          WY(J) = (J-NY) * A4
+       ENDDO
+
+       A4 = 2*PI/NZ
+       DO L=0,NZ/2-1
+          WZ(L) = L * A4
+       ENDDO
+       WZ(NZ/2) = 0
+       DO L=NZ/2+1,NZ-1
+          WZ(L) = (L-NZ) * A4
+       ENDDO
+
+       DO K1=0,NXLD/2-1
+          A4 = WX(K1)
+          DO J=0,NY-1
+             DO L=0,NZ-1
+                X1(2*K1,J,L)   =  F0(2*K1+1,J,L) * A4
+                X1(2*K1+1,J,L) = -F0(2*K1,J,L)   * A4
+             ENDDO
+          ENDDO
+       ENDDO
+
+       DO J=0,NY-1
+          A4 = WY(J)
+          DO L=0,NZ-1
+             DO K1=0,NXLD/2-1
+                Y1(2*K1,J,L)   =  F0(2*K1+1,J,L) * A4
+                Y1(2*K1+1,J,L) = -F0(2*K1,J,L)   * A4
+                XY2(2*K1,J,L)   =  X1(2*K1+1,J,L) * A4
+                XY2(2*K1+1,J,L) = -X1(2*K1,J,L)   * A4
+             ENDDO
+          ENDDO
+       ENDDO
+
+       DO L=0,NZ-1
+          A4 = WZ(L)
+          DO J=0,NY-1
+             DO K1=0,NXLD/2-1
+                 Z1(2*K1,J,L)   =  F0(2*K1+1,J,L) * A4
+                 Z1(2*K1+1,J,L) = -F0(2*K1,J,L)   * A4
+                 XZ2(2*K1,J,L)   =  X1(2*K1+1,J,L) * A4
+                 XZ2(2*K1+1,J,L) = -X1(2*K1,J,L)   * A4
+                 YZ2(2*K1,J,L)   =  Y1(2*K1+1,J,L) * A4
+                 YZ2(2*K1+1,J,L) = -Y1(2*K1,J,L)   * A4
+C                F0 =XYZ3
+C                XYZ3(2*K1,J,L)   =  XY2(2*K1+1,J,L) * A4
+C                XYZ3(2*K1+1,J,L) = -XY2(2*K1,J,L)   * A4
+                 F0(2*K1,J,L)   =  XY2(2*K1+1,J,L) * A4
+                 F0(2*K1+1,J,L) = -XY2(2*K1,J,L)   * A4
+              ENDDO
+          ENDDO
+       ENDDO
+
+       INV= -1
+       CALL  FMRS_3(X1,NX,NY,NZ,INV)
+       INV= -1
+       CALL  FMRS_3(Y1,NX,NY,NZ,INV)
+       INV= -1
+       CALL  FMRS_3(Z1,NX,NY,NZ,INV)
+       INV= -1
+       CALL  FMRS_3(XY2,NX,NY,NZ,INV)
+       INV= -1
+       CALL  FMRS_3(XZ2,NX,NY,NZ,INV)
+       INV= -1
+       CALL  FMRS_3(YZ2,NX,NY,NZ,INV)
+       INV= -1
+       CALL  FMRS_3(F0,NX,NY,NZ,INV)
+
+d121 3
+d125 2
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d69 8
+a76 9
+
+C        DIMENSION   F1(NXLD,NY,NZ)
+C        DIMENSION   F2(NXLD2,NY2,NZ2) 
+       REAL              :: F1(0:NXLD-1,0:NY-1,0:NZ-1)
+       REAL              :: F2(0:NX2-1, 0:NY2-1,0:NZ2-1)
+       REAL, ALLOCATABLE :: F0(:,:,:)
+       REAL, ALLOCATABLE :: X1(:,:,:)
+       REAL, ALLOCATABLE :: Y1(:,:,:)
+       REAL, ALLOCATABLE :: Z1(:,:,:)
+a79 1
+C      XYZ3(:,:) = F0(:,:,:)
+d87 1
+a87 1
+       INTEGER           :: K1,K2,K3
+d95 1
+a95 1
+       REAL              :: A0, A1, A2, A3
+d111 1
+a111 1
+       write(6,*) 'NX2 =', NX2
+d114 3
+a116 3
+       SCALEX = FLOAT(NX2) / FLOAT(NX)
+       SCALEY = FLOAT(NY2) / FLOAT(NY)
+       SCALEZ = FLOAT(NZ2) / FLOAT(NZ)
+d121 4
+a124 6
+
+        F0  = F1
+	
+	
+        INV= +1
+        CALL  FMRS_3(F0,NX,NY,NZ,INV)
+d127 1
+a127 1
+          A4 = 2*PI/NXLD
+d133 1
+a133 1
+          A4 = 2*PI/NY
+d135 1
+a135 1
+       WY(J) = J * A4
+d137 2
+a138 2
+          WY(NY/2) = 0
+          DO J=NY/2+1,NY-1
+d140 1
+a140 1
+          ENDDO
+d142 1
+a142 1
+          A4 = 2*PI/NZ
+d144 1
+a144 1
+       WZ(L) = L * A4
+d146 2
+a147 2
+          WZ(NZ/2) = 0
+          DO L=NZ/2+1,NZ-1
+d149 1
+a149 1
+          ENDDO
+d154 4
+a157 4
+          DO L=0,NZ-1
+             X1(2*K1,J,L)   =  F0(2*K1+1,J,L) * A4
+             X1(2*K1+1,J,L) = -F0(2*K1,J,L)   * A4
+          ENDDO
+d164 6
+a169 6
+          DO K1=0,NXLD/2-1
+             Y1(2*K1,J,L)   =  F0(2*K1+1,J,L) * A4
+             Y1(2*K1+1,J,L) = -F0(2*K1,J,L)   * A4
+             XY2(2*K1,J,L)   =  X1(2*K1+1,J,L) * A4
+             XY2(2*K1+1,J,L) = -X1(2*K1,J,L)   * A4
+          ENDDO
+d176 13
+a188 13
+          DO K1=0,NXLD/2-1
+              Z1(2*K1,J,L)   =  F0(2*K1+1,J,L) * A4
+              Z1(2*K1+1,J,L) = -F0(2*K1,J,L)   * A4
+           XZ2(2*K1,J,L)   =  X1(2*K1+1,J,L) * A4
+           XZ2(2*K1+1,J,L) = -X1(2*K1,J,L)   * A4
+              YZ2(2*K1,J,L)   =  Y1(2*K1+1,J,L) * A4
+              YZ2(2*K1+1,J,L) = -Y1(2*K1,J,L)   * A4
+C          F0 =XYZ3
+C          XYZ3(2*K1,J,L)   =  XY2(2*K1+1,J,L) * A4
+C          XYZ3(2*K1+1,J,L) = -XY2(2*K1,J,L)   * A4
+           F0(2*K1,J,L)   =  XY2(2*K1+1,J,L) * A4
+           F0(2*K1+1,J,L) = -XY2(2*K1,J,L)   * A4
+          ENDDO
+d192 14
+a205 14
+        INV= -1
+        CALL  FMRS_3(X1,NX,NY,NZ,INV)
+        INV= -1
+        CALL  FMRS_3(Y1,NX,NY,NZ,INV)
+        INV= -1
+        CALL  FMRS_3(Z1,NX,NY,NZ,INV)
+        INV= -1
+        CALL  FMRS_3(XY2,NX,NY,NZ,INV)
+        INV= -1
+        CALL  FMRS_3(XZ2,NX,NY,NZ,INV)
+        INV= -1
+        CALL  FMRS_3(YZ2,NX,NY,NZ,INV)
+        INV= -1
+        CALL  FMRS_3(F0,NX,NY,NZ,INV)
+d212 4
+a215 4
+             I2 = MODULO(I,NX)
+             I3 = MODULO(I+1,NX)
+C             I2 = MODULO(I,NXLD)
+C             I3 = MODULO(I+1,NXLD)
+d217 3
+a219 3
+       DO K2 = 0,NY2-1
+          J  = INT(K2 * SCALEY2)
+          DY = K2 * SCALEY2 - J
+d223 3
+a225 3
+       DO K3 = 0,NZ2-1
+          L  = INT(K3 * SCALEZ2)
+          DZ = K3 * SCALEZ2 - L
+d229 1
+a229 2
+
+       write(6,*) '(Nmax - N) =', NX2-1-K1
+d363 1
+a363 1
+C       F(Z)=A0 + A1*DZ + A2*DZ**2 + A3*DZ**3
+d365 10
+a374 10
+C       where A0, A1, A2, and A3 are given by
+C       A0 = F(0)
+C       A1 = F'(0)
+C       A2 = 3*(F(1)-F(0)) - 2*F'(0) - F'(1)
+C       A3 = 2*(F(0)-F(1)) + F'(0) + F'(1)
+
+C       A0 = C0
+C       A1 = DC0
+       A2 = 3*(C1-C0) - 2*DC0 - DC1
+       A3 = 2*(C0-C1) + DC0 + DC1
+d376 1
+a376 1
+       F2(K1,K2,K3) = C0 + DC0*DZ + A2*DZ**2 + A3*DZ**3
+d378 2
+a379 2
+       ENDDO
+       ENDDO
+d384 1
+a384 1
+      IF (ALLOCATED(Y1))  DEALLOCATE(Y1)
+d386 1
+a386 1
+      IF (ALLOCATED(XY2)) DEALLOCATE(XY2)
+d389 1
+@

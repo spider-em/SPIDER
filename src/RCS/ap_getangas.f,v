@@ -1,0 +1,921 @@
+head	1.12;
+access;
+symbols
+	pre_getangas:1.7
+	GPL2010:1.7
+	pre_GPL2010:1.6
+	pre_var_equation:1.6
+	pre_fftwrings:1.6
+	pre_opfiles:1.6
+	src:1.6
+	best-code:1.6
+	x-named-regs:1.6
+	x:1.6
+	v13-00:1.6
+	pre_GPL:1.4;
+locks; strict;
+comment	@c @;
+
+
+1.12
+date	2015.04.30.13.15.27;	author leith;	state Exp;
+branches;
+next	1.11;
+
+1.11
+date	2015.04.28.15.33.39;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2012.01.11.15.33.09;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2011.02.17.13.25.09;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2011.02.16.18.53.05;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2010.06.24.13.25.03;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2005.10.17.19.52.37;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2005.10.17.17.49.52;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2005.03.09.16.49.14;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2004.03.22.21.25.43;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2004.03.22.16.31.55;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2004.03.11.14.57.13;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.12
+log
+@FORMATTING IMPROVED
+@
+text
+@
+C++*********************************************************************
+C
+C    AP_GETANGAS.F
+C                          ADDED CCROT RETRIEVAL  FEB 05 ARDEAN LEITH
+C                          '-'                    FEB 11 ARDEAN LEITH
+C                          ADDED DIR. VECTORS     FEB 11 ARDEAN LEITH
+C                          ADDED CC RETURN        APR 15 ARDEAN LEITH
+C
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2015  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C AP_GETANGAS(ILIST,NIMA,IMIT,ANGDOCNAM,IMGPAT, LUNIN,SA,ANGS,IRTFLG)
+C
+C PURPOSE:       READ PROJ. ANGLES AND CONVERT TO UNITARY 
+C                DIRECTIONAL VECTORS.
+C
+C PARAMETERS:
+C       ILIST               LIST OF IMAGE FILE NUMBERS        (INPUT)
+C       NIMA                NUMBER OF IMAGES                  (INPUT)
+C       IMIT                IMAGE NUMBER (0 IF ALL)           (INPUT)
+C       ANGDOCNAM           ANGLES FILE NAME                  (INPUT)
+C       IMGPAT              IMAGE SERIES FILE TEMPLATE        (INPUT)
+C       LUNIMG              IMAGE FILE IO UNIT                (INPUT)
+C                               < 0 IMAGE ALREADY OPEN
+C       LUNANG              PROJ. ANGLE FILE IO UNIT          (INPUT)
+C       NWANT               NUMBER OF PARAMS TO RETRIEVE      (INPUT)
+C       ANGS                PROJ. ANGLES                      (OUTPUT)
+C       GOTANGS             FLAG FOR SUCCESS READING ANGLES   (OUTPUT)
+C       NGOTX               # OF ALIGNMENT PAR. RETURNED      (OUTPUT)                      (OUTPUT)
+C       WANTDIRS            WANT DIRECTIONAL VECTORS          (INPUT)                      (OUTPUT)
+C       DIRS                DIRECTIONAL VECTORS               (OUTPUT)                      (OUTPUT)
+C       IRTFLG              ERROR FLAG                        (OUTPUT)
+C                              IF == -999 WANT MIRCC NOT ROTCC 
+C
+C--*********************************************************************
+
+	SUBROUTINE AP_GETANGAS(ILIST,NIMA,IMIT,ANGDOCNAM,IMGPAT,
+     &                         LUNIMG,LUNANG,NWANT,ANGS,GOTANGS,NGOTX,
+     &                         WANTDIRS,DIRS,IRTFLG)
+
+        IMPLICIT NONE
+        INCLUDE 'CMLIMIT.INC'
+        INCLUDE 'CMBLOCK.INC'
+        INCLUDE 'F90ALLOC.INC'
+
+        INTEGER                 :: ILIST(NIMA)
+        INTEGER                 :: NIMA,IMIT
+        CHARACTER (LEN=*)       :: ANGDOCNAM
+        CHARACTER (LEN=*)       :: IMGPAT
+        INTEGER                 :: LUNIMG,LUNANG,NWANT 
+        REAL                    :: ANGS(NWANT,NIMA)
+        LOGICAL                 :: GOTANGS
+        INTEGER                 :: NGOTX
+        LOGICAL                 :: WANTDIRS
+        REAL                    :: DIRS(3,NIMA)
+        INTEGER                 :: IRTFLG
+
+        CHARACTER (LEN=MAXNAM)  :: ANGDOCNAMPE
+        CHARACTER (LEN=MAXNAM)  :: FILNAM
+        REAL                    :: BUFIN(16)
+
+C       DOC FILE POINTER
+        REAL, POINTER           :: ANGBUF(:,:)
+
+        LOGICAL                 :: ANGINHEADER,WANTCCMIR
+        INTEGER                 :: IGO,IEND,NLET,MAXX,MAXY,IMI,IV
+        INTEGER                 :: MAXIM,LSAM,LROW,NSLICE,KEY,NLIST
+        INTEGER                 :: INTFLAG
+        REAL                    :: ZT,CCMIR
+
+        GOTANGS     = .FALSE.
+        WANTCCMIR   = ( IRTFLG == -8999)    !WANT MIRCC NOT ROTCC 
+        ANGINHEADER = (ANGDOCNAM(1:1) == '-')
+        IRTFLG      = 0
+
+        IF (ANGDOCNAM(1:1) == '*' .OR.
+     &      ANGDOCNAM(1:1) == CHAR(0) ) THEN
+C          NO ANGLES AVAILABLE IN DOC FILE OR HEADER
+           IF (NWANT > 0) ANGS = 0.0    ! ARRAY ZERO
+           IF (WANTDIRS)  DIRS = 0.0    ! ARRAY ZERO
+           NGOTX  = 0
+           IRTFLG = 0
+           RETURN
+        ENDIF
+
+        NGOTX = 3
+
+C       READ  ANGLES 
+        IGO  = 1
+        IEND = NIMA
+        IF (IMIT > 0) THEN
+C          ONLY WANT ONE IMAGE'S ANGLES
+           IGO  = IMIT
+           IEND = IMIT
+        ENDIF
+
+        IF (.NOT. ANGINHEADER) THEN
+C          ANGLES ARE IN DOC FILE, GET THE FILE NAME
+           CALL FILNAMANDEXT(ANGDOCNAM,DATEXC,ANGDOCNAMPE,NLET,
+     &                        .TRUE.,IRTFLG)
+           IF (IRTFLG .NE. 0) GOTO 9999
+
+C          RETRIEVE ARRAY WITH ANGLES DATA IN IT, CAN NOT USE
+C          LUNDOCGETANG BECAUSE OF ILIST!
+           MAXX = 8 + 1
+           IF (NWANT > 7) MAXX = 11 + 1      ! GET CCROT ALSO
+           IF (WANTCCMIR) MAXX = 15 + 1      ! GET CCMIR 
+           !write(6,*) ' nwant,maxx:',nwant,maxx
+
+
+           MAXY = MAXVAL(ILIST(1:NIMA))
+           CALL GETDOCDAT(' ',.FALSE.,ANGDOCNAMPE,LUNANG,.FALSE.,
+     &                 MAXX,MAXY,ANGBUF,IRTFLG)
+           IF (IRTFLG .NE. 0) GOTO 9999
+
+        ENDIF
+
+	DO  IMI=IGO,IEND
+           IV = IMI - IGO + 1
+           IF (IMIT > 0) IV = 1
+
+           IF (ANGINHEADER) THEN
+C             ANGLES IN IMAGE HEADER
+
+              MAXX = NWANT + 1
+              IF (NWANT >= 8) MAXX = 11 +1
+
+              IF (LUNIMG > 0) THEN
+C                MUST OPEN IMAGE ON LUNIMG FIRST
+                 NLET = 0
+                 CALL FILGET(IMGPAT,FILNAM,NLET,ILIST(IMI),INTFLAG)
+	         MAXIM = 0
+	         CALL OPFILEC(0,.FALSE.,FILNAM,LUNIMG,'O',IFORM,
+     &                  LSAM,LROW,NSLICE,MAXIM,' ',.FALSE.,IRTFLG)
+                 IF (IRTFLG .NE. 0)  GOTO 9999
+
+                 CALL LUNGETVALS(LUNIMG,IAPLOC + 1,MAXX,BUFIN,IRTFLG)
+                 CLOSE(LUNIMG)
+
+              ELSEIF (LUNIMG < 0) THEN
+C                IMAGE ALREADY OPEN ON LUNIMG, DO NOT CLOSE
+                 CALL LUNGETVALS(-LUNIMG,IAPLOC + 1,MAXX,BUFIN,IRTFLG)
+              ENDIF
+              IF (IRTFLG .NE. 0)  GOTO 9999
+
+              IF (BUFIN(4) <= 0) THEN
+	         CALL ERRT(102,
+     &              'NO ANGLES IN HEADER OF IMAGE NUMBER',IMI)
+                 ANGS(:,IV) = 0.0
+                 IRTFLG     = 1
+	         GOTO 9999
+              ENDIF
+
+C             GET PROJECTION ANGLES FROM HEADER BUFFER
+              ANGS(1:3,IV) = BUFIN(1:3)
+
+              IF (NWANT >= 7) THEN
+C                WANT OTHER ALIGNMENT PARAMETERS ALSO
+                 ANGS(4:7,IV) = BUFIN(6:9)
+                 ZT           = MAXVAL(BUFIN(6:9))
+                 IF (ZT > 0.0) NGOTX = 7
+              ENDIF
+              IF (NWANT == 8) THEN
+C                WANT CCROT PARAMETER ALSO
+                 ANGS(8,IV) = BUFIN(11)
+                 NGOTX      = 8
+              ENDIF
+
+           ELSE
+C             READ ANGLES FROM DOC FILE ON LUNANG
+
+C             EXTRACT ALIGN. PARAM. FROM ANGBUF
+              KEY   = ILIST(IMI)
+              NLIST = 3
+              IF (NWANT >= 7) NLIST = 8
+              IF (NWANT == 8) NLIST = 11
+              IF (WANTCCMIR)  NLIST = 17
+              CALL LUNDOCGETKEY(LUNANG,ANGBUF(1,1),MAXX,MAXY,KEY,
+     &                          BUFIN,NLIST,.TRUE.,IRTFLG)
+	      IF (IRTFLG .NE. 0) THEN
+	         CALL ERRT(102,'MISSING ANGLE FOR IMAGE',KEY)
+                 GOTO 9999
+              ENDIF
+
+              ANGS(1:3,IV) = BUFIN(1:3)
+              IF (NWANT >= 7) THEN
+C                WANT OTHER ALIGNMENT PARAMETERS ALSO
+                 ANGS(4:6,IV) = BUFIN(6:8)
+                 ZT           = MAXVAL(BUFIN(6:8))
+                 IF (ZT > 0.0) NGOTX = 7
+                 ANGS(7,IV)   = 0.0
+                 IF (BUFIN(4) < 0) ANGS(7,IV) = 1.0
+              ENDIF
+              IF (NWANT == 8) THEN
+C                WANT CCROT PARAMETER ALSO
+                 ANGS(8,IV) = BUFIN(11)
+                 NGOTX      = 8
+                 IF (WANTCCMIR) THEN
+C                   WANT MIR-CC PARAMETER INSTEAD OF CCROT
+                    ANGS(8,IV) = BUFIN(15)
+                 ENDIF
+              ENDIF
+           ENDIF
+	ENDDO
+
+        IRTFLG = 0
+
+        IF (WANTDIRS) THEN
+C          CONVERT ANGLES TO UNITARY DIRECTIONAL VECTORS
+	   CALL AP_GETSATA(ANGS,DIRS,NWANT,NIMA,IRTFLG)
+        ENDIF
+
+        GOTANGS = .TRUE.
+
+9999    IF (IMIT <= 0) CLOSE(LUNANG)
+
+C       DEALLOCATE DOC. FILE MEMORY
+        IF (ASSOCIATED(ANGBUF)) DEALLOCATE(ANGBUF)
+
+        END 
+
+C       **************************** AP_GETSATA  ***********************
+
+	SUBROUTINE AP_GETSATA(ANGIN,SATA,NCOL,NDIM,IRTFLG)
+
+        IMPLICIT NONE
+        INCLUDE 'CMLIMIT.INC'
+        INCLUDE 'CMBLOCK.INC'
+
+        INTEGER         :: NCOL,NDIM,IRTFLG
+
+        REAL            :: ANGIN(NCOL,NDIM)
+        REAL            :: SATA(3,NDIM)
+
+	REAL, PARAMETER :: QUADPI = 3.1415926535897932384626
+	REAL, PARAMETER :: DGR_TO_RAD = (QUADPI/180)
+
+        INTEGER         :: I
+
+        DO I=1,NDIM
+           SATA(1,I) = COS(ANGIN(3,I)*DGR_TO_RAD) * 
+     &                 SIN(ANGIN(2,I)*DGR_TO_RAD)
+
+           SATA(2,I) = SIN(ANGIN(3,I)*DGR_TO_RAD) * 
+     &                 SIN(ANGIN(2,I)*DGR_TO_RAD)
+
+           SATA(3,I) = COS(ANGIN(2,I)*DGR_TO_RAD)
+        ENDDO
+        IRTFLG = 0
+
+        END
+
+
+#ifdef NEVER
+C       **************************** AP_TEST  ***********************
+
+	SUBROUTINE AP_TEST(ARRAY,nsam,nrow,IRTFLG)
+
+        INCLUDE 'CMLIMIT.INC'
+        INCLUDE 'CMBLOCK.INC'
+
+        REAL, ALLOCATABLE     :: ARRAY(:,:)
+        REAL, POINTER     :: ARRAYT(:,:)
+
+        write(6,*) ' nsam:',nsam,nrow
+        ALLOCATE(ARRAY(nsam,nrow), STAT=IRTFLG)
+        IF (IRTFLG .NE. 0) THEN
+            MWANT = nsam* nrow 
+            CALL ERRT(46,'; ARRAY...',MWANT)
+            GOTO 999
+        ENDIF 
+        write(6,*) ' setting:'
+        array = 2.45
+
+        write(6,*) ' array in tst:',array(1,5)
+
+        !arrayt =>  array
+        !write(6,*) ' arrayt in tst:',arrayt 
+
+        IRTFLG = 0
+
+ 999    return
+
+        END
+#endif
+@
+
+
+1.11
+log
+@ADDED CC RETURN
+@
+text
+@d53 1
+d85 1
+a85 1
+        LOGICAL                 :: ANGINHEADER
+d92 1
+a92 1
+
+d94 1
+d127 1
+a127 1
+           IF (NWANT > 8) MAXX = 15 + 1      ! GET CCROT ALSO
+a135 8
+           IF (MAXX > 15 .AND. NWANT == 9) THEN
+              ! GET CCROT & MIRCC ALSO
+              CCMIR = ANGBUF(16,ILIST(1))
+              !write(6,*) ' docnam:',ANGDOCNAMPE(1:40)
+              !write(6,*) ' ccmir for ilist:',ilist(1),' ',ccmir
+              !write(6,*) ' angbuf:'
+              !!write(6,*)   angbuf(2:16,ilist(1))
+           ENDIF
+d183 1
+a183 1
+              IF (NWANT >= 8) THEN
+d196 2
+a197 2
+              IF (NWANT >= 8) NLIST = 11
+              IF (NWANT >= 9) NLIST = 17
+d214 1
+a214 1
+              IF (NWANT >= 8) THEN
+d218 4
+a221 5
+              ENDIF
+              IF (NWANT >= 9) THEN
+C                WANT MIR-CC PARAMETER ALSO
+                 ANGS(9,IV) = BUFIN(15)
+                 NGOTX      = 9
+@
+
+
+1.10
+log
+@commented out
+@
+text
+@d8 1
+d14 1
+a14 1
+C=* Copyright 1985-2011  Health Research Inc.,                         *
+d39 1
+a39 1
+C       NIMA                NO. OF IMAGES                     (INPUT)
+a48 1
+C       ANGS                PROJ. ANGLES                      (OUTPUT)
+d79 1
+a79 1
+        REAL                    :: BUFIN(15)
+d88 1
+a88 1
+        REAL                    :: ZT
+d92 1
+a92 1
+        ANGINHEADER = (ANGDOCNAM(1:1) .EQ. '-')
+d94 2
+a95 2
+        IF (ANGDOCNAM(1:1) .EQ. '*' .OR.
+     &      ANGDOCNAM(1:1) .EQ. CHAR(0) ) THEN
+d124 4
+a127 1
+           IF (NWANT .GT. 7) MAXX = 11 + 1       ! GET CCROT ALSO
+d133 9
+d203 1
+d224 5
+@
+
+
+1.9
+log
+@ap_getangas rewrite
+@
+text
+@d278 1
+a278 1
+            CALL ERRT(46,'APSH_PSC; ARRAY...',MWANT)
+@
+
+
+1.8
+log
+@AP_GETANGAS added
+@
+text
+@d4 1
+a4 1
+C    AP_GETANGA.F
+d7 1
+d31 1
+a31 1
+C AP_GETANGA(ILIST,NIMA,IMIT,ANGDOCNAM,IMGPAT, LUNIN,SA,ANGS,IRTFLG)
+d47 5
+a51 1
+C       NGOTX               NUMBER OF ALIGNMENT PAR. RETURNED (OUTPUT)                      (OUTPUT)
+a55 161
+	SUBROUTINE AP_GETANGA(ILIST,NIMA,IMIT,ANGDOCNAM,IMGPAT,
+     &                       LUNIMG,LUNANG,NWANT,ANGS,NGOTX,IRTFLG)
+
+        INCLUDE 'CMLIMIT.INC'
+        INCLUDE 'CMBLOCK.INC'
+        INCLUDE 'F90ALLOC.INC'
+
+        INTEGER                   :: ILIST(NIMA)
+        INTEGER                   :: NIMA,IMIT
+        CHARACTER (LEN=*)         :: ANGDOCNAM
+        CHARACTER (LEN=*)         :: IMGPAT
+        INTEGER                   :: LUNIMG,LUNANG,NWANT 
+        REAL                      :: ANGS(NWANT,NIMA)
+        INTEGER                   :: NGOTX,IRTFLG
+
+        CHARACTER (LEN=MAXNAM)    :: ANGDOCNAMPE
+        CHARACTER (LEN=MAXNAM)    :: FILNAM
+        REAL                      :: BUFIN(15)
+
+C       DOC FILE POINTERS
+        REAL, POINTER             :: ANGBUF(:,:)
+        real, allocatable         :: array(:,:)
+
+        LOGICAL                   :: ANGINHEADER
+        LOGICAL                   :: GOTREFANG
+
+        NGOTX = 3
+
+C       READ  ANGLES.
+	
+        IGO  = 1
+        IEND = NIMA
+        IF (IMIT > 0) THEN
+C          ONLY WANT ONE IMAGE'S ANGLES
+           IGO  = IMIT
+           IEND = IMIT
+        ENDIF
+
+        ANGINHEADER = (ANGDOCNAM(1:1) .EQ. CHAR(0) .OR. 
+     &                 ANGDOCNAM(1:1) .EQ. '*')
+        GOTREFANG   = (ANGDOCNAM(1:1) .NE. '-')
+
+        IF (.NOT. GOTREFANG) THEN
+C          NO ANGLES ANYWHERE
+           ANGS   = 0      ! ARRAY ZEROED
+           NGOTX  = NWANT
+           IRTFLG = 0
+           RETURN
+        ENDIF
+
+        IF (.NOT. ANGINHEADER) THEN
+C          ANGLES ARE IN DOC FILE, GET THE FILE NAME
+           CALL FILNAMANDEXT(ANGDOCNAM,DATEXC,ANGDOCNAMPE,NLET,
+     &                        .TRUE.,IRTFLG)
+
+C          RETRIEVE ARRAY WITH ANGLES DATA IN IT, CAN NOT USE
+C          LUNDOCGETANG BECAUSE OF ILIST!
+           MAXX = 8 + 1
+           IF (NWANT .GT. 7) MAXX = 11 + 1       ! GET CCROT ALSO
+
+           MAXY = MAXVAL(ILIST(1:NIMA))
+           CALL GETDOCDAT(' ',.FALSE.,ANGDOCNAMPE,LUNANG,.FALSE.,
+     &                 MAXX,MAXY,ANGBUF,IRTFLG)
+           IF (IRTFLG .NE. 0) GOTO 9999
+        ENDIF
+
+	DO  IMI=IGO,IEND
+           IV = IMI - IGO + 1
+           IF (IMIT > 0) IV = 1
+
+           IF (ANGINHEADER) THEN
+C             ANGLES IN IMAGE HEADER
+
+              MAXX = NWANT + 1
+              IF (NWANT .GE. 8) MAXX = 11 +1
+
+              IF (LUNIMG .GT. 0) THEN
+C                MUST OPEN IMAGE ON LUNIMG FIRST
+                 NLET = 0
+                 CALL FILGET(IMGPAT,FILNAM,NLET,ILIST(IMI),INTFLAG)
+	         MAXIM = 0
+	         CALL OPFILEC(0,.FALSE.,FILNAM,LUNIMG,'O',IFORM,
+     &                  LSAM,LROW,NSLICE,MAXIM,' ',.FALSE.,IRTFLG)
+                 IF (IRTFLG .NE. 0)  GOTO 9999
+
+                 CALL LUNGETVALS(LUNIMG,IAPLOC + 1,MAXX,BUFIN,IRTFLG)
+                 CLOSE(LUNIMG)
+
+              ELSEIF (LUNIMG .LT. 0) THEN
+C                IMAGE ALREADY OPEN ON LUNIMG, DO NOT CLOSE
+                 CALL LUNGETVALS(-LUNIMG,IAPLOC + 1,MAXX,BUFIN,IRTFLG)
+              ENDIF
+              IF (IRTFLG .NE. 0)  GOTO 9999
+
+              IF (BUFIN(4) .LE. 0) THEN
+	         CALL ERRT(102,
+     &              'NO ANGLES IN HEADER OF IMAGE NUMBER',IMI)
+                 ANGS(:,IV) = 0.0
+                 IRTFLG     = 1
+	         GOTO 9999
+              ENDIF
+
+C             GET PROJECTION ANGLES FROM HEADER BUFFER
+              ANGS(1:3,IV) = BUFIN(1:3)
+
+              IF (NWANT .GE. 7) THEN
+C                WANT OTHER ALIGNMENT PARAMETERS ALSO
+                 ANGS(4:7,IV) = BUFIN(6:9)
+                 ZT           = MAXVAL(BUFIN(6:9))
+                 IF (ZT .GT. 0.0) NGOTX = 7
+              ENDIF
+              IF (NWANT .GE. 8) THEN
+C                WANT CCROT PARAMETER ALSO
+                 ANGS(8,IV) = BUFIN(11)
+                 NGOTX      = 8
+              ENDIF
+
+           ELSE
+C             READ ANGLES FROM DOC FILE ON LUNANG
+
+C             EXTRACT ALIGN. PARAM. FROM ANGBUF
+              KEY   = ILIST(IMI)
+              NLIST = 3
+              IF (NWANT .GE. 7) NLIST = 8
+              IF (NWANT .GE. 8) NLIST = 11
+              CALL LUNDOCGETKEY(LUNANG,ANGBUF(1,1),MAXX,MAXY,KEY,
+     &                          BUFIN,NLIST,.TRUE.,IRTFLG)
+	      IF (IRTFLG .NE. 0) THEN
+	         CALL ERRT(102,'MISSING ANGLE FOR IMAGE',KEY)
+                 GOTO 9999
+              ENDIF
+
+              ANGS(1:3,IV) = BUFIN(1:3)
+              IF (NWANT .GE. 7) THEN
+C                WANT OTHER ALIGNMENT PARAMETERS ALSO
+                 ANGS(4:6,IV) = BUFIN(6:8)
+                 ZT           = MAXVAL(BUFIN(6:8))
+                 IF (ZT .GT. 0.0) NGOTX = 7
+                 ANGS(7,IV)   = 0.0
+                 IF (BUFIN(4) .LT. 0) ANGS(7,IV) = 1.0
+              ENDIF
+              IF (NWANT .GE. 8) THEN
+C                WANT CCROT PARAMETER ALSO
+                 ANGS(8,IV) = BUFIN(11)
+                 NGOTX      = 8
+              ENDIF
+           ENDIF
+	ENDDO
+
+        IRTFLG = 0
+9999    CLOSE(LUNANG)
+        IF (IMIT .LE. 0) CLOSE(LUNANG)
+
+C       DEALLOCATE DOC. FILE MEMORY
+        IF (ASSOCIATED(ANGBUF)) DEALLOCATE(ANGBUF)
+
+        END 
+
+
+C       *************************** AP_GETANGAS  ***********************
+
+d90 1
+a90 1
+        GOTANGS = .FALSE.
+d92 3
+a94 1
+        IF (ANGDOCNAM(1:1) .EQ. '-' .OR.
+d106 1
+a106 1
+C       READ  ANGLES AND CONVERT TO UNITARY DIRECTIONAL VECTORS.
+a114 2
+        ANGINHEADER = (ANGDOCNAM(1:1) .EQ. '*')
+
+d119 1
+d140 1
+a140 1
+              IF (NWANT .GE. 8) MAXX = 11 +1
+d142 1
+a142 1
+              IF (LUNIMG .GT. 0) THEN
+d154 1
+a154 1
+              ELSEIF (LUNIMG .LT. 0) THEN
+d160 1
+a160 1
+              IF (BUFIN(4) .LE. 0) THEN
+d171 1
+a171 1
+              IF (NWANT .GE. 7) THEN
+d175 1
+a175 1
+                 IF (ZT .GT. 0.0) NGOTX = 7
+d177 1
+a177 1
+              IF (NWANT .GE. 8) THEN
+d189 2
+a190 2
+              IF (NWANT .GE. 7) NLIST = 8
+              IF (NWANT .GE. 8) NLIST = 11
+d199 1
+a199 1
+              IF (NWANT .GE. 7) THEN
+d203 1
+a203 1
+                 IF (ZT .GT. 0.0) NGOTX = 7
+d205 1
+a205 1
+                 IF (BUFIN(4) .LT. 0) ANGS(7,IV) = 1.0
+d207 1
+a207 1
+              IF (NWANT .GE. 8) THEN
+d224 1
+a224 1
+9999    IF (IMIT .LE. 0) CLOSE(LUNANG)
+@
+
+
+1.7
+log
+@GPL_2010
+@
+text
+@d6 1
+d12 1
+a12 1
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+d58 11
+a68 8
+        INTEGER, DIMENSION(NIMA)                     :: ILIST
+        CHARACTER (LEN=*)                            :: ANGDOCNAM
+        CHARACTER (LEN=*)                            :: IMGPAT
+        REAL, DIMENSION(NWANT,NIMA)                  :: ANGS
+
+        CHARACTER (LEN=MAXNAM)                       :: ANGDOCNAMPE
+        CHARACTER(LEN=MAXNAM)                        :: FILNAM
+        REAL, DIMENSION(15)                          :: BUFIN
+d71 5
+a75 1
+        REAL, DIMENSION(:,:), POINTER                :: ANGBUF
+a76 1
+        LOGICAL                                      :: ANGINHEADER
+d79 2
+a80 2
+C       READ  ANGLES AND CONVERT TO UNITARY DIRECTIONAL VECTORS.
+
+d84 1
+a84 1
+C          0NLY WANT ONE IMAGE'S ANGLES
+d89 11
+a99 1
+        ANGINHEADER = (ANGDOCNAM .EQ. CHAR(0) .OR. ANGDOCNAM .EQ. '*')
+d210 5
+a214 1
+	SUBROUTINE AP_GETSATA(ANGIN,SATA,ICOL,NDIM,IRTFLG)
+d216 1
+d219 89
+d309 5
+a313 2
+        REAL, DIMENSION(ICOL,NDIM) :: ANGIN
+        REAL, DIMENSION(3,NDIM)    :: SATA
+d315 88
+a402 2
+	PARAMETER (QUADPI = 3.1415926535897932384626)
+	PARAMETER (DGR_TO_RAD = (QUADPI/180))
+d416 34
+@
+
+
+1.6
+log
+@GPL License fixed
+@
+text
+@a7 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d9 5
+a13 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d15 1
+a15 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d20 1
+a20 1
+C=* This program is distributed in the hope that it will be useful,    *
+d22 1
+a22 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a23 1
+C=*                                                                    *
+d25 1
+a25 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.5
+log
+@HRI GPL License used
+@
+text
+@a2 1
+C++************************************************************************
+a7 1
+C * SPIDER - MODULAR IMAGE PROCESSING SYSTEM.    AUTHOR: J.FRANK       *
+d11 1
+a11 1
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *  
+a30 6
+
+C * COPYRIGHT (C)1985, 2002. HEALTH RESEARCH INCORPORATED (HRI),       *
+C * ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+C * THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO HRI AND ARE NOT   *
+C * TO BE DISCLOSED TO OTHERS OR USED FOR PURPOSES OTHER THAN INTENDED *
+C * WITHOUT WRITTEN APPROVAL OF HRI.                                   *
+a52 1
+C--************************************************************************
+@
+
+
+1.4
+log
+@can retrieve CCROT
+@
+text
+@d2 1
+d10 24
+d60 1
+@
+
+
+1.3
+log
+@doc file header order changed
+@
+text
+@d5 1
+d51 1
+a51 1
+        REAL, DIMENSION(9)                           :: BUFIN
+d56 1
+d69 4
+a72 1
+        IF (ANGDOCNAM .NE. '*' .AND. ANGDOCNAM .NE. CHAR(0)) THEN
+d79 2
+d91 1
+a91 1
+           IF (ANGDOCNAM .EQ. CHAR(0) .OR. ANGDOCNAM .EQ. '*') THEN
+d94 3
+d105 2
+a106 1
+                 CALL LUNGETVALS(LUNIMG,IAPLOC + 1,NWANT+1,BUFIN,IRTFLG)
+d108 1
+d111 1
+a111 2
+                 CALL LUNGETVALS(-LUNIMG,IAPLOC + 1,NWANT+1,BUFIN,
+     &                           IRTFLG)
+d116 2
+a117 1
+	         CALL ERRT(102,'NO ANGLES IN HEADER OF IMAGE',IMI)
+d123 1
+d125 1
+d129 1
+a129 1
+                 ZT = MAXVAL(BUFIN(6:9))
+d132 5
+d145 1
+d157 1
+a157 1
+                 ZT = MAXVAL(BUFIN(6:8))
+d159 7
+a165 2
+                 ANGS(7,IV) = 0.0
+                 IF(BUFIN(4) .LT. 0) ANGS(7,IV) = 1.0
+@
+
+
+1.2
+log
+@-iref
+@
+text
+@d123 1
+a123 1
+              KEY = ILIST(IMI)
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d4 1
+a4 1
+C    AP_GETANG.F
+d15 1
+a15 1
+C AP_GETANG(ILIST,NIMA,IMIT,ANGDOCNAM,IMGPAT, LUNIN,SA,ANGS,IRTFLG)
+d73 1
+a73 1
+           MAXX = 9 + 1
+d125 1
+a125 1
+              IF (NWANT .GE. 7) NLIST = 9
+d136 2
+a137 2
+                 ANGS(4:7,IV) = BUFIN(6:9)
+                 ZT = MAXVAL(BUFIN(6:9))
+d139 2
+@

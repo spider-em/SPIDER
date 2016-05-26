@@ -1,0 +1,455 @@
+head	1.7;
+access;
+symbols;
+locks; strict;
+comment	@c @;
+
+
+1.7
+date	2011.12.19.17.39.55;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2011.12.16.13.48.11;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2011.12.16.13.39.51;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2011.12.14.19.58.45;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2011.12.14.17.04.13;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2011.12.13.13.40.30;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2011.12.12.19.41.45;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.7
+log
+@fbs3 nxp parameter
+@
+text
+@C++*********************************************************************
+C                                                                      *
+C WPRO_FBS.F  FROM: WPRO_N                      DEC 2011 G. KISHCHENKO *
+C                                                                      *
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2011  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C                                                                      *
+C WPRO_FBS(PROJ, NXLD,NX,NY,NZ, CUBE,                                  *
+C          X1,Y1,Z1,XY2,XZ2,YZ2,XYZ,  IPCUBE, NN,                      *
+C          PHI,THETA,PSI, RI, LDPX,LDPY,LDPZ)                          * 
+C                                                                      *
+C PURPOSE:  COMPUTES PROJECTION(S) OF VOLUME ACCORDING                 *
+C           THREE EULERIAN ANGLES.                                     *
+C           DOES A WHOLE PROJECTION SERIES.                            *
+C           USES 3D FBS INTERPOLATION.                                 *
+C                                                                      *
+C IPCUBE: A  LIST OF VOXELS ON EACH LINE IN THE              *
+C         VOLUME  WHICH ARE WITHIN A SPECIFED RADIUS SPHERE IN VOL.    *
+C                1 - BEGINNING VOXEL ON LINE                           *
+C                2 - ENDING    VOXEL ON LINE                                     *
+C                3 - IX FOR VOXEL                                      *
+C                4 - IY FOR VOXEL                                      *
+C                5 - IZ FOR VOXEL                                      *
+C                                                                      *
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C--*********************************************************************
+
+         SUBROUTINE WPRO_FBS(PROJ, NXLD,NX,NY,NZ, CUBE,
+     &                       X1,Y1,Z1,XY2,XZ2,YZ2,XYZ,
+     &                       IPCUBE, NN,
+     &                       PHI,THETA,PSI, RI, LDPX,LDPY,LDPZ)
+
+         IMPLICIT NONE
+
+         REAL                :: PROJ(NX,NY)
+         INTEGER             :: NXLD,NX,NY,NZ
+         REAL                :: CUBE(NX,NY,NZ)
+         REAL                :: X1 (NXLD,NY,NZ),Y1 (NXLD,NY,NZ)
+         REAL                :: Z1 (NXLD,NY,NZ)
+         REAL                :: XY2(NXLD,NY,NZ),XZ2(NXLD,NY,NZ)
+         REAL                :: YZ2(NXLD,NY,NZ),XYZ(NXLD,NY,NZ)
+         INTEGER             :: IPCUBE(5,NN)
+         INTEGER             :: NN
+         REAL                :: PHI,THETA,PSI,RI
+         INTEGER             :: LDPX,LDPY,LDPZ
+
+         REAL                :: DM(9)
+         DOUBLE PRECISION    :: CPHI,SPHI,CTHE,STHE
+         DOUBLE PRECISION    :: CPSI,SPSI
+
+         REAL                :: fbs3
+
+         INTEGER             :: K,J,I,IRTFLG,IOX,IOY,IOZ
+         REAL                :: DIM,XB,YB,ZB,DM1,DM2,DM3
+
+         DOUBLE PRECISION,PARAMETER :: QUADPI = 3.1415926535897932384626
+         DOUBLE PRECISION,PARAMETER :: DGR_TO_RAD = (QUADPI/180)
+
+         CPHI = DCOS(DBLE(PHI)  *DGR_TO_RAD)
+         SPHI = DSIN(DBLE(PHI)  *DGR_TO_RAD)
+
+         CTHE = DCOS(DBLE(THETA)*DGR_TO_RAD)
+         STHE = DSIN(DBLE(THETA)*DGR_TO_RAD)
+
+         CPSI = DCOS(DBLE(PSI)  *DGR_TO_RAD)
+         SPSI = DSIN(DBLE(PSI)  *DGR_TO_RAD)
+
+         DM(1) =  CPHI*CTHE*CPSI - SPHI*SPSI
+         DM(2) =  SPHI*CTHE*CPSI + CPHI*SPSI
+         DM(3) = -STHE*CPSI
+
+         DM(4) = -CPHI*CTHE*SPSI - SPHI*CPSI
+         DM(5) = -SPHI*CTHE*SPSI + CPHI*CPSI
+         DM(6) =  STHE*SPSI
+
+         DM(7) =  STHE*CPHI
+         DM(8) =  STHE*SPHI
+         DM(9) =  CTHE
+
+         DM1   = DM(1)
+         DM2   = DM(2)
+         DM3   = DM(3)
+
+C        ZERO THE WHOLE PROJ ARRAY
+         PROJ  = 0.0
+
+         DIM  = MIN(NX,NY,NZ)
+
+         IF ((2*(RI+1) + 1) .LE. DIM) THEN
+C            NO NEED TO CHECK IQX & IQY BOUNDARIES
+
+             DO I=1,NN
+
+               K  = IPCUBE(4,I)+LDPY
+
+               XB = IPCUBE(3,I)*DM(1) + IPCUBE(4,I)*DM(4) +
+     &              IPCUBE(5,I)*DM(7) + LDPX
+
+               YB = IPCUBE(3,I)*DM(2) + IPCUBE(4,I)*DM(5) +
+     &              IPCUBE(5,I)*DM(8) + LDPY
+
+               ZB = IPCUBE(3,I)*DM(3) + IPCUBE(4,I)*DM(6) +
+     &              IPCUBE(5,I)*DM(9) + LDPZ
+
+               DO J=IPCUBE(1,I),IPCUBE(2,I)  ! OVER VOXELS ON THIS LINE
+
+                  PROJ(J,K) = PROJ(J,K) + 
+     &                     FBS3(XB,YB,ZB,
+     &                     NXLD,  NX, NY, NZ,
+     &                     CUBE,NX, XYZ,X1,Y1,Z1,
+     &                     XY2,XZ2,YZ2)
+
+                  XB = XB + DM1
+                  YB = YB + DM2
+                  ZB = ZB + DM3
+               ENDDO
+            ENDDO
+         ELSE
+C            MUST CHECK IQX & IQY BOUNDARIES
+
+             DO I=1,NN
+
+               K  = IPCUBE(4,I)+LDPY
+
+               XB = IPCUBE(3,I)*DM(1) + IPCUBE(4,I)*DM(4) +
+     &              IPCUBE(5,I)*DM(7) + LDPX
+
+               YB = IPCUBE(3,I)*DM(2) + IPCUBE(4,I)*DM(5) +
+     &              IPCUBE(5,I)*DM(8) + LDPY
+
+               ZB = IPCUBE(3,I)*DM(3) + IPCUBE(4,I)*DM(6) +
+     &              IPCUBE(5,I)*DM(9) + LDPZ
+
+               DO J=IPCUBE(1,I),IPCUBE(2,I)
+
+C                 CHECK FOR PIXELS OUT OF BOUNDS 
+                  IOX = IFIX(XB)
+                  IOY = IFIX(YB)
+                  IOZ = IFIX(ZB)
+
+                  IF ((IOX > 0 .AND. IOX <= NX) .AND.
+     &                (IOY > 0 .AND. IOY <= NY) .AND.
+     &                (IOZ > 0 .AND. IOZ <= NZ)) THEN
+
+                       PROJ(J,K) = PROJ(J,K) + 
+     &                          FBS3(XB,YB,ZB,
+     &                          NXLD, NX, NY, NZ,
+     &                          CUBE,NX, XYZ,X1,Y1,Z1,
+     &                          XY2,XZ2,YZ2)
+                  ENDIF
+
+                  XB = XB + DM1
+                  YB = YB + DM2
+                  ZB = ZB + DM3
+               ENDDO
+            ENDDO
+          ENDIF
+
+          END
+@
+
+
+1.6
+log
+@missing C
+@
+text
+@d70 1
+a70 1
+         REAL                :: fbs3_n
+d127 1
+a127 1
+     &                     FBS3_N(XB,YB,ZB,
+d129 1
+a129 1
+     &                     CUBE, XYZ,X1,Y1,Z1,
+d165 1
+a165 1
+     &                          FBS3_N(XB,YB,ZB,
+d167 1
+a167 1
+     &                          CUBE, XYZ,X1,Y1,Z1,
+@
+
+
+1.5
+log
+@comments
+@
+text
+@d28 2
+a29 2
+           X1,Y1,Z1,XY2,XZ2,YZ2,XYZ,  IPCUBE, NN,                      *
+           PHI,THETA,PSI, RI, LDPX,LDPY,LDPZ)                          * 
+@
+
+
+1.4
+log
+@rewrite for OMP use
+@
+text
+@d27 3
+a29 2
+C WPRO_FBS(B,NX,NY,CUBE,IPCUBE,NN,                                 *
+C        PHI,THETA,PSI,RI,LDPX,LDPY,LDPZ)                              *
+d36 1
+a36 1
+C IPCUBE: A RUN LENGTH LIST OF VOXELS ON EACH LINE IN THE              *
+d39 1
+a39 1
+C                2 - LENGTH OF RUN                                     *
+d124 1
+a124 1
+               DO J=IPCUBE(1,I),IPCUBE(2,I)
+@
+
+
+1.3
+log
+@CUBE1 .
+@
+text
+@d27 1
+a27 1
+C WPRO_FBS(B,NX,NY,CUBE,LTB,IPCUBE,NN,                                 *
+d46 4
+a49 2
+         SUBROUTINE WPRO_FBS(B,NX,NY,NZ,CUBE,LTB,IPCUBE,
+     &                       NN,PHI,THETA,PSI,RI,LDPX,LDPY,LDPZ)
+d53 2
+a54 2
+         REAL                :: B(NX,NY)
+         INTEGER             :: NX,NY,NZ
+d56 4
+a59 1
+         INTEGER             :: LTB
+d69 1
+a69 8
+         REAL, ALLOCATABLE   :: CUBE0(:,:,:) ! CUBE DATA --> XYZ DERIV.
+         REAL, ALLOCATABLE   :: CUBE1(:,:,:) ! CUBE DATA
+         REAL, ALLOCATABLE   :: X1   (:,:,:)
+         REAL, ALLOCATABLE   :: Y1   (:,:,:)
+         REAL, ALLOCATABLE   :: Z1   (:,:,:)
+         REAL, ALLOCATABLE   :: XY2  (:,:,:)
+         REAL, ALLOCATABLE   :: XZ2  (:,:,:)
+         REAL, ALLOCATABLE   :: YZ2  (:,:,:)
+d71 1
+a71 3
+         REAL                :: fbs3
+
+         INTEGER             :: NXLD,K,J,I,IRTFLG,IOX,IOY,IOZ
+a76 15
+         NXLD   = NX + 2 - MOD(NX,2)
+
+         ALLOCATE (CUBE0(NXLD,NY,NZ),
+     &             CUBE1(NXLD,NY,NZ),
+     &             X1   (NXLD,NY,NZ),
+     &             Y1   (NXLD,NY,NZ),
+     &             Z1   (NXLD,NY,NZ),
+     &             XY2  (NXLD,NY,NZ),
+     &             XZ2  (NXLD,NY,NZ),
+     &             YZ2  (NXLD,NY,NZ), STAT=IRTFLG)
+         IF (IRTFLG .NE. 0) THEN             
+            CALL ERRT(46,'WPRO_FBS, CUBE0...',8*NXLD*NY*NZ)
+            RETURN                          
+         ENDIF
+
+d102 2
+a103 28
+C        ZERO THE WHOLE B ARRAY
+         B  = 0.0
+
+C        ZERO THE LAST COL OF CUBE0 ARRAY
+         DO K=1,NZ
+           DO J=1,NY
+              DO I = NX+1,NXLD
+                 CUBE0(I,J,K) = 0
+              ENDDO
+           ENDDO
+         ENDDO
+
+C        COPY CUBE INTO CUBE0 EXCEPT FOR THE LAST COL OF CUBE0
+         DO K=1,NZ
+           DO J=1,NY
+              DO I=1,NX
+                 CUBE0(I,J,K) = CUBE(I,J,K)
+              ENDDO
+           ENDDO
+         ENDDO
+
+C        FILL THE WHOLE CUBE1 ARRAY
+         CUBE1  = CUBE0
+
+C        CALCULATION OF PROJECTIONS DERIVATIVES USING 3D FFT
+C        RETURNS: CUBE0, X1, Y1, Z1, XY2, XZ2, YZ2
+         CALL FBS3_PREP(CUBE0, NXLD, NX, NY, NZ,
+     &                  X1, Y1, Z1, XY2, XZ2, YZ2)
+d125 4
+a128 5
+                  B(J,K) = B(J,K) + 
+     &                     FBS3(XB,YB,ZB,
+     &                     NXLD, NX, NY, NZ,
+     &                     CUBE1, CUBE0,
+     &                     X1, Y1, Z1,
+d163 2
+a164 2
+                       B(J,K) = B(J,K) + 
+     &                          FBS3(XB,YB,ZB,
+d166 1
+a166 2
+     &                          CUBE1, CUBE0,
+     &                          X1, Y1, Z1,
+a175 9
+
+          IF (ALLOCATED(CUBE0)) DEALLOCATE(CUBE0)
+          IF (ALLOCATED(CUBE1)) DEALLOCATE(CUBE1)
+          IF (ALLOCATED(X1))    DEALLOCATE(X1)
+          IF (ALLOCATED(Y1))    DEALLOCATE(Y1)
+          IF (ALLOCATED(Z1))    DEALLOCATE(Z1)
+          IF (ALLOCATED(XY2))   DEALLOCATE(XY2)
+          IF (ALLOCATED(XZ2))   DEALLOCATE(XZ2)
+          IF (ALLOCATED(YZ2))   DEALLOCATE(YZ2)
+@
+
+
+1.2
+log
+@cosmetic
+@
+text
+@d3 1
+a3 1
+C WPRO_FBS.F  FROM: WPRO_N                      DEC 2022 G. KISHCHENKO *
+d49 2
+d64 10
+a73 7
+         REAL, ALLOCATABLE   :: CUBE0(:,:,:)
+         REAL, ALLOCATABLE   :: X1 (:,:,:)
+         REAL, ALLOCATABLE   :: Y1 (:,:,:)
+         REAL, ALLOCATABLE   :: Z1 (:,:,:)
+         REAL, ALLOCATABLE   :: XY2(:,:,:)
+         REAL, ALLOCATABLE   :: XZ2(:,:,:)
+         REAL, ALLOCATABLE   :: YZ2(:,:,:)
+d75 2
+a76 1
+         INTEGER             :: NXLD,IRTFLG
+d84 1
+d92 1
+a92 1
+            CALL ERRT(46,'WPRO_FBS, CUBE0...',7*NXLD*NY*NZ)
+d142 3
+d146 1
+d154 1
+d185 1
+a185 1
+            DO    I=1,NN
+d204 1
+d225 1
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d78 6
+a83 6
+     &              X1  (NXLD,NY,NZ),
+     &              Y1  (NXLD,NY,NZ),
+     &              Z1  (NXLD,NY,NZ),
+     &              XY2 (NXLD,NY,NZ),
+     &              XZ2 (NXLD,NY,NZ),
+     &              YZ2 (NXLD,NY,NZ), STAT=IRTFLG)
+d158 6
+a163 6
+                                 B(J,K) = B(J,K) + 
+     &                              FBS3(XB,YB,ZB,
+     &                              NXLD, NX, NY, NZ,
+     &                              CUBE1, CUBE0,
+     &                              X1, Y1, Z1,
+     &                              XY2,XZ2,YZ2)
+@

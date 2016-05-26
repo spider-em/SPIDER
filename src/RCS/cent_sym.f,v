@@ -1,0 +1,799 @@
+head	1.9;
+access;
+symbols;
+locks; strict;
+comment	@c @;
+
+
+1.9
+date	2012.03.28.14.51.01;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2012.03.27.17.59.52;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2012.02.15.20.22.15;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2012.02.13.14.19.57;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2012.02.13.13.14.28;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2012.02.13.13.13.45;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2012.01.24.14.52.25;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2012.01.24.14.51.25;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2012.01.23.16.46.41;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.9
+log
+@merged with cent_symobj, cosmetic
+@
+text
+@C **********************************************************************
+C                                                                      *
+C CENT_SYM       NEW                      FEB 2012  GREGORY KISHCHENKO *
+C                SHIFTIT                  MAR 2012  ARDEAN LEITH       *                                                                   *
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2012  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NROW 12204.    *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) aNROW later version.                  *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANROW WARRANTY; without even the implied warranty of   *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C                                                                      
+C   SUBROUTINE CENT_SYM(BUF1,BUF2, SHIFTIT, NXLD,NX,NY, 
+C                          SHX,SHY,IRTFLG)     
+C                                                                      
+C   PARAMETERS: BUF1    DATA ARRAY                              INPUT  
+C               BUF2    DATA ARRAY                              OUTPUT 
+C               SHX,SHY SHIFTS                                  OUTPUT 
+C               SHIFTIT SHIFT FLAG                              INPUT 
+C               IRTFLG  ERROR FLAG                              OUTPUT 
+C                                                                      
+C   PURPOSE: SHIFT OBJECT IN ORDER TO MOVE IT TO CENTER OF IMAGE       
+C            USES 2D FOURIER-BASED BICUBIC SPLINE INTERPOLATION        
+C            BETWEEN PIXELS.                                           
+C                                                                      
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C***********************************************************************
+
+       SUBROUTINE CENT_SYM(BUF1,BUF2, SHIFTIT,
+     &                     NXLD,NX,NY,
+     &                     SHX,SHY, IRTFLG)
+
+       IMPLICIT NONE
+
+       REAL              :: BUF1(NXLD,NY)
+       REAL              :: BUF2(NX,  NY)
+       INTEGER           :: NXLD, NX, NY
+       REAL              :: SHX, SHY
+       LOGICAL           :: SHIFTIT
+       INTEGER           :: IRTFLG
+
+       INTEGER           :: INV, MWANT
+       INTEGER           :: CX, CY
+       INTEGER           :: I,J
+       INTEGER           :: NX25,NX75,NY25,NY75
+
+       REAL              :: X,Y
+       REAL              :: SHX2, SHY2
+       REAL              :: COR
+       REAL              :: WEIGHT
+       REAL              :: A,B,C,D
+
+       REAL              :: fbs2
+
+       REAL, ALLOCATABLE :: F0(:,:)
+       REAL, ALLOCATABLE :: F1(:,:)
+       REAL, ALLOCATABLE :: X1(:,:)
+       REAL, ALLOCATABLE :: Y1(:,:)
+       REAL, ALLOCATABLE :: XY2(:,:)
+
+       ALLOCATE (F0 (0:NXLD-1,0:NY-1),
+     &           F1 (0:NXLD-1,0:NY-1),
+     &           X1 (0:NXLD-1,0:NY-1),
+     &           Y1 (0:NXLD-1,0:NY-1),
+     &           XY2(0:NXLD-1,0:NY-1),
+     &           STAT=IRTFLG)
+
+       IF (IRTFLG .NE. 0) THEN
+          MWANT = 4* NXLD*NY
+          CALL ERRT(46,'CENT_SYM, F0...',MWANT)
+          RETURN
+       ENDIF
+
+       F0 = BUF1  ! ARRAY ASSIGN
+
+       CALL FBS2_PREP(F0, X1,Y1,XY2, NXLD, NX,NY, IRTFLG)
+       IF (IRTFLG .NE. 0) RETURN
+
+C      COMPUTATION OF SQUARE OF A COMPLEX NUMBER AT EACH POINT
+C      OF 2D FOURIER TRANSFORM OF IMAGE AFTER A 180-DEGREE ROTATION
+       DO J=0,NY-1
+          DO I=0,NXLD/2-1
+             F1(2*I,J)   =     F0(2*I,J)**2 - F0(2*I+1,J)**2
+             F1(2*I+1,J) = 2 * F0(2*I,J)    * F0(2*I+1,J)
+          ENDDO
+       ENDDO
+
+C      COMPUTATION OF REVERSED 2D FOURIER TRANSFORM THAT IS
+C      EQUAL TO 2D CROSS-CORRELATION BETWEEN
+C      ORIGINAL IMAGE AND IMAGE AFTER A 180-DEGREE ROTATION
+       INV = -1
+       CALL FMRS(F1, NX,NY,1, 0.0D0, .TRUE.,.TRUE., INV, IRTFLG)
+
+C      SEARCH FOR SHIFT WITH MAXIMUM CORRELATION
+C      BETWEEN ORIGINAL IMAGE AND IMAGE AFTER A 180-DEGREE ROTATION
+       COR = 0.0
+       SHX = 0
+       SHY = 0
+
+       DO J=0,NY-1
+          DO I=0,NX-1
+            IF (F1(I,J) > COR) THEN
+              COR = F1(I,J)
+              SHX = I
+              SHY = J
+            ENDIF
+          ENDDO
+       ENDDO
+
+       IF (SHX > NX*0.5) SHX = SHX - NX
+       IF (SHY > NY*0.5) SHY = SHY - NY
+
+       SHX = (SHX + MOD(NX,2)) * 0.5
+       SHY = (SHY + MOD(NY,2)) * 0.5
+
+       F0  = BUF1  ! ARRAY ASSIGNMENT
+
+       CX  = NX / 2 + 1
+       CY  = NY / 2 + 1
+
+C      GENERATION OF IMAGE WITH OBJECT BY OPTIMAL SHIFT
+c$omp  parallel do private(j,i,x,y)
+       DO J=1, NY
+          DO I=1, NX
+            X = I  + SHX
+            Y = J  + SHY
+            BUF2(I,J) = FBS2(X,Y, NXLD,NX,NY,F0,
+     &	                     NXLD,X1,Y1,XY2, .TRUE.)
+          ENDDO
+       ENDDO
+
+C      CORRECTION OF CENTER OF GRAVITY:
+C      IF THE OBJECT'S CENTER OF QUASISYMMETRY IS NOT IN
+C      CENTRAL QUARTER - MOVE IT BY HALF-SIZE OF IMAGE;
+C      FOUR QUARTERS ARE TESTED.
+       SHX2 = SHX
+       SHY2 = SHY
+
+       NX25 = INT(NX * 0.25)
+       NX75 = INT(NX * 0.75)
+       NY25 = INT(NY * 0.25)
+       NY75 = INT(NY * 0.75)
+
+       A = 0
+       DO J=NY25, NY75
+          DO I=NX25, NX75
+             A = A + BUF2(I,J)
+          ENDDO
+       ENDDO
+       WEIGHT = A
+
+       B = 0
+       DO J= 1,NY25
+          DO I= NX25, NX75
+             B = B + BUF2(I,J)
+          ENDDO
+       ENDDO
+       DO J= NY75,NY
+          DO I= NX25, NX75
+             B = B + BUF2(I,J)
+          ENDDO
+       ENDDO
+       IF (B > WEIGHT) THEN
+          WEIGHT = B
+          SHX2 = SHX
+          SHY2 = SHY - NY*0.5
+       ENDIF
+
+       C = 0
+       DO J=NY25, NY75
+          DO I=1, NX25
+             C = C + BUF2(I,J)
+          ENDDO
+       ENDDO
+       DO J= NY25, NY75
+          DO I= NX75, NX
+             C = C + BUF2(I,J)
+          ENDDO
+       ENDDO
+       IF (C > WEIGHT) THEN
+          WEIGHT = C
+          SHX2   = SHX - NX*0.5
+          SHY2   = SHY
+       ENDIF
+
+       D = 0
+       DO J= 1,NY25
+          DO I=1, NX25
+             D = D + BUF2(I,J)
+          ENDDO
+       ENDDO
+       DO J= 1,NY25
+          DO I= NX75, NX
+             D = D + BUF2(I,J)
+          ENDDO
+       ENDDO
+       DO J= NY75,NY
+          DO I=1, NX25
+             D = D + BUF2(I,J)
+          ENDDO
+       ENDDO
+       DO J= NY75,NY
+          DO I= NX75, NX
+             D = D + BUF2(I,J)
+          ENDDO
+       ENDDO
+       IF (D > WEIGHT) THEN
+          SHX2 = SHX - NX*0.5
+          SHY2 = SHY - NY*0.5
+       ENDIF
+
+       IF (SHIFTIT) THEN
+C         GENERATION OF IMAGE WITH OBJECT BY CORRECTED OPTIMAL SHIFT
+
+c$omp     parallel do private(j,i,x,y)
+          DO J=1,NY 
+             DO I=1,NX 
+                X         = I + SHX2
+                Y         = J + SHY2
+                BUF2(I,J) = FBS2(X,Y, NXLD,NX,NY,F0,
+     &	   	                 NXLD,X1,Y1,XY2, .TRUE.)
+             ENDDO
+          ENDDO
+       ENDIF
+
+       IF (ALLOCATED(F0))  DEALLOCATE(F0)
+       IF (ALLOCATED(F1))  DEALLOCATE(F1)
+       IF (ALLOCATED(X1))  DEALLOCATE(X1)
+       IF (ALLOCATED(Y1))  DEALLOCATE(Y1)
+       IF (ALLOCATED(XY2)) DEALLOCATE(XY2)
+
+C       write(6,*), 'A,B,C,D =',A,B,C,D
+C       write(6,*), 'SHX, SHY = ', SHX2, SHY2
+
+       END
+@
+
+
+1.8
+log
+@*** empty log message ***
+@
+text
+@d1 1
+a1 1
+C++*********************************************************************
+d3 2
+a4 2
+C CENT_SYM        NEW                      JAN 2012 GREGORY KISHCHENKO *
+C                 F1(0:NXLD-1,0:NY-1)      MAR 2012 ARDEAN LEITH       *
+d9 2
+a10 2
+C=* Copyright 1985-2012 Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+d16 1
+a16 1
+C=* License, or (at your option) any later version.                    *
+d19 1
+a19 1
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+d26 20
+a45 8
+C                                                                      *
+C   CENT_SYM(F0,F1,NXLD, NX,NY,SHX,SHY,IRTFLG)                         *
+C                                                                      *
+C   PURPOSE: DETERMINE CENTER OF QUASISYMMETRY                         *
+C                                                                      *
+C--*********************************************************************
+
+       SUBROUTINE CENT_SYM(F0,F1,NXLD, NX,NY, SHX2,SHY2,IRTFLG)
+d49 5
+a53 3
+       REAL              :: F0(0:NXLD-1,0:NY-1), F1(0:NXLD-1,0:NY-1)
+       INTEGER           :: NXLD,NX,NY
+       REAL              :: SHX2,SHY2
+d56 4
+a59 5
+       REAL, ALLOCATABLE :: F00(:,:)
+       REAL, ALLOCATABLE :: X1(:,:)
+       REAL, ALLOCATABLE :: Y1(:,:)
+       REAL, ALLOCATABLE :: XY2(:,:)
+       REAL, ALLOCATABLE :: BUF2(:,:)
+d61 2
+a62 1
+       INTEGER           :: INV, I,J, I2,J2, MWANT
+a63 4
+       REAL              :: X,Y
+       REAL              :: SHX, SHY
+       INTEGER           :: MAXL_ARRAY(2)
+
+d69 5
+d75 5
+a79 5
+       ALLOCATE (F00 (0:NXLD-1,0:NY-1),
+     &           X1  (NXLD,NY),
+     &           Y1  (NXLD,NY),
+     &           XY2 (NXLD,NY),
+     &           BUF2(NXLD,NY),
+d81 1
+d83 1
+a83 1
+          MWANT = 5* NXLD*NY
+d88 1
+a88 1
+       F00 = F0  ! ARRAY ASSIGNMENT
+d94 1
+a94 2
+C      OF 2D FOURIER TRANSFORM
+
+a104 2
+
+C      INVERSE FFTW OF F1
+d108 15
+a122 5
+C      SEARCH FOR THE MAXIMUM OF CORRELATION IN (X,Y)-PLANE
+       MAXL_ARRAY = MAXLOC(F1(0:NX-1,0:NY-1)) ! RETURNS ARRAY OF LENGTH: 2
+       SHX = MAXL_ARRAY(1) -1
+       SHY = MAXL_ARRAY(2) -1
+       COR = F1(MAXL_ARRAY(1)-1,MAXL_ARRAY(2)-1) 
+d130 6
+d139 4
+a142 4
+             X  = I + SHX
+             Y  = J + SHY
+             BUF2(I,J) = FBS2(X,Y, NXLD,NX,NY, F00,NXLD,
+     &                        X1,Y1,XY2, .TRUE.)
+d146 4
+a149 6
+#ifdef NEVER
+             if (i < 1 .or. i > nx .or. j < 1 .or. j >ny) then
+                  write(6,*) 'bad ij 1:',i,j
+                  stop
+             endif
+#endif
+d153 5
+d159 2
+a160 2
+       DO J=NY*0.25, NY*0.75
+          DO I=NX*0.25, NX*0.75
+a163 1
+
+a164 1
+       B      = 0
+d166 3
+a168 2
+       DO J= 1,NY*0.25
+          DO I= NX*0.25, NX*0.75
+d172 2
+a173 3
+
+       DO J= NY*0.75,NY
+          DO I= NX*0.25, NX*0.75
+d184 2
+a185 3
+
+       DO J=NY*0.25, NY*0.75
+          DO I=1, NX*0.25
+d189 2
+a190 3
+
+       DO J= NY*0.25, NY*0.75
+          DO I= NX*0.75, NX
+a193 1
+
+d201 2
+a202 3
+
+       DO J= 1,NY*0.25
+          DO I=1, NX*0.25
+d206 2
+a207 3
+
+       DO J= 1,NY*0.25
+          DO I= NX* 0.75, NX
+d211 2
+a212 3
+
+       DO J= NY-NY*0.25,NY
+          DO I=1, NX*0.25
+d216 2
+a217 3
+
+       DO J= NY*0.75,NY
+          DO I= NX*0.75, NX
+a220 1
+
+d226 20
+a245 1
+C       write(6,*), ' '
+d247 1
+a247 7
+C       write(6,*), 'shx2,shy2 =',shx2,shy2
+
+       IF (ALLOCATED(F00))  DEALLOCATE(F00)
+       IF (ALLOCATED(BUF2)) DEALLOCATE(BUF2)
+       IF (ALLOCATED(X1))   DEALLOCATE(X1)
+       IF (ALLOCATED(Y1))   DEALLOCATE(Y1)
+       IF (ALLOCATED(XY2))  DEALLOCATE(XY2)
+@
+
+
+1.7
+log
+@*** empty log message ***
+@
+text
+@d3 2
+a4 2
+C CENT_SYM        NEW                   JAN 2012    GREGORY KISHCHENKO *
+C                                                                      *
+d29 1
+a29 1
+C   PURPOSE: DETERMINATION OF CENTER OF QUASISYMMETRY                  *
+d37 1
+a37 1
+       REAL              :: F0(NXLD,NY), F1(NXLD,NY)
+d42 5
+a46 6
+C      AUTOMATIC ARRAYS ON STACK!!
+       REAL              :: F00(NXLD,NY)
+       REAL              :: X1 (NXLD,NY)
+       REAL              :: Y1 (NXLD,NY)
+       REAL              :: XY2(NXLD,NY)
+       REAL              :: BUF2(NX, NY)
+d48 1
+a48 1
+       INTEGER           :: INV, I,J, I2,J2
+d59 14
+a72 1
+       F00 = F0
+d96 4
+a99 14
+
+       COR = 0.0
+       SHX = 0
+       SHY = 0
+
+       DO J=0,NY-1
+          DO I=0,NX-1
+            IF (F1(I,J) > COR) THEN
+              COR = F1(I,J)
+              SHX = I
+              SHY = J
+            ENDIF
+          ENDDO
+       ENDDO
+d107 6
+a112 9
+c$omp  parallel do private(j,j2,i,i2,x,y)
+       DO J=0, NY-1
+          J2   = J  + 1
+          DO I=0, NX-1
+             I2   = I + 1
+             X = I2  + SHX
+             Y = J2  + SHY
+
+             BUF2(I2,J2) = FBS2(X,Y, NXLD,NX,NY, F00,NXLD,
+d117 6
+d134 1
+a134 2
+
+       B = 0
+d206 7
+@
+
+
+1.6
+log
+@typos
+@
+text
+@d42 1
+@
+
+
+1.5
+log
+@cosmetic
+@
+text
+@d37 1
+a37 1
+       REAL              :: F0(NXLD,NY), F1(XLD,NY)
+d43 2
+a44 2
+       REAL              :: X1 (NXLD,NY),
+       REAL              :: Y1 (NXLD,NY),
+@
+
+
+1.4
+log
+@gpk's enhancements for boundary shift problem
+@
+text
+@d3 1
+a3 2
+C CENT_SYM                                                             *
+C                 NEW                   JAN 2012    GREGORY KISHCHENKO *
+d37 4
+a40 7
+       REAL              :: F0(0:NXLD-1,0:NY-1)
+       REAL              :: F00(0:NXLD-1,0:NY-1)
+       REAL              :: BUF2(NX,  NY)
+       REAL   :: F1(0:NXLD-1,0:NY-1),
+     &           X1 (0:NXLD-1,0:NY-1),
+     &           Y1 (0:NXLD-1,0:NY-1),
+     &           XY2(0:NXLD-1,0:NY-1)
+d42 5
+a46 2
+       INTEGER           :: NXLD, NX,NY
+       INTEGER           :: IRTFLG
+a51 1
+       REAL              :: SHX2, SHY2
+d59 1
+a59 1
+            F00 = F0
+a99 2
+           SHX = (SHX + MOD(NX,2)) * 0.5
+           SHY = (SHY + MOD(NY,2)) * 0.5
+d101 10
+d112 1
+a112 8
+c$omp    parallel do private(j,j2,i,i2,x,y)
+            DO J=0, NY-1
+               J2   = J  + 1
+                    DO I=0, NX-1
+                       I2   = I + 1
+                X = I2  + SHX
+                Y = J2  + SHY
+           BUF2(I2,J2) = FBS2(X,Y, NXLD,NX,NY, F00,NXLD,
+d114 2
+a115 2
+                    ENDDO
+            ENDDO
+d117 2
+a118 2
+                  SHX2 = SHX
+                  SHY2 = SHY
+d120 4
+a123 5
+                  A = 0
+          DO J=NY*0.25, NY*0.75
+               DO I=NX*0.25, NX*0.75
+                  A = A + BUF2(I,J)
+               ENDDO
+d125 3
+a127 1
+                  WEIGHT = A
+d129 1
+a129 1
+                  B = 0
+d131 3
+a133 4
+          DO J= 1,NY*0.25
+               DO I= NX*0.25, NX*0.75
+                  B = B + BUF2(I,J)
+               ENDDO
+d135 1
+d137 16
+a152 4
+           DO J= NY*0.75,NY
+               DO I= NX*0.25, NX*0.75
+                  B = B + BUF2(I,J)
+               ENDDO
+d154 1
+a154 7
+             IF (B > WEIGHT) THEN
+                  WEIGHT = B
+                  SHX2 = SHX
+                  SHY2 = SHY - NY*0.5
+             ENDIF
+
+                  C = 0
+d156 3
+a158 4
+          DO J=NY*0.25, NY*0.75
+               DO I=1, NX*0.25
+                  C = C + BUF2(I,J)
+               ENDDO
+d160 1
+d162 11
+a172 4
+          DO J= NY*0.25, NY*0.75
+               DO I= NX*0.75, NX
+                  C = C + BUF2(I,J)
+               ENDDO
+d174 1
+a174 7
+             IF (C > WEIGHT) THEN
+                  WEIGHT= C
+                  SHX2 = SHX - NX*0.5
+                  SHY2 = SHY
+             ENDIF
+
+                  D = 0
+d176 3
+a178 4
+          DO J= 1,NY*0.25
+               DO I=1, NX*0.25
+                  D = D + BUF2(I,J)
+               ENDDO
+d180 1
+d182 3
+a184 4
+          DO J= 1,NY*0.25
+               DO I= NX*0.75, NX
+                  D = D + BUF2(I,J)
+               ENDDO
+d186 1
+d188 3
+a190 4
+          DO J= NY-NY*0.25,NY
+               DO I=1, NX*0.25
+                  D = D + BUF2(I,J)
+               ENDDO
+d192 1
+d194 4
+a197 9
+          DO J= NY*0.75,NY
+               DO I= NX*0.75, NX
+                  D = D + BUF2(I,J)
+               ENDDO
+          ENDDO
+             IF (D > WEIGHT) THEN
+                  SHX2 = SHX - NX*0.5
+                  SHY2 = SHY - NY*0.5
+             ENDIF
+d199 2
+a200 2
+       write(6,*), ' '
+       write(6,*), 'A,B,C,D =',A,B,C,D
+@
+
+
+1.3
+log
+@unused code commented out
+@
+text
+@d28 1
+a28 1
+C   CENT_SYM(F0,F1,NXLD, NX,NY,SNS,SNR,IRTFLG)                         *
+d34 1
+a34 1
+       SUBROUTINE CENT_SYM(F0,F1,NXLD, NX,NY, SNS,SNR,IRTFLG)
+d38 8
+a45 1
+       REAL              :: F0(0:NXLD-1,0:NY-1), F1(0:NXLD-1,0:NY-1)
+d49 5
+a53 2
+       INTEGER           :: INV, I,J
+       REAL              :: SNS, SNR, COR
+d56 8
+a63 3
+C      FFTW ON F0
+       INV = 1
+       CALL FMRS(F0, NX,NY,1, 0.0D0, .TRUE.,.TRUE., INV, IRTFLG)
+d68 1
+d77 2
+a78 2
+C      EQUAL TO 2D CROSS-CORRELATION
+C      BETWEEN ORIGINAL IMAGE AND IMAGE AFTER A 180-DEGREE ROTATION
+a85 5
+       MAXL_ARRAY = MAXLOC(F1)  ! RETURNS ARRAY OF LENGTH: 2
+       SNS        = MAXL_ARRAY(1)
+       SNR        = MAXL_ARRAY(2)
+
+#ifdef NEVER
+d87 2
+a88 2
+       SNS = 0
+       SNR = 0
+d94 2
+a95 2
+              SNS = I
+              SNR = J
+a98 1
+#endif
+d100 96
+a195 2
+       IF (SNS > NX*0.5) SNS = SNS - NX
+       IF (SNR > NY*0.5) SNR = SNR - NY
+d197 2
+a198 2
+       SNS = (SNS + MOD(NX,2)) * 0.5
+       SNR = (SNR + MOD(NY,2)) * 0.5
+@
+
+
+1.2
+log
+@SNS = (SNS + MOD(NX,2)) * 0.5 , MAXLOC(F1)
+@
+text
+@a67 4
+       COR = 0.0
+       SNS = 0
+       SNR = 0
+
+d75 4
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d28 1
+a28 1
+C   CENT_SYM(F0,F1,NXLD, NX,NY,SNS,SNR,IRTFLG)                                          *
+d44 1
+d52 1
+a52 1
+C                   OF 2D FOURIER TRANSFORM
+d74 5
+d88 1
+d93 2
+a94 2
+       SNS = SNS * 0.5
+       SNR = SNR * 0.5
+@

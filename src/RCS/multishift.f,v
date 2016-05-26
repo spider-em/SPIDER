@@ -1,0 +1,1710 @@
+head	1.9;
+access;
+symbols
+	pre_getangas:1.8
+	pre_GPL2010:1.8
+	pre_var_equation:1.8
+	pre_fftwrings:1.8
+	pre_opfiles:1.4
+	src:1.4
+	best-code:1.4
+	x-named-regs:1.4
+	x:1.4
+	v13-00:1.4
+	pre_GPL:1.3
+	prec_CA:1.3
+	noindx:1.2;
+locks; strict;
+comment	@c @;
+
+
+1.9
+date	2014.01.12.19.22.44;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2008.03.07.20.10.49;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2008.02.29.13.12.24;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2008.02.22.14.03.59;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2008.01.24.16.24.00;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2005.10.17.16.56.28;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2003.02.20.19.53.55;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2002.05.06.16.34.21;	author pawel;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2002.05.02.16.22.17;	author pawel;	state Exp;
+branches;
+next	;
+
+
+desc
+@AP MS
+@
+
+
+1.9
+log
+@enter
+@
+text
+@C++*********************************************************************
+C
+C    MULTISHIFT
+C                  OPFILEC                         FEB 03 ARDEAN LEITH
+C                  PARALLEL FFTW BUG               JAN 08 ARDEAN LEITH
+C                  REWRITE                         JAN 08 ARDEAN LEITH
+C                  FMRS, AND OLD SUB PIXEL BUG     FEB 08 ARDEAN LEITH
+C                  DOCALC ON FMRS CALL             FEB 08 ARDEAN LEITH
+C
+C=**********************************************************************
+C=* From: SPIDER - MODULAR IMAGE PROCESSING SYSTEM                     *
+C=* Copyright (C)2001, P. A. Penczek                                   *
+C=*                                                                    *
+C=* University of Texas - Houston Medical School                       *
+C=*                                                                    *
+C=* Email:  pawel.a.penczek@@uth.tmc.edu                                *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* This program is distributed in the hope that it will be useful,    *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+C=* General Public License for more details.                           *
+C=*                                                                    *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+C=*                                                                    *
+C=**********************************************************************
+C                  
+C  MULTISHIFT 
+C
+C  PURPOSE:  MULTI-REFERENCE SHIFT (WITH 180 DEGEES CHECK) ALIGNMENT
+C            HAS BUG IN SUB_PIXEL RESULTS.
+C  CALLS:
+C
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C--*********************************************************************
+
+	SUBROUTINE MULTISHIFT
+
+	INCLUDE 'CMBLOCK.INC' 
+	INCLUDE 'CMLIMIT.INC' 
+
+        CHARACTER (LEN=MAXNAM)               :: FINPAT,FINPIC,FILTOA
+
+	INTEGER, ALLOCATABLE, DIMENSION(:,:) :: NUMR
+	INTEGER, ALLOCATABLE, DIMENSION(:)   :: ILIST,IRIST
+	REAL, ALLOCATABLE, DIMENSION(:,:,:)  :: REFER_A
+
+	DATA  INPIC/77/
+
+C       ALLOCATE SPACE FOR REFERENCE IMAGE FILE LIST
+	NILMAX = NIMAX
+	ALLOCATE(ILIST(NILMAX),STAT=IRTFLG)
+	IF (IRTFLG .NE. 0) THEN
+           CALL ERRT(46,'AP MS, NUMR',NILMAX)
+           RETURN
+        ENDIF
+
+C       ASK FOR REFERENCE IMAGE FILE LIST
+	CALL FILELIST(.TRUE.,INPIC,FINPAT,NLETR,ILIST,NILMAX,NIMA,
+     &      'TEMPLATE FOR REFERENCE IMAGE SERIES',IRTFLG)
+	IF (IRTFLG .NE. 0) GOTO 9999
+
+        IF (NIMA .GT. 0)  THEN
+           WRITE(NOUT,2001) NIMA
+2001       FORMAT('  Number of reference images: ',I6)
+        ELSE
+           CALL ERRT(101,'No reference images!',IDUM)
+           GOTO 9999
+        ENDIF
+
+C       GET FIRST REFERENCE IMAGE TO DETERMINE DIMS
+        CALL  FILGET(FINPAT,FINPIC,NLETR,ILIST(1),INTFLG)
+        MAXIM = 0
+	CALL OPFILEC(0,.FALSE.,FINPIC,INPIC,'O',IFORM,NSAM,NROW,NSLICE,
+     &               MAXIM,' ',.FALSE.,IRTFLG)
+        IF (IRTFLG.NE.0)  GOTO 9999
+        CLOSE(INPIC)
+
+	CALL RDPRMI(NSIX,NSIY,NOT_USED,
+     &             'TRANSLATION SEARCH RANGE X and Y')
+	NSIX   = MAX(NSIX,1)
+	NSIY   = MAX(NSIY,1)
+
+C       DETERMINE NUMBER OF OMP THREADS
+        CALL GETTHREADS(NUMTH)
+        WRITE(NOUT,*) ' NUMBER OF OMP THREADS: ',NUMTH
+ 
+C       ALLOCATE SPACE FOR IMAGES TO BE ALIGNED
+	ALLOCATE(IRIST(NILMAX),STAT=IRTFLG)
+	IF (IRTFLG .NE. 0) THEN
+           CALL ERRT(46,'AP MS, NUMR',IER)
+           GOTO 9999
+        ENDIF
+
+C       GET LIST OF SAMPLE IMAGES TO BE ALIGNED
+C       NTOTAL IS NUMBER OF THE SAMPLE IMAGES
+	CALL FILELIST(.TRUE.,INPIC,FILTOA,NLETI,IRIST,NILMAX,NTOTAL,
+     &     'TEMPLATE FOR IMAGE SERIES TO BE ALIGNED',IRTFLG)
+	IF (IRTFLG.NE.0) GOTO 9999
+
+        IF (NTOTAL .GT. 0)  THEN
+           WRITE(NOUT,2002) NTOTAL
+2002       FORMAT('  Number of experimental images: ',I6/)
+        ELSE
+           CALL ERRT(101,'No experimental images!',IDUM)
+           GOTO 9999
+        ENDIF
+
+C       NIMA IS NUMBER OF THE REFERENCE IMAGES
+C       ALLOCATE SPACE FOR REFERENCE IMAGES
+	ALLOCATE(REFER_A(2*(NSAM+1),2*NROW,NIMA),STAT=IRTFLG)
+	IF (IRTFLG .NE. 0) THEN
+           MWANT = 2*(NSAM+1) * 2*NROW * NIMA
+           CALL  ERRT(46,'AP MS, REFER_A',MWANT)
+           RETURN
+        ENDIF 
+
+C       READ REFERENCE IMAGES
+        CALL READIMS(FINPAT,NLETR,ILIST,NIMA,NSAM,NROW,REFER_A,IRTFLG)
+	IF (IRTFLG .NE. 0) THEN
+           CALL ERRT(47,'AP MS',IER)
+           RETURN
+        ENDIF 
+	
+        IF (NTOTAL .GE. NUMTH)  THEN
+C          WORKFLOW STRATEGY FOR LARGE NUMBER OF IMAGES TO BE ALIGNED
+           write(nout,*) ' Using: mrshift_ps '
+
+           CALL MRSHIFT_PS(ILIST,NIMA,IRIST,NTOTAL,NSAM,NROW,NSIX,NSIY,
+     &                     NUMTH,REFER_A,FILTOA,NLETI)
+	ELSE
+C          FOR FEW IMAGES TO BE ALIGNED USE DIFFERENT STRATEGY.
+           write(nout,*) ' Using: mrshift_ss '
+           CALL MRSHIFT_SS(ILIST,NIMA,IRIST,NTOTAL,NSAM,NROW,NSIX,NSIY,
+     &                     NUMTH,REFER_A,FILTOA,NLETI)
+ 	ENDIF
+
+        WRITE (NOUT,2600)
+2600    FORMAT (/,' ',7('-'),
+     &      ' Multi-reference shift alignment, end of computation ',
+     &      7('-'),/)
+
+9999    IF (ALLOCATED(IRIST))      DEALLOCATE(IRIST)
+        IF (ALLOCATED(ILIST))      DEALLOCATE(ILIST)
+        IF (ALLOCATED(NUMR))       DEALLOCATE(NUMR)
+        IF (ALLOCATED(REFER_A))    DEALLOCATE(REFER_A)
+
+         END
+
+C *************************** MRSHIFT_PS ****************************
+
+        SUBROUTINE MRSHIFT_PS(ILIST,NIMA,IRIST,NTOTAL,
+     &                NSAM,NROW,NSIX,NSIY,NUMTH,REFER_A,FILTOA,NLETI)
+
+        USE TYPE_KINDS      
+
+C       FFTW_PLANR IS A POINTER TO A STRUCTURE 
+        INTEGER(KIND=I_8) :: FFTW_PLANF=0, FFTW_PLANR=0
+
+	INCLUDE 'CMBLOCK.INC'
+	INCLUDE 'CMLIMIT.INC'
+
+	DIMENSION  REFER_A(2*(NSAM+1),2*NROW,NIMA)
+
+	INTEGER, DIMENSION(NIMA)   :: ILIST
+	INTEGER, DIMENSION(NTOTAL) :: IRIST
+        CHARACTER (LEN=*)          :: FILTOA
+
+C       AUTOMATIC ARRAYS
+        PARAMETER (NDLI=7)
+        DIMENSION  DLIST(NDLI,NUMTH)
+	INTEGER    :: NASSIG(NUMTH)
+
+	REAL, ALLOCATABLE, DIMENSION(:,:,:)    :: A
+	COMPLEX, ALLOCATABLE, DIMENSION(:,:,:) :: OUT
+
+        CHARACTER(LEN=MAXNAM)   :: FINPIC 
+        CHARACTER(LEN=1)        :: MODE
+
+        DATA  NDOC/56/,INPIC/58/
+
+	ALLOCATE(A(2*(NSAM+1),2*NROW,NUMTH),
+     &		 OUT((NSAM+1),2*NROW,NUMTH),STAT=IRTFLG)
+	IF (IRTFLG.NE.0) THEN
+            MWANT = 3*(NSAM+1) * 2*NROW * NUMTH
+            CALL ERRT(46,'AM MS, A and OUT ',MWANT)
+            RETURN
+        ENDIF 
+
+C       NTOTAL INPUT IMAGES READY TO BE ALIGNED
+        LSD       = 2 * (NSAM+1)
+        IAX       = 2 * NSAM
+        LSR       = 2 * NROW
+        NUMTHFFTW = 1
+
+        CALL FFTW3_MAKEPLAN(IAX,LSR,1,NUMTHFFTW,FFTW_PLANF, 1,IRTFLG)
+        CALL FFTW3_MAKEPLAN(IAX,LSR,1,NUMTHFFTW,FFTW_PLANR,-1,IRTFLG)
+
+C       LOOP OVER IMAGES TO BE ALIGNED
+ 	DO IMIT=1,NTOTAL,NUMTH
+	   DO IMI=IMIT,MIN(NTOTAL,IMIT+NUMTH-1)
+
+	      CALL FILGET(FILTOA,FINPIC,NLETI,IRIST(IMI),IRTFLG)
+              IF (IRTFLG .NE. 0) GOTO 9999
+
+	      MAXIM = 0
+	      CALL OPFILEC(0,.FALSE.,FINPIC,INPIC,'O',IFORM,NSAMT,NROWT,
+     &                     NSLICE, MAXIM,' ',.FALSE.,IRTFLG)
+              IF (IRTFLG .NE. 0) GOTO 9999
+
+              IF (NSAMT.NE.NSAM .OR. NROWT.NE.NROW)  THEN
+                 CALL ERRT(1,'AP MS',NE)
+                 CLOSE(INPIC)
+	         GOTO 9999
+	      ENDIF
+	      DO J=1,NROW
+	         CALL REDLIN(INPIC,A(1,J,IMI-IMIT+1),NSAM,J)
+	      ENDDO
+	      CLOSE(INPIC)
+	   ENDDO
+
+C          NUMTH INPUT IMAGES READY TO BE ALIGNED
+
+c$omp      parallel do private(imi,irtflg) !!!!!!!!!!!!!!!
+	   DO IMI=IMIT,MIN(NTOTAL,IMIT+NUMTH-1)
+C             LOOP OVER ALL SAMPLE IMAGES
+
+              CALL RAMP_C(A(1,1,IMI-IMIT+1),NSAM,NROW)      ! FLAT FIELDING
+              CALL PD2(A(1,1,IMI-IMIT+1),LSD,LSR,NSAM,NROW) ! PAD 2X
+
+              INV = +1                                  ! FORWARD FOURIER
+              CALL FMRS(A(1,1,IMI-IMIT+1),IAX,LSR,1, FFTW_PLANF,
+     &                  .FALSE.,.FALSE.,INV,IRTFLG)
+
+              CALL SHFRA(A(1,1,IMI-IMIT+1),
+     &           OUT(1,1,IMI-IMIT+1),
+     &	         NSAM,NROW,
+     &	         REFER_A,NIMA,NSIX,NSIY,
+     &	         DLIST(3,IMI-IMIT+1),
+     &	         DLIST(5,IMI-IMIT+1),
+     &           DLIST(6,IMI-IMIT+1),
+     &           NASSIG(IMI-IMIT+1),FFTW_PLANR)
+	   ENDDO
+
+C          OUTPUT (IN DLIST POSITION IS INCREASED BY 1, NO.1 IS THE KEY).
+C          1 - NUMBER OF THE MOST SIMILAR REFERENCE PROJECTION
+C          2 - CORRELATION COEFFICIENT
+C          3 - SX
+C          4 - SY
+C          5 - IMAGE NUMBER
+
+           DO  IMI=IMIT,MIN(NTOTAL,IMIT+NUMTH-1)
+	      DLIST(2,IMI-IMIT+1) = ILIST(IABS(NASSIG(IMI-IMIT+1)))
+	      IF (NASSIG(IMI-IMIT+1).GT.0)  THEN
+	         DLIST(4,IMI-IMIT+1) = 0.0
+	      ELSE
+	         DLIST(4,IMI-IMIT+1) = 180.0
+	      ENDIF
+
+              DLIST(7,IMI-IMIT+1) = IRIST(IMI)
+              DLIST(1,IMI-IMIT+1) = IMI
+              CALL SAVD(NDOC,DLIST(1,IMI-IMIT+1),NDLI,IRTFLG)
+	   ENDDO
+	ENDDO
+
+	CLOSE(NDOC)
+        CALL SAVDC
+
+C       DEALLOCATE LOCAL ARRAYS
+9999    DEALLOCATE(A,OUT)
+        CALL FFTW3_KILLPLAN(FFTW_PLANF,IRTFLG)
+        CALL FFTW3_KILLPLAN(FFTW_PLANR,IRTFLG)
+
+	END
+
+
+C **********************************************************************
+C
+C  MRSHIFT_SS   : FOR SMALL NUMBER OF IMAGES TO BE ALIGNED
+C
+C--*********************************************************************
+
+        SUBROUTINE MRSHIFT_SS(ILIST,NIMA,IRIST,NTOTAL,
+     &                NSAM,NROW,NSIX,NSIY,NUMTH,REFER_A,FILTOA,NLETI)
+
+        USE TYPE_KINDS      
+
+C       FFTW_PLANR IS A POINTER TO A STRUCTURE 
+        INTEGER(KIND=I_8) :: FFTW_PLANR=0
+
+	INCLUDE 'CMBLOCK.INC'
+	DIMENSION  REFER_A(2*(NSAM+1),2*NROW,NIMA)
+
+	INTEGER, DIMENSION(NIMA)   :: ILIST
+	INTEGER, DIMENSION(NTOTAL) :: IRIST
+        CHARACTER (LEN=*)          :: FILTOA
+
+C       AUTOMATIC ARRAYS
+        PARAMETER (NDLI=7)
+        DIMENSION  DLIST(NDLI)
+
+	INTEGER, ALLOCATABLE, DIMENSION(:,:)   :: NASSIG
+	REAL,    ALLOCATABLE, DIMENSION(:,:,:) :: A,RESI
+	COMPLEX, ALLOCATABLE, DIMENSION(:,:,:) :: OUT
+
+        CHARACTER(LEN=1)  :: MODE
+
+        DATA  NDOC/56/,INPIC/58/
+
+C       ALIGNMENT
+
+	ALLOCATE(A(2*(NSAM+1),2*NROW,NTOTAL),
+     &		 OUT((NSAM+1),2*NROW,NUMTH),
+     &		 RESI(3,NIMA,NTOTAL),
+     &		 NASSIG(NIMA,NTOTAL),
+     &		 STAT=IRTFLG)
+
+	IF (IRTFLG .NE. 0) THEN
+            MWANT = 2*(NSAM+1) * 2*NROW * NTOTAL +
+     &              1*(NSAM+1) * 2*NROW * NUMTH +
+     &              4*NIMA*NTOTAL 
+
+            CALL ERRT(46,'AM MS, A, RESI, NASSIG, and OUT',MWANT)
+            RETURN
+        ENDIF
+
+C       READ ALL SAMPLE IMAGES TO BE ALIGNED
+        CALL READIMS(FILTOA,NLETI,IRIST,NTOTAL,NSAM,NROW,A,IRTFLG)
+	IF (IRTFLG .NE. 0) THEN
+            CALL  ERRT(47,'AP MS',IER)
+            GOTO 9999
+        ENDIF
+
+C       LOOP OVER SAMPLE IMAGES TO BE ALIGNED
+C       NIMA   - NUMBER OF REFERENCE IMAGES
+C       NTOTAL - NUMBER OF IMAGES TO BE ALIGNED
+
+        NUMTHFFTW = 1
+ 	CALL FFTW3_MAKEPLAN(NSAM*2,NROW*2,1,NUMTHFFTW,
+     &                      FFTW_PLANR,-1,IRTFLG)
+
+ 	DO  IMITT=1,NTOTAL*NIMA,NUMTH
+
+c$omp      parallel do private(IMIT,NREF,IMI) !!!!!!!!!!!!!!!!
+	   DO  IMIT=IMITT,MIN(NTOTAL*NIMA,IMITT+NUMTH-1)
+		NREF = MOD(IMIT-1,NIMA)+1
+		IMI  = (IMIT-1)/NIMA+1
+
+		CALL SHFRS(A(1,1,IMI),OUT(1,1,IMIT-IMITT+1),
+     &	           NSAM,NROW,
+     &	           REFER_A(1,1,NREF),NSIX,NSIY,
+     &	           RESI(1,NREF,IMI),
+     &	           RESI(2,NREF,IMI),
+     &             RESI(3,NREF,IMI),
+     &             NASSIG(NREF,IMI),FFTW_PLANR)
+	   ENDDO
+	ENDDO
+
+C       OUTPUT (IN DLIST POSITION IS INCREASED BY 1, NO.1 IS THE KEY).
+C          1 - NUMBER OF THE MOST SIMILAR REFERENCE PROJECTION.
+C          2 - CORRELATION COEFFICIENT.
+C          3 - ANGLE (0 or 180)
+C          4 - SX
+C          5 - SY
+C          6 - IMAGE NUMBER.
+
+	DO IMI=1,NTOTAL
+	  CM = -HUGE(CM)
+	  DO NREF=1,NIMA
+             IF (RESI(1,NREF,IMI) .GT. CM)  THEN
+                CM  = RESI(1,NREF,IMI)
+                NRI = NREF
+             ENDIF
+	  ENDDO
+
+	  DLIST(1)=IMI
+	  DLIST(2)   = ILIST(NRI)
+	  DLIST(3)   = RESI(1,NRI,IMI)
+	  DLIST(4)   = 180*NASSIG(NRI,IMI)
+	  DLIST(5:6) = RESI(2:3,NRI,IMI)
+	  DLIST(7)   = IRIST(IMI)
+	  CALL SAVD(NDOC,DLIST,NDLI,IRTFLG)
+	ENDDO
+
+	CLOSE(NDOC)
+        CALL  SAVDC
+
+C       DEALLOCATE LOCAL ARRAYS
+9999    DEALLOCATE(A,OUT,NASSIG,RESI)
+
+        CALL FFTW3_KILLPLAN(FFTW_PLANR,IRTFLG)
+
+	END
+
+
+C       ------------------ SHFRS --------------------------------------
+
+	SUBROUTINE SHFRS(A,OUT,NSAM,NROW,REFER_A,
+     &		         NSIX,NSIY,CM,SX,SY,IDIM,FFTW_PLANR)
+
+	COMPLEX :: A((NSAM+1),2*NROW), REFER_A((NSAM+1),2*NROW)
+	COMPLEX :: OUT((NSAM+1),2*NROW)
+
+	INV = -1
+	LSD = 2 * (NSAM+1)
+	IAX = 2 * NSAM
+	LSR = 2 * NROW
+
+        OUT = REFER_A * CONJG(A)         ! FOURIER MULTIPLICATION
+
+        CALL FMRS(OUT,IAX,LSR,1, FFTW_PLANR, .FALSE.,.FALSE.,
+     &            INV,IRTFLG)                 ! FOURIER BACK TRANSFORM
+
+	CALL FINDRMX(OUT,LSD,LSR,NSIX,NSIY,CM,SX,SY)  ! MAX. LOCATION
+
+	OUT = REFER_A * A                    ! FOURIER MULTIPLICATION
+
+        CALL FMRS(OUT,IAX,LSR,1, FFTW_PLANR, .FALSE.,.FALSE.,
+     &            INV,IRTFLG)                  ! FOURIER BACK TRANSFORM
+
+	CALL FINDRMX(OUT,LSD,LSR,NSIX,NSIY,CMX,SXS,SYS) ! MAX. LOCATION
+
+	IF (CMX .GT. CM)  THEN
+	    CM   = CMX / FLOAT(IAX * LSR)  ! NO SCALING OF FFT
+	    SX   = SXS
+	    SY   = SYS
+	    IDIM = 1
+	ELSE
+	    IDIM = 0
+	ENDIF
+
+	END
+
+
+C       ------------------ SHFRA --------------------------------------
+
+       SUBROUTINE SHFRA(A,OUT,NSAM,NROW,REFER_A,NIMA,
+     &		        NSIX,NSIY,CM,SX,SY,IDIM,FFTW_PLANR)
+
+       COMPLEX :: A((NSAM+1),2*NROW)
+       COMPLEX :: REFER_A((NSAM+1),2*NROW,NIMA)
+       COMPLEX :: OUT((NSAM+1),2*NROW)
+       
+
+       LSD = 2 * (NSAM+1)
+       IAX = 2 * NSAM
+       LSR = 2 * NROW
+       CM  = -HUGE(SX)
+
+       DO  IR=1,NIMA
+
+         OUT = REFER_A(:,:,IR) * CONJG(A)     ! FOURIER MULTIPLICATION
+
+         INV = -1                              ! BACK TRANSFORM
+ 	 CALL FMRS(OUT,IAX,LSR,1, FFTW_PLANR, .FALSE.,.FALSE.,
+     &             INV,IRTFLG)                 ! FOURIER BACK TRANSFORM
+
+         CALL FINDRMX(OUT,LSD,LSR,NSIX,NSIY,CMX,SXS,SYS) ! PEAK LOCATION
+
+         IF (CMX .GT. CM)  THEN
+	    CM   = CMX
+	    SX   = SXS
+	    SY   = SYS
+	    IDIM = IR
+         ENDIF
+
+         OUT = REFER_A(:,:,IR) * A             ! FOURIER MULTIPLICATION
+
+         INV = -1                              ! BACK TRANSFORM
+ 	 CALL FMRS(OUT,IAX,LSR,1, FFTW_PLANR, .FALSE.,.FALSE.,
+     &             INV,IRTFLG)                 ! FOURIER BACK TRANSFORM
+
+         CALL FINDRMX(OUT,LSD,LSR,NSIX,NSIY,CMX,SXS,SYS) ! PEAK LOCATION
+
+         IF (CMX .GT. CM)  THEN
+	    CM   = CMX
+	    SX   = SXS
+	    SY   = SYS
+	    IDIM = -IR
+         ENDIF
+       ENDDO
+
+       CM = CM / FLOAT(IAX * LSR) ! NO SCALING OF FFT
+
+       END
+
+
+C       ------------------ FINDRMX --------------------------------------
+
+C        FIND  MAX. PEAK LOCATION
+
+         SUBROUTINE  FINDRMX(D,LSD,NROW,NSIX,NSIY,CMX,SX,SY)
+
+         DIMENSION  :: D(LSD,NROW),Z(-1:1,-1:1)
+         LOGICAL    :: FOUND
+
+         FOUND = .FALSE.
+	 NSAM  = LSD - 2
+	 NS21  = NSAM / 2+ 1
+	 NR21  = NROW / 2+ 1
+	
+         CMX = -HUGE(SX)
+         SX  = 0.0
+         SY  = 0.0
+         DO J=1,NSIY+1
+            DO I=1,NSIX+1
+               TMX = D(I,J) / FLOAT(NS21-I) / 
+     &                        FLOAT(NR21-J)
+               IF (CMX .LT. TMX)  THEN
+		  CMX   = TMX
+                  IX    = I-1
+                  IY    = J-1
+                  FOUND = .TRUE.
+               ENDIF
+            ENDDO         
+         ENDDO
+         DO J=1,NSIY+1
+            DO I=NSAM-NSIX+1,NSAM
+               TMX = D(I,J) / FLOAT(NS21-(NSAM-I+2)) /
+     &                        FLOAT(NR21-J)
+               IF ( CMX .LT. TMX)  THEN
+		  CMX   = TMX
+                  IX    = -(NSAM-I+1)
+                  IY    = J-1
+                  FOUND = .TRUE.
+               ENDIF
+            ENDDO         
+         ENDDO
+
+         DO J=NROW-NSIY+1,NROW
+            DO I=1,NSIX+1
+               TMX = D(I,J) / FLOAT(NS21-I) /
+     &                        FLOAT(NR21-(NROW-J+2))
+               IF (CMX .LT. TMX)  THEN
+		  CMX   = TMX
+                  IX    = I-1
+                  IY    = -(NROW-J+1)
+                  FOUND = .TRUE.
+               ENDIF
+            ENDDO         
+         ENDDO
+         DO J=NROW-NSIY+1,NROW
+            DO I=NSAM-NSIX+1,NSAM
+               TMX = D(I,J) / FLOAT(NS21-(NSAM-I+2)) /
+     &                        FLOAT(NR21-(NROW-J+2))
+               IF (CMX .LT. TMX)  THEN
+		  CMX   = TMX
+                  IX    = -(NSAM-I+1)
+                  IY    = -(NROW-J+1)
+                  FOUND = .TRUE.
+               ENDIF
+            ENDDO         
+         ENDDO
+	 
+         IF (.NOT.FOUND)  RETURN
+         SX = IX
+         SY = IY
+
+C       DO NOT INTERPOLATE IF THE MAX IS ON THE EDGE
+	IF (NSIX.EQ.IABS(IX) .OR. NSIY.EQ.IABS(IY))  RETURN
+
+	IF (IX .LE. 0)  THEN
+	   IXS = NSAM + IX + 1
+	ELSE
+	   IXS = IX + 1
+	ENDIF
+
+	IF (IY .LE. 0)  THEN
+	   IYS = NROW + IY + 1
+	ELSE
+	   IYS = IY + 1
+	ENDIF
+
+         DO J=-1,1
+	   IYT = MOD(NROW+IYS+J-1,NROW) + 1
+            DO I=-1,1
+	      IXT    = MOD(NSAM+IXS+I-1, NSAM) + 1
+              Z(I,J) = D(IXT,IYT) / FLOAT(NSAM/2-IABS(IX+I)) / 
+     &                              FLOAT(NROW/2-IABS(IY+J))
+
+            ENDDO
+         ENDDO
+
+         CALL PARABL(Z, XSH,YSH,CMX)
+
+         SX = SX + XSH
+         SY = SY + YSH
+
+         END
+
+C        -------------------- READIMS --------------------------------
+
+        SUBROUTINE READIMS(FINPAT,NLET,ILIST,NIMA,NSAM,NROW,A,IRTFLG)
+
+        USE TYPE_KINDS      
+
+	INCLUDE 'CMBLOCK.INC'
+	INCLUDE 'CMLIMIT.INC'
+
+C       EXTERNAL ARRAYS
+	DIMENSION  A(2*(NSAM+1),2*NROW,NIMA),ILIST(NIMA)
+        CHARACTER(LEN=*)      :: FINPAT
+
+        CHARACTER(LEN=MAXNAM) :: FINPIC
+
+C       PLAN IS A POINTER TO A STRUCTURE 
+        INTEGER(KIND=I_8) :: FFTW_PLANF=0
+
+	DATA  INPIC/34/
+
+C       READ ALL REFERENCE IMAGES
+        DO  IMI=1,NIMA
+           CALL FILGET(FINPAT,FINPIC,NLET,ILIST(IMI),INTFLAG)
+
+           MAXIM = 0
+           CALL OPFILEC(0,.FALSE.,FINPIC,INPIC,'O',IFORM,NSAMT,NROWT,
+     &                  NSLICE, MAXIM,' ',.FALSE.,IRTFLG)
+           IF (IRTFLG .NE. 0)  RETURN
+
+           DO J=1,NROW
+              CALL REDLIN(INPIC,A(1,J,IMI),NSAM,J)
+           ENDDO
+           CLOSE(INPIC)
+	ENDDO
+
+	LSD       = 2 * (NSAM+1)
+        IAX       = 2 * NSAM
+	LSR       = 2 * NROW
+	INV       = +1
+        NUMTHFFTW = 1
+ 
+	CALL FFTW3_MAKEPLAN(IAX,LSR,1,NUMTHFFTW,FFTW_PLANF,INV,IRTFLG)
+
+c$omp   parallel do private(IMI,IRTFLG) !!!!!!!!!!!!!!!!!!
+	DO  IMI=1,NIMA
+           CALL RAMP_C(A(1,1,IMI),NSAM,NROW)        ! FLAT FIELDING
+           CALL PD2(A(1,1,IMI),LSD,LSR,NSAM,NROW)   ! PAD 2X
+
+	   CALL FMRS(A(1,1,IMI),IAX,LSR,1, FFTW_PLANF,
+     &              .FALSE.,.FALSE., INV,IRTFLG)
+	ENDDO
+
+	CALL FFTW3_KILLPLAN(FFTW_PLANF,IRTFLG)
+
+        IRTFLG = 0
+	IF (INV .GT. 1)  THEN
+C          SIGNAL INCORRECT FFT RESULT
+           IRTFLG = 1
+	ENDIF
+
+	END
+
+
+C        -------------------- RAMP_C --------------------------------
+
+	 SUBROUTINE  RAMP_C(X,NSAM,NROW)
+
+C        PURPOSE: SUBTRACT THE RAMP AND NORMALIZE THE IMAGE
+
+         DIMENSION        X(2*(NSAM+1),2*NROW)
+         EXTERNAL         BETAI
+         DOUBLE PRECISION BETAI
+         DOUBLE PRECISION C,D,EPS,B1,B2,A,F,R2,DN1,DN2
+         DOUBLE PRECISION QYX1,QYX2,QX1X2
+     &                   ,QX1,QX2,QY,SYX1,SYX2,SX1X2,SX1
+     &                   ,SX2,SY,SX1Q,SX2Q,SYQ
+
+         PARAMETER (EPS=1.0D-5)
+	 	 
+         SYX1 = 0.0
+         SYX2 = 0.0
+         SY   = 0.0
+         SX1Q = 0.0
+         SX2Q = 0.0
+         SYQ  = 0.0
+
+         N1   = NSAM / 2
+         N2   = NROW / 2
+         SX1  = FLOAT(N1) * FLOAT(NSAM + 1)
+         IF (MOD(NSAM,2) .EQ. 1)   SX1 = SX1 + 1 + N1
+         SX2  = FLOAT(N2) * FLOAT(NROW + 1)
+         IF (MOD(NROW,2) .EQ. 1)   SX2 = SX2 + 1 + N2
+         SX1   = SX1 * NROW
+         SX2   = SX2 * NSAM
+         SX1X2 = 0.0D0
+
+         DO  J = 1, NROW
+           DO I = 1, NSAM
+             SYX1 = SYX1 + X(I,J) * I
+             SYX2 = SYX2 + X(I,J) * J
+             SY   = SY   + X(I,J)
+             SX1Q = SX1Q + I * I
+             SX2Q = SX2Q + J * J
+             SYQ  = SYQ  + X(I,J) * DBLE(X(I,J))
+           END DO
+         END DO
+
+         DN    = FLOAT(NSAM) * FLOAT(NROW)
+         QYX1  = SYX1 - SX1 * SY / DN
+         QYX2  = SYX2 - SX2 * SY / DN
+         QX1X2 = 0.0
+         QX1   = SX1Q - SX1 * SX1 / DN
+         QX2   = SX2Q - SX2 * SX2 / DN
+         QY    = SYQ  - SY  * SY  / DN
+         C     = QX1  * QX2 - QX1X2 * QX1X2
+
+         IF (C .GT. EPS) THEN
+           B1  = (QYX1 * QX2 - QYX2 * QX1X2) / C
+           B2  = (QYX2 * QX1 - QYX1 * QX1X2) / C
+           A   = (SY - B1 * SX1 - B2 * SX2)  / DN
+
+           D   = A + B1 + B2
+           SY  = 0.0
+           SYQ = 0.0
+           DO I = 1, NROW
+             QY = D
+             DO K = 1, NSAM
+                X(K,I) = X(K,I) - QY
+                SY     = SY   + X(K,I)
+                SYQ    = SYQ  + X(K,I) * DBLE(X(K,I))
+                QY     = QY + B1
+             ENDDO
+             D = D + B2
+           ENDDO
+
+C         ELSE
+C           WRITE(NOUT,3030)
+C3030       FORMAT(/,' No solution - image is not modified !')
+         ENDIF
+
+	 SY   = SY / NSAM / NROW
+	 SYQ  = 1.0 / DSQRT((SYQ-NSAM*NROW*SY*SY )/ (NSAM*NROW-1))
+	 X(1:NSAM,1:NROW) = SYQ * (X(1:NSAM,1:NROW) - SY)
+         END
+
+C       --------------------------- PD2 ------------------------------
+
+	SUBROUTINE  PD2(A,LSD,LSR,NSAM,NROW)
+	
+	DIMENSION  A(LSD,LSR)
+
+	IPA = NSAM/2 + MOD(NSAM,2)
+	IPB = NROW/2 + MOD(NROW,2)
+
+        DO J=NROW,1,-1
+           DO I=NSAM,1,-1
+              A(IPA+I,IPB+J) = A(I,J)
+           ENDDO
+        ENDDO
+
+	DO J=1,IPB
+	  DO I=1,LSD
+              A(I,J) = 0.0
+	  ENDDO
+	ENDDO
+
+	DO J=IPB+NROW+1,LSR
+	  DO I=1,LSD
+              A(I,J) = 0.0
+	  ENDDO
+	ENDDO
+
+	DO J=IPB+1,IPB+NROW
+	  DO I=1,IPA
+              A(I,J) = 0.0
+	  ENDDO
+
+	  DO  I=IPA+NSAM+1,LSD
+              A(I,J) = 0.0
+	  ENDDO
+	ENDDO
+
+	END
+@
+
+
+1.8
+log
+@removed docalc from fmrs call
+@
+text
+@d67 1
+a67 1
+     &      'ENTER TEMPLATE FOR REFERENCE IMAGE SERIES',IRTFLG)
+d105 1
+a105 1
+     &     'ENTER TEMPLATE FOR IMAGE SERIES TO BE ALIGNED',IRTFLG)
+@
+
+
+1.7
+log
+@docalc parameter for fmrs
+@
+text
+@d240 1
+a240 1
+     &                  .TRUE.,.FALSE.,.FALSE.,INV,IRTFLG)
+d418 1
+a418 1
+        CALL FMRS(OUT,IAX,LSR,1, FFTW_PLANR, .TRUE.,.FALSE.,.FALSE.,
+d425 1
+a425 1
+        CALL FMRS(OUT,IAX,LSR,1, FFTW_PLANR, .TRUE.,.FALSE.,.FALSE.,
+d462 1
+a462 1
+ 	 CALL FMRS(OUT,IAX,LSR,1, FFTW_PLANR, .TRUE.,.FALSE.,.FALSE.,
+d477 1
+a477 1
+ 	 CALL FMRS(OUT,IAX,LSR,1, FFTW_PLANR, .TRUE.,.FALSE.,.FALSE.,
+d647 1
+a647 1
+     &              .TRUE.,.FALSE.,.FALSE., INV,IRTFLG)
+@
+
+
+1.6
+log
+@new fmrs call needed
+@
+text
+@d8 2
+d37 2
+a38 2
+C  PURPOSE:  MULTI-REFERENCE SHIFT (WITH 180 DEGERSS CHECK) ALIGNMENT
+C  
+a39 9
+C        MRSHIFT_PS(ILIST,NIMA,IRIST,NTOTAL,NSAM,NROW,NSIX,NSIY,
+C        MRSHIFT_SS(ILIST,NIMA,IRIST,NTOTAL,NSAM,NROW,NSIX,NSIY,
+C        READIMS(FILTOA,NLETI,IRIST,NTOTAL,NSAM,NROW,A,IRTFLG)
+C        RAMP_C(A(1,1,IMI-IMIT+1),NSAM,NROW)
+C	 PD2(A(1,1,IMI-IMIT+1),LSD,LSR,NSAM,NROW)
+C	 SHFRA(A(1,1,IMI-IMIT+1),OUT(1,1,IMI-IMIT+1),
+C	 SHFRS(A(1,1,IMI),OUT(1,1,IMIT-IMITT+1),
+C	 FINDRMX(OUT,LSD,LSR,NSIX,NSIY,CMX,SXS,SYS)
+C	 FMRS_2(A(1,1,IMI-IMIT+1),LSD-2,LSR,INV)
+d240 1
+a240 1
+     &                  .FALSE.,.FALSE.,INV,IRTFLG)
+d418 1
+a418 2
+        CALL FMRS(OUT,IAX,LSR,1, 
+     &            FFTW_PLANR,.FALSE.,.FALSE.,
+d425 1
+a425 2
+        CALL FMRS(OUT,IAX,LSR,1, 
+     &            FFTW_PLANR,.FALSE.,.FALSE.,
+d462 1
+a462 2
+ 	 CALL FMRS(OUT,IAX,LSR,1, 
+     &             FFTW_PLANR,.FALSE.,.FALSE.,
+d477 1
+a477 2
+ 	 CALL FMRS(OUT,IAX,LSR,1, 
+     &             FFTW_PLANR,.FALSE.,.FALSE.,
+d647 1
+a647 1
+     &              .FALSE.,.FALSE.,INV,IRTFLG)
+@
+
+
+1.5
+log
+@rewrite & OMP bug thread fftw fixed
+@
+text
+@d7 1
+a7 1
+C
+a236 1
+           INV = +1                                  ! FORWARD FOURIER
+d245 3
+a247 3
+C             FFTW3_USEPLAN WILL CALL FMRS IF NOT USING FFTW3
+ 	      CALL FFTW3_USEPLAN(A(1,1,IMI-IMIT+1),IAX,LSR,1,
+     &                        .FALSE.,.FALSE.,FFTW_PLANF,INV,IRTFLG)
+a414 5
+        USE TYPE_KINDS      
+
+C       FFTW_PLANR IS A POINTER TO A STRUCTURE 
+        INTEGER(KIND=I_8), INTENT(IN) :: FFTW_PLANR
+
+d425 3
+a427 3
+C       FFTW3_USEPLAN WILL CALL FMRS IF NOT USING FFTW3
+        CALL FFTW3_USEPLAN(OUT,IAX,LSR,1, .FALSE.,.FALSE.,FFTW_PLANR,
+     &                      INV,IRTFLG)   ! FOURIER BACK TRANSFORM
+d431 1
+a431 1
+	OUT = REFER_A * A                 ! FOURIER MULTIPLICATION
+d433 3
+a435 2
+        CALL FFTW3_USEPLAN(OUT,IAX,LSR,1, .FALSE.,.FALSE.,FFTW_PLANR,
+     &                      INV,IRTFLG)   ! FOURIER BACK TRANSFORM
+d440 1
+a440 1
+	    CM   = CMX / FLOAT( IAX * LSR)  ! NO SCALING OF FFT
+a455 5
+       USE TYPE_KINDS      
+
+C      FFTW_PLANR IS A POINTER TO A STRUCTURE 
+       INTEGER(KIND=I_8), INTENT(IN) :: FFTW_PLANR
+
+a459 1
+       INV = -1                              ! BACK TRANSFORM
+d468 1
+a468 1
+         OUT = REFER_A(:,:,IR) * CONJG(A)    ! FOURIER MULTIPLICATION
+d470 4
+a473 3
+C        FFTW3_USEPLAN WILL CALL FMRS IF NOT USING FFTW3
+ 	 CALL FFTW3_USEPLAN(OUT,IAX,LSR,1, .FALSE.,.FALSE.,FFTW_PLANR,
+     &                      INV,IRTFLG)      ! FOURIER BACK TRANSFORM
+d484 1
+a484 1
+         OUT = REFER_A(:,:,IR) * A            ! FOURIER MULTIPLICATION
+d486 4
+a489 2
+ 	 CALL FFTW3_USEPLAN(OUT,IAX,LSR,1, .FALSE.,.FALSE.,FFTW_PLANR,
+     &                      INV,IRTFLG)       ! FOURIER BACK TRANSFORM
+d501 1
+a501 1
+       CM = CM / FLOAT( IAX * LSR) ! NO SCALING OF FFT
+d525 2
+a526 1
+               TMX = D(I,J)/(NS21-I)/(NR21-J)
+d537 2
+a538 1
+               TMX = D(I,J)/(NS21-(NSAM-I+2))/(NR21-J)
+d550 2
+a551 1
+               TMX = D(I,J) / (NS21-I)/(NR21-(NROW-J+2))
+d562 2
+a563 1
+               TMX = D(I,J) / (NS21-(NSAM-I+2))/(NR21-(NROW-J+2))
+d581 1
+a581 1
+	   IXS = NSAM+IX+1
+d583 1
+a583 1
+	   IXS = IX+1
+d587 1
+a587 1
+	   IYS = NROW+IY+1
+d589 1
+a589 1
+	   IYS = IY+1
+d593 1
+a593 1
+	   IYT = MOD(NROW+IYS+J-1,NROW)+1
+d595 3
+a597 2
+	      IXT = MOD(NSAM+IXS+I-1,NSAM)+1
+              Z(I,J)=D(IXT,IYT)/(NSAM/2-IABS(IX+I))/(NROW/2-IABS(IY+J))
+d602 1
+a602 1
+         CALL  PARABL(Z, XSH,YSH,CMX)
+d657 2
+a658 3
+C          FFTW3_USEPLAN WILL CALL FMRS IF NOT FFTW3
+	   CALL FFTW3_USEPLAN(A(1,1,IMI),IAX,LSR,1,
+     &                        .FALSE.,.FALSE.,FFTW_PLANF,INV,IRTFLG)
+@
+
+
+1.4
+log
+@Pawels GPL License used
+@
+text
+@d4 3
+a7 2
+C **********************************************************************
+C *  MUTLISHIFT
+d32 4
+a35 3
+C                  OPFILEC                         FEB 03 ARDEAN LEITH
+C **********************************************************************
+C  MULTISHIFT - multi-reference shift (with 180 degerss check) alignment
+d38 9
+a46 12
+C
+C        CALL  MRSHIFT_PS(ILIST,NIMA,IRIST,NTOTAL,NSAM,NROW,NSIX,NSIY,
+C        CALL  MRSHIFT_SS(ILIST,NIMA,IRIST,NTOTAL,NSAM,NROW,NSIX,NSIY,
+C        CALL READIMS(FILTOA,NLETI,IRIST,NTOTAL,NSAM,NROW,A,IRTFLG)
+C        CALL  RAMP_C(A(1,1,IMI-IMIT+1),NSAM,NROW)
+C	 CALL  PD2(A(1,1,IMI-IMIT+1),LSD,LSR,NSAM,NROW)
+C	 CALL  SHFRA(A(1,1,IMI-IMIT+1),OUT(1,1,IMI-IMIT+1),
+C	 CALL  SHFRS(A(1,1,IMI),OUT(1,1,IMIT-IMITT+1),
+C	 CALL  FINDRMX(OUT,LSD,LSR,NSIX,NSIY,CMX,SXS,SYS)
+C	 CALL  FMRS_2(A(1,1,IMI-IMIT+1),LSD-2,LSR,INV)
+C
+C IMAGE_PROCESSING_ROUTINE
+d56 5
+a60 7
+C       be careful with the common, it has to agree with 64 bits...
+	CHARACTER*80      FINPAT,FINPIC,FILTOA
+	COMMON  /FISPEC/  FINPAT,FINPIC,FILTOA,NLET,NLETI
+
+	INTEGER, ALLOCATABLE, DIMENSION(:,:) ::  NUMR
+	INTEGER, ALLOCATABLE, DIMENSION(:) ::    ILIST,IRIST
+	REAL, ALLOCATABLE, DIMENSION(:,:,:) ::   REFER_A
+d68 1
+a68 1
+           CALL ERRT(46,'AP MS, NUMR',IER)
+d73 1
+a73 1
+	CALL FILELIST(.TRUE.,INPIC,FINPAT,NLET,ILIST,NILMAX,NIMA,
+d79 1
+a79 1
+2001       FORMAT(' Number of reference images: ',I6)
+d81 1
+a81 1
+           CALL ERRT(101,' No reference images!',IDUM)
+d86 1
+a86 1
+        CALL  FILGET(FINPAT,FINPIC,NLET,ILIST(1),INTFLG)
+d95 2
+a96 2
+	NSIX   = MAX0(NSIX,1)
+	NSIY   = MAX0(NSIY,1)
+d110 1
+d117 1
+a117 1
+2002       FORMAT(' Number of experimental images: ',I6/)
+d123 1
+a123 3
+C       NIMA NUMBER OF THE REFERENCE IMAGES
+C       NTOTAL IS NUMBER OF THE SAMPLE IMAGES
+
+d127 3
+a129 2
+            CALL  ERRT(46,'AP MS, REFER_A',IER)
+            RETURN
+d131 3
+a133 1
+        CALL READIMS(FINPAT,NLET,ILIST,NIMA,NSAM,NROW,REFER_A,IRTFLG)
+d135 2
+a136 2
+            CALL  ERRT(47,'AP MS',IER)
+            RETURN
+d139 3
+a142 2
+        IF (NTOTAL .GE. NUMTH)  THEN
+C          FOR MP, LARGE NUMBER OF IMAGES TO BE ALIGNED, OR SP.
+d144 1
+a144 1
+     &          NUMTH,REFER_A)
+d146 2
+a147 2
+C          FOR SMALL NUMBER OF IMAGES TO BE ALIGNED USE DIFFERENT 
+C          STRATEGY TO MAKE MP EFFICIENT.
+d149 1
+a149 1
+     &             NUMTH,REFER_A)
+d153 3
+a155 3
+2600    FORMAT (/,' ',72('-'),//,
+     &      '  Multi-reference shift alignment, end of computation',//,
+     &      ' ',72('-'),/)
+d159 2
+d163 3
+a165 5
+C **********************************************************************
+C
+C  MRSHIFT_PS
+C
+C--*********************************************************************
+d167 6
+a172 1
+     &                NSAM,NROW,NSIX,NSIY,NUMTH,REFER_A)
+d175 2
+d179 3
+a181 2
+	INTEGER, DIMENSION(NIMA) ::       ILIST
+	INTEGER, DIMENSION(NTOTAL) ::     IRIST
+d186 1
+a186 1
+	INTEGER    NASSIG(NUMTH)
+d188 2
+a189 4
+	REAL, ALLOCATABLE, DIMENSION(:,:,:) ::          A
+	COMPLEX, ALLOCATABLE, DIMENSION(:,:,:) ::       OUT
+
+        CHARACTER(LEN=1)  :: MODE
+d191 2
+a192 2
+        CHARACTER*80     FINPAT,FINPIC,FILTOA
+        COMMON  /FISPEC/ FINPAT,FINPIC,FILTOA,NLET,NLETI
+a195 5
+
+C       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+C       ALIGNMENT
+C       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+d197 1
+a197 1
+     &		OUT((NSAM+1),2*NROW,NUMTH),STAT=IRTFLG)
+d199 2
+a200 1
+            CALL  ERRT(46,'AM MS, A and OUT ',IER)
+d204 9
+d214 5
+a218 2
+ 	DO  IMIT=1,NTOTAL,NUMTH
+	   DO  IMI=IMIT,MIN(NTOTAL,IMIT+NUMTH-1)
+a219 1
+	      CALL  FILGET(FILTOA,FINPIC,NLETI,IRIST(IMI),INTFLAG)
+d222 2
+a223 2
+     &             NSLICE, MAXIM,' ',.FALSE.,IRTFLG)
+              IF (IRTFLG.NE.0) GOTO 9999
+d237 15
+a251 9
+	LSD=2*(NSAM+1)
+	LSR=2*NROW
+	INV=+1
+c$omp      parallel do private(IMI),SHARED(INV)
+	   DO  IMI=IMIT,MIN(NTOTAL,IMIT+NUMTH-1)
+         	CALL  RAMP_C(A(1,1,IMI-IMIT+1),NSAM,NROW)
+	 	CALL  PD2(A(1,1,IMI-IMIT+1),LSD,LSR,NSAM,NROW)
+	 	CALL  FMRS_2(A(1,1,IMI-IMIT+1),LSD-2,LSR,INV)
+		CALL  SHFRA(A(1,1,IMI-IMIT+1),OUT(1,1,IMI-IMIT+1),
+d255 3
+a257 4
+     &	         DLIST(5,IMI-IMIT+1),DLIST(6,IMI-IMIT+1),
+     &			NASSIG(IMI-IMIT+1))
+C
+C     &			CM,SX,SY,TURN)
+d261 2
+a262 2
+C          1 - NUMBER OF THE MOST SIMILAR REFERENCE PROJECTION.
+C          2 - CORRELATION COEFFICIENT.
+d265 1
+a265 1
+C          5 - INPUT IMAGE NUMBER.
+d267 4
+a270 4
+	   DO  IMI=IMIT,MIN(NTOTAL,IMIT+NUMTH-1)
+	      DLIST(2,IMI-IMIT+1)=ILIST(IABS(NASSIG(IMI-IMIT+1)))
+	      IF(NASSIG(IMI-IMIT+1).gt.0)  THEN
+	       DLIST(4,IMI-IMIT+1)=0.0
+d272 1
+a272 1
+	       DLIST(4,IMI-IMIT+1)=180.0
+d274 3
+a276 2
+              DLIST(7,IMI-IMIT+1)=IRIST(IMI)
+              DLIST(1,IMI-IMIT+1)=IMI
+a278 1
+C---------------------------------------------------------------------
+a280 1
+C       OVER AND OUT
+d282 1
+a282 1
+        CALL  SAVDC
+d286 2
+d294 1
+a294 2
+C  MRSHIFT_SS
+C  VERSION FOR MP AND A SMALL NUMBER OF IMAGES TO BE ALIGNED
+d299 6
+a304 1
+     &                NSAM,NROW,NSIX,NSIY,NUMTH,REFER_A)
+d309 3
+a311 2
+	INTEGER, DIMENSION(NIMA) ::       ILIST
+	INTEGER, DIMENSION(NTOTAL) ::     IRIST
+d317 3
+a319 4
+
+	INTEGER, ALLOCATABLE, DIMENSION(:,:)  ::  NASSIG
+	REAL, ALLOCATABLE, DIMENSION(:,:,:) ::          A,RESI
+	COMPLEX, ALLOCATABLE, DIMENSION(:,:,:) ::       OUT
+a322 3
+        CHARACTER*80     FINPAT,FINPIC,FILTOA
+        COMMON  /FISPEC/ FINPAT,FINPIC,FILTOA,NLET,NLETI
+
+a324 2
+
+C       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+a325 1
+C       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+d328 11
+a338 6
+     &		OUT((NSAM+1),2*NROW,NUMTH),
+     &		RESI(3,NIMA,NTOTAL),
+     &		NASSIG(NIMA,NTOTAL),
+     &		STAT=IRTFLG)
+	IF (IRTFLG.NE.0) THEN
+            CALL  ERRT(46,'AM MS, A, RESI, NASSIG, and OUT',IER)
+d341 2
+a342 2
+C
+C       READ ALL IMAGES TO BE ALIGNED
+d346 1
+a346 1
+            RETURN
+d349 7
+a355 3
+	LSD=2*(NSAM+1)
+	LSR=2*NROW
+	INV=+1
+a356 3
+C       LOOP OVER IMAGES TO BE ALIGNED
+C  NIMA   - number of reference images
+C  NTOTAL - numer of images to be aligned
+d358 2
+a359 1
+c$omp      parallel do private(IMIT,NREF,IMI),SHARED(INV)
+d361 10
+a370 11
+		NREF=MOD(IMIT-1,NIMA)+1
+		IMI=(IMIT-1)/NIMA+1
+C
+		CALL  SHFRS(A(1,1,IMI),OUT(1,1,IMIT-IMITT+1),
+     &	         NSAM,NROW,
+     &	         REFER_A(1,1,NREF),NSIX,NSIY,
+     &	         RESI(1,NREF,IMI),
+     &	         RESI(2,NREF,IMI),RESI(3,NREF,IMI),
+     &			NASSIG(NREF,IMI))
+C
+C     &			CM,SX,SY,TURN)
+d374 1
+a374 1
+C          OUTPUT (IN DLIST POSITION IS INCREASED BY 1, NO.1 IS THE KEY).
+d380 1
+a380 1
+C          6 - INPUT IMAGE NUMBER.
+d382 7
+a388 7
+	DO  IMI=1,NTOTAL
+	  CM=-HUGE(CM)
+	  DO  NREF=1,NIMA
+	 	IF(RESI(1,NREF,IMI).GT.CM)  THEN
+		   CM=RESI(1,NREF,IMI)
+		   NRI=NREF
+	 	ENDIF
+d390 8
+a397 7
+              DLIST(1)=IMI
+	      DLIST(2)=ILIST(NRI)
+	      DLIST(3)=RESI(1,NRI,IMI)
+	      DLIST(4)=180*NASSIG(NRI,IMI)
+	      DLIST(5:6)=RESI(2:3,NRI,IMI)
+              DLIST(7)=IRIST(IMI)
+              CALL SAVD(NDOC,DLIST,NDLI,IRTFLG)
+a398 1
+C---------------------------------------------------------------------
+a399 1
+C       OVER AND OUT
+d406 2
+d409 4
+a412 1
+C
+d414 39
+a452 22
+     &		NSIX,NSIY,CM,SX,SY,IDIM)
+	COMPLEX  A((NSAM+1),2*NROW),REFER_A((NSAM+1),2*NROW)
+	COMPLEX  OUT((NSAM+1),2*NROW)
+	LOGICAL  TURN
+	INV=-1
+	LSD=2*(NSAM+1)
+	IAX=2*NSAM
+	LSR=2*NROW
+	 OUT=REFER_A*CONJG(A)
+	 CALL  FMRS_2(OUT,IAX,LSR,INV)
+	 CALL  FINDRMX(OUT,LSD,LSR,NSIX,NSIY,CM,SX,SY)
+	 OUT=REFER_A*A
+	 CALL  FMRS_2(OUT,LSD-2,LSR,INV)
+	 CALL  FINDRMX(OUT,LSD,LSR,NSIX,NSIY,CMX,SXS,SYS)
+	 IF(CMX.GT.CM)  THEN
+	   CM=CMX
+	   SX=SXS
+	   SY=SYS
+	   IDIM=1
+	 ELSE
+	   IDIM=0
+	 ENDIF
+d454 64
+a517 33
+C
+	SUBROUTINE SHFRA(A,OUT,NSAM,NROW,REFER_A,NIMA,
+     &		NSIX,NSIY,CM,SX,SY,IDIM)
+	COMPLEX  A((NSAM+1),2*NROW),REFER_A((NSAM+1),2*NROW,NIMA)
+	COMPLEX  OUT((NSAM+1),2*NROW)
+	LOGICAL  TURN
+	INV=-1
+	LSD=2*(NSAM+1)
+	IAX=2*NSAM
+	LSR=2*NROW
+	CM=-HUGE(SX)
+	DO  IR=1,NIMA
+	 OUT=REFER_A(:,:,IR)*CONJG(A)
+	 CALL  FMRS_2(OUT,IAX,LSR,INV)
+	 CALL  FINDRMX(OUT,LSD,LSR,NSIX,NSIY,CMX,SXS,SYS)
+	 IF(CMX.GT.CM)  THEN
+	   CM=CMX
+	   SX=SXS
+	   SY=SYS
+	   IDIM=IR
+	 ENDIF
+	 OUT=REFER_A(:,:,IR)*A
+	 CALL  FMRS_2(OUT,LSD-2,LSR,INV)
+	 CALL  FINDRMX(OUT,LSD,LSR,NSIX,NSIY,CMX,SXS,SYS)
+	 IF(CMX.GT.CM)  THEN
+	   CM=CMX
+	   SX=SXS
+	   SY=SYS
+	   IDIM=-IR
+	 ENDIF
+	ENDDO
+	END
+C
+d519 8
+a526 6
+         DIMENSION  D(LSD,NROW),Z(-1:1,-1:1)
+         LOGICAL  FOUND
+         FOUND=.FALSE.
+	 NSAM=LSD-2
+	 NS21=NSAM/2+1
+	 NR21=NROW/2+1
+d528 11
+a538 11
+         CMX=-HUGE(SX)
+         SX=0.0
+         SY=0.0
+         DO    J=1,NSIY+1
+            DO    I=1,NSIX+1
+               TMX=D(I,J)/(NS21-I)/(NR21-J)
+               IF(CMX.LT.TMX)  THEN
+		  CMX=TMX
+                  IX=I-1
+                  IY=J-1
+                  FOUND=.TRUE.
+d542 8
+a549 8
+         DO    J=1,NSIY+1
+            DO    I=NSAM-NSIX+1,NSAM
+               TMX=D(I,J)/(NS21-(NSAM-I+2))/(NR21-J)
+               IF(CMX.LT.TMX)  THEN
+		  CMX=TMX
+                  IX=-(NSAM-I+1)
+                  IY=J-1
+                  FOUND=.TRUE.
+d553 9
+a561 8
+         DO    J=NROW-NSIY+1,NROW
+            DO    I=1,NSIX+1
+               TMX=D(I,J)/(NS21-I)/(NR21-(NROW-J+2))
+               IF(CMX.LT.TMX)  THEN
+		  CMX=TMX
+                  IX=I-1
+                  IY=-(NROW-J+1)
+                  FOUND=.TRUE.
+d565 8
+a572 8
+         DO    J=NROW-NSIY+1,NROW
+            DO    I=NSAM-NSIX+1,NSAM
+               TMX=D(I,J)/(NS21-(NSAM-I+2))/(NR21-(NROW-J+2))
+               IF(CMX.LT.TMX)  THEN
+		  CMX=TMX
+                  IX=-(NSAM-I+1)
+                  IY=-(NROW-J+1)
+                  FOUND=.TRUE.
+d577 3
+a579 3
+         IF(.NOT.FOUND)  RETURN
+         SX=IX
+         SY=IY
+d581 2
+a582 2
+C Do not interpolate if the max is on the edge
+	IF(NSIX.EQ.IABS(IX).OR.NSIY.EQ.IABS(IY))  RETURN
+d584 2
+a585 2
+	IF(IX.LE.0)  THEN
+	IXS=NSAM+IX+1
+d587 1
+a587 1
+	IXS=IX+1
+d590 2
+a591 2
+	IF(IY.LE.0)  THEN
+	IYS=NROW+IY+1
+d593 1
+a593 1
+	IYS=IY+1
+d596 7
+a602 6
+         DO    J=-1,1
+	  IYT=MOD(NROW+IYS+J-1,NROW)+1
+           DO    I=-1,1
+	    IXT=MOD(NSAM+IXS+I-1,NSAM)+1
+            Z(I,J)=D(IXT,IYT)/(NSAM/2-IABS(IX+I))/(NROW/2-IABS(IY+J))
+           ENDDO
+d604 6
+a609 3
+         CALL  PARABL(Z,XSH,YSH,CMX)
+         SX=SX+XSH
+         SY=SY+YSH
+d611 3
+a613 1
+C
+d615 3
+d619 1
+d623 6
+a629 1
+        CHARACTER*80     FINPAT,FINPIC
+d634 6
+a639 5
+	      CALL FILGET(FINPAT,FINPIC,NLET,ILIST(IMI),INTFLAG)
+	      MAXIM = 0
+	      CALL OPFILEC(0,.FALSE.,FINPIC,INPIC,'O',IFORM,NSAMT,NROWT,
+     &                NSLICE, MAXIM,' ',.FALSE.,IRTFLG)
+              IF (IRTFLG .NE. 0)  RETURN
+d641 4
+a644 4
+	      DO J=1,NROW
+	         CALL REDLIN(INPIC,A(1,J,IMI),NSAM,J)
+	      ENDDO
+	      CLOSE(INPIC)
+d647 9
+a655 4
+	LSD=2*(NSAM+1)
+	LSR=2*NROW
+	INV=+1
+c$omp   parallel do private(IMI),SHARED(INV)
+d657 6
+a662 3
+         CALL  RAMP_C(A(1,1,IMI),NSAM,NROW)
+	 CALL  PD2(A(1,1,IMI),LSD,LSR,NSAM,NROW)
+	 CALL  FMRS_2(A(1,1,IMI),LSD-2,LSR,INV)
+d664 7
+a670 5
+C       Have to signal incorrect fft result
+	IF (INV.LE.0)  THEN
+	  IRTFLG=-10
+	ELSE
+	  IRTFLG=0
+d675 6
+a680 2
+C  Subtract the ramp and normalize the image
+	SUBROUTINE  RAMP_C(X,NSAM,NROW)
+d687 2
+a688 2
+     &                       ,QX1,QX2,QY,SYX1,SYX2,SX1X2,SX1
+     &                       ,SX2,SY,SX1Q,SX2Q,SYQ
+a690 1
+
+d692 13
+a704 12
+             SYX1 = 0.0
+             SYX2 = 0.0
+             SY   = 0.0
+             SX1Q = 0.0
+             SX2Q = 0.0
+             SYQ  = 0.0
+         N1  = NSAM / 2
+         N2  = NROW / 2
+         SX1 = FLOAT(N1) * FLOAT(NSAM + 1)
+         IF(MOD(NSAM,2) .EQ. 1)   SX1 = SX1 + 1 + N1
+         SX2 = FLOAT(N2) * FLOAT(NROW + 1)
+         IF(MOD(NROW,2) .EQ. 1)   SX2 = SX2 + 1 + N2
+d708 1
+d719 1
+d728 1
+d734 3
+a736 3
+           D = A + B1 + B2
+             SY   = 0.0
+             SYQ  = 0.0
+d739 1
+a739 1
+             DO  K = 1, NSAM
+d741 4
+a744 4
+             SY   = SY   + X(K,I)
+             SYQ  = SYQ  + X(K,I) * DBLE(X(K,I))
+                QY   = QY + B1
+             END DO
+d746 2
+a747 1
+           END DO
+d751 5
+a755 4
+         END IF
+	 SY=SY/NSAM/NROW
+	 SYQ=1.0/DSQRT((SYQ-NSAM*NROW*SY*SY)/(NSAM*NROW-1))
+	 X(1:NSAM,1:NROW)=SYQ*(X(1:NSAM,1:NROW)-SY)
+d757 5
+a761 2
+C
+	SUBROUTINE  PD2(A,LSD,LSR,NSAM,NROW)	
+d763 7
+a769 5
+	IPA=NSAM/2+MOD(NSAM,2)
+	IPB=NROW/2+MOD(NROW,2)
+        DO  J=NROW,1,-1
+           DO  I=NSAM,1,-1
+              A(IPA+I,IPB+J)=A(I,J)
+d772 4
+a775 3
+	DO  J=1,IPB
+	  DO  I=1,LSD
+		A(I,J)=0.0
+d778 4
+a781 3
+	DO  J=IPB+NROW+1,LSR
+	  DO  I=1,LSD
+		A(I,J)=0.0
+d784 4
+a787 3
+	DO  J=IPB+1,IPB+NROW
+	  DO  I=1,IPA
+		A(I,J)=0.0
+d789 1
+d791 1
+a791 1
+		A(I,J)=0.0
+d794 1
+@
+
+
+1.3
+log
+@opfilec
+@
+text
+@d1 1
+a1 1
+C++************************************************************************
+a5 1
+C *  SPIDER - MODULAR IMAGE PROCESSING SYSTEM.
+d7 24
+a30 5
+C *  COPYRIGHT (C)2001, P.A.Penczek
+C *  University of Texas - Houston Medical School
+C *  pawel.a.penczek@@uth.tmc.edu
+C *    THE CONTENTS OF THIS DOCUMENT CANNOT BE CHANGED WITHOUT WRITTEN
+C *    PERMISSION OF THE AUTHOR                          *
+d50 1
+a50 1
+C--************************************************************************
+d161 1
+a161 1
+C **************************************************************************
+d165 1
+a165 1
+C--************************************************************************
+d273 1
+a273 1
+C **************************************************************************
+d278 1
+a278 1
+C--************************************************************************
+@
+
+
+1.2
+log
+@output changed
+@
+text
+@d13 1
+d15 1
+a15 1
+C   MULTISHIFT - multi-reference shift (with 180 degerss check) alignment
+d66 1
+a66 1
+           CALL ERRT(101,'No reference images!',IDUM)
+d73 1
+a73 1
+	CALL OPFILE(.FALSE.,FINPIC,INPIC,'O',IFORM,NSAM,NROW,NSLICE,
+d190 1
+a190 1
+	      CALL OPFILE(.FALSE.,FINPIC,INPIC,'O',IFORM,NSAMT,NROWT,
+d525 1
+a525 1
+	      CALL OPFILE(.FALSE.,FINPIC,INPIC,'O',IFORM,NSAMT,NROWT,
+d544 3
+a546 3
+C Have to signal incorrect fft result
+	IF(INV.LE.0)  THEN
+	 IRTFLG=-10
+d548 1
+a548 1
+	 IRTFLG=0
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d157 1
+a157 1
+        PARAMETER (NDLI=6)
+d217 1
+a217 1
+     &	         DLIST(4,IMI-IMIT+1),DLIST(5,IMI-IMIT+1),
+d231 7
+a237 3
+	      DLIST(2,IMI-IMIT+1)=
+     &	      ISIGN(ILIST(IABS(NASSIG(IMI-IMIT+1))),NASSIG(IMI-IMIT+1))
+              DLIST(6,IMI-IMIT+1)=IRIST(IMI)
+d271 1
+a271 1
+        PARAMETER (NDLI=6)
+d335 4
+a338 3
+C          3 - SX
+C          4 - SY
+C          5 - INPUT IMAGE NUMBER.
+d349 5
+a353 3
+	      DLIST(2)=ILIST(NRI)*NASSIG(NRI,IMI)
+	      DLIST(3:5)=RESI(1:3,NRI,IMI)
+              DLIST(6)=IRIST(IMI)
+d386 1
+a386 1
+	   IDIM=-1
+d388 1
+a388 1
+	   IDIM=1
+@

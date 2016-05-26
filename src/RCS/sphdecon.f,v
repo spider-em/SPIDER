@@ -1,0 +1,1179 @@
+head	1.9;
+access;
+symbols;
+locks; strict;
+comment	@c @;
+
+
+1.9
+date	2014.05.21.13.29.35;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2014.03.12.14.50.12;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2013.08.22.17.49.27;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2013.03.14.18.20.45;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2013.03.14.18.17.57;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2013.03.12.13.31.56;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2013.02.20.17.25.57;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2013.02.19.15.20.36;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2013.02.19.14.22.04;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.9
+log
+@cosmetic & debug output removal
+@
+text
+@C ++********************************************************************
+C                                                                    
+C SPHDECON     NEW                          FEB 12  GREGORY KISHCHENKO  
+C                                                                    
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2014  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C SPHDECON()
+C
+C PURPOSE:  SPHERICAL DECONVOLUTION OF VOLUME
+C
+C--*********************************************************************
+
+        SUBROUTINE SPHDECON()
+
+        IMPLICIT NONE
+
+	INCLUDE 'CMBLOCK.INC'
+	INCLUDE 'CMLIMIT.INC'
+
+        CHARACTER(LEN=MAXNAM) :: FILNAM1,FILNAM2
+
+        REAL, ALLOCATABLE     :: X1F(:,:,:), X2F(:,:,:)  
+        REAL, ALLOCATABLE     :: X1F_90(:,:,:)  
+        REAL, ALLOCATABLE     :: X2F_90(:,:,:)  
+
+        REAL, PARAMETER       :: PI  = 3.14159265358979323846
+        REAL                  :: PIRAD
+
+        REAL                  :: SIGMA
+        REAL                  :: X,  Y,  Z, RAD, TET
+
+        INTEGER               :: MAXIM1,MAXIM2,IFORM1,IFORM2
+        INTEGER               :: NX,NY,NZ
+        INTEGER               :: IRTFLG,NOT_USED
+        INTEGER               :: NXLD, NYLD, MWANT
+        INTEGER               :: I, J, K
+        INTEGER               :: CX, CY, CZ
+        INTEGER               :: NRAD
+
+	INTEGER, PARAMETER    :: LUN1   = 21
+	INTEGER, PARAMETER    :: LUN2   = 22
+
+C       OPEN INPUT FILE
+        MAXIM1  = 0
+        CALL OPFILEC(0,.TRUE.,FILNAM1,LUN1,'O',IFORM1,NX,NY,NZ,
+     &                MAXIM1,'INPUT',.FALSE.,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+        CALL RDPRM1S(SIGMA,NOT_USED,'SIGMA',IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 9999
+
+C	GET OUTPUT FILE NAME
+        IFORM2 = 3
+        CALL OPFILEC(0,.TRUE.,FILNAM2,LUN2,'U',IFORM2,NX,NY,NZ,
+     &                MAXIM2,'OUTPUT',.FALSE.,IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 9999
+
+
+        CX     = NX / 2 + 1
+        CY     = NY / 2 + 1
+        CZ     = NZ / 2 + 1
+        NXLD   = NX + 2 - MOD(NX,2)
+        NYLD   = NY + 2 - MOD(NY,2)
+
+        NRAD   = MIN(NX,NY,NZ) / 2 - 2
+
+        ALLOCATE (X1F   (NXLD, NY,NZ),
+     &            X2F   (NX,   NY,NZ),
+     &            X1F_90(NYLD, NX,NZ),
+     &            X2F_90(NY,   NX,NZ), STAT=IRTFLG)
+
+        IF (IRTFLG .NE. 0) THEN 
+            MWANT = NXLD*NY*NZ + 2*NX*NY*NZ + NYLD*NX*NZ
+            CALL ERRT(46,'SPHDECON, X1F & X2F',MWANT)
+            GOTO 9999
+        ENDIF 
+
+C       LOAD VOLUME WITH FOURIER PAD
+        CALL READV(LUN1,X1F, NXLD,NY, NX,NY,NZ) ! PAD FOR FFT
+
+        X1F_90 = 0
+
+        DO K=1,NZ
+           DO J=1,NY
+              DO I=1,NX
+                 X1F_90(J, I, K) = X1F(I, J, K)
+              ENDDO
+           ENDDO
+        ENDDO
+
+        CALL SPHDECON2(X1F,   X2F,   NXLD,NX,NY,NZ,SIGMA,IRTFLG)
+        CALL SPHDECON2(X1F_90,X2F_90,NYLD,NY,NX,NZ,SIGMA,IRTFLG)
+
+        PIRAD = 2 * PI / REAL(NRAD)
+
+       DO K=1,NZ
+          Z = (K-CZ)
+          DO J=1,NY
+             Y = (J-CY)
+             DO I=1,NX
+                X    = (I-CX)
+                RAD  = SQRT(X**2 + Y**2 + Z**2)
+
+                IF (RAD == 0) THEN
+                   TET = 1.0
+                ELSE
+                   TET = ABS(X/RAD)
+                ENDIF
+
+                IF (TET >= 0.707) THEN
+                         TET = (TET-0.707) / (1-0.707)
+                X2F(I, J, K) = (1-TET) * X2F(I, J, K) +
+     &                                TET * X2F_90(J,I,K)
+                ENDIF
+
+             ENDDO
+          ENDDO
+       ENDDO
+
+C       X2F IS NOT FOURIER PADDED!
+        CALL WRITEV(LUN2,X2F, NX,NY, NX,NY,NZ)
+
+9999    CLOSE(LUN1)
+        CLOSE(LUN2)
+
+        IF (ALLOCATED(X1F))    DEALLOCATE(X1F)
+        IF (ALLOCATED(X2F))    DEALLOCATE(X2F)
+        IF (ALLOCATED(X1F_90)) DEALLOCATE(X1F_90)
+        IF (ALLOCATED(X2F_90)) DEALLOCATE(X2F_90)
+
+        END
+
+
+
+C      --------------------- SPHDECON2 ------------------------------
+
+       SUBROUTINE SPHDECON2(BUFIN,BUFOUT,
+     &                      NXLD, NNX,NNY,NNZ, SIGMAT,IRTFLG )
+
+       IMPLICIT NONE
+
+       REAL              :: BUFIN (NXLD, NNY, NNZ)
+       REAL              :: BUFOUT(NNX,   NNY, NNZ)
+       INTEGER           :: NXLD, NNX, NNY, NNZ
+       REAL              :: SIGMAT
+       INTEGER           :: IRTFLG
+
+       INTEGER           :: CX, CY, CZ
+       INTEGER           :: NRAD, NRING, NRLD
+       INTEGER           :: I, J, K, IRAD
+       INTEGER           :: J2, K2, J3, K3
+       INTEGER           :: IX,  IY,  IZ
+       INTEGER           :: IX1, IY1, IZ1
+       INTEGER           :: I2
+
+       REAL              :: SIGMA, TEMP
+       REAL              :: A1, A2, A3, A4 
+       REAL              :: A5, A6, A61, A7, A8 
+       REAL              :: X,  Y,  Z, DX, DY, DZ
+       REAL              :: RAD, DELTA, FI, TET
+       REAL              :: PIRING, RINGPI
+
+       INTEGER           :: INV,NUMTH,MWANT
+
+       REAL, ALLOCATABLE :: FLTR(:)
+       REAL, ALLOCATABLE :: MER(:), FMER(:)
+       REAL, ALLOCATABLE :: EQU(:,:,:), EQU_2(:,:,:), FEQU (:)
+
+       LOGICAL, PARAMETER:: SPIDER_SIGN  = .FALSE.
+       LOGICAL, PARAMETER:: SPIDER_SCALE = .FALSE.
+
+       INTEGER, PARAMETER:: INV_F =  1
+       INTEGER, PARAMETER:: INV_R = -1
+
+       REAL, PARAMETER   :: PI  = 3.14159265358979323846
+       REAL, PARAMETER   :: PI2 = 6.28318530717958647692
+
+C      PLAN.. ARE POINTERS TO A STRUCTURE 
+       INTEGER *8        :: PLAN_MERF = 0
+       INTEGER *8        :: PLAN_MERR = 0
+       INTEGER *8        :: PLAN_EQUF = 0
+       INTEGER *8        :: PLAN_EQUR = 0
+
+       NRAD   = MIN(NNX,NNY,NNZ) / 2 - 2
+
+       X      = PI2 * NRAD
+       X      = LOG(X) / LOG(2.0)
+       NRING  = INT(X) + 1
+       NRING  = 2**NRING
+
+       NRLD   = NRING + 2 - MOD(NRING,2)
+       PIRING = PI2 / REAL(NRING)
+       RINGPI = REAL(NRING) / PI2
+
+       CX     = NNX / 2 + 1
+       CY     = NNY / 2 + 1
+       CZ     = NNZ / 2 + 1
+
+       SIGMA  = SIGMAT / 360
+c       SIGMA = 0.5*(1.0/REAL(NRAD) + 0.0063739 * SIGMA)
+
+       ALLOCATE(EQU ((NRING/2+1),NRING,0:NRAD+1),
+     &          EQU_2(NRING,(NRING/2+1),0:NRAD+1), 
+     &          FLTR(0:(NRLD/2 -1)),
+     &          MER (NRING),
+     &          FMER(NRLD),
+     &          FEQU(NRLD),STAT=IRTFLG)
+        IF (IRTFLG .NE. 0) THEN
+          MWANT = NRING * NRING * (NRING + 1) + NRING + 2*NRLD
+          CALL ERRT(46,'SPHDECON2; EQU....',MWANT)
+          RETURN
+       ENDIF
+
+       BUFOUT = 0  ! ARRAY ZERO
+       MER    = 0  ! ARRAY ZERO
+       FMER   = 0  ! ARRAY ZERO
+       EQU    = 0  ! ARRAY ZERO
+       EQU_2  = 0  ! ARRAY ZERO
+       FEQU   = 0  ! ARRAY ZERO
+
+       !write(6,'(A,I5,A,I5)') ' NRAD:',NRAD,'  NRING:',NRING
+
+C      CREATE FFTW PLANS AND CACHE THEM
+       NUMTH = 1    ! SINCE USED INSIDE PARALLEL REGION
+
+       CALL FFTW3_MAKEPLAN(NRING,1,1,NUMTH, PLAN_MERF, 1,IRTFLG)
+       CALL FFTW3_MAKEPLAN(NRING,1,1,NUMTH, PLAN_MERR,-1,IRTFLG)
+
+       CALL FFTW3_MAKEPLAN(NRING,1,1,NUMTH, PLAN_EQUF, 1,IRTFLG)
+       CALL FFTW3_MAKEPLAN(NRING,1,1,NUMTH, PLAN_EQUR,-1,IRTFLG)
+
+C      ************* CALCULATE FOURIER FILTER *************
+       TEMP = 0.65 / SIGMA
+       I2   = INT(TEMP)
+
+       IF (I2 >= (NRLD/2 -1)) THEN
+          DO I=0,NRLD/2 -1
+             FLTR(I) = SIGMA * I
+             FLTR(I) = 1 - FLTR(I)
+          ENDDO
+       ELSE
+          DO I=0,I2
+             FLTR(I) = SIGMA * I
+             FLTR(I) = 1 - FLTR(I)
+          ENDDO
+          DO I=I2+1,NRLD/2 -1
+             FLTR(I) = SIGMA  * (I - TEMP)
+             FLTR(I) = 0.35 * EXP(-FLTR(I )/ 0.35)
+          ENDDO
+       ENDIF
+
+       DO I=0,NRLD/2 -1
+          FLTR(I) = FLTR(I) / (0.95 * FLTR(I)**2 + 0.05)
+       ENDDO
+
+C      ************* SPHERICAL DECONVOLUTION *************
+
+C      CYCLE ON RADIUS
+
+       DO IRAD = 0, NRAD
+           !write(6,*) 'IRAD  =',IRAD
+
+C          CYCLE ON DELTA-INCLINATION (DIFFERENT "EQUATORS")
+           DO K=1,NRING/2
+
+             DELTA = (K-1) * PIRING
+
+C            CYCLE ON FI
+             DO J=1,NRING/2
+
+               MER = 0      ! ARRAY(NRING) ZERO
+
+C              CYCLE ON THETA
+
+c$omp  parallel do private(i,tet,fi,x,y,z,
+c$omp&                  ix,iy,iz,dx,dy,dz,
+c$omp&                  a1,a2,a3,a4,a5,a61,a6,a7,a8)
+
+             DO I=1,NRING
+
+                  IF (I <= (NRING/4)) THEN
+                     TET = 0.5*PI - REAL(I-1) * PIRING
+                     FI  =          REAL(J-1) * PIRING
+                  ENDIF
+
+                  IF(I > (NRING/4) .AND. I <= (3*NRING/4)) THEN
+                     TET = -0.5*PI + REAL(I-1) * PIRING
+                     FI  = PI      + REAL(J-1) * PIRING
+                  ENDIF
+
+                  IF ((I) > (3*NRING/4)) THEN
+                     TET = 2.5*PI - REAL(I-1) * PIRING
+                     FI  =          REAL(J-1) * PIRING
+                  ENDIF
+
+                  X   = IRAD * SIN(TET) * COS(FI)  + CX
+                  Y   = IRAD * (-SIN(DELTA) * COS(TET) +
+     &                  COS(DELTA) * SIN(TET) * SIN(FI)) + CY
+                  Z   = IRAD * (COS(DELTA)*COS(TET) +
+     &                  SIN(DELTA)*SIN(TET)*SIN(FI)) + CZ
+
+                  IX  = INT(X)
+                  IY  = INT(Y)
+                  IZ  = INT(Z)
+
+                  DX  = X - IX
+                  DY  = Y - IY
+                  DZ  = Z - IZ
+
+                  A1  =       BUFIN(IX,  IY,  IZ)
+                  A2  =       BUFIN(IX+1,IY,  IZ)   - A1
+                  A3  =       BUFIN(IX,  IY+1,IZ)   - A1
+                  A4  =       BUFIN(IX,  IY,  IZ+1) - A1
+                  A5  = -A2 - BUFIN(IX,  IY+1,IZ)   + 
+     &                        BUFIN(IX+1,IY+1,IZ)
+                  A61 = -     BUFIN(IX,  IY,  IZ+1) + 
+     &                        BUFIN(IX+1,IY,  IZ+1)
+                  A6  = -A2 + A61
+                  A7  = -A3 - BUFIN(IX,  IY,  IZ+1) + 
+     &                        BUFIN(IX,  IY+1,IZ+1)
+                  A8  = -A5 - A61 -
+     &                        BUFIN(IX,  IY+1,IZ+1) + 
+     &                        BUFIN(IX+1,IY+1,IZ+1)
+
+                  MER(I) = A1 + 
+     &                   DZ*(A4 + A6*DX + 
+     &                  (A7 + A8*DX)*DY) + A3*DY +
+     &                   DX*(A2 + A5*DY)
+
+               ENDDO ! END OF: DO I=1,NRING
+c$omp end parallel do 
+
+               DO I=1,NRING
+                  FMER(I) = MER(I)
+               ENDDO
+               DO I=NRING+1,NRLD
+                  FMER(I) = 0
+               ENDDO
+
+C              ************* Meridianal Deconvolution *************
+
+C              1D FOURIER TRANSFORM OF MERIDIAN
+               CALL FMRS(FMER, NRING,1,1, PLAN_MERF,
+     &                  SPIDER_SIGN,SPIDER_SCALE, INV_F,IRTFLG)
+
+               DO I=0,NRLD/2 -1
+                  FMER(2*I+1) = FMER(2*I+1) * FLTR(I)
+                  FMER(2*I+2) = FMER(2*I+2) * FLTR(I)
+               ENDDO
+
+C              REVERSE 1D FOURIER TRANSFORM OF MERIDIAN
+               CALL FMRS(FMER, NRING,1,1, PLAN_MERR,
+     &                  SPIDER_SIGN,SPIDER_SCALE, INV_R,IRTFLG)
+
+               EQU(K,J,IRAD)  = FMER(1)
+
+               J2             = J + NRING/2
+               J2             = MOD(J2-1,NRING) +1
+               EQU(K,J2,IRAD) = FMER(1+ NRING/2)
+
+             ENDDO   ! END OF:  DO J=1,NRING/2 +1
+           ENDDO     ! END OF:  DO K=1,NRING/2
+        ENDDO        ! END OF:  DO IRAD = 0, NRAD
+
+C       ************* Equatorial Deconvolution *************
+
+        DO IRAD = 0, NRAD
+           DO K=1,NRING/2
+
+             DO J=1,NRING
+                FEQU(J) = EQU(K,J,IRAD)
+             ENDDO
+             DO J=NRING+1,NRLD
+                   FEQU(J) = 0
+             ENDDO
+
+             CALL FMRS(FEQU, NRING,1,1, PLAN_EQUF,
+     &                  SPIDER_SIGN,SPIDER_SCALE, INV_F,IRTFLG)
+
+               DO I=0,NRLD/2 - 1
+                  FEQU(2*I+1) = FEQU(2*I+1) * FLTR(I)
+                  FEQU(2*I+2) = FEQU(2*I+2) * FLTR(I)
+               ENDDO
+
+             CALL FMRS(FEQU, NRING,1,1, PLAN_EQUR,
+     &                  SPIDER_SIGN,SPIDER_SCALE, INV_R,IRTFLG)
+
+             DO J=1,NRING
+                EQU(K,J,IRAD) =  FEQU(J)
+             ENDDO
+
+           ENDDO
+        ENDDO
+
+C       ****** Arrange Data in Regular Spherical Coordinates ******
+
+        DO IRAD = 0, NRAD
+           DO K=1,NRING/2
+
+             DO J = 1, NRING/2 + 1
+                EQU_2(K,J,IRAD) = EQU (K,J,IRAD)
+             ENDDO
+
+             DO J = NRING/2 +2, NRING
+                K2                = MOD((K+NRING/2-1),NRING) + 1
+                J2                = NRING - J + 2
+                EQU_2(K2,J2,IRAD) = EQU (K,J,IRAD)
+             ENDDO
+
+           ENDDO
+        ENDDO
+
+C      ************* Back to Cartesian *************
+
+       DO K=1,NNZ
+          Z = (K-CZ)
+
+          DO J=1,NNY
+             Y = (J-CY)
+
+             DO I=1,NNX
+                X    = (I-CX)
+
+                RAD  = SQRT(X**2 + Y**2 + Z**2)
+                IRAD = INT(RAD)
+
+             IF (IRAD > NRAD) THEN
+                BUFOUT(I, J, K)= 0
+             ELSE
+
+                   FI  = ATAN2(Z,Y)*RINGPI
+
+                   IF (Y == 0 .AND. Z == 0) THEN
+                      TET = (NRING/4) * (1-(X+0.1) / ABS(X+0.1))
+                   ELSE
+                      TET = ACOS(X/RAD)*RINGPI
+                   ENDIF
+
+                   FI    = FI  + NRING
+                   K2    = INT(FI)
+                   DX    = FI - K2
+
+                   K2    = K2 + 1
+                   K2    = MOD(K2-1,NRING)+1
+                   K3    = MOD(K2,NRING) + 1
+
+                   J2    = INT(TET)
+                   DY    = TET - J2
+                   J2    = J2 + 1
+                   J3    = J2 + 1
+
+                   DZ    = RAD-IRAD
+
+                   IF (J3 > NRING/2 + 1) THEN
+                      J3 = NRING - J3 + 2
+                      K3 = MOD(K3+NRING/2 -2,NRING) + 1
+                   ENDIF
+
+                   A1 = EQU_2(K2,J2,IRAD)
+                   A2 = EQU_2(K3,J2,IRAD)   - A1
+                   A3 = EQU_2(K2,J3,IRAD)   - A1
+                   A4 = EQU_2(K2,J2,IRAD+1) - A1
+                   A5 = -A2 - EQU_2(K2,J3,IRAD) +
+     &                        EQU_2(K3,J3,IRAD)
+                   A61= - EQU_2(K2,J2,IRAD+1) +
+     &                    EQU_2(K3,J2,IRAD+1)
+                   A6 = -A2 + A61
+                   A7 = -A3 - EQU_2(K2,J2,IRAD+1) +
+     &                        EQU_2(K2,J3,IRAD+1)
+                   A8 = -A5 - A61 -
+     &                  EQU_2(K2,J3,IRAD+1) +
+     &                  EQU_2(K3,J3,IRAD+1)
+
+                   BUFOUT(I, J, K) = A1 + 
+     &                DZ*(A4 + A6*DX + 
+     &                (A7 + A8*DX)*DY) + A3*DY +
+     &                DX*(A2 + A5*DY)
+
+                   BUFOUT(I, J, K)= BUFOUT(I, J, K)/(NRING**2)
+
+                ENDIF
+             ENDDO
+          ENDDO
+       ENDDO
+
+       CALL FFTW3_KILLPLAN(PLAN_MERF,IRTFLG)
+       CALL FFTW3_KILLPLAN(PLAN_MERR,IRTFLG)
+       CALL FFTW3_KILLPLAN(PLAN_EQUF,IRTFLG)
+       CALL FFTW3_KILLPLAN(PLAN_EQUR,IRTFLG)
+
+9999   IF (ALLOCATED(MER))    DEALLOCATE(MER)
+       IF (ALLOCATED(FMER))   DEALLOCATE(FMER)
+       IF (ALLOCATED(EQU))    DEALLOCATE(EQU)
+       IF (ALLOCATED(FEQU))   DEALLOCATE(FEQU)
+       IF (ALLOCATED(EQU_2))  DEALLOCATE(EQU_2)
+       IF (ALLOCATED(FLTR))   DEALLOCATE(FLTR)
+
+       END
+
+@
+
+
+1.8
+log
+@latest updates
+@
+text
+@d2 3
+a4 3
+C                                                                   *
+C SPHDECON     NEW                       FEB 12  GREGORY KISHCHENKO *
+C                                                                   *
+d9 1
+a9 1
+C=* Copyright 1985-2013  Health Research Inc.,                         *
+d40 1
+a40 1
+        CHARACTER(LEN=MAXNAM)   :: FILNAM1,FILNAM2
+d42 17
+a58 3
+        REAL, ALLOCATABLE       :: X1F(:,:,:), X2F(:,:,:)  
+        REAL, ALLOCATABLE       :: X1F_90(:,:,:)  
+        REAL, ALLOCATABLE       :: X2F_90(:,:,:)  
+d60 2
+a61 17
+        REAL, PARAMETER   :: PI  = 3.14159265358979323846
+        REAL              :: PIRAD
+
+         REAL              :: SIGMA
+         REAL              :: X,  Y,  Z, RAD, TET
+
+        INTEGER                 :: MAXIM1,MAXIM2,IFORM1,IFORM2
+        INTEGER                 :: NX,NY,NZ
+        INTEGER                 :: IRTFLG,NOT_USED
+        INTEGER                 :: NXLD, NYLD, MWANT
+        INTEGER                 :: I, J, K
+        INTEGER                 :: CX, CY, CZ
+
+	INTEGER, PARAMETER      :: LUN1   = 21
+	INTEGER, PARAMETER      :: LUN2   = 22
+
+        INTEGER                 :: NRAD
+d76 2
+a77 1
+        IF (IRTFLG .NE. 0) RETURN
+a78 1
+ 
+d88 1
+a88 1
+     &            X2F   (NX,  NY,NZ),
+d90 1
+a90 1
+     &            X2F_90(NY, NX,NZ), STAT=IRTFLG)
+d93 1
+a93 3
+c        MWANT = LSD*NY*NZ + NX*NY*NZ
+        MWANT = NXLD*NYLD*NZ + NX*NY*NZ
+
+d101 1
+a101 1
+                X1F_90 = 0
+d103 7
+a109 7
+       DO K=1,NZ
+          DO J=1,NY
+             DO I=1,NX
+                X1F_90(J, I, K) = X1F(I, J, K)
+             ENDDO
+          ENDDO
+       ENDDO
+d111 2
+a112 2
+       CALL SPHDECON2(X1F,   X2F,   NXLD,NX,NY,NZ,SIGMA,IRTFLG)
+       CALL SPHDECON2(X1F_90,X2F_90,NYLD,NY,NX,NZ,SIGMA,IRTFLG)
+d114 1
+a114 1
+          PIRAD = 2 * PI / REAL(NRAD)
+a129 2
+C                IF (TET <= -0.707 .OR. TET >= 0.707) THEN
+
+a135 4
+c                IF (RAD <= NRAD/2) THEN
+c          X2F(I, J, K) = X2F(I,J,K)*(1.5+0.5*COS(RAD*PIRAD))
+c                ENDIF
+
+d146 4
+a149 4
+        IF (ALLOCATED(X1F))   DEALLOCATE(X1F)
+        IF (ALLOCATED(X2F))   DEALLOCATE(X2F)
+        IF (ALLOCATED(X1F_90))   DEALLOCATE(X1F_90)
+        IF (ALLOCATED(X2F_90))   DEALLOCATE(X2F_90)
+d174 1
+a174 1
+       INTEGER           :: i2
+d198 1
+a198 1
+C      PLAN.. IS A POINTER TO A STRUCTURE 
+d241 1
+a241 3
+       write(6,*) ' '
+       write(6,'(A,I5,A,I5)') ' NRAD:',NRAD,'  NRING:',NRING
+       write(6,*) ' '
+d253 2
+a254 2
+           TEMP = 0.65/SIGMA
+             i2 = INT(TEMP)
+d256 15
+a270 15
+         IF(i2 >= (NRLD/2 -1)) THEN
+             DO I=0,NRLD/2 -1
+               FLTR(i)    = SIGMA * i
+               FLTR(i)    = 1 - FLTR(i)
+             ENDDO
+         ELSE
+             DO I=0,i2
+               FLTR(i)    = SIGMA * i
+               FLTR(i)    = 1 - FLTR(i)
+             ENDDO
+             DO I=i2+1,NRLD/2 -1
+               FLTR(i)    = SIGMA * (i - TEMP)
+               FLTR(i)    = 0.35*EXP(-FLTR(i)/0.35)
+             ENDDO
+          ENDIF
+d272 3
+a274 4
+           DO I=0,NRLD/2 -1
+c             FLTR(I) = FLTR(I)/(0.98 * FLTR(I)**2 + 0.02)
+             FLTR(I) = FLTR(I)/(0.95 * FLTR(I)**2 + 0.05)
+           ENDDO
+d280 2
+a281 2
+         DO IRAD = 0, NRAD
+          write(6,*) 'IRAD  =',IRAD
+d283 1
+a283 1
+C         CYCLE ON DELTA-INCLINATION (DIFFERENT "EQUATORS")
+d291 1
+a291 1
+               MER = 0  ! ARRAY(NRING) ZERO
+d351 1
+a351 1
+c$omp  end  parallel do 
+d357 1
+a357 1
+                     FMER(I) = 0
+d360 1
+a360 1
+C       ************* Meridianal Deconvolution *************
+a371 2
+               !INV = -1
+               !CALL FMRS_1(FMER,NRING,INV)
+d383 1
+a383 1
+         ENDDO       ! END OF:  DO IRAD = 0, NRAD
+d416 1
+d425 2
+a426 2
+                K2   = MOD((K+NRING/2-1),NRING) + 1
+                J2               = NRING - J + 2
+d448 1
+a448 1
+             BUFOUT(I, J, K)= 0
+d454 1
+a454 1
+                      TET = (NRING/4)*(1-(X+0.1)/ABS(X+0.1))
+d459 1
+a459 1
+                   FI = FI  + NRING
+d474 1
+a474 1
+                   IF(J3 > NRING/2 + 1) THEN
+d499 1
+a499 1
+        BUFOUT(I, J, K)= BUFOUT(I, J, K)/(NRING**2)
+d516 1
+a516 1
+       IF (ALLOCATED(FLTR))  DEALLOCATE(FLTR)
+@
+
+
+1.7
+log
+@gpk's cchanges aug 2013
+@
+text
+@d133 2
+a134 1
+c                IF (TET <= -0.707 .OR. TET >= 0.707) THEN
+d141 3
+a143 3
+                IF (RAD <= NRAD/2) THEN
+          X2F(I, J, K) = X2F(I,J,K)*(1.5+0.5*COS(RAD*PIRAD))
+                ENDIF
+d183 1
+d185 1
+a185 1
+       REAL              :: SIGMA
+d229 1
+d264 2
+d267 15
+a281 9
+       DO I=0,NRLD/2 -1
+
+C          Wiener Filter (deconvolution) SQRT
+          FLTR(I)    = 4*SQRT(I * SIGMA)
+          FLTR(I)    = EXP(-FLTR(I))
+          FLTR(I)    = FLTR(I)/(0.98 * FLTR(I)**2 + 0.02)
+
+
+       ENDDO
+d283 4
+@
+
+
+1.6
+log
+@cosmetic
+@
+text
+@d46 5
+a50 2
+        REAL                    :: SIGMA
+        REAL                    :: X,  Y,  Z, RAD, TET
+d62 2
+a69 1
+        SIGMA  = 30
+d86 2
+d89 1
+d91 1
+a91 2
+     &            X2F_90(NY,   NX,NZ),
+     &            X2F   (NX,   NY,NZ), STAT=IRTFLG)
+d94 2
+a95 1
+            MWANT = 3*NXLD*NY*NZ + 2*NX*NY*NZ
+d104 1
+a104 1
+        X1F_90 = 0
+d106 1
+a106 1
+        DO K=1,NZ
+d112 4
+a115 1
+        ENDDO
+d117 1
+a117 2
+        CALL SPHDECON2(X1F,   X2F,   NXLD,NX,NY,NZ,SIGMA,IRTFLG)
+        CALL SPHDECON2(X1F_90,X2F_90,NYLD,NY,NX,NZ,SIGMA,IRTFLG)
+d119 1
+a119 1
+        DO K=1,NZ
+a120 1
+
+a122 1
+
+d130 1
+a130 1
+                   TET = X/RAD
+d133 5
+a137 2
+                IF (TET <= -0.707 .OR. TET >= 0.707) THEN
+                   X2F(I, J, K) = X2F_90(J,I,K)
+d139 5
+d146 1
+a146 1
+        ENDDO
+a150 1
+
+d156 2
+d166 1
+a166 1
+     &                      NNXLD, NX,NY,NZ, SIGMAT,IRTFLG )
+d170 3
+a172 3
+       REAL              :: BUFIN (NNXLD, NY, NZ)
+       REAL              :: BUFOUT(NX,   NY, NZ)
+       INTEGER           :: NNXLD, NX, NY, NZ
+d180 2
+a181 1
+       INTEGER           :: IX, IY, IZ
+d211 3
+a213 2
+       NRAD   = MIN(NX,NY,NZ) / 2 - 2
+       X      = 2 * PI * NRAD
+d217 1
+d222 3
+a224 3
+       CX     = NX / 2 + 1
+       CY     = NY / 2 + 1
+       CZ     = NZ / 2 + 1
+d228 2
+a229 2
+       ALLOCATE(EQU ((NRING/2+1),NRING,0:(2*NRAD)),
+     &          EQU_2(NRING,(NRING/2+1),0:(2*NRAD)), 
+d264 3
+a266 2
+          FLTR(I)    = SQRT(ABS(I * SIGMA))
+          FLTR(I)    = EXP(-1.85*FLTR(I))
+d269 1
+d272 1
+d280 1
+a280 1
+C         CYCLE ON DELTA-INCLINATION (DIFFERENT "EQUATORS")"
+d292 1
+a292 1
+c$omp          parallel do private(i,tet,fi,x,y,z,
+d296 1
+a296 1
+               DO I=1,NRING
+d348 1
+a348 1
+c$omp  end     parallel do 
+d354 1
+a354 1
+                  FMER(I) = 0
+d393 1
+a393 1
+                FEQU(J) = 0
+d433 1
+a433 1
+       DO K=1,NZ
+d436 1
+a436 1
+          DO J=1,NY
+d439 1
+a439 1
+             DO I=1,NX
+d445 3
+a447 3
+                IF (IRAD > NRAD) THEN
+                   BUFOUT(I, J, K) = 0
+                ELSE
+d497 2
+d514 1
+@
+
+
+1.5
+log
+@gpk's changes
+@
+text
+@d46 2
+a47 2
+         REAL              :: SIGMA
+         REAL              :: X,  Y,  Z, RAD, TET
+a51 1
+c        INTEGER                 :: LSD,MWANT
+a75 1
+c        LSD   = NX + 2 - MOD(NX,2)
+a81 1
+c        ALLOCATE (X1F   (LSD,NY,NZ),
+d84 2
+a85 2
+     &            X2F_90(NY, NX,NZ),
+     &            X2F   (NX, NY,NZ), STAT=IRTFLG)
+d88 1
+a88 2
+c        MWANT = LSD*NY*NZ + NX*NY*NZ
+        MWANT = NXLD*NYLD*NZ + NX*NY*NZ
+a94 1
+c        CALL READV(LUN1,X1F, LSD,NY, NX,NY,NZ) ! PAD FOR FFT
+d97 1
+a97 1
+                X1F_90 = 0
+d99 1
+a99 1
+       DO K=1,NZ
+d105 1
+a105 1
+       ENDDO
+d107 2
+a108 1
+c        CALL SPHDECON2(X1F, X2F, LSD,NX,NY, NZ, SIGMA, IRTFLG)
+d110 2
+a111 2
+       CALL SPHDECON2(X1F,   X2F,   NXLD,NX,NY,NZ,SIGMA,IRTFLG)
+       CALL SPHDECON2(X1F_90,X2F_90,NYLD,NY,NX,NZ,SIGMA,IRTFLG)
+a112 2
+       DO K=1,NZ
+          Z = (K-CZ)
+d115 1
+d126 3
+a128 4
+           IF (TET <= -0.707 .OR. TET >= 0.707) THEN
+              X2F(I, J, K) = X2F_90(J,I,K)
+           ENDIF
+
+d131 1
+a131 1
+       ENDDO
+d270 1
+a270 1
+c$omp  parallel do private(i,tet,fi,x,y,z,
+d274 1
+a274 1
+             DO I=1,NRING
+d326 1
+a326 1
+c$omp  end  parallel do 
+@
+
+
+1.4
+log
+@lun2 wrong
+@
+text
+@d43 5
+d52 4
+a55 3
+        INTEGER                 :: LSD,MWANT
+
+        REAL                    :: SIGMA
+a59 1
+
+d71 1
+d77 12
+a88 1
+        LSD   = NX + 2 - MOD(NX,2)
+a89 2
+        ALLOCATE (X1F(LSD,NY,NZ),
+     &            X2F(NX, NY,NZ), STAT=IRTFLG)
+d91 3
+a93 1
+        MWANT = LSD*NY*NZ + NX*NY*NZ
+d99 2
+a100 1
+        CALL READV(LUN1,X1F, LSD,NY, NX,NY,NZ) ! PAD FOR FFT
+d102 36
+a137 1
+        CALL SPHDECON2(X1F, X2F, LSD,NX,NY, NZ, SIGMA, IRTFLG)
+d152 1
+d156 1
+a156 1
+     &                      NXLD, NX,NY,NZ, SIGMAT,IRTFLG )
+d160 1
+a160 1
+       REAL              :: BUFIN (NXLD, NY, NZ)
+d162 1
+a162 1
+       INTEGER           :: NXLD, NX, NY, NZ
+d253 1
+a253 7
+          FLTR(I)    = FLTR(I)/(0.98 * FLTR(I)**2 + 0.02) 
+C         CC C = 0.88339
+
+c         FLTR(I)    = (ABS(I * SIGMA))**0.45
+c         FLTR(I)    = EXP(-1.8*FLTR(I))
+c         FLTR(I)    = FLTR(I)/(0.98 * FLTR(I)**2 + 0.02) 
+C         CC C = 0.88404
+@
+
+
+1.3
+log
+@*** empty log message ***
+@
+text
+@d66 1
+a66 1
+        CALL OPFILEC(0,.TRUE.,FILNAM2,LUN1,'U',IFORM2,NX,NY,NZ,
+@
+
+
+1.2
+log
+@added operation communication
+@
+text
+@d1 30
+a32 4
+
+
+
+
+a40 1
+	CHARACTER(LEN=1)        :: NULL = CHAR(0)
+d42 1
+a42 1
+        REAL, ALLOCATABLE       :: X1F(:), X2F(:) ! ACTUAL MULTI-DIM.     
+a71 1
+        MWANT = LSD * NY * NZ 
+d73 2
+a74 2
+        ALLOCATE (X1F(MWANT),
+     &            X2F(MWANT), STAT=IRTFLG)
+d76 2
+a77 1
+            CALL ERRT(46,'SPHDECON, X1F & X2F',2*MWANT)
+d81 1
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d3 74
+a76 2
+       SUBROUTINE INTERP_FBS3(BUFIN,BUFOUT,
+     &                        NX,NY,NZ, NX2,NY2,NZ2, NXLD)
+d80 5
+a84 3
+       !USE TYPE_KINDS
+
+       INTEGER           :: NX2, NY2, NZ2, NXLD
+a85 1
+       INTEGER           :: NX, NY, NZ
+d99 1
+a99 1
+       INTEGER           :: INV,IRTFLG,NUMTH,MWANT
+a100 2
+       REAL              :: BUFIN(NXLD, NY, NZ)
+       REAL              :: BUFOUT(NX, NY, NZ)
+d120 12
+a131 12
+       NRAD  = MIN(NX,NY,NZ)/2 - 2
+         X = 2*PI*NRAD
+         X = LOG(X)/LOG(2.0)
+         NRING = INT(X) + 1
+       NRING = 2**NRING
+       NRLD  = NRING + 2 - MOD(NRING,2)
+       PIRING  = PI2/REAL(NRING)
+       RINGPI  = REAL(NRING)/PI2
+
+       CX    = NX / 2 +1
+       CY    = NY / 2 +1
+       CZ    = NZ / 2 +1
+d133 1
+a133 2
+       SIGMA = 30
+       SIGMA = SIGMA / 360
+d135 1
+a135 1
+       ALLOCATE(EQU  ((NRING/2+1),NRING,0:(2*NRAD)),
+d143 1
+a143 1
+          CALL ERRT(46,'DECONV; EQU....',MWANT)
+d167 1
+a167 1
+C     ************* CALCULATE FOURIER FILTER *************
+d169 6
+a174 1
+               DO I=0,NRLD/2 -1
+d176 4
+a179 9
+                  FLTR(I)    = SQRT(ABS(I * SIGMA))
+                  FLTR(I)    = EXP(-1.85*FLTR(I))
+                  FLTR(I)    = FLTR(I)/(0.98 * FLTR(I)**2 + 0.02) 
+C                 CC C = 0.88339
+
+c                  FLTR(I)    = (ABS(I * SIGMA))**0.45
+c                  FLTR(I)    = EXP(-1.8*FLTR(I))
+c                  FLTR(I)    = FLTR(I)/(0.98 * FLTR(I)**2 + 0.02) 
+C                 CC C = 0.88404
+d181 1
+a181 1
+               ENDDO
+d183 1
+a183 1
+C     ************* SPHERICAL DECONVOLUTION *************
+d213 4
+a216 4
+            IF(I > (NRING/4) .AND. I <= (3*NRING/4)) THEN
+              TET = -0.5*PI + REAL(I-1) * PIRING
+              FI  = PI      + REAL(J-1) * PIRING
+            ENDIF
+d225 1
+a225 1
+     &                COS(DELTA) * SIN(TET) * SIN(FI)) + CY
+d227 1
+a227 1
+     &                SIN(DELTA)*SIN(TET)*SIN(FI)) + CZ
+d263 3
+a265 3
+                 DO I=NRING+1,NRLD
+                    FMER(I) = 0
+                 ENDDO
+d359 1
+a359 1
+                FI  = ATAN2(Z,Y)*RINGPI
+d361 5
+a365 5
+                IF (Y == 0 .AND. Z == 0) THEN
+                   TET = (NRING/4)*(1-(X+0.1)/ABS(X+0.1))
+                ELSE
+                   TET = ACOS(X/RAD)*RINGPI
+                ENDIF
+d382 4
+a385 4
+                IF(J3 > NRING/2 + 1) THEN
+                   J3 = NRING - J3 + 2
+                   K3 = MOD(K3+NRING/2 -2,NRING) + 1
+                ENDIF
+@

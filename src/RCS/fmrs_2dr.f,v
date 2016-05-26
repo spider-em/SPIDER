@@ -1,0 +1,933 @@
+head	1.11;
+access;
+symbols
+	pre_getangas:1.11
+	GPL2010:1.11
+	pre_GPL2010:1.10
+	pre_var_equation:1.10
+	pre_fftwrings:1.10
+	pre_opfiles:1.10
+	src:1.10
+	best-code:1.10
+	x-named-regs:1.10
+	x:1.10
+	v13-00:1.10
+	pre_GPL:1.8
+	prec_CA:1.8
+	noindx:1.8
+	Bproc:1.7
+	oct21:1.7
+	last77:1.6;
+locks; strict;
+comment	@c @;
+
+
+1.11
+date	2010.06.24.13.25.41;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2005.10.17.20.23.13;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2005.10.17.18.15.28;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2000.12.05.14.06.38;	author bimal;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	99.06.04.21.02.17;	author pawel;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	97.10.06.20.43.46;	author pawel;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	96.09.11.18.26.01;	author pawel;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	96.09.09.20.41.12;	author pawel;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	96.09.09.20.39.37;	author pawel;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	96.09.09.20.34.36;	author pawel;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	96.08.27.14.01.19;	author pawel;	state Exp;
+branches;
+next	;
+
+
+desc
+@on disk simple 2D fft
+,
+@
+
+
+1.11
+log
+@GPL_2010
+@
+text
+@C++*********************************************************************
+C
+C $$ FMRS_2DR.FOR
+C
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C  Order of elements:
+C
+C
+C IMAGE_PROCESSING_ROUTINE
+C
+C        1         2         3         4         5         6         7
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C--*********************************************************************
+C
+C $$ FMRS_2DR.FOR
+C
+        SUBROUTINE  FMRS_2DR(LUN1,LUN2,LR,NNNN,NSAM,NROW,INV)
+        REAL, ALLOCATABLE, DIMENSION(:,:) :: BUF
+        REAL, ALLOCATABLE, DIMENSION(:) :: X       
+	LOGICAL  IFNS 
+		
+
+	ALLOCATE (BUF(LR,NROW), STAT=IRTFLG)
+	IF (IRTFLG.NE.0) THEN 
+           CALL ERRT(46,'FT, BUF',IER)
+           RETURN
+        ENDIF
+        	
+	ALLOCATE (X(NNNN), STAT=IRTFLG)
+	IF (IRTFLG.NE.0) THEN 
+           CALL ERRT(46,'FT, X',IER)
+           DEALLOCATE (BUF)
+           RETURN
+        ENDIF	
+	
+C       NUMBER OF CHUNKS
+	NC=NNNN/LR
+	IF(MOD(NNNN,LR).NE.0) NC=NC+1
+	LRE=NNNN-(NC-1)*LR
+	INS=INV*LR
+
+        IF(INV.GT.0)  THEN
+	   DO    J=1,NROW
+	      CALL  REDLIN(LUN1,X,NSAM,J)
+              CALL  FMRS_1(X,NSAM,INV)
+              IF(INV.EQ.0)  THEN
+                 DEALLOCATE (X,BUF)               
+                 RETURN
+              ENDIF
+	      DO    I=1,LR
+	         BUF(I,J)=X(I)
+	      ENDDO
+	      CALL  WRTLIN(LUN2,X,NNNN,J)
+	   ENDDO
+c	   CLOSE(LUN1)
+c$omp parallel do private(i),shared(invt)
+           DO    I=1,LR,2
+	      INVT=INS
+	      CALL  FFTMCF(BUF(I,1),BUF(I+1,1),NROW,NROW,NROW,INVT)
+	   ENDDO
+           IF(INVT.EQ.0)  THEN
+              INV=0
+              DEALLOCATE (X,BUF)   
+              RETURN
+           ENDIF
+           
+	   IF(NC.GT.2)  THEN
+C             DO FULL CHUNKS
+	      DO    LC=2,NC-1
+C				print  *,lc,nc
+	         DO    J=1,NROW
+	            CALL  REDLIN(LUN2,X,NNNN,J)
+	            DO    I=1,LR
+	               X(I+(LC-2)*LR)=BUF(I,J)
+	               BUF(I,J)=X(I+(LC-1)*LR)
+	            ENDDO
+	            CALL  WRTLIN(LUN2,X,NNNN,J)
+	         ENDDO
+c$omp parallel do private(i),shared(invt)
+                 DO    I=1,LR,2
+	            INVT=INS
+	CALL  FFTMCF(BUF(I,1),BUF(I+1,1),NROW,NROW,NROW,INVT)
+	         ENDDO
+                 IF(INVT.EQ.0)  THEN
+                    INV=0
+                    DEALLOCATE (X,BUF)   
+                    RETURN
+                 ENDIF
+	      ENDDO
+	   ENDIF
+
+C          DO THE LAST, PROBABLY SHORTER CHUNK
+	   DO    J=1,NROW
+	      CALL  REDLIN(LUN2,X,NNNN,J)
+	      DO    I=1,LR
+	         X(I+(NC-2)*LR)=BUF(I,J)
+	      ENDDO
+	      DO    I=1,LRE
+	         BUF(I,J)=X(I+(NC-1)*LR)
+	      ENDDO
+	      CALL  WRTLIN(LUN2,X,NNNN,J)
+	   ENDDO
+c$omp parallel do private(i),shared(invt)
+           DO    I=1,LRE,2
+	      INVT=INS
+	CALL  FFTMCF(BUF(I,1),BUF(I+1,1),NROW,NROW,NROW,INVT)
+	   ENDDO 
+           IF(INVT.EQ.0)  THEN
+              INV=0
+              DEALLOCATE (X,BUF)   
+              RETURN
+           ENDIF
+	   DO    J=1,NROW
+	      CALL  REDLIN(LUN2,X,NNNN,J)
+	      DO    I=1,LRE
+	         X(I+(NC-1)*LR)=BUF(I,J)
+	      ENDDO
+	      CALL  WRTLIN(LUN2,X,NNNN,J)
+	   ENDDO
+c	   CLOSE(LUN2)
+           DEALLOCATE (X,BUF)   
+	   RETURN	
+c          INVERSE
+	ENDIF
+C       BEGIN HERE WHEN INV<=0
+	IFNS=MOD(NSAM,2).EQ.0
+C       NORMALIZE FOR INVERSE
+        Q=1.0/FLOAT(NROW)
+C       DO THE FIRST CHUNK, HAVE TO COMPRESS
+        DO    J=1,NROW
+	   CALL  REDLIN(LUN1,X,NNNN,J)
+           DO    I=1,NNNN
+              X(I)=X(I)*Q
+	   ENDDO
+	   DO    I=1,2
+	      BUF(I,J)=X(I)
+	      BUF(I+2,J)=X(I+NNNN-2)
+	   ENDDO
+	   IF(LR.GT.4)  THEN
+	      DO    I=5,LR
+	         BUF(I,J)=X(I-2)
+	      ENDDO
+	   ENDIF
+	   X(1)=0.0
+	   X(2)=0.0
+	   CALL  WRTLIN(LUN2,X,NSAM,J)
+	ENDDO
+c	CLOSE(LUN1)
+c$omp parallel do private(i),shared(invt)
+        DO    I=1,LR,2
+	   INVT=INS
+	CALL  FFTMCF(BUF(I,1),BUF(I+1,1),NROW,NROW,NROW,INVT)
+	ENDDO
+        IF(INVT.EQ.0)  THEN
+           INV=0
+           DEALLOCATE (X,BUF)   
+           RETURN
+        ENDIF
+
+	IF(NC.GT.2)  THEN
+	   LRC=LR
+	ELSE
+	   LRC=LRE
+	ENDIF
+	DO    LC=2,NC
+	  DO     J=1,NROW
+	     CALL  REDLIN(LUN2,X,NSAM,J)
+	     IF(LC.EQ.2)  THEN
+C               PUT ONLY REAL PARTS, IMAGINARY ARE ZERO
+                X(1)=BUF(1,J)
+		IF(IFNS)  THEN
+		   X(2)=BUF(3,J)
+		ELSE
+		   X(2)=BUF(4,J)
+		   X(NSAM)=BUF(3,J)
+		ENDIF
+		IF(LR.GT.4)  THEN
+		   DO    I=5,LRC
+		      X(I-2)=BUF(I,J)
+		   ENDDO
+		ENDIF
+		DO    I=1,LRC
+		   BUF(I,J)=X(I+LRC-2)
+		ENDDO
+	     ELSE
+		 DO    I=1,LRC
+		    X(I+(LC-2)*LR-2)=BUF(I,J)
+		    BUF(I,J)=X(I+(LC-1)*LR-2)
+                 ENDDO
+	      ENDIF
+	      CALL  WRTLIN(LUN2,X,NSAM,J)
+	   ENDDO
+c$omp parallel do private(i),shared(invt)
+           DO    I=1,LRC,2
+	      INVT=INS
+	CALL  FFTMCF(BUF(I,1),BUF(I+1,1),NROW,NROW,NROW,INVT)
+	   ENDDO
+           IF(INVT.EQ.0)  THEN
+              INV=0
+              DEALLOCATE (X,BUF)   
+              RETURN
+           ENDIF
+	ENDDO
+C       DO THE LAST, PROBABLY SHORTER CHUNK
+	DO    J=1,NROW
+	      CALL  REDLIN(LUN2,X,NSAM,J)
+	   DO    I=1,LRE
+	      X(I+(NC-1)*LR-2)=BUF(I,J)
+	   ENDDO
+	   CALL  WRTLIN(LUN2,X,NSAM,J)
+	ENDDO
+C
+	DO    J=1,NROW
+	   CALL  REDLIN(LUN2,X,NSAM,J)
+	   INV=-1
+           CALL  FMR_1(X,NSAM,BUF,INV)
+	   CALL  WRTLIN(LUN2,X,NSAM,J)
+	ENDDO
+c	CLOSE(LUN2)
+	DEALLOCATE (BUF,X)
+        END
+@
+
+
+1.10
+log
+@GPL License fixed
+@
+text
+@a5 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d7 5
+a11 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d13 1
+a13 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d18 1
+a18 1
+C=* This program is distributed in the hope that it will be useful,    *
+d20 1
+a20 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a21 1
+C=*                                                                    *
+d23 1
+a23 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.9
+log
+@HRI GPL License used
+@
+text
+@a1 1
+C++************************************************************************
+a5 3
+C **************************************************************************
+C * SPIDER - MODULAR IMAGE PROCESSING SYSTEM.  AUTHOR: J.FRANK         *
+C *  SPIDER - MODULAR IMAGE PROCESSING SYSTEM.  AUTHOR: J.FRANK            *
+d9 1
+a9 1
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *  
+a28 7
+
+C *  COPYRIGHT (C)1981,1987, WADSWORTH CENTER FOR LABORATORIES AND         *
+C *  RESEARCH, NEW YORK STATE DEPARTMENT OF HEALTH, ALBANY, NY 12201.      *
+C *  THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO THE CENTER FOR       *
+C *  LABORATORIES AND RESEARCH AND ARE NOT TO BE DISCLOSED TO OTHERS OR    *
+C *  USED FOR PURPOSES OTHER THAN INTENDED WITHOUT WRITTEN APPROVAL OF     *
+C *  THE CENTER FOR LABORATORIES AND RESEARCH   			   *
+a29 1
+C **************************************************************************
+a37 1
+C--************************************************************************
+@
+
+
+1.8
+log
+@adapted for dynamical memory allocation
+@
+text
+@d1 1
+d6 1
+d8 1
+d10 24
+d40 1
+d49 1
+@
+
+
+1.7
+log
+@OpenMP
+@
+text
+@a0 1
+C
+d17 4
+d25 20
+a44 4
+        SUBROUTINE  FMRS_2DR(LUN1,LUN2,X,BUF,LR,NNNN,NSAM,NROW,INV)
+        DIMENSION  X(NNNN),BUF(LR,NROW)
+	LOGICAL  IFNS
+C  number of chunks
+d49 1
+a49 1
+C
+d51 13
+a63 10
+	DO    J=1,NROW
+	CALL  REDLIN(LUN1,X,NSAM,J)
+        CALL  FMRS_1(X,NSAM,INV)
+        IF(INV.EQ.0)  RETURN
+	DO    I=1,LR
+	BUF(I,J)=X(I)
+	ENDDO
+	CALL  WRTLIN(LUN2,X,NNNN,J)
+	ENDDO
+c	CLOSE(LUN1)
+d65 13
+a77 11
+        DO    I=1,LR,2
+	INVT=INS
+	CALL  FFTMCF(BUF(I,1),BUF(I+1,1),NROW,NROW,NROW,INVT)
+	ENDDO
+        IF(INVT.EQ.0)  THEN
+        INV=0
+        RETURN
+        ENDIF
+	IF(NC.GT.2)  THEN
+C DO FULL CHUNKS
+	DO    LC=2,NC-1
+d79 8
+a86 8
+	DO    J=1,NROW
+	CALL  REDLIN(LUN2,X,NNNN,J)
+	DO    I=1,LR
+	X(I+(LC-2)*LR)=BUF(I,J)
+	BUF(I,J)=X(I+(LC-1)*LR)
+	ENDDO
+	CALL  WRTLIN(LUN2,X,NNNN,J)
+	ENDDO
+d88 2
+a89 2
+        DO    I=1,LR,2
+	INVT=INS
+d91 20
+a110 19
+	ENDDO
+        IF(INVT.EQ.0)  THEN
+         INV=0
+         RETURN
+        ENDIF
+	ENDDO
+	ENDIF
+C
+C DO THE LAST, PROBABLY SHORTER CHUNK
+	DO    J=1,NROW
+	CALL  REDLIN(LUN2,X,NNNN,J)
+	DO    I=1,LR
+	X(I+(NC-2)*LR)=BUF(I,J)
+	ENDDO
+	DO    I=1,LRE
+	BUF(I,J)=X(I+(NC-1)*LR)
+	ENDDO
+	CALL  WRTLIN(LUN2,X,NNNN,J)
+	ENDDO
+d112 2
+a113 2
+        DO    I=1,LRE,2
+	INVT=INS
+d115 17
+a131 15
+	ENDDO 
+       IF(INVT.EQ.0)  THEN
+        INV=0
+        RETURN
+        ENDIF
+	DO    J=1,NROW
+	CALL  REDLIN(LUN2,X,NNNN,J)
+	DO    I=1,LRE
+	X(I+(NC-1)*LR)=BUF(I,J)
+	ENDDO
+	CALL  WRTLIN(LUN2,X,NNNN,J)
+	ENDDO
+c	CLOSE(LUN2)
+	RETURN	
+c  inverse
+d133 1
+a133 1
+C  begin here when INV<=0
+d135 1
+a135 1
+C NORMALIZE FOR INVERSE
+d137 18
+a154 13
+C  Do the first chunk, have to compress
+	DO    J=1,NROW
+	CALL  REDLIN(LUN1,X,NNNN,J)
+        DO    I=1,NNNN
+         X(I)=X(I)*Q
+	ENDDO
+	DO    I=1,2
+	BUF(I,J)=X(I)
+	BUF(I+2,J)=X(I+NNNN-2)
+	ENDDO
+	IF(LR.GT.4)  THEN
+	DO    I=5,LR
+	BUF(I,J)=X(I-2)
+a155 5
+	ENDIF
+	X(1)=0.0
+	X(2)=0.0
+	CALL  WRTLIN(LUN2,X,NSAM,J)
+	ENDDO
+d159 1
+a159 1
+	INVT=INS
+d163 3
+a165 2
+        INV=0
+        RETURN
+d167 1
+a167 1
+C
+d169 1
+a169 1
+	LRC=LR
+d171 1
+a171 1
+	LRC=LRE
+d174 5
+a178 5
+	DO     J=1,NROW
+	CALL  REDLIN(LUN2,X,NSAM,J)
+	IF(LC.EQ.2)  THEN
+C  put only real parts, imaginary are zero
+		X(1)=BUF(1,J)
+d180 1
+a180 1
+		X(2)=BUF(3,J)
+d182 2
+a183 2
+		X(2)=BUF(4,J)
+		X(NSAM)=BUF(3,J)
+d186 3
+a188 3
+		DO    I=5,LRC
+		X(I-2)=BUF(I,J)
+		ENDDO
+d191 1
+a191 6
+		BUF(I,J)=X(I+LRC-2)
+		ENDDO
+	ELSE
+		DO    I=1,LRC
+		X(I+(LC-2)*LR-2)=BUF(I,J)
+		BUF(I,J)=X(I+(LC-1)*LR-2)
+d193 8
+a200 3
+	ENDIF
+	CALL  WRTLIN(LUN2,X,NSAM,J)
+	ENDDO
+d202 2
+a203 2
+        DO    I=1,LRC,2
+	INVT=INS
+d205 14
+a218 13
+	ENDDO
+        IF(INVT.EQ.0)  THEN
+        INV=0
+        RETURN
+        ENDIF
+	ENDDO
+C DO THE LAST, PROBABLY SHORTER CHUNK
+	DO    J=1,NROW
+	CALL  REDLIN(LUN2,X,NSAM,J)
+	DO    I=1,LRE
+	X(I+(NC-1)*LR-2)=BUF(I,J)
+	ENDDO
+	CALL  WRTLIN(LUN2,X,NSAM,J)
+d222 4
+a225 4
+	CALL  REDLIN(LUN2,X,NSAM,J)
+	INV=-1
+        CALL  FMR_1(X,NSAM,BUF,INV)
+	CALL  WRTLIN(LUN2,X,NSAM,J)
+d228 1
+@
+
+
+1.6
+log
+@*** empty log message ***
+@
+text
+@a24 1
+CNO_SAVE
+d31 1
+a31 2
+        IF(INV)  2,2,1
+1       CONTINUE 
+d42 1
+a42 1
+c$doacross  local(i),share(invt)
+d54 1
+a54 1
+				print  *,lc,nc
+d63 1
+a63 1
+c$doacross  local(i),share(invt)
+d69 2
+a70 2
+        INV=0
+        RETURN
+d86 1
+a86 1
+c$doacross  local(i),share(invt)
+d91 1
+a91 1
+        IF(INVT.EQ.0)  THEN
+d105 2
+a106 1
+2       CONTINUE
+d130 1
+a130 1
+c$doacross  local(i),share(invt)
+d173 1
+a173 1
+c$doacross  local(i),share(invt)
+d198 1
+a198 1
+c	CLOSE(LUN2)		
+@
+
+
+1.5
+log
+@parallel corrected
+@
+text
+@d34 1
+a34 1
+	DO  10  J=1,NROW
+d38 3
+a40 2
+	DO  11  I=1,LR
+11	BUF(I,J)=X(I)
+d42 1
+a42 1
+10      CONTINUE
+d45 1
+a45 1
+        DO  14  I=1,LR,2
+d47 2
+a48 1
+14	CALL  FFTMCF(BUF(I,1),BUF(I+1,1),NROW,NROW,NROW,INVT)
+d55 1
+a55 1
+	DO  501  LC=2,NC-1
+d57 1
+a57 1
+	DO  21  J=1,NROW
+d59 1
+a59 1
+	DO  22  I=1,LR
+d61 4
+a64 2
+22	BUF(I,J)=X(I+(LC-1)*LR)
+21	CALL  WRTLIN(LUN2,X,NNNN,J)
+d66 1
+a66 1
+        DO  24  I=1,LR,2
+d68 2
+a69 1
+24	CALL  FFTMCF(BUF(I,1),BUF(I+1,1),NROW,NROW,NROW,INVT)
+d74 1
+a74 1
+501	CONTINUE
+d78 1
+a78 1
+	DO  31  J=1,NROW
+d80 8
+a87 5
+	DO  32  I=1,LR
+32	X(I+(NC-2)*LR)=BUF(I,J)
+	DO  33  I=1,LRE
+33	BUF(I,J)=X(I+(NC-1)*LR)
+31	CALL  WRTLIN(LUN2,X,NNNN,J)
+d89 1
+a89 1
+        DO  34  I=1,LRE,2
+d91 2
+a92 1
+34	CALL  FFTMCF(BUF(I,1),BUF(I+1,1),NROW,NROW,NROW,INVT)
+d97 1
+a97 1
+	DO  35  J=1,NROW
+d99 5
+a103 3
+	DO  36  I=1,LRE
+36	X(I+(NC-1)*LR)=BUF(I,J)
+35	CALL  WRTLIN(LUN2,X,NNNN,J)
+d112 1
+a112 1
+	DO  51  J=1,NROW
+d114 4
+a117 3
+        DO  2002  I=1,NNNN
+2002    X(I)=X(I)*Q
+	DO  52  I=1,2
+d119 2
+a120 1
+52	BUF(I+2,J)=X(I+NNNN-2)
+d122 3
+a124 2
+	DO  53  I=5,LR
+53	BUF(I,J)=X(I-2)
+d128 2
+a129 1
+51	CALL  WRTLIN(LUN2,X,NSAM,J)
+d132 1
+a132 1
+        DO  54  I=1,LR,2
+d134 2
+a135 1
+54	CALL  FFTMCF(BUF(I,1),BUF(I+1,1),NROW,NROW,NROW,INVT)
+d146 2
+a147 2
+	DO  601  LC=2,NC
+	DO  61   J=1,NROW
+d159 3
+a161 2
+		DO  62  I=5,LRC
+62		X(I-2)=BUF(I,J)
+d163 3
+a165 2
+		DO  63  I=1,LRC
+63		BUF(I,J)=X(I+LRC-2)
+d167 1
+a167 1
+		DO  65  I=1,LRC
+d169 2
+a170 1
+65		BUF(I,J)=X(I+(LC-1)*LR-2)
+d172 2
+a173 1
+61	CALL  WRTLIN(LUN2,X,NSAM,J)
+d175 1
+a175 1
+        DO  66  I=1,LRC,2
+d177 2
+a178 1
+66	CALL  FFTMCF(BUF(I,1),BUF(I+1,1),NROW,NROW,NROW,INVT)
+d183 1
+a183 1
+601	CONTINUE
+d185 1
+a185 1
+	DO  71  J=1,NROW
+d187 5
+a191 3
+	DO  72  I=1,LRE
+72	X(I+(NC-1)*LR-2)=BUF(I,J)
+71	CALL  WRTLIN(LUN2,X,NSAM,J)
+d193 1
+a193 1
+	DO  81  J=1,NROW
+d197 2
+a198 1
+81	CALL  WRTLIN(LUN2,X,NSAM,J)
+@
+
+
+1.4
+log
+@*** empty log message ***
+@
+text
+@d43 1
+a43 1
+c$doacross  local(i,inst,inv) 
+d45 6
+a50 7
+	INST=INS
+	CALL  FFTMCF(BUF(I,1),BUF(I+1,1),NROW,NROW,NROW,INST)
+	IF(INST.EQ.0)  THEN
+	INV=0
+	RETURN
+	ENDIF
+14	CONTINUE
+d61 1
+a61 1
+c$doacross  local(i,inst,inv) 
+d63 6
+a68 7
+	INST=INS
+	CALL  FFTMCF(BUF(I,1),BUF(I+1,1),NROW,NROW,NROW,INST)
+	IF(INST.EQ.0)  THEN
+	INV=0
+	RETURN
+	ENDIF
+24	CONTINUE
+d80 1
+a80 1
+c$doacross  local(i,inst,inv) 
+d82 6
+a87 7
+	INST=INS
+	CALL  FFTMCF(BUF(I,1),BUF(I+1,1),NROW,NROW,NROW,INST)
+	IF(INST.EQ.0)  THEN
+	INV=0
+	RETURN
+	ENDIF
+34	CONTINUE
+d116 1
+a116 1
+c$doacross  local(i,inst,inv) 
+d118 6
+a123 7
+	INST=INS
+	CALL  FFTMCF(BUF(I,1),BUF(I+1,1),NROW,NROW,NROW,INST)
+	IF(INST.EQ.0)  THEN
+	INV=0
+	RETURN
+	ENDIF
+54	CONTINUE
+a130 1
+				print  *,lc,nc
+d154 1
+a154 1
+c$doacross  local(i,inst,inv) 
+d156 6
+a161 7
+	INST=INS
+	CALL  FFTMCF(BUF(I,1),BUF(I+1,1),NROW,NROW,NROW,INST)
+	IF(INST.EQ.0)  THEN
+	INV=0
+	RETURN
+	ENDIF
+66	CONTINUE
+@
+
+
+1.3
+log
+@*** empty log message ***
+@
+text
+@d82 1
+a82 1
+c$doacross  local(i,inst) 
+@
+
+
+1.2
+log
+@ break due to image dimensions
+@
+text
+@d43 1
+a43 1
+c$doacross  local(i,inst) 
+d62 1
+a62 1
+c$doacross  local(i,inst) 
+d119 1
+a119 1
+c$doacross  local(i,inst) 
+d159 1
+a159 1
+c$doacross  local(i,inst) 
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d43 1
+a43 1
+c$doacross  local(i) 
+d45 7
+a51 1
+14      CALL  FFTMCF(BUF(I,1),BUF(I+1,1),NROW,NROW,NROW,INS)
+d62 1
+a62 1
+c$doacross  local(i) 
+d64 7
+a70 1
+24      CALL  FFTMCF(BUF(I,1),BUF(I+1,1),NROW,NROW,NROW,INS)
+d82 1
+a82 1
+c$doacross  local(i) 
+d84 7
+a90 1
+34      CALL  FFTMCF(BUF(I,1),BUF(I+1,1),NROW,NROW,NROW,INS)
+d119 1
+a119 1
+c$doacross  local(i) 
+d121 7
+a127 1
+54      CALL  FFTMCF(BUF(I,1),BUF(I+1,1),NROW,NROW,NROW,INS)
+d159 1
+a159 1
+c$doacross  local(i) 
+d161 7
+a167 1
+66      CALL  FFTMCF(BUF(I,1),BUF(I+1,1),NROW,NROW,NROW,INS)
+@

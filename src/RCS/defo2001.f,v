@@ -1,0 +1,1203 @@
+head	1.12;
+access;
+symbols
+	pre_getangas:1.11
+	GPL2010:1.11
+	pre_GPL2010:1.10
+	pre_var_equation:1.10
+	pre_fftwrings:1.10
+	pre_opfiles:1.10
+	src:1.10
+	best-code:1.10
+	x-named-regs:1.10
+	x:1.10
+	v13-00:1.10
+	pre_GPL:1.8
+	prec_CA:1.8
+	noindx:1.8
+	Bproc:1.7
+	oct21:1.6
+	last77:1.6;
+locks; strict;
+comment	@c @;
+
+
+1.12
+date	2013.01.07.15.21.32;	author leith;	state Exp;
+branches;
+next	1.11;
+
+1.11
+date	2010.06.24.13.25.24;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2005.10.17.20.38.13;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2005.10.17.18.28.36;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2002.03.11.14.08.28;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	99.11.10.23.09.13;	author yuchen;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	99.02.04.14.38.25;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	98.01.26.15.40.48;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	97.10.03.21.11.00;	author pawel;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	95.10.04.18.38.52;	author mladjadj;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	95.07.31.20.32.03;	author mladjadj;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	95.07.06.20.34.02;	author mladjadj;	state Exp;
+branches;
+next	;
+
+
+desc
+@created by june Zhu
+@
+
+
+1.12
+log
+@CS_zero
+@
+text
+@C++*********************************************************************
+C
+C DEFO2001.FOR
+C
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C   DEFO2001(NUM,NP,KP,NA,NSAM,SPMAX)
+C
+C   USING LEAST SQUARE METHOD TO DETERMINE DEFOCUS, AMPLITUDE CONTRAST
+C   X(K,A)=PI*(0.5*CS*LAMBDA**3*K**4-DZ*LAMBDA*K**2)-OFFSET
+C   X(K,A)=PI*(0.5*CS*LAMBDA**3*K**4-A1*LAMBDA*K**2)-A2
+C
+C	NUM: NUMBER OF IMAGES
+C       NP(I): NUMBER OF MINIMUM IN EACH IMAGES
+C	KP(I,J): ARRAY OF SP. FREQ. POINTS OF MINIMUM
+C	NA(I,J): ARRAY OF ABBERATION
+C	NSAM: IMAGE DIMENSION
+C	SPMAX: MAX OF SP. FREQ.
+C	NA: NUMBER OF ABBERATION IN UNIT OF PI
+C       
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC*/
+
+	SUBROUTINE DEFO2001(NUM,NP,KP,NA,NSAM,SPMAX)
+	
+ 
+
+C       I DO NOT KNOW IF SAVE IS NEEDED FEB 99 al
+        SAVE
+
+        INCLUDE 'CMBLOCK.INC' 
+
+	DIMENSION NP(*)
+	DIMENSION NA(20,20)
+	REAL      KP(20,20)
+
+        COMMON BETA(20),ALPHA(20,20),ARRAY(20,20),Y1(20,20),
+     &         WEIGHT(20,20),A(20),B(20),C(20),DEFO(20),X1(20),X2(20),
+     &         DERIV(20)
+
+	REAL KM,KS,KF,LAMBDA
+
+        CHARACTER *1  NULL
+	DATA PI/3.141592654/
+	
+	NULL=CHAR(0)
+	LUN2=10
+C       INPUT EM PARAMETERS*/
+	WRITE(NOUT,*)' INPUT PARAMETERS OF  IMAGES'
+	CALL RDPRM(LAMBDA,NOT_USED,' WAVELENGTH LAMBDA [A]')
+	CALL RDPRM(CS,NOT_USED,'SPHERICAL ABERRATION CS[MM]')
+           IF (CS < 0.0001)    CS = 0.0001
+	CS=CS*1.0E07
+	KM=SPMAX
+	KS=KM/FLOAT(NSAM)
+	NTERM=1+NUM
+	XMIN=99999999.9
+	
+C.......GET VALUE OF Y1  */
+	DO  I=1,NUM
+	DO  J=1,NP(I)
+	Y1(I,J)=PI*FLOAT(NA(I,J))
+	ENDDO
+	ENDDO
+
+C.......CALCULATE  DEFOCUS(ROUGH)
+	DO I=1,NUM
+	A1=0
+	A2=0
+	B1=0
+	B2=0
+	C1=0
+	C2=0
+	IF(NP(I) .EQ. 1) THEN
+C	KF=FLOAT(KP(I,1))*KS
+	KF= KP(I,1) * KS
+	C(I)=-(Y1(I,1)-0.5*CS*PI*LAMBDA**3*KF**4)
+     &           /(PI*LAMBDA*KF**2)
+	GOTO 550
+	ELSE
+	DO J=1,NP(I)
+C	KF=FLOAT(KP(I,J))*KS
+	KF=KP(I,J)*KS
+	A1=A1+(PI*LAMBDA*KF**2)**2
+	A2=A2+(PI*LAMBDA*KF**2)
+	C1=C1-(Y1(I,J)-0.5*CS*PI*LAMBDA**3*KF**4)
+     &  *PI*LAMBDA*KF**2
+	C2=C2-(Y1(I,J)-0.5*CS*PI*LAMBDA**3*KF**4)
+	B2=B2+1.
+	ENDDO
+	B1=A2
+	C(I)=(C1*B2-C2*B1)/(A1*B2-A2*B1)
+	GOTO 550
+	ENDIF
+550	CONTINUE
+C	WRITE(NOUT,*)'INITIAL DEFOCUS', C(I)
+	ENDDO
+
+C......CALCULATE THE WEIGHT OF EACH POINTS
+	DO  I=1,NUM
+	DO  J=1,NP(I)
+C	KF=FLOAT(KP(I,J))*KS
+	KF=KP(I,J)*KS
+	WEIGHT(I,J)=PI*(2.*CS*LAMBDA**3*KF**3-2.*C(I)*LAMBDA*KF)*2.*KS
+	ENDDO
+	ENDDO
+
+	DO  NAC=1,31
+	A(NTERM)=FLOAT(NAC)*0.01
+	DO I=1,NUM
+	A(I)=C(I)
+	ENDDO
+C.......SET ITERATION STEP */
+	NSTEP=0
+999	CONTINUE
+
+	DO  I=1,NTERM
+	BETA(I)=0
+	DO  J=1,I
+	ALPHA(I,J)=0
+	ENDDO
+	ENDDO
+	T=0.001
+C.......GET X**2
+	X0=0
+	DO  I=1,NUM
+	DO  J=1,NP(I)
+C	KF=KS*FLOAT(KP(I,J))
+	KF=KS* KP(I,J) 
+	VALUE=PI*(0.5*CS*LAMBDA**3*KF**4-A(I)
+     &  *LAMBDA*KF**2)-A(NTERM)
+	X0=X0+(VALUE-Y1(I,J))**2/WEIGHT(I,J)**2
+	ENDDO
+	ENDDO
+C	WRITE(NOUT,*) 'X0=',X0
+C.......CALCULATE DERIVES
+C.......NOTE FOR X**2
+C.......X11(K,L)=X^2(A(K)+DA(K),A(L)+DA(L))
+C.......X10(K)=X^2(A(K)+DA(K))
+C.......X20(K)=X^2(A(K)-DA(K))
+
+ 	DO I=1,NTERM
+	B(I)=A(I)
+	ENDDO
+	DO  K=1,NTERM
+	X1(K)=0
+	X2(K)=0
+	B(K)=A(K)+0.0001*A(K)
+	DO  I=1,NUM
+	DO  J=1,NP(I)
+C	KF=KS*FLOAT(KP(I,J))
+	KF=KS* KP(I,J)
+	VALUE=PI*(0.5*CS*LAMBDA**3*KF**4-B(I)
+     &  *LAMBDA*KF**2)-B(NTERM)
+	X1(K)=X1(K)+(VALUE-Y1(I,J))**2/WEIGHT(I,J)**2
+	ENDDO
+	ENDDO
+	B(K)=A(K)-0.0001*A(K)
+	DO  I=1,NUM
+	DO  J=1,NP(I)
+C	KF=KS*FLOAT(KP(I,J))
+	KF=KS* KP(I,J) 
+	VALUE=PI*(0.5*CS*LAMBDA**3*KF**4-B(I)
+     &  *LAMBDA*KF**2)-B(NTERM)
+	X2(K)=X2(K)+(VALUE-Y1(I,J))**2/WEIGHT(I,J)**2
+	ENDDO
+	ENDDO
+	B(K)=A(K)
+	DERIV(K)=(X1(K)-X2(K))/(0.0002*A(K))
+	ENDDO
+C	WRITE(NOUT,*) 'DERIVE=',(DERIV(I), I=1,NTERM)
+	DO  K=1,NTERM
+	BETA(K)=-0.5*DERIV(K)
+	DO  L=1,K
+	X11=0
+	B(K)=A(K)*(1.+0.0001)
+	B(L)=A(L)*(1.+0.0001)
+	DO  I=1,NUM
+	DO  J=1,NP(I)
+C	KF=KS*FLOAT(KP(I,J))
+	KF=KS*  KP(I,J) 
+	VALUE=PI*(0.5*CS*LAMBDA**3*KF**4-B(I)
+     &  *LAMBDA*KF**2)-B(NTERM)
+	X11=X11+(VALUE-Y1(I,J))**2/WEIGHT(I,J)**2
+	ENDDO
+	ENDDO
+	B(K)=A(K)
+	B(L)=A(L)
+	ALPHA(K,L)=0.5*(X11-X1(K)-X1(L)+X0)/(0.0001*A(K)*0.0001*A(L))
+	ENDDO
+ 	ALPHA(K,K)=0.5*ABS(X1(K)-2*X0+X2(K))/((0.0001*A(K))**2)
+	IF(ALPHA(K,K) .LT. 0.00001) ALPHA(K,K)=0.00001
+	ENDDO
+	
+	DO  K=1,NTERM
+	DO  L=1,K
+	ALPHA(L,K)=ALPHA(K,L)
+	ENDDO
+	ENDDO
+
+69	DO  J=1,NTERM
+	DO  K=1,NTERM
+	ARRAY(J,K)=ALPHA(J,K)/SQRT(ALPHA(J,J)*ALPHA(K,K))
+	ENDDO
+	ARRAY(J,J)=(1.+T)
+	ENDDO
+
+	CALL MATINV(ARRAY,NTERM,DET)
+
+C.......GET NEW VALUES OF PARAMETERS
+
+	DO  J=1,NTERM
+	B(J)=A(J)
+	DO  K=1,NTERM
+	B(J)=B(J)+BETA(K)*ARRAY(J,K)/SQRT(ALPHA(J,J)*ALPHA(K,K))
+	ENDDO
+	ENDDO
+C.......GET NEW X**2
+	XN=0
+	DO  I=1,NUM
+	DO  J=1,NP(I)
+C 	KF=KS*FLOAT(KP(I,J))
+ 	KF=KS* KP(I,J) 
+	VALUE=PI*(0.5*CS*LAMBDA**3*KF**4-B(I)
+     &  *LAMBDA*KF**2)-B(NTERM)
+	XN=XN+(VALUE-Y1(I,J))**2/WEIGHT(I,J)**2
+	ENDDO
+	ENDDO
+	IF((XN-X0) .GT. 0) THEN
+	T=T*10.
+	GOTO 69
+	ELSE
+	D=0
+	DO  I=1,NTERM
+	D=D+ABS((A(I)-B(I))/B(I))
+	A(I)=B(I)
+	ENDDO
+	NSTEP=NSTEP+1
+	X0=XN
+C	WRITE(NOUT,*)'X**2=',X0
+C	WRITE(NOUT,*) 'NSTEP',NSTEP, A(1),A(2),A(3),A(4)
+	IF(D .LT. 0.0001 .AND. NSTEP .GT. 20) GOTO 200
+	IF(NSTEP .GT. 200) GOTO 200
+	GOTO 999
+	ENDIF
+	
+200	IF(X0 .LT. XMIN) THEN
+	XMIN=X0
+	DO I=1,NTERM
+	DEFO(I)=A(I)
+	ENDDO
+	ENDIF
+	WRITE(NOUT,*) 'NSTEP=',NSTEP,'X**2=',X0, '  AC=',A(NTERM)
+	ENDDO
+130	WRITE(NOUT,*)'  X**2=',XMIN
+	WRITE(NOUT,*)' DEFOCUS ARE [A]'
+	WRITE(NOUT,*) (DEFO(I), I=1,NUM)
+	Q=SIN(DEFO(NTERM))/COS(DEFO(NTERM))*100.
+	WRITE(NOUT,140)Q
+140	FORMAT(' AMPLITUDE CONTRAST=',F10.6,'%')
+
+C.......CALCULATE ASTIGTISM
+	DO I=1,NTERM
+	C(I)=DEFO(I)
+	ENDDO
+C.......AVERAGE OF DEFOCUS
+	DEFOCUS=0
+	DO I=1,NUM
+	DEFOCUS=DEFOCUS+C(I)
+	ENDDO
+	DEFOCUS=DEFOCUS/FLOAT(NUM)
+C.......THE ASTIGTISM IS MAX(DEFOCUS)-MIN(DEFOCUS)
+	XMIN=9999999.
+	XMAX=-9999999.
+	DO I=1,NUM-1
+	IF(ABS(C(I)-C(I+1)) .GT. XMAX) XMAX=C(I)
+	IF(ABS(C(I)-C(I+1)) .LT. XMIN) XMIN=C(I)
+	ENDDO
+	ASTIG=XMAX-XMIN
+	WRITE(NOUT,*)'INITIAL VALUE: DEFOCUS=',DEFOCUS,'  ASTIGTISM=',ASTIG
+	NTERM=3
+
+	DO 9800 NANGLE=1,36
+	A(1)=DEFOCUS
+	A(2)=ASTIG
+	A(3)=5.*FLOAT(NANGLE)*PI/180.
+	NSTEP=1
+9999	CONTINUE
+	DO  I=1,NTERM
+	BETA(I)=0
+	DO  J=1,I
+	ALPHA(I,J)=0
+	ENDDO
+	ENDDO
+	T=0.001
+C.......GET X**2
+	X0=0
+	INTERVEL=180/NUM
+	DO  I=1,NUM
+C	PHI=FLOAT(INTEVEL*(I-1))+FLOAT(INTERVEL)/2.
+	PHI=FLOAT(INTERVEL*(I-1))+FLOAT(INTERVEL)/2.
+	PHI=PHI*PI/180.
+	VALUE=A(1)+0.5*A(2)*COS(2.*(PHI-A(3)))
+	X0=X0+(VALUE-C(I))**2
+	ENDDO
+C.......CALCULATE DERIVES
+C.......NOTE FOR X**2
+C.......X11(K,L)=X^2(A(K)+DA(K),A(L)+DA(L))
+C.......X10(K)=X^2(A(K)+DA(K))
+C.......X20(K)=X^2(A(K)-DA(K))
+
+ 	DO K=1,NTERM
+	B(K)=A(K)
+	ENDDO
+	DO  K=1,NTERM
+	X1(K)=0
+	X2(K)=0
+	B(K)=A(K)+0.0001*A(K)
+	DO  I=1,NUM
+C	PHI=FLOAT(INTEVEL*(I-1))+FLOAT(INTERVEL)/2.
+	PHI=FLOAT(INTERVEL*(I-1))+FLOAT(INTERVEL)/2.
+	PHI=PHI*PI/180.
+	VALUE=B(1)+0.5*B(2)*COS(2.*(PHI-B(3)))
+	X1(K)=X1(K)+(VALUE-C(I))**2
+	ENDDO
+	B(K)=A(K)-0.0001*A(K)
+	DO  I=1,NUM
+C	PHI=FLOAT(INTEVEL*(I-1))+FLOAT(INTERVEL)/2.
+	PHI=FLOAT(INTERVEL*(I-1))+FLOAT(INTERVEL)/2.
+	PHI=PHI*PI/180.
+	VALUE=B(1)+0.5*B(2)*COS(2.*(PHI-B(3)))
+	X2(K)=X2(K)+(VALUE-C(I))**2
+	ENDDO
+	B(K)=A(K)
+	DERIV(K)=(X1(K)-X2(K))/(0.0002*A(K))
+	ENDDO
+
+	DO  K=1,NTERM
+	BETA(K)=-0.5*DERIV(K)
+	DO  L=1,K
+	X11=0
+	B(K)=A(K)*(1.+0.0001)
+	B(L)=A(L)*(1.+0.0001)
+	DO  I=1,NUM
+C	PHI=FLOAT(INTEVEL*(I-1))+FLOAT(INTERVEL)/2.
+	PHI=FLOAT(INTERVEL*(I-1))+FLOAT(INTERVEL)/2.
+	PHI=PHI*PI/180.
+	VALUE=B(1)+0.5*B(2)*COS(2.*(PHI-B(3)))
+	X11=X11+(VALUE-C(I))**2
+	ENDDO
+	B(K)=A(K)
+	B(L)=A(L)
+	ALPHA(K,L)=0.5*(X11-X1(K)-X1(L)+X0)/(0.0001*A(K)*0.0001*A(L))
+	ENDDO
+ 	ALPHA(K,K)=0.5*ABS(X1(K)-2*X0+X2(K))/((0.0001*A(K))**2)
+	IF(ALPHA(K,K) .LT. 0.00001) ALPHA(K,K)=0.00001
+	ENDDO
+	
+	DO  K=1,NTERM
+	DO  L=1,K
+	ALPHA(L,K)=ALPHA(K,L)
+	ENDDO
+	ENDDO
+
+969	DO  J=1,NTERM
+	  DO  K=1,NTERM
+	   ARRAY(J,K)=ALPHA(J,K)/SQRT(ALPHA(J,J)*ALPHA(K,K))
+	  ENDDO
+	 ARRAY(J,J)=(1.+T)
+	ENDDO
+
+	CALL MATINV(ARRAY,NTERM,DET)
+
+C.......GET NEW VALUES OF PARAMETERS
+
+	DO  J=1,NTERM
+	B(J)=A(J)
+	DO  K=1,NTERM
+	B(J)=B(J)+BETA(K)*ARRAY(J,K)/SQRT(ALPHA(J,J)*ALPHA(K,K))
+	ENDDO
+	ENDDO
+C.......GET NEW X**2
+	XN=0
+	DO  I=1,NUM
+C	PHI=FLOAT(INTEVEL*(I-1))+FLOAT(INTERVEL)/2.
+	PHI=FLOAT(INTERVEL*(I-1))+FLOAT(INTERVEL)/2.
+	PHI=PHI*PI/180.
+	VALUE=B(1)+0.5*B(2)*COS(2.*(PHI-B(3)))
+	XN=XN+(VALUE-C(I))**2
+	ENDDO
+	IF((XN-X0) .GT. 0) THEN
+	T=T*10.
+	GOTO 969
+	ELSE
+	D=0
+	DO  I=1,NTERM
+	D=D+ABS((A(I)-B(I))/B(I))
+	A(I)=B(I)
+	ENDDO
+9100	IF(A(3) .GT. PI) THEN
+	A(3)=A(3)-PI
+	GOTO 9100
+	ELSEIF(A(3) .LT. 0) THEN
+	A(3)=A(3)+PI
+	GOTO 9100
+	ENDIF
+	NSTEP=NSTEP+1
+	X0=XN
+C	WRITE(NOUT,*)'X**2=',X0
+C	WRITE(NOUT,*) 'NSTEP',NSTEP, A(1),A(2),A(3),A(4)
+	IF(D .LT. 0.000001 .AND. NSTEP .GT. 20) GOTO 9200
+	IF(NSTEP .GT. 200) GOTO 9200
+	GOTO 9999
+	ENDIF
+
+
+
+9200	CONTINUE
+	A(3)=A(3)*180./PI
+	WRITE(NOUT,*)'A1=',A(1),'A2=',A(2),' A3=',A(3)
+	WRITE(NOUT,*)'X**2=',X0, '  NSTEP=',NSTEP
+9800 	CONTINUE
+	RETURN
+	END
+@
+
+
+1.11
+log
+@GPL_2010
+@
+text
+@d3 1
+a3 1
+C DEFO001.FOR
+d71 2
+a72 1
+	CALL RDPRM(CS,NOT_USED,' SPHERICAL ABBERATION CS [MM]')
+@
+
+
+1.10
+log
+@GPL License fixed
+@
+text
+@a5 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d7 5
+a11 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d13 1
+a13 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d18 1
+a18 1
+C=* This program is distributed in the hope that it will be useful,    *
+d20 1
+a20 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a21 1
+C=*                                                                    *
+d23 1
+a23 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.9
+log
+@HRI GPL License used
+@
+text
+@a1 1
+C++************************************************************************
+a5 3
+C **************************************************************************
+C * SPIDER - MODULAR IMAGE PROCESSING SYSTEM.  AUTHOR: J.FRANK         *
+C *  SPIDER - MODULAR IMAGE PROCESSING SYSTEM.  AUTHOR: J.FRANK            *
+d9 1
+a9 1
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *  
+a28 7
+
+C *  COPYRIGHT (C)1981,1987, WADSWORTH CENTER FOR LABORATORIES AND         *
+C *  RESEARCH, NEW YORK STATE DEPARTMENT OF HEALTH, ALBANY, NY 12201.      *
+C *  THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO THE CENTER FOR       *
+C *  LABORATORIES AND RESEARCH AND ARE NOT TO BE DISCLOSED TO OTHERS OR    *
+C *  USED FOR PURPOSES OTHER THAN INTENDED WITHOUT WRITTEN APPROVAL OF     *
+C *  THE CENTER FOR LABORATORIES AND RESEARCH   			   *
+a29 1
+C **************************************************************************
+@
+
+
+1.8
+log
+@nloop,iloop_removed
+@
+text
+@d1 1
+d6 1
+d8 1
+d10 24
+d40 1
+@
+
+
+1.7
+log
+@a
+@
+text
+@d58 2
+a59 2
+	CALL RDPRM(LAMBDA,NLOOP,ILOOP,' WAVELENGTH LAMBDA [A]')
+	CALL RDPRM(CS,NLOOP,ILOOP,' SPHERICAL ABBERATION CS [MM]')
+@
+
+
+1.6
+log
+@CNO_SAVE
+@
+text
+@d34 1
+a34 1
+CNO_SAVE 
+@
+
+
+1.5
+log
+@f90 formating, used common blocks
+@
+text
+@d34 5
+@
+
+
+1.4
+log
+@*** empty log message ***
+@
+text
+@d3 1
+a3 1
+C $$ DEFO001.FOR
+d14 1
+a14 1
+C   $$ DEFO001:
+d17 2
+a18 2
+C   x(K,A)=PI*(0.5*CS*LAMBDA**3*K**4-DZ*LAMBDA*K**2)-OFFSET
+C   x(K,A)=PI*(0.5*CS*LAMBDA**3*K**4-A1*LAMBDA*K**2)-A2
+d22 2
+a23 2
+C	KP(I,J): ARRAy OF SP. FREQ. POINTS OF MINIMUM
+C	NA(I,J): ARRAy OF ABBERATION
+d25 1
+a25 1
+C	SPMAx: MAx OF SP. FREQ.
+d34 1
+a35 5
+#ifdef SP_UNIX
+        INCLUDE 'CMBLOCK.INC' 
+#else
+        INCLUDE 'COMMON1:CMBLOCK.INC' 
+#endif
+d38 6
+a43 2
+	real kp(20,20)
+	dimension beta(20),ALPHA(20,20),ARRAY(20,20)
+d45 1
+a45 4
+  	DIMENSION Y1(20,20),weight(20,20)
+	DIMENSION A(20),B(20),c(20),defo(20),X1(20),X2(20),DERIV(20)
+C	DIMENSION F2(512)
+C	CHARACTER  OUTNAME*81, CHO1*1
+d51 1
+a51 1
+C....... INPUT EM PARAMETERS*/
+d53 2
+a54 2
+	CALL RDPRM(LAMBDA,NLOOP,ILOOP,' WAVELENGTH LAMBDA [A]$')
+	CALL RDPRM(CS,NLOOP,ILOOP,' SPHERICAL ABBERATION CS [MM]$')
+d58 2
+a59 2
+	nterm=1+num
+	xmin=99999999.9
+d70 7
+a76 7
+	a1=0
+	a2=0
+	b1=0
+	b2=0
+	c1=0
+	c2=0
+	if(np(i) .eq. 1) then
+d79 1
+a79 1
+	c(i)=-(y1(i,1)-0.5*CS*PI*LAMBDA**3*KF**4)
+d81 2
+a82 2
+	goto 550
+	else
+d84 1
+a84 1
+c	KF=FLOAT(KP(I,J))*KS
+d88 1
+a88 1
+	C1=C1-(Y1(i,j)-0.5*CS*PI*LAMBDA**3*KF**4)
+d90 1
+a90 1
+	C2=C2-(Y1(i,j)-0.5*CS*PI*LAMBDA**3*KF**4)
+d94 5
+a98 5
+	c(I)=(C1*B2-C2*B1)/(A1*B2-A2*B1)
+	goto 550
+	endif
+550	continue
+c	WRITE(NOUT,*)'initial defocus', c(i)
+d104 1
+a104 1
+c	KF=FLOAT(KP(I,J))*KS
+d106 1
+a106 1
+	WEIGHT(I,J)=PI*(2.*CS*LAMBDA**3*KF**3-2.*c(i)*LAMBDA*KF)*2.*KS
+d110 5
+a114 5
+	DO  nac=1,31
+	A(nterm)=FLOAT(nac)*0.01
+	do i=1,num
+	a(i)=c(i)
+	enddo
+d130 1
+a130 1
+c	KF=KS*FLOAT(KP(I,J))
+d132 2
+a133 2
+	VALUE=PI*(0.5*CS*LAMBDA**3*KF**4-a(i)
+     &  *LAMBDA*KF**2)-A(nterm)
+d137 1
+a137 1
+c	WRITE(NOUT,*) 'x0=',x0
+d144 2
+a145 2
+ 	DO i=1,NTERM
+	B(i)=A(i)
+d153 1
+a153 1
+c	KF=KS*FLOAT(KP(I,J))
+d155 2
+a156 2
+	VALUE=PI*(0.5*CS*LAMBDA**3*KF**4-b(i)
+     &  *LAMBDA*KF**2)-b(nterm)
+d163 1
+a163 1
+c	KF=KS*FLOAT(KP(I,J))
+d165 2
+a166 2
+	VALUE=PI*(0.5*CS*LAMBDA**3*KF**4-b(i)
+     &  *LAMBDA*KF**2)-b(nterm)
+d173 1
+a173 1
+c	WRITE(NOUT,*) 'derive=',(deriv(i), i=1,nterm)
+d182 1
+a182 1
+c	KF=KS*FLOAT(KP(I,J))
+d184 2
+a185 2
+	VALUE=PI*(0.5*CS*LAMBDA**3*KF**4-b(i)
+     &  *LAMBDA*KF**2)-b(nterm)
+d224 1
+a224 1
+c 	KF=KS*FLOAT(KP(I,J))
+d226 3
+a228 3
+	VALUE=PI*(0.5*CS*LAMBDA**3*KF**4-b(i)
+     &  *LAMBDA*KF**2)-B(nterm)
+	Xn=Xn+(VALUE-Y1(I,J))**2/WEIGHT(I,J)**2
+d234 2
+a235 2
+	else
+	d=0
+d237 1
+a237 1
+	d=d+abs((a(i)-b(i))/b(i))
+d242 4
+a245 4
+c	WRITE(NOUT,*)'x**2=',x0
+c	WRITE(NOUT,*) 'NSTEP',NSTEP, A(1),A(2),A(3),A(4)
+	if(d .lt. 0.0001 .and. nstep .gt. 20) goto 200
+	if(nstep .gt. 200) goto 200
+d249 4
+a252 7
+200	if(x0 .lt. xmin) then
+	xmin=x0
+	do i=1,nterm
+	defo(i)=a(i)
+	enddo
+	endif
+	WRITE(NOUT,*) 'nstep=',nstep,'X**2=',x0, '  AC=',a(nterm)
+d254 4
+a257 1
+130	WRITE(NOUT,*)'  X**2=',xmin
+d259 2
+a260 2
+	WRITE(NOUT,*) (defo(i), I=1,NUM)
+	Q=SIN(defo(nterm))/COS(defo(nterm))*100.
+d264 27
+a290 27
+c.......calculate astigtism
+	do i=1,nterm
+	c(i)=defo(i)
+	enddo
+c.......average of defocus
+	defocus=0
+	do i=1,num
+	defocus=defocus+c(i)
+	enddo
+	defocus=defocus/float(num)
+c.......the astigtism is max(defocus)-min(defocus)
+	xmin=9999999.
+	xmax=-9999999.
+	do i=1,num-1
+	if(abs(c(i)-c(i+1)) .gt. xmax) xmax=c(i)
+	if(abs(c(i)-c(i+1)) .lt. xmin) xmin=c(i)
+	enddo
+	astig=xmax-xmin
+	WRITE(NOUT,*)'initial value: defocus=',defocus,'  astigtism=',astig
+	nterm=3
+
+	do 9800 nangle=1,36
+	a(1)=defocus
+	a(2)=astig
+	a(3)=5.*float(nangle)*pi/180.
+	nstep=1
+9999	continue
+d305 2
+a306 2
+	value=A(1)+0.5*A(2)*COS(2.*(PHI-A(3)))
+	X0=X0+(VALUE-c(i))**2
+d325 2
+a326 2
+	value=b(1)+0.5*b(2)*COS(2.*(PHI-b(3)))
+	X1(K)=X1(K)+(VALUE-c(i))**2
+d333 2
+a334 2
+	value=b(1)+0.5*b(2)*COS(2.*(PHI-b(3)))
+	X2(K)=X2(K)+(VALUE-c(i))**2
+d349 3
+a351 3
+	phi=phi*pi/180.
+	value=b(1)+0.5*b(2)*COS(2.*(PHI-b(3)))
+	X11=X11+(VALUE-c(i))**2
+d389 3
+a391 3
+	phi=phi*pi/180.
+	value=B(1)+0.5*B(2)*COS(2.*(PHI-B(3)))
+	Xn=Xn+(VALUE-c(i))**2
+d396 2
+a397 2
+	else
+	d=0
+d399 1
+a399 1
+	d=d+abs((a(i)-b(i))/b(i))
+d402 7
+a408 7
+9100	if(a(3) .gt. pi) then
+	a(3)=a(3)-pi
+	goto 9100
+	elseif(a(3) .lt. 0) then
+	a(3)=a(3)+pi
+	goto 9100
+	endif
+d411 4
+a414 4
+c	WRITE(NOUT,*)'x**2=',x0
+c	WRITE(NOUT,*) 'NSTEP',NSTEP, A(1),A(2),A(3),A(4)
+	if(d .lt. 0.000001 .and. nstep .gt. 20) goto 9200
+	if(nstep .gt. 200) goto 9200
+d420 2
+a421 2
+9200	continue
+	a(3)=a(3)*180./pi
+d423 2
+a424 2
+	WRITE(NOUT,*)'X**2=',X0, '  nstep=',nstep
+9800 	continue
+@
+
+
+1.3
+log
+@change write(* to write(nout
+@
+text
+@d65 5
+a69 3
+	DO 10 I=1,NUM
+	DO 10 J=1,NP(I)
+10	Y1(I,J)=PI*FLOAT(NA(I,J))
+d72 1
+a72 1
+	DO 510 I=1,NUM
+d86 1
+a86 1
+	DO 500 J=1,NP(I)
+d95 1
+a95 1
+500	CONTINUE
+d102 1
+a102 1
+510	CONTINUE
+d105 2
+a106 2
+	DO 520 I=1,NUM
+	DO 520 J=1,NP(I)
+d109 3
+a111 1
+520	WEIGHT(I,J)=PI*(2.*CS*LAMBDA**3*KF**3-2.*c(i)*LAMBDA*KF)*2.*KS
+d113 1
+a113 1
+	DO 20 nac=1,31
+d122 1
+a122 1
+	DO 30 I=1,NTERM
+d124 4
+a127 2
+	DO 30 J=1,I
+30	ALPHA(I,J)=0
+d131 2
+a132 2
+	DO 40 I=1,NUM
+	DO 40 J=1,NP(I)
+d138 2
+a139 1
+40	CONTINUE	
+d150 1
+a150 1
+	DO 55 K=1,NTERM
+d154 2
+a155 2
+	DO 50 I=1,NUM
+	DO 50 J=1,NP(I)
+d161 2
+a162 1
+50	CONTINUE
+d164 2
+a165 2
+	DO 53 I=1,NUM
+	DO 53 J=1,NP(I)
+d171 2
+a172 1
+53	CONTINUE
+d175 1
+a175 1
+55	CONTINUE
+d177 1
+a177 1
+	DO 58 K=1,NTERM
+d179 1
+a179 1
+	DO 57 L=1,K
+d183 2
+a184 2
+	DO 56 I=1,NUM
+	DO 56 J=1,NP(I)
+d190 2
+a191 1
+56	CONTINUE
+d194 2
+a195 1
+57	ALPHA(K,L)=0.5*(X11-X1(K)-X1(L)+X0)/(0.0001*A(K)*0.0001*A(L))
+d198 1
+a198 1
+58	CONTINUE
+d200 12
+a211 8
+	DO 60 K=1,NTERM
+	DO 60 L=1,K
+60	ALPHA(L,K)=ALPHA(K,L)
+
+69	DO 70 J=1,NTERM
+	DO 73 K=1,NTERM
+73	ARRAY(J,K)=ALPHA(J,K)/SQRT(ALPHA(J,J)*ALPHA(K,K))
+70	ARRAY(J,J)=(1.+T)
+d217 1
+a217 1
+	DO 80 J=1,NTERM
+d219 4
+a222 2
+	DO 80 K=1,NTERM
+80	B(J)=B(J)+BETA(K)*ARRAY(J,K)/SQRT(ALPHA(J,J)*ALPHA(K,K))
+d225 2
+a226 2
+	DO 85 I=1,NUM
+	DO 85 J=1,NP(I)
+d232 2
+a233 1
+85	CONTINUE	
+d239 1
+a239 1
+	DO 90 I=1,NTERM
+d241 2
+a242 1
+90	A(I)=B(I)
+d259 1
+a259 1
+20	continue
+d294 1
+a294 1
+	DO 920 I=1,NTERM
+d296 4
+a299 2
+	DO 920 J=1,I
+920	ALPHA(I,J)=0
+d304 1
+a304 1
+	DO 930 I=1,NUM
+d310 1
+a310 1
+930	CONTINUE	
+d320 1
+a320 1
+	DO 955 K=1,NTERM
+d324 1
+a324 1
+	DO 950 I=1,NUM
+d330 1
+a330 1
+950	CONTINUE
+d332 1
+a332 1
+	DO 953 I=1,NUM
+d338 1
+a338 1
+953	CONTINUE
+d341 1
+a341 1
+955	CONTINUE
+d343 1
+a343 1
+	DO 958 K=1,NTERM
+d345 1
+a345 1
+	DO 957 L=1,K
+d349 1
+a349 1
+	DO 956 I=1,NUM
+d355 1
+a355 1
+956	CONTINUE
+d358 2
+a359 1
+957	ALPHA(K,L)=0.5*(X11-X1(K)-X1(L)+X0)/(0.0001*A(K)*0.0001*A(L))
+d362 1
+a362 1
+958	CONTINUE
+d364 12
+a375 8
+	DO 960 K=1,NTERM
+	DO 960 L=1,K
+960	ALPHA(L,K)=ALPHA(K,L)
+
+969	DO 970 J=1,NTERM
+	DO 973 K=1,NTERM
+973	ARRAY(J,K)=ALPHA(J,K)/SQRT(ALPHA(J,J)*ALPHA(K,K))
+970	ARRAY(J,J)=(1.+T)
+d381 1
+a381 1
+	DO 980 J=1,NTERM
+d383 4
+a386 2
+	DO 980 K=1,NTERM
+980	B(J)=B(J)+BETA(K)*ARRAY(J,K)/SQRT(ALPHA(J,J)*ALPHA(K,K))
+d389 1
+a389 1
+	DO 985 I=1,NUM
+d395 1
+a395 1
+985	CONTINUE	
+d401 1
+a401 1
+	DO 990 I=1,NTERM
+d403 2
+a404 1
+990	A(I)=B(I)
+@
+
+
+1.2
+log
+@correct warnings from VAX
+@
+text
+@d99 1
+a99 1
+c	write(*,*)'initial defocus', c(i)
+d133 1
+a133 1
+c	write(*,*) 'x0=',x0
+d167 1
+a167 1
+c	write(*,*) 'derive=',(deriv(i), i=1,nterm)
+d226 2
+a227 2
+c	write(*,*)'x**2=',x0
+c	WRITE(*,*) 'NSTEP',NSTEP, A(1),A(2),A(3),A(4)
+d239 1
+a239 1
+	write(*,*) 'nstep=',nstep,'X**2=',x0, '  AC=',a(nterm)
+d266 1
+a266 1
+	write(*,*)'initial value: defocus=',defocus,'  astigtism=',astig
+d385 2
+a386 2
+c	write(*,*)'x**2=',x0
+c	WRITE(*,*) 'NSTEP',NSTEP, A(1),A(2),A(3),A(4)
+d396 2
+a397 2
+	WRITE(*,*)'A1=',A(1),'A2=',A(2),' A3=',A(3)
+	WRITE(*,*)'X**2=',X0, '  nstep=',nstep
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d33 7
+a39 1
+	INCLUDE 'CMBLOCK.INC'
+d47 3
+a49 2
+	DIMENSION F2(512)
+	CHARACTER *81 OUTNAME, CHO1*1,NULL*1
+d51 1
+d78 4
+a81 2
+	KF=FLOAT(KP(I,1))*KS
+	c(i)=-(y1(i,1)-0.5*CS*PI*LAMBDA**3*KF**4)/(PI*LAMBDA*KF**2)
+d85 2
+a86 1
+	KF=FLOAT(KP(I,J))*KS
+d105 2
+a106 1
+	KF=FLOAT(KP(I,J))*KS
+d127 2
+a128 1
+	KF=KS*FLOAT(KP(I,J))
+d149 2
+a150 1
+	KF=KS*FLOAT(KP(I,J))
+d158 2
+a159 1
+	KF=KS*FLOAT(KP(I,J))
+d176 2
+a177 1
+	KF=KS*FLOAT(KP(I,J))
+d210 2
+a211 1
+	KF=KS*FLOAT(KP(I,J))
+d284 2
+a285 1
+	PHI=FLOAT(INTEVEL*(I-1))+FLOAT(INTERVEL)/2.
+d304 2
+a305 1
+	PHI=FLOAT(INTEVEL*(I-1))+FLOAT(INTERVEL)/2.
+d312 2
+a313 1
+	PHI=FLOAT(INTEVEL*(I-1))+FLOAT(INTERVEL)/2.
+d329 2
+a330 1
+	PHI=FLOAT(INTEVEL*(I-1))+FLOAT(INTERVEL)/2.
+d362 2
+a363 1
+	PHI=FLOAT(INTEVEL*(I-1))+FLOAT(INTERVEL)/2.
+@

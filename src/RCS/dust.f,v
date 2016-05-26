@@ -1,0 +1,421 @@
+head	1.10;
+access;
+symbols
+	pre_getangas:1.9
+	GPL2010:1.9
+	pre_GPL2010:1.8
+	pre_var_equation:1.8
+	pre_fftwrings:1.7
+	pre_opfiles:1.7
+	src:1.7
+	best-code:1.7
+	x-named-regs:1.7
+	x:1.7
+	v13-00:1.7
+	pre_GPL:1.5
+	prec_CA:1.5
+	noindx:1.5
+	Bproc:1.4
+	oct21:1.3
+	last77:1.1;
+locks; strict;
+comment	@c @;
+
+
+1.10
+date	2013.12.31.19.12.34;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2010.06.24.13.25.30;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2009.05.22.10.57.01;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2005.10.17.20.36.27;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2005.10.17.18.26.54;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2002.03.11.14.08.25;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	99.12.27.18.55.43;	author bimal;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	99.09.08.19.02.30;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	99.09.08.17.00.38;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	98.08.10.19.13.37;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@split out of hist.f
+@
+
+
+1.10
+log
+@nx, output top & bot, etc
+@
+text
+@
+C++*********************************************************************
+C
+C DUST.F
+C                 SETPRMB PARAMETERS       ARDEAN LEITH         5/19/09
+C
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C    HIST(LUN,NX,NY,NZ,HSIG,HMODE,IRTFLG)
+C
+C    PURPOSE:    REMOVE DATA THAT ARE 
+C                OUT OF A SPECIFIED STATISTICAL RANGE.
+C
+C    PARAMETERS:  LUN        IO UNIT NUMBER OF IMAGE FILE
+C                 NX,NY  DIMENSIONS OF IMAGE
+C                 NZ     DIMENSIONS OF IMAGE
+C                 HSIG       HISTOGRAM STANDARD DEVIATION
+C                 HMODE      HISTOGRAM MODE
+C                 IRTFLG     UNUSED
+C
+C23456789 123456789 123456789 123456789 123456789 123456789 123456789 12
+C--*********************************************************************
+
+      SUBROUTINE DUST(LUN,NX,NY,NZ,HSIG,HMODE,IRTFLG)
+
+      INCLUDE 'CMBLOCK.INC'
+
+      REAL, ALLOCATABLE :: REDBUF(:)
+
+      FMULT = 2.0
+      CALL RDPRM1S(FMULT,NOT_USED,'STANDARD DEVIATION FACTOR',IRTFLG)
+      IF (IRTFLG .EQ. -1) RETURN
+
+      ISIDE = 3
+      CALL RDPRI1S(ISIDE,NOT_USED,
+     &             'BOTTOM=(1),  TOP=(2), OR BOTH SIDES=(3)',IRTFLG)
+      IF (IRTFLG .EQ. -1) RETURN
+
+      IF (FCHAR(4:4) == 'V') THEN
+         CALL RDPRM1S(VALUE,NOT_USED,'VALUE TO BE SUBSTITUTED',IRTFLG)
+         IF (IRTFLG .EQ. -1) RETURN
+      ENDIF
+
+      BOT  = FMIN
+      TOP  = FMAX
+      YSUB = HSIG * FMULT
+
+      IF (ISIDE == 1 .OR. ISIDE == 3) BOT = HMODE - YSUB
+      IF (ISIDE == 2 .OR. ISIDE == 3) TOP = HMODE + YSUB
+
+C     FOR 'DU' CASE
+      TT  = TOP
+      TB  = BOT
+
+C     FOR 'DU V' CASE
+      IF (FCHAR(4:4) == 'V') THEN
+         TT = VALUE
+         TB = VALUE
+      ENDIF
+
+      IF (ISIDE == 1 .OR. ISIDE == 3) THEN
+         WRITE(NOUT,90) '  REPLACING PIXELS < ',BOT,'  WITH: ',TB
+      ENDIF
+
+      IF (ISIDE == 2 .OR. ISIDE == 3) THEN
+         WRITE(NOUT,90) '  REPLACING PIXELS > ',TOP,'  WITH: ',TT
+ 90      FORMAT(A,ES10.3, A,ES10.3)
+      ENDIF
+
+      ALLOCATE (REDBUF(NX), STAT=IRTFLG)
+      IF (IRTFLG .NE. 0) THEN 
+         CALL ERRT(46,'DUST , REDBUF',NX)
+         RETURN
+      ENDIF
+
+      DO  I=1,NY*NZ
+         CALL REDLIN(LUN,REDBUF,NX,I)
+
+         DO  K=1,NX
+            IF (REDBUF(K) > TOP) REDBUF(K) = TT
+            IF (REDBUF(K) < BOT) REDBUF(K) = TB
+         ENDDO
+         CALL WRTLIN(LUN,REDBUF,NX,I)
+      ENDDO
+
+C     SET STATISTICS TO UNDETERMINED
+      CALL SETPRMB(LUN, 0.0,0.0, 0.0,0.0)
+
+      DEALLOCATE (REDBUF)
+
+      END
+
+@
+
+
+1.9
+log
+@GPL_2010
+@
+text
+@d29 1
+a29 1
+C    HIST(LUN,NSAM,NROW,NSLICE,HSIG,HMODE,IRTFLG)
+d35 2
+a36 2
+C                 NSAM,NROW  DIMENSIONS OF IMAGE
+C                 NSLICE     DIMENSIONS OF IMAGE
+d44 1
+a44 1
+      SUBROUTINE DUST(LUN,NSAM,NROW,NSLICE,HSIG,HMODE,IRTFLG)
+d48 1
+a48 1
+      REAL, ALLOCATABLE, DIMENSION(:) :: REDBUF
+d50 13
+a62 7
+      CALL RDPRM(FMULT,NOT_USED,'STANDARD DEVIATION FACTOR')
+
+      CALL RDPRMI(ISIDE,IDUM,NOT_USED,
+     &             '(1)BOTTOM (2)TOP (3)BOTH SIDES')
+
+      IF (FCHAR(4:4) .EQ. 'V') 
+     &     CALL RDPRM(VALUE,NOT_USED,'VALUE TO BE SUBSTITUTED')
+d67 3
+a69 2
+      IF (ISIDE .EQ .1 .OR. ISIDE .EQ. 3) BOT = HMODE - YSUB
+      IF (ISIDE .EQ .2 .OR. ISIDE .EQ. 3) TOP = HMODE + YSUB
+d76 1
+a76 1
+      IF (FCHAR(4:4) .EQ. 'V') THEN
+d81 12
+a92 3
+      ALLOCATE (REDBUF(NSAM), STAT=IRTFLG)
+      IF (IRTFLG.NE.0) THEN 
+         CALL ERRT(46,'DUST , REDBUF',NSAM)
+d96 2
+a97 2
+      DO  I=1,NROW*NSLICE
+         CALL REDLIN(LUN,REDBUF,NSAM,I)
+d99 3
+a101 3
+         DO  K=1,NSAM
+            IF (REDBUF(K) .GT. TOP) REDBUF(K) = TT
+            IF (REDBUF(K) .LT. BOT) REDBUF(K) = TB
+d103 1
+a103 1
+         CALL WRTLIN(LUN,REDBUF,NSAM,I)
+d110 1
+a110 1
+      RETURN
+@
+
+
+1.8
+log
+@rdprmb parameters
+@
+text
+@a7 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2009  Health Research Inc.                      *
+d9 5
+a13 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d15 1
+a15 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d20 1
+a20 1
+C=* This program is distributed in the hope that it will be useful,    *
+d22 1
+a22 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a23 1
+C=*                                                                    *
+d25 1
+a25 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.7
+log
+@GPL License fixed
+@
+text
+@d5 1
+d9 1
+a9 1
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+a51 1
+ 
+a53 4
+
+      
+
+
+d80 1
+a80 1
+         CALL ERRT(46,'DUST , REDBUF',IER)
+a86 1
+	
+a91 1
+	
+d95 1
+a96 2
+
+      CALL SETPRMB(REDBUF,LUN,NSAM,NROW,0.0,0.0,0.0,'U')
+@
+
+
+1.6
+log
+@HRI GPL License used
+@
+text
+@a2 1
+C++************************************************************************
+a6 3
+C **************************************************************************
+C * SPIDER - MODULAR IMAGE PROCESSING SYSTEM.  AUTHOR: J.FRANK         *
+C *  SPIDER - MODULAR IMAGE PROCESSING SYSTEM.  AUTHOR: J.FRANK            *
+d10 1
+a10 1
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *  
+a29 7
+
+C *  COPYRIGHT (C)1981, WADSWORTH CENTER FOR LABORATORIES AND              *
+C *  RESEARCH, NEW YORK STATE DEPARTMENT OF HEALTH, ALBANY, NY 12201.      *
+C *    THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO THE CENTER FOR     *
+C *    LABORATORIES AND RESEARCH AND ARE NOT TO BE DISCLOSED TO OTHERS OR  *
+C *    USED FOR PURPOSES OTHER THAN INTENDED WITHOUT WRITTEN APPROVAL OF   *
+C *    THE CENTER FOR LABORATORIES AND RESEARCH                            *
+a30 1
+C **************************************************************************
+@
+
+
+1.5
+log
+@nloop,iloop_removed
+@
+text
+@d2 1
+d7 1
+d9 1
+d11 24
+d41 1
+@
+
+
+1.4
+log
+@adapted for dynamical memory allocation
+@
+text
+@d42 1
+a42 1
+      CALL RDPRM(FMULT,NLOOP,ILOOP,'STANDARD DEVIATION FACTOR')
+d44 1
+a44 1
+      CALL RDPRMI(ISIDE,IDUM,NLOOP,ILOOP,
+d48 1
+a48 1
+     &     CALL RDPRM(VALUE,NLOOP,ILOOP,'VALUE TO BE SUBSTITUTED')
+@
+
+
+1.3
+log
+@CMLIMIT
+@
+text
+@a33 2
+      INCLUDE 'CMLIMIT.INC'
+      COMMON /IOBUF/   REDBUF(NBUFSIZ)
+d35 7
+d66 6
+d74 2
+d81 1
+d85 2
+d88 1
+a88 1
+
+@
+
+
+1.2
+log
+@CMLIMIT.INC
+@
+text
+@d34 1
+a34 1
+      INCLUDE 'COMLIMIT.INC'
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d34 1
+a34 3
+CNO_SAVE
+
+      PARAMETER        (NBUFSIZ = 17008)
+a35 2
+
+CNO_SAVE      
+@

@@ -1,0 +1,2149 @@
+head	1.16;
+access;
+symbols;
+locks; strict;
+comment	@c @;
+
+
+1.16
+date	2012.12.10.19.01.04;	author leith;	state Exp;
+branches;
+next	1.15;
+
+1.15
+date	2012.12.10.15.08.06;	author leith;	state Exp;
+branches;
+next	1.14;
+
+1.14
+date	2012.09.05.13.50.38;	author leith;	state Exp;
+branches;
+next	1.13;
+
+1.13
+date	2011.12.23.17.45.58;	author leith;	state Exp;
+branches;
+next	1.12;
+
+1.12
+date	2011.12.22.13.57.39;	author leith;	state Exp;
+branches;
+next	1.11;
+
+1.11
+date	2011.12.21.15.04.37;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2011.12.19.17.36.19;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2011.12.16.14.39.14;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2011.12.16.14.32.13;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2011.12.14.19.57.45;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2011.12.14.17.06.15;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2011.12.13.13.41.13;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2011.12.08.17.23.46;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2011.10.28.17.36.06;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2011.10.12.15.16.39;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2011.10.06.16.06.33;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.16
+log
+@WX DIM. BUG       DEC 2012 Gregory Kishchenko *
+C                              .
+@
+text
+@C ++********************************************************************
+C                                                                      *
+C  FBS3      NEW                          OCT 2011 GREGORY KISHCHENKO *
+C            NXP ADDED                    DEC 2011 ARDEAN LEITH       *
+C            /NXLD BUG, WX DIM. BUG       DEC 2012 Gregory Kishchenko *
+C                                                                      *
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2012  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NROW 12204.    *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C                                                                      *
+C   FUNCTION FBS3(X,Y,Z,NXLD,NX,NY,NZ,F1,NXP,XYZ,X1,Y1,Z1,XY2,XZ2,YZ2) *
+C                                                                      *
+C   PURPOSE: 3D FOURIER-BASED TRICUBIC SPLINE INTERPOLATION            *
+C            BETWEEN VOXELS. ALGORITHM IS FAIRLY FAST AND              *
+C            PRESERVES FINE DETAILS OF IMAGES                          *
+C                                                                      *
+C   PARAMETERS: X,Y,Z         LOCATION WITHIN F1                  SENT *
+C               NXLD          FFTW PAD SIZE                       SENT *
+C               NX,NY,NZ      SIZE                                SENT *
+C               F1            PADDED IMAGE                        SENT *
+C               NXP           F1 X DIM                            SENT *
+C               XYZ,X1,Y1     DERIVATIVES                         SENT *
+C               XY2,XZ2,YZ2   DERIVATIVES                         SENT *
+C                                                                      *
+C   NOTES:                                                             *
+C   If the values of a function F(X) and its first derivatives F'(X)   *
+C   are known at X=0 and X=1, the function can be interpolated on the  *
+C   interval [0,1] as a third degree polynomial (cubic                 *
+C   interpolation formula):                                            *
+C                                                                      *
+C      F(X)=A0 + A1*X + A2*X**2 + A3*X**3                              *
+C                                                                      *
+C       where A0, A1, A2, and A3 are given by                          *
+C       A0 = F(0)                                                      *
+C       A1 = F'(0)                                                     *
+C       A2 = 3*(F(1)-F(0) - 2*F'(0) - F'(1)                            *
+C       A3 = 2*(F(0)-F(1)) +  F'(0) + F'(1)                            *
+C                                                                      *
+C   In order to interpolate a three-dimensional grid [0,1]×[0,1]×[0,1] *
+C   we used a particular sequential combination of three               *
+C   one-dimensional cubic interpolations.                              *
+C       The following derivatives were used for interpolation:         *
+C   dF/dX, dF/dY, dF/dZ, d2F/dXdY, d2F/dXdZ, d2F/dYdZ, d3F/dXdYdZ.     *
+C      The use of this set satisfies the isotropic requirement of      *
+C   interpolation                                                      *
+C      All mentioned above derivatives for 8 grid nodes were obtained  *
+C   by formula for derivatives' calculation using 3D Fourier transform.*
+C   This approach is computationally efficient and very convenient     *
+C   for calculating the derivatives of a  function defined as a        *
+C   discrete data set, and allows to calculate the derivative in any   *
+C   local point without the finite difference approximation involving  *
+C   the data from neighboring points.                                  *
+C                                                                      *
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C***********************************************************************
+
+       REAL FUNCTION FBS3(X,Y,Z, 
+     &               NXLD, NX,NY,NZ,
+     &               F1,NXP, XYZ,X1,Y1,Z1,
+     &               XY2,XZ2,YZ2)
+
+       IMPLICIT NONE
+
+       REAL          :: X,  Y,  Z
+       INTEGER       :: NXLD, NX, NY, NZ
+
+       REAL          :: F1 (NXP,  NY,NZ)  ! DATA CUBE 
+       INTEGER       :: NXP
+
+       REAL          :: XYZ(NXLD, NY,NZ)  ! XYZ DERIVATIVE OF F1  
+       REAL          :: X1 (NXLD, NY,NZ)  ! X   DERIVATIVE OF F1
+       REAL          :: Y1 (NXLD, NY,NZ)  ! Y   DERIVATIVE OF F1
+       REAL          :: Z1 (NXLD, NY,NZ)  ! Z   DERIVATIVE OF F1
+       REAL          :: XY2(NXLD, NY,NZ)  ! XY  DERIVATIVE OF F1
+       REAL          :: XZ2(NXLD, NY,NZ)  ! XZ  DERIVATIVE OF F1
+       REAL          :: YZ2(NXLD, NY,NZ)  ! YZ  DERIVATIVE OF F1
+
+       INTEGER       :: I, J, L
+       INTEGER       :: I2,J2,L2
+       INTEGER       :: I3,J3,L3
+
+       REAL          :: DX, DY, DZ
+       REAL          :: A0, A1, A2, A3
+       REAL          :: ADX, BDX, DADX, DBDX
+       REAL          :: C0, DC0, C1, DC1
+       REAL          :: DXSQR,DYSQR,DXCUB,DYCUB
+
+
+             I  = FLOOR(X)
+             J  = FLOOR(Y)
+             L  = FLOOR(Z)
+
+             I2 = MODULO(I-1,NX) + 1
+             J2 = MODULO(J-1,NY) + 1
+             L2 = MODULO(L-1,NZ) + 1
+
+             I3 = I2 + 1
+             IF (I3 > NX) I3 = 1
+             J3 = J2 + 1
+             IF (J3 > NY) J3 = 1
+             L3 = L2 + 1
+             IF (L3 > NZ) L3 = 1
+
+             DX    = X - I
+             DY    = Y - J
+             DZ    = Z - L
+             DXSQR = DX **2
+             DXCUB = DX **3
+             DYSQR = DY **2
+             DYCUB = DY **3
+
+C            1ST Plane - Function
+             A0  = F1(I2,J2,L2)
+             A1  = X1(I2,J2,L2)
+             A2  = 3*( F1(I3,J2,L2)-A0) - 2*A1-X1(I3,J2,L2)
+             A3  = 2*(-F1(I3,J2,L2)+A0) +   A1+X1(I3,J2,L2)
+             ADX = A0 + A1*DX + A2*DXSQR + A3*DXCUB
+
+             A0 = F1(I2,J3,L2)
+             A1 = X1(I2,J3,L2)
+             A2 = 3*( F1(I3,J3,L2)-A0) - 2*A1 - X1(I3,J3,L2)
+             A3 = 2*(-F1(I3,J3,L2)+A0) +   A1 + X1(I3,J3,L2)
+             BDX = A0 + A1*DX + A2*DXSQR + A3*DXCUB
+
+             A0  = Y1(I2,J2,L2)
+             A1  = XY2(I2,J2,L2)
+             A2  = 3*( Y1(I3,J2,L2)-A0) -2*A1 - XY2(I3,J2,L2)
+             A3  = 2*(-Y1(I3,J2,L2)+A0) +  A1 + XY2(I3,J2,L2)
+             DADX = A0 + A1*DX + A2*DXSQR + A3*DXCUB
+
+             A0 = Y1(I2,J3,L2)
+             A1 = XY2(I2,J3,L2)
+             A2 = 3*( Y1(I3,J3,L2)-A0) - 2*A1 - XY2(I3,J3,L2)
+             A3 = 2*(-Y1(I3,J3,L2)+A0) +   A1 + XY2(I3,J3,L2)
+             DBDX = A0 + A1*DX + A2*DXSQR + A3*DXCUB
+
+             A2 = 3*(BDX - ADX) - 2*DADX - DBDX
+             A3 = 2*(ADX - BDX) +   DADX + DBDX
+
+             C0 = ADX + DADX * DY + A2 * DYSQR + A3 * DYCUB
+
+C            1ST Plane - Z-Derivative
+             A0  = Z1(I2,J2,L2)
+             A1  = XZ2(I2,J2,L2)
+             A2  = 3*( Z1(I3,J2,L2)-A0) - 2*A1-XZ2(I3,J2,L2)
+             A3  = 2*(-Z1(I3,J2,L2)+A0) +   A1+XZ2(I3,J2,L2)
+             ADX = A0 + A1*DX + A2*DXSQR + A3*DXCUB
+
+             A0 = Z1(I2,J3,L2)
+             A1 = XZ2(I2,J3,L2)
+             A2 = 3*( Z1(I3,J3,L2)-A0) - 2*A1 - XZ2(I3,J3,L2)
+             A3 = 2*(-Z1(I3,J3,L2)+A0) +   A1 + XZ2(I3,J3,L2)
+             BDX = A0 + A1*DX + A2*DXSQR + A3*DXCUB
+
+             A0  = YZ2(I2,J2,L2)
+             A1  = XYZ(I2,J2,L2)
+             A2  = 3*( YZ2(I3,J2,L2)-A0) -2*A1 - XYZ(I3,J2,L2)
+             A3  = 2*(-YZ2(I3,J2,L2)+A0) +  A1 + XYZ(I3,J2,L2)
+             DADX = A0 + A1*DX + A2*DXSQR + A3*DXCUB
+
+             A0 = YZ2(I2,J3,L2)
+             A1 = XYZ(I2,J3,L2)
+             A2 = 3*( YZ2(I3,J3,L2)-A0) - 2*A1 - XYZ(I3,J3,L2)
+             A3 = 2*(-YZ2(I3,J3,L2)+A0) +   A1 + XYZ(I3,J3,L2)
+             DBDX = A0 + A1*DX + A2*DXSQR + A3*DXCUB
+
+             A2 = 3*(BDX - ADX) - 2*DADX - DBDX
+             A3 = 2*(ADX - BDX) +   DADX + DBDX
+
+             DC0 = ADX + DADX*DY + A2*DYSQR + A3*DYCUB
+
+C            2nd Plane - Function
+             A0  = F1(I2,J2,L3)
+             A1  = X1(I2,J2,L3)
+             A2  = 3*( F1(I3,J2,L3)-A0) - 2*A1-X1(I3,J2,L3)
+             A3  = 2*(-F1(I3,J2,L3)+A0) +  A1+X1(I3,J2,L3)
+             ADX = A0 + A1*DX + A2*DXSQR + A3*DXCUB
+
+             A0 = F1(I2,J3,L3)
+             A1 = X1(I2,J3,L3)
+             A2 = 3*( F1(I3,J3,L3)-A0) - 2*A1 - X1(I3,J3,L3)
+             A3 = 2*(-F1(I3,J3,L3)+A0) +   A1 + X1(I3,J3,L3)
+             BDX = A0 + A1*DX + A2*DXSQR + A3*DXCUB
+
+             A0  = Y1 (I2,J2,L3)
+             A1  = XY2(I2,J2,L3)
+             A2  = 3*( Y1(I3,J2,L3)-A0) - 2*A1 - XY2(I3,J2,L3)
+             A3  = 2*(-Y1(I3,J2,L3)+A0) +   A1 + XY2(I3,J2,L3)
+             DADX = A0 + A1*DX + A2*DXSQR + A3*DXCUB
+
+             A0 = Y1 (I2,J3,L3)
+             A1 = XY2(I2,J3,L3)
+             A2 = 3*( Y1(I3,J3,L3)-A0) - 2*A1 - XY2(I3,J3,L3)
+             A3 = 2*(-Y1(I3,J3,L3)+A0) +   A1 + XY2(I3,J3,L3)
+             DBDX = A0 + A1*DX + A2*DXSQR + A3*DXCUB
+
+             A2 = 3*(BDX - ADX) - 2*DADX - DBDX
+             A3 = 2*(ADX - BDX) +   DADX + DBDX
+
+             C1 = ADX + DADX* DY + A2 * DYSQR + A3 * DYCUB
+
+C            2nd Plane - Z-Derivative
+             A0  = Z1 (I2,J2,L3)
+             A1  = XZ2(I2,J2,L3)
+             A2  = 3*( Z1(I3,J2,L3)-A0) - 2*A1-XZ2(I3,J2,L3)
+             A3  = 2*(-Z1(I3,J2,L3)+A0) +   A1+XZ2(I3,J2,L3)
+             ADX = A0 + A1*DX + A2*DXSQR + A3*DXCUB
+
+             A0 = Z1 (I2,J3,L3)
+             A1 = XZ2(I2,J3,L3)
+             A2 = 3*( Z1(I3,J3,L3)-A0) - 2*A1 - XZ2(I3,J3,L3)
+             A3 = 2*(-Z1(I3,J3,L3)+A0) +   A1 + XZ2(I3,J3,L3)
+             BDX = A0 + A1*DX + A2*DXSQR + A3*DXCUB
+
+             A0  = YZ2(I2,J2,L3)
+             A1  = XYZ(I2,J2,L3)
+             A2  = 3*( YZ2(I3,J2,L3)-A0) -2*A1 - XYZ(I3,J2,L3)
+             A3  = 2*(-YZ2(I3,J2,L3)+A0) +  A1 + XYZ(I3,J2,L3)
+             DADX = A0 + A1*DX + A2*DXSQR + A3*DXCUB
+
+             A0 = YZ2(I2,J3,L3)
+             A1 = XYZ(I2,J3,L3)
+             A2 = 3*( YZ2(I3,J3,L3)-A0) - 2*A1 - XYZ(I3,J3,L3)
+             A3 = 2*(-YZ2(I3,J3,L3)+A0) +   A1 + XYZ(I3,J3,L3)
+             DBDX = A0 + A1*DX + A2*DXSQR + A3*DXCUB
+
+             A2 = 3*(BDX - ADX) - 2*DADX - DBDX
+             A3 = 2*(ADX - BDX) +   DADX + DBDX
+
+             DC1 = ADX + DADX * DY + A2 * DYSQR + A3 * DYCUB
+
+C            FINAL LINE INSIDE CUBE
+C            F(Z)=A0 + A1*DZ + A2*DZ**2 + A3*DZ**3
+C              where A2, and A3 are given by
+C            A2 = 3*(F(1)-F(0)) - 2*F'(0) - F'(1)
+C            A3 = 2*(F(0)-F(1)) + F'(0) + F'(1)
+
+             A2 = 3*(C1-C0) - 2*DC0 - DC1
+             A3 = 2*(C0-C1) +   DC0 + DC1
+
+             FBS3 = C0 + DC0*DZ + A2*DZ**2 + A3*DZ**3
+
+       END FUNCTION FBS3 
+
+C            TRI-LINEAR (JUST AN EXAMPLE)
+C            C0 = F1(I2,J2,L2)*(1-DX)*(1-DY)*(1-DZ)
+C            C0 = C0 + F1(I3,J2,L2)  * DX*(1-DY)*(1-DZ)
+C            C0 = C0 + F1(I2,J3,L2)  * (1-DX)*DY*(1-DZ)
+C            C0 = C0 + F1(I3,J3,L2)  * DX*DY*(1-DZ)
+C            C0 = C0 + F1(I2,J2,L3)  * (1-DX)*(1-DY)*DZ
+C            C0 = C0 + F1(I3,J2,L3)  * DX*(1-DY)*DZ
+C            C0 = C0 + F1(I2,J3,L3)  * (1-DX)*DY*DZ
+C            C0 = C0 + F1(I3,J3,L3)  * DX*DY*DZ
+C            FBS3 = C0/8.0
+
+
+C ************************ FBS3_PREP ***********************************
+C                                                                      *
+C   FUNCTION FBS3_PREP(F0, NXLD,NX,NY,NZ,                              *
+C                      X1,Y1,Z1,XY2,XZ2,YZ2)                           *
+C                                                                      *
+C   PURPOSE: 3D FOURIER-BASED TRICUBIC SPLINE INTERPOLATION            *
+C            BETWEEN VOXELS. ALGORITHM IS FAIRLY FAST AND              *
+C            PRESERVES FINE DETAILS OF IMAGES                          *
+C                                                                      *
+C   PARAMETERS: F0            IMAGE                               SENT *
+C               NXLD          FFTW PAD SIZE                       SENT *
+C               NX,NY,NZ      SIZE                                SENT *
+C               F1            PADDED IMAGE                        SENT *
+C               NXP           F1 X DIM                            SENT *
+C               XYZ,X1,Y1     DERIVATIVES                          RET *
+C               XXY2,XZ2,YZ2  DERIVATIVES                          RET *
+C                                                                      *
+C **********************************************************************
+
+       SUBROUTINE FBS3_PREP(F0, NXLD,NX,NY,NZ,
+     &                      X1,Y1,Z1,XY2,XZ2,YZ2)
+
+       REAL              :: F0 (NXLD, NY,NZ) ! XYZ DERIV. RETURNED
+       REAL              :: X1 (NXLD, NY,NZ)
+       REAL              :: Y1 (NXLD, NY,NZ)
+       REAL              :: Z1 (NXLD, NY,NZ)
+       REAL              :: XY2(NXLD, NY,NZ)
+       REAL              :: XZ2(NXLD, NY,NZ)
+       REAL              :: YZ2(NXLD, NY,NZ)
+C      XYZ3 = F0
+       INTEGER           :: NXLD, NX, NY, NZ
+       INTEGER           :: K, J, L
+       REAL              :: WX(0:NXLD/2-1)
+       REAL              :: WY(0:NY-1)
+       REAL              :: WZ(0:NZ-1)
+       REAL              :: A4
+
+       REAL, PARAMETER   :: PI2 = 6.28318530717958647692
+
+C      FORWARD FFT OF: F0
+       INV = +1
+       CALL  FMRS_3(F0,NX,NY,NZ,INV)
+
+C      CALCULATE DERIVATIVES (dF0/dX, dF0/dY, dF0/dZ)
+
+       A4 = PI2 / NX
+
+       DO K=0,NXLD/2-1
+          WX(K) = K * A4
+       ENDDO
+
+       A4 = PI2 / NY
+
+       DO J=0,NY/2
+          WY(J) = J * A4
+       ENDDO
+
+       WY(NY/2) = 0
+
+       DO J=NY/2+1,NY-1
+          WY(J) = (J-NY) * A4
+       ENDDO
+
+       A4 = PI2 / NZ
+
+       DO L=0,NZ/2
+          WZ(L) = L * A4
+       ENDDO
+
+       WZ(NZ/2) = 0
+
+       DO L=NZ/2+1,NZ-1
+          WZ(L) = (L-NZ) * A4
+       ENDDO
+
+       ! ARRAY INITIALIZATIONS (needed??)
+       X1  = 0
+       Y1  = 0
+       Z1  = 0
+       XY2 = 0
+       XZ2 = 0
+       YZ2 = 0
+
+c$omp  parallel do private(l,j,k)
+       DO L=0,NZ-1
+          DO J=0,NY-1
+             DO K=0,NXLD/2-1
+                X1 (2*K+1,J+1,L+1) =  F0(2*K+2,J+1,L+1) * WX(K)
+                X1 (2*K+2,J+1,L+1) = -F0(2*K+1,J+1,L+1) * WX(K)
+                Y1 (2*K+1,J+1,L+1) =  F0(2*K+2,J+1,L+1) * WY(J)
+                Y1 (2*K+2,J+1,L+1) = -F0(2*K+1,J+1,L+1) * WY(J)
+                XY2(2*K+1,J+1,L+1) =  X1(2*K+2,J+1,L+1) * WY(J)
+                XY2(2*K+2,J+1,L+1) = -X1(2*K+1,J+1,L+1) * WY(J)
+             ENDDO
+          ENDDO
+       ENDDO
+
+c$omp  parallel do private(l,j,k)
+       DO L=0,NZ-1
+          DO J=0,NY-1
+             DO K=0,NXLD/2-1
+                Z1 (2*K+1,J+1,L+1)  =  F0(2*K+2,J+1,L+1)  * WZ(L)
+                Z1 (2*K+2,J+1,L+1)  = -F0(2*K+1,J+1,L+1)  * WZ(L)
+
+                XZ2(2*K+1,J+1,L+1)  =  X1(2*K+1,J+1,L+1)  * WZ(L)
+                XZ2(2*K+2,J+1,L+1)  = -X1(2*K+1,J+1,L+1)  * WZ(L)
+                YZ2(2*K+1,J+1,L+1)  =  Y1(2*K+2,J+1,L+1)  * WZ(L)
+                YZ2(2*K+2,J+1,L+1)  = -Y1(2*K+1,J+1,L+1)  * WZ(L)
+
+                F0 (2*K+1,J+1,L+1)  =  XY2(2*K+2,J+1,L+1) * WZ(L)
+                F0 (2*K+2,J+1,L+1)  = -XY2(2*K+1,J+1,L+1) * WZ(L)
+
+              ENDDO
+           ENDDO
+        ENDDO
+
+C      REVERSE FFT
+       INV= -1
+       CALL  FMRS_3(X1, NX,NY,NZ,INV)
+       INV= -1
+       CALL  FMRS_3(Y1, NX,NY,NZ,INV)
+       INV= -1
+       CALL  FMRS_3(Z1, NX,NY,NZ,INV)
+       INV= -1
+       CALL  FMRS_3(XY2,NX,NY,NZ,INV)
+       INV= -1
+       CALL  FMRS_3(XZ2,NX,NY,NZ,INV)
+       INV= -1
+       CALL  FMRS_3(YZ2,NX,NY,NZ,INV)
+       INV= -1
+       CALL  FMRS_3(F0, NX,NY,NZ,INV)
+
+       END
+@
+
+
+1.15
+log
+@/NXLD BUG
+@
+text
+@d5 1
+a5 1
+C            /NXLD BUG                    DEC 2012 Gregory Kishchenko *
+d11 1
+a11 1
+C=* Copyright 1985-2013  Health Research Inc.,                         *
+d307 1
+a307 1
+       REAL              :: WX(0:NXLD-1)
+d311 1
+a311 1
+c                           PI  = 3.14159265358979323846
+d314 1
+a314 1
+C      FFT OF: F0
+d320 2
+a321 1
+       A4 = PI2/NX
+a324 1
+       WX(NXLD/2) = 0
+d326 3
+a328 2
+       A4 = PI2/NY
+       DO J=0,NY/2-1
+d331 1
+d338 3
+a340 2
+       A4 = PI2/NZ
+       DO L=0,NZ/2-1
+d343 1
+d362 2
+a363 10
+                X1(2*K+1,J+1,L+1) =  F0(2*K+2,J+1,L+1) * WX(K)
+                X1(2*K+2,J+1,L+1) = -F0(2*K+1,J+1,L+1) * WX(K)
+             ENDDO
+          ENDDO
+       ENDDO
+
+c$omp  parallel do private(l,j,k)
+       DO L=0,NZ-1
+          DO J=0,NY-1
+             DO K=0,NXLD/2-1
+a386 3
+C               XYZ3(2*K+1,J+1,L+1) =  XY2(2*K+2,J+1,L+1) * WZ(L)
+C               XYZ3(2*K+2,J+1,L+1) = -XY2(2*K+1,J+1,L+1) * WZ(L)
+
+d391 1
+a391 1
+C      REVERSE FFTS
+@
+
+
+1.14
+log
+@typo in comment
+@
+text
+@d3 3
+a5 2
+C  FBS3      NEW                        OCT 2011    GREGORY KISHCHENKO *
+C            NXP ADDED                  DEC 2011    ARDEAN LEITH       *
+d11 1
+a11 1
+C=* Copyright 1985-2011  Health Research Inc.,                         *
+d320 1
+a320 1
+       A4 = PI2/NXLD
+@
+
+
+1.13
+log
+@*** empty log message ***
+@
+text
+@d40 1
+a40 1
+C               XXY2,XZ2,YZ2  DERIVATIVES                         SENT *
+@
+
+
+1.12
+log
+@DY**2 --> DYSQR,  A0 inlined
+@
+text
+@d17 1
+a17 1
+C=* License, or (at your option) aNROW later version.                  *
+d20 1
+a20 1
+C=* but WITHOUT ANROW WARRANTY; without even the implied warranty of   *
+@
+
+
+1.11
+log
+@comments
+@
+text
+@d28 1
+a28 1
+C   FUNCTION FBS3(X,Y,Z, NXLD,NX,NY,NZ, F1,NXP, XYZ,X1,Y1,Z1,XY2,XZ2,YZ2)    *
+d103 1
+a109 4
+             DX = X - I
+             DY = Y - J
+             DZ = Z - L
+
+d121 8
+d134 1
+a134 1
+             ADX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+d140 1
+a140 1
+             BDX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+d146 1
+a146 1
+             DADX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+d152 1
+a152 1
+             DBDX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+a153 2
+             A0 = ADX
+             A1 = DADX
+d157 1
+a157 1
+             C0 = A0+A1*DY+A2*DY**2+A3*DY**3
+d164 1
+a164 1
+             ADX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+d170 1
+a170 1
+             BDX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+d176 1
+a176 1
+             DADX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+d182 1
+a182 1
+             DBDX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+a183 2
+             A0 = ADX
+             A1 = DADX
+d187 1
+a187 1
+             DC0 = A0+A1*DY+A2*DY**2+A3*DY**3
+d194 1
+a194 1
+             ADX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+d200 1
+a200 1
+             BDX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+d206 1
+a206 1
+             DADX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+d212 1
+a212 1
+             DBDX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+a213 2
+             A0 = ADX
+             A1 = DADX
+d217 1
+a217 1
+             C1 = A0+A1*DY+A2*DY**2+A3*DY**3
+d224 1
+a224 1
+             ADX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+d230 1
+a230 1
+             BDX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+d236 1
+a236 1
+             DADX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+d242 1
+a242 1
+             DBDX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+a243 2
+             A0 = ADX
+             A1 = DADX
+d247 1
+a247 1
+             DC1 = A0+A1*DY+A2*DY**2+A3*DY**3
+d251 1
+a251 3
+C              where A0, A1, A2, and A3 are given by
+C            A0 = F(0)
+C            A1 = F'(0)
+a254 2
+C            A0 = C0
+C            A1 = DC0
+d260 2
+a271 3
+
+       END FUNCTION FBS3 
+
+@
+
+
+1.10
+log
+@added nxp parameter to consolidate 2 routines into 1
+@
+text
+@d39 2
+a40 2
+C               XYZ,X1,Y1     DERIVATIVES                          RET *
+C               XXY2,XZ2,YZ2  DERIVATIVES                          RET *
+d282 18
+a299 1
+C      ------------------ FBS3_PREP ---------------------------
+@
+
+
+1.9
+log
+@reverted to 1.7, modulo --> if now
+@
+text
+@d4 1
+d28 1
+a28 1
+C   FUNCTION FBS3(X,Y,Z, NXLD,NX,NY,NZ, F1,F0,X1,Y1,Z1,XY2,XZ2,YZ2)    *
+d35 1
+a35 1
+C               NXLD          PADDED SIZE                         SENT *
+d38 1
+d76 1
+a76 1
+     &               F1, XYZ,X1,Y1,Z1,
+d84 2
+a85 1
+       REAL          :: F1 (NXLD, NY,NZ)  ! DATA CUBE 
+a280 206
+C      ------------------ FBS3_N -------------------------------
+
+       REAL FUNCTION FBS3_N(X,Y,Z, 
+     &               NXLD, NX,NY,NZ,
+     &               F1, XYZ,X1,Y1,Z1,
+     &               XY2,XZ2,YZ2)
+
+       IMPLICIT NONE
+
+       REAL          :: X,  Y,  Z
+       INTEGER       :: NXLD, NX, NY, NZ
+
+       REAL          :: F1 (NX, NY,NZ)    ! DATA CUBE 
+
+       REAL          :: XYZ(NXLD, NY,NZ)  ! XYZ DERIVATIVE OF F1  
+       REAL          :: X1 (NXLD, NY,NZ)  ! X   DERIVATIVE OF F1
+       REAL          :: Y1 (NXLD, NY,NZ)  ! Y   DERIVATIVE OF F1
+       REAL          :: Z1 (NXLD, NY,NZ)  ! Z   DERIVATIVE OF F1
+       REAL          :: XY2(NXLD, NY,NZ)  ! XY  DERIVATIVE OF F1
+       REAL          :: XZ2(NXLD, NY,NZ)  ! XZ  DERIVATIVE OF F1
+       REAL          :: YZ2(NXLD, NY,NZ)  ! YZ  DERIVATIVE OF F1
+
+       INTEGER       :: I, J, L
+       INTEGER       :: I2,J2,L2
+       INTEGER       :: I3,J3,L3
+
+       REAL          :: DX, DY, DZ
+       REAL          :: A0, A1, A2, A3
+       REAL          :: ADX, BDX, DADX, DBDX
+       REAL          :: C0, DC0, C1, DC1
+
+
+             I  = FLOOR(X)
+             J  = FLOOR(Y)
+             L  = FLOOR(Z)
+
+             DX = X - I
+             DY = Y - J
+             DZ = Z - L
+
+             I2 = MODULO(I-1,NX) + 1
+             J2 = MODULO(J-1,NY) + 1
+             L2 = MODULO(L-1,NZ) + 1
+
+             I3 = I2 +1
+             IF (I3 > NX) I3 =1
+             J3 = J2 +1
+             IF (J3 > NY) J3 =1
+             L3 = L2 +1
+             IF (L3 > NZ) L3 =1
+
+C            1ST Plane - Function
+             A0  = F1(I2,J2,L2)
+             A1  = X1(I2,J2,L2)
+             A2  = 3*( F1(I3,J2,L2)-A0) - 2*A1-X1(I3,J2,L2)
+             A3  = 2*(-F1(I3,J2,L2)+A0) +   A1+X1(I3,J2,L2)
+             ADX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0 = F1(I2,J3,L2)
+             A1 = X1(I2,J3,L2)
+             A2 = 3*( F1(I3,J3,L2)-A0) - 2*A1 - X1(I3,J3,L2)
+             A3 = 2*(-F1(I3,J3,L2)+A0) +   A1 + X1(I3,J3,L2)
+             BDX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0  = Y1(I2,J2,L2)
+             A1  = XY2(I2,J2,L2)
+             A2  = 3*( Y1(I3,J2,L2)-A0) -2*A1 - XY2(I3,J2,L2)
+             A3  = 2*(-Y1(I3,J2,L2)+A0) +  A1 + XY2(I3,J2,L2)
+             DADX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0 = Y1(I2,J3,L2)
+             A1 = XY2(I2,J3,L2)
+             A2 = 3*( Y1(I3,J3,L2)-A0) - 2*A1 - XY2(I3,J3,L2)
+             A3 = 2*(-Y1(I3,J3,L2)+A0) +   A1 + XY2(I3,J3,L2)
+             DBDX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0 = ADX
+             A1 = DADX
+             A2 = 3*(BDX - ADX) - 2*DADX - DBDX
+             A3 = 2*(ADX - BDX) +   DADX + DBDX
+
+             C0 = A0+A1*DY+A2*DY**2+A3*DY**3
+
+C            1ST Plane - Z-Derivative
+             A0  = Z1(I2,J2,L2)
+             A1  = XZ2(I2,J2,L2)
+             A2  = 3*( Z1(I3,J2,L2)-A0) - 2*A1-XZ2(I3,J2,L2)
+             A3  = 2*(-Z1(I3,J2,L2)+A0) +   A1+XZ2(I3,J2,L2)
+             ADX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0 = Z1(I2,J3,L2)
+             A1 = XZ2(I2,J3,L2)
+             A2 = 3*( Z1(I3,J3,L2)-A0) - 2*A1 - XZ2(I3,J3,L2)
+             A3 = 2*(-Z1(I3,J3,L2)+A0) +   A1 + XZ2(I3,J3,L2)
+             BDX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0  = YZ2(I2,J2,L2)
+             A1  = XYZ(I2,J2,L2)
+             A2  = 3*( YZ2(I3,J2,L2)-A0) -2*A1 - XYZ(I3,J2,L2)
+             A3  = 2*(-YZ2(I3,J2,L2)+A0) +  A1 + XYZ(I3,J2,L2)
+             DADX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0 = YZ2(I2,J3,L2)
+             A1 = XYZ(I2,J3,L2)
+             A2 = 3*( YZ2(I3,J3,L2)-A0) - 2*A1 - XYZ(I3,J3,L2)
+             A3 = 2*(-YZ2(I3,J3,L2)+A0) +   A1 + XYZ(I3,J3,L2)
+             DBDX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0 = ADX
+             A1 = DADX
+             A2 = 3*(BDX - ADX) - 2*DADX - DBDX
+             A3 = 2*(ADX - BDX) +   DADX + DBDX
+
+             DC0 = A0+A1*DY+A2*DY**2+A3*DY**3
+
+C            2nd Plane - Function
+             A0  = F1(I2,J2,L3)
+             A1  = X1(I2,J2,L3)
+             A2  = 3*( F1(I3,J2,L3)-A0) - 2*A1-X1(I3,J2,L3)
+             A3  = 2*(-F1(I3,J2,L3)+A0) +  A1+X1(I3,J2,L3)
+             ADX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0 = F1(I2,J3,L3)
+             A1 = X1(I2,J3,L3)
+             A2 = 3*( F1(I3,J3,L3)-A0) - 2*A1 - X1(I3,J3,L3)
+             A3 = 2*(-F1(I3,J3,L3)+A0) +   A1 + X1(I3,J3,L3)
+             BDX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0  = Y1 (I2,J2,L3)
+             A1  = XY2(I2,J2,L3)
+             A2  = 3*( Y1(I3,J2,L3)-A0) - 2*A1 - XY2(I3,J2,L3)
+             A3  = 2*(-Y1(I3,J2,L3)+A0) +   A1 + XY2(I3,J2,L3)
+             DADX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0 = Y1 (I2,J3,L3)
+             A1 = XY2(I2,J3,L3)
+             A2 = 3*( Y1(I3,J3,L3)-A0) - 2*A1 - XY2(I3,J3,L3)
+             A3 = 2*(-Y1(I3,J3,L3)+A0) +   A1 + XY2(I3,J3,L3)
+             DBDX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0 = ADX
+             A1 = DADX
+             A2 = 3*(BDX - ADX) - 2*DADX - DBDX
+             A3 = 2*(ADX - BDX) +   DADX + DBDX
+
+             C1 = A0+A1*DY+A2*DY**2+A3*DY**3
+
+C            2nd Plane - Z-Derivative
+             A0  = Z1 (I2,J2,L3)
+             A1  = XZ2(I2,J2,L3)
+             A2  = 3*( Z1(I3,J2,L3)-A0) - 2*A1-XZ2(I3,J2,L3)
+             A3  = 2*(-Z1(I3,J2,L3)+A0) +   A1+XZ2(I3,J2,L3)
+             ADX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0 = Z1 (I2,J3,L3)
+             A1 = XZ2(I2,J3,L3)
+             A2 = 3*( Z1(I3,J3,L3)-A0) - 2*A1 - XZ2(I3,J3,L3)
+             A3 = 2*(-Z1(I3,J3,L3)+A0) +   A1 + XZ2(I3,J3,L3)
+             BDX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0  = YZ2(I2,J2,L3)
+             A1  = XYZ(I2,J2,L3)
+             A2  = 3*( YZ2(I3,J2,L3)-A0) -2*A1 - XYZ(I3,J2,L3)
+             A3  = 2*(-YZ2(I3,J2,L3)+A0) +  A1 + XYZ(I3,J2,L3)
+             DADX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0 = YZ2(I2,J3,L3)
+             A1 = XYZ(I2,J3,L3)
+             A2 = 3*( YZ2(I3,J3,L3)-A0) - 2*A1 - XYZ(I3,J3,L3)
+             A3 = 2*(-YZ2(I3,J3,L3)+A0) +   A1 + XYZ(I3,J3,L3)
+             DBDX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0 = ADX
+             A1 = DADX
+             A2 = 3*(BDX - ADX) - 2*DADX - DBDX
+             A3 = 2*(ADX - BDX) +   DADX + DBDX
+
+             DC1 = A0+A1*DY+A2*DY**2+A3*DY**3
+
+C            FINAL LINE INSIDE CUBE
+C            F(Z)=A0 + A1*DZ + A2*DZ**2 + A3*DZ**3
+C              where A0, A1, A2, and A3 are given by
+C            A0 = F(0)
+C            A1 = F'(0)
+C            A2 = 3*(F(1)-F(0)) - 2*F'(0) - F'(1)
+C            A3 = 2*(F(0)-F(1)) + F'(0) + F'(1)
+
+C            A0 = C0
+C            A1 = DC0
+             A2 = 3*(C1-C0) - 2*DC0 - DC1
+             A3 = 2*(C0-C1) +   DC0 + DC1
+
+             FBS3_N = C0 + DC0*DZ + A2*DZ**2 + A3*DZ**3
+
+C            TRI-LINEAR (JUST AN EXAMPLE)
+C            C0 = F1(I2,J2,L2)*(1-DX)*(1-DY)*(1-DZ)
+C            C0 = C0 + F1(I3,J2,L2)  * DX*(1-DY)*(1-DZ)
+C            C0 = C0 + F1(I2,J3,L2)  * (1-DX)*DY*(1-DZ)
+C            C0 = C0 + F1(I3,J3,L2)  * DX*DY*(1-DZ)
+C            C0 = C0 + F1(I2,J2,L3)  * (1-DX)*(1-DY)*DZ
+C            C0 = C0 + F1(I3,J2,L3)  * DX*(1-DY)*DZ
+C            C0 = C0 + F1(I2,J3,L3)  * (1-DX)*DY*DZ
+C            C0 = C0 + F1(I3,J3,L3)  * DX*DY*DZ
+C            FBS3 = C0/8.0
+
+       END FUNCTION FBS3_N 
+@
+
+
+1.8
+log
+@b0,b1 assignment for speedup
+@
+text
+@a99 1
+       REAL          :: B0,B1
+d114 6
+a119 10
+             I3 = I +1
+             IF (I3 > NX) I3 =1
+             J3 = J +1
+             IF (J3 > NY) J3 =1
+             L3 = L +1
+             IF (L3 > NZ) L3 =1
+
+             !I3 = MODULO(I,NX) + 1
+             !J3 = MODULO(J,NY) + 1
+             !L3 = MODULO(L,NZ) + 1
+d122 16
+a137 23
+             A0   = F1(I2,J2,L2)
+             A1   = X1(I2,J2,L2)
+             B0   = F1(I3,J2,L2)
+             B1   = X1(I3,J2,L2)
+
+             A2   = 3*( B0-A0) - 2*A1 - B1
+             A3   = 2*(-B0+A0) +   A1 + B1
+             ADX  = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0   = F1(I2,J3,L2)
+             A1   = X1(I2,J3,L2)
+             B0   = F1(I3,J3,L2)
+             B1   = X1(I3,J3,L2)
+             A2   = 3*( B0-A0) - 2*A1 - B1
+             A3   = 2*(-B0+A0) +   A1 + B1
+             BDX  = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0   = Y1(I2,J2,L2)
+             A1   = XY2(I2,J2,L2)
+             B0   = Y1(I3,J2,L2)
+             B1   = XY2(I3,J2,L2)
+             A2   = 3*( B0-A0) -2*A1 - B1
+             A3   = 2*(-B0+A0) +  A1 + B1
+d140 4
+a143 6
+             A0   = Y1(I2,J3,L2)
+             A1   = XY2(I2,J3,L2)
+             B0   = Y1(I3,J3,L2)
+             B1   = XY2(I3,J3,L2)
+             A2   = 3*( B0-A0) - 2*A1 - B1
+             A3   = 2*(-B0+A0) +   A1 + B1
+d146 4
+a149 4
+             A0   = ADX
+             A1   = DADX
+             A2   = 3*(BDX - ADX) - 2*DADX - DBDX
+             A3   = 2*(ADX - BDX) +   DADX + DBDX
+d151 1
+a151 1
+             C0   = A0+A1*DY+A2*DY**2+A3*DY**3
+d154 16
+a169 22
+             A0   = Z1(I2,J2,L2)
+             A1   = XZ2(I2,J2,L2)
+             B0   = Z1(I3,J2,L2)
+             B1   = XZ2(I3,J2,L2)
+             A2   = 3*( B0-A0) - 2*A1 - B1
+             A3   = 2*(-B0+A0) +   A1 + B1
+             ADX  = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0   = Z1(I2,J3,L2)
+             A1   = XZ2(I2,J3,L2)
+             B0   = Z1(I3,J3,L2)
+             B1   = XZ2(I3,J3,L2)
+             A2   = 3*( B0-A0) - 2*A1 - B1
+             A3   = 2*(-B0+A0) +   A1 + B1
+             BDX  = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0   = YZ2(I2,J2,L2)
+             A1   = XYZ(I2,J2,L2)
+             B0   = YZ2(I3,J2,L2)
+             B1   = XYZ(I3,J2,L2)
+             A2   = 3*( B0-A0) -2*A1 - B1
+             A3   = 2*(-B0+A0) +  A1 + B1
+d172 4
+a175 6
+             A0   = YZ2(I2,J3,L2)
+             A1   = XYZ(I2,J3,L2)
+             B0   = YZ2(I3,J3,L2)
+             B1   = XYZ(I3,J3,L2)
+             A2   = 3*( B0-A0) - 2*A1 - B1
+             A3   = 2*(-B0+A0) +   A1 + B1
+d178 4
+a181 4
+             A0   = ADX
+             A1   = DADX
+             A2   = 3*(BDX - ADX) - 2*DADX - DBDX
+             A3   = 2*(ADX - BDX) +   DADX + DBDX
+d183 1
+a183 1
+             DC0  = A0+A1*DY+A2*DY**2+A3*DY**3
+d186 16
+a201 22
+             A0   = F1(I2,J2,L3)
+             A1   = X1(I2,J2,L3)
+             B0   = F1(I3,J2,L3)
+             B1   = X1(I3,J2,L3)
+             A2   = 3*( B0-A0) - 2*A1 - B1
+             A3   = 2*(-B0+A0) +   A1 + B1
+             ADX  = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0   = F1(I2,J3,L3)
+             A1   = X1(I2,J3,L3)
+             B0   = F1(I3,J3,L3)
+             B1   = X1(I3,J3,L3)
+             A2   = 3*( B0-A0) - 2*A1 - B1
+             A3   = 2*(-B0+A0) +   A1 + B1
+             BDX  = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0   = Y1 (I2,J2,L3)
+             A1   = XY2(I2,J2,L3)
+             B0   = Y1(I3,J2,L3)
+             B1   = XY2(I3,J2,L3)
+             A2   = 3*( B0-A0) - 2*A1 - B1
+             A3   = 2*(-B0+A0) +   A1 + B1
+d204 4
+a207 6
+             A0   = Y1 (I2,J3,L3)
+             A1   = XY2(I2,J3,L3)
+             B0   = Y1(I3,J3,L3)
+             B1   = XY2(I3,J3,L3)
+             A2   = 3*( B0-A0) - 2*A1 - B1
+             A3   = 2*(-B0+A0) +   A1 + B1
+d210 4
+a213 4
+             A0   = ADX
+             A1   = DADX
+             A2   = 3*(BDX - ADX) - 2*DADX - DBDX
+             A3   = 2*(ADX - BDX) +   DADX + DBDX
+d215 1
+a215 1
+             C1   = A0+A1*DY+A2*DY**2+A3*DY**3
+d218 16
+a233 22
+             A0   = Z1 (I2,J2,L3)
+             A1   = XZ2(I2,J2,L3)
+             B0   = Z1(I3,J2,L3)
+             B1   = XZ2(I3,J2,L3)
+             A2   = 3*( B0-A0) - 2*A1-B1
+             A3   = 2*(-B0+A0) +   A1+B1
+             ADX  = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0   = Z1 (I2,J3,L3)
+             A1   = XZ2(I2,J3,L3)
+             B0   = Z1(I3,J3,L3)
+             B1   = XZ2(I3,J3,L3)
+             A2   = 3*( B0-A0) - 2*A1 - B1
+             A3   = 2*(-B0+A0) +   A1 + B1
+             BDX  = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0   = YZ2(I2,J2,L3)
+             A1   = XYZ(I2,J2,L3)
+             B0   = YZ2(I3,J2,L3)
+             B1   = XYZ(I3,J2,L3)
+             A2   = 3*( B0-A0) -2*A1 - B1
+             A3   = 2*(-B0+A0) +  A1 + B1
+d236 4
+a239 6
+             A0   = YZ2(I2,J3,L3)
+             A1   = XYZ(I2,J3,L3)
+             B0   = YZ2(I3,J3,L3)
+             B1   = XYZ(I3,J3,L3)
+             A2   = 3*( B0-A0) - 2*A1 - B1
+             A3   = 2*(-B0+A0) +   A1 + B1
+d242 4
+a245 4
+             A0   = ADX
+             A1   = DADX
+             A2   = 3*(BDX - ADX) - 2*DADX - DBDX
+             A3   = 2*(ADX - BDX) +   DADX + DBDX
+d247 1
+a247 1
+             DC1  = A0+A1*DY+A2*DY**2+A3*DY**3
+d252 9
+a260 9
+C            A0   = F(0)
+C            A1   = F'(0)
+C            A2   = 3*(F(1)-F(0)) - 2*F'(0) - F'(1)
+C            A3   = 2*(F(0)-F(1)) + F'(0) + F'(1)
+
+C            A0   = C0
+C            A1   = DC0
+             A2   = 3*(C1-C0) - 2*DC0 - DC1
+             A3   = 2*(C0-C1) +   DC0 + DC1
+d265 8
+a272 8
+C            C0   = F1(I2,J2,L2)*(1-DX)*(1-DY)*(1-DZ)
+C            C0   = C0 + F1(I3,J2,L2)  * DX*(1-DY)*(1-DZ)
+C            C0   = C0 + F1(I2,J3,L2)  * (1-DX)*DY*(1-DZ)
+C            C0   = C0 + F1(I3,J3,L2)  * DX*DY*(1-DZ)
+C            C0   = C0 + F1(I2,J2,L3)  * (1-DX)*(1-DY)*DZ
+C            C0   = C0 + F1(I3,J2,L3)  * DX*(1-DY)*DZ
+C            C0   = C0 + F1(I2,J3,L3)  * (1-DX)*DY*DZ
+C            C0   = C0 + F1(I3,J3,L3)  * DX*DY*DZ
+a276 1
+C      --------------------------- FBS3_N --------------------------
+d278 1
+a278 1
+C      NON-PADDED F1
+d290 1
+a290 1
+       REAL          :: F1 (NX, NY,NZ)  ! DATA CUBE 
+a307 1
+       REAL          :: B0,B1
+d322 1
+a322 1
+             I3 = I +1
+d324 1
+a324 1
+             J3 = J +1
+d326 1
+a326 1
+             L3 = L +1
+a328 4
+             !I3  = MODULO(I,NX) + 1
+             !J3  = MODULO(J,NY) + 1
+             !L3  = MODULO(L,NZ) + 1
+
+d330 16
+a345 23
+             A0   = F1(I2,J2,L2)
+             A1   = X1(I2,J2,L2)
+             B0   = F1(I3,J2,L2)
+             B1   = X1(I3,J2,L2)
+
+             A2   = 3*( B0-A0) - 2*A1 - B1
+             A3   = 2*(-B0+A0) +   A1 + B1
+             ADX  = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0   = F1(I2,J3,L2)
+             A1   = X1(I2,J3,L2)
+             B0   = F1(I3,J3,L2)
+             B1   = X1(I3,J3,L2)
+             A2   = 3*( B0-A0) - 2*A1 - B1
+             A3   = 2*(-B0+A0) +   A1 + B1
+             BDX  = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0   = Y1(I2,J2,L2)
+             A1   = XY2(I2,J2,L2)
+             B0   = Y1(I3,J2,L2)
+             B1   = XY2(I3,J2,L2)
+             A2   = 3*( B0-A0) -2*A1 - B1
+             A3   = 2*(-B0+A0) +  A1 + B1
+d348 4
+a351 6
+             A0   = Y1(I2,J3,L2)
+             A1   = XY2(I2,J3,L2)
+             B0   = Y1(I3,J3,L2)
+             B1   = XY2(I3,J3,L2)
+             A2   = 3*( B0-A0) - 2*A1 - B1
+             A3   = 2*(-B0+A0) +   A1 + B1
+d354 4
+a357 4
+             A0   = ADX
+             A1   = DADX
+             A2   = 3*(BDX - ADX) - 2*DADX - DBDX
+             A3   = 2*(ADX - BDX) +   DADX + DBDX
+d359 1
+a359 1
+             C0   = A0+A1*DY+A2*DY**2+A3*DY**3
+d362 16
+a377 22
+             A0   = Z1(I2,J2,L2)
+             A1   = XZ2(I2,J2,L2)
+             B0   = Z1(I3,J2,L2)
+             B1   = XZ2(I3,J2,L2)
+             A2   = 3*( B0-A0) - 2*A1-B1
+             A3   = 2*(-B0+A0) +   A1+B1
+             ADX  = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0   = Z1(I2,J3,L2)
+             A1   = XZ2(I2,J3,L2)
+             B0   = Z1(I3,J3,L2)
+             B1   = XZ2(I3,J3,L2)
+             A2   = 3*( B0-A0) - 2*A1 - B1
+             A3   = 2*(-B0+A0) +   A1 + B1
+             BDX  = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0   = YZ2(I2,J2,L2)
+             A1   = XYZ(I2,J2,L2)
+             B0   = YZ2(I3,J2,L2)
+             B1   = XYZ(I3,J2,L2)
+             A2   = 3*( B0-A0) -2*A1 - B1
+             A3   = 2*(-B0+A0) +  A1 + B1
+d380 4
+a383 6
+             A0   = YZ2(I2,J3,L2)
+             A1   = XYZ(I2,J3,L2)
+             B0   = YZ2(I3,J3,L2)
+             B1   = XYZ(I3,J3,L2)
+             A2   = 3*( B0-A0) - 2*A1 - B1
+             A3   = 2*(-B0+A0) +   A1 + B1
+d386 4
+a389 4
+             A0   = ADX
+             A1   = DADX
+             A2   = 3*(BDX - ADX) - 2*DADX - DBDX
+             A3   = 2*(ADX - BDX) +   DADX + DBDX
+d391 1
+a391 1
+             DC0  = A0+A1*DY+A2*DY**2+A3*DY**3
+d394 16
+a409 22
+             A0   = F1(I2,J2,L3)
+             A1   = X1(I2,J2,L3)
+             B0   = F1(I3,J2,L3)
+             B1   = X1(I3,J2,L3)
+             A2   = 3*( B0-A0) - 2*A1 - B1
+             A3   = 2*(-B0+A0) +   A1 + B1
+             ADX  = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0   = F1(I2,J3,L3)
+             A1   = X1(I2,J3,L3)
+             B0   = F1(I3,J3,L3)
+             B1   = X1(I3,J3,L3)
+             A2   = 3*( B0-A0) - 2*A1 - B1
+             A3   = 2*(-B0+A0) +   A1 + B1
+             BDX  = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0   = Y1 (I2,J2,L3)
+             A1   = XY2(I2,J2,L3)
+             B0   = Y1(I3,J2,L3)
+             B1   = XY2(I3,J2,L3)
+             A2   = 3*( B0-A0) - 2*A1 - B1
+             A3   = 2*(-B0+A0) +   A1 + B1
+d412 4
+a415 6
+             A0   = Y1 (I2,J3,L3)
+             A1   = XY2(I2,J3,L3)
+             B0   = Y1(I3,J3,L3)
+             B1   = XY2(I3,J3,L3)
+             A2   = 3*( B0-A0) - 2*A1 - B1
+             A3   = 2*(-B0+A0) +   A1 + B1
+d418 4
+a421 4
+             A0   = ADX
+             A1   = DADX
+             A2   = 3*(BDX - ADX) - 2*DADX - DBDX
+             A3   = 2*(ADX - BDX) +   DADX + DBDX
+d423 1
+a423 1
+             C1   = A0+A1*DY+A2*DY**2+A3*DY**3
+d426 16
+a441 22
+             A0   = Z1 (I2,J2,L3)
+             A1   = XZ2(I2,J2,L3)
+             B0   = Z1(I3,J2,L3)
+             B1   = XZ2(I3,J2,L3)
+             A2   = 3*( B0-A0) - 2*A1-B1
+             A3   = 2*(-B0+A0) +   A1+B1
+             ADX  = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0   = Z1 (I2,J3,L3)
+             A1   = XZ2(I2,J3,L3)
+             B0   = Z1(I3,J3,L3)
+             B1   = XZ2(I3,J3,L3)
+             A2   = 3*( B0-A0) - 2*A1 - B1
+             A3   = 2*(-B0+A0) +   A1 + B1
+             BDX  = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0   = YZ2(I2,J2,L3)
+             A1   = XYZ(I2,J2,L3)
+             B0   = YZ2(I3,J2,L3)
+             B1   = XYZ(I3,J2,L3)
+             A2   = 3*( B0-A0) -2*A1 - B1
+             A3   = 2*(-B0+A0) +  A1 + B1
+d444 4
+a447 6
+             A0   = YZ2(I2,J3,L3)
+             A1   = XYZ(I2,J3,L3)
+             B0   = YZ2(I3,J3,L3)
+             B1   = XYZ(I3,J3,L3)
+             A2   = 3*( B0-A0) - 2*A1 - B1
+             A3   = 2*(-B0+A0) +   A1 + B1
+d450 4
+a453 4
+             A0   = ADX
+             A1   = DADX
+             A2   = 3*(BDX - ADX) - 2*DADX - DBDX
+             A3   = 2*(ADX - BDX) +   DADX + DBDX
+d455 1
+a455 1
+             DC1  = A0+A1*DY+A2*DY**2+A3*DY**3
+d460 9
+a468 9
+C            A0   = F(0)
+C            A1   = F'(0)
+C            A2   = 3*(F(1)-F(0)) - 2*F'(0) - F'(1)
+C            A3   = 2*(F(0)-F(1)) + F'(0) + F'(1)
+
+C            A0   = C0
+C            A1   = DC0
+             A2   = 3*(C1-C0) - 2*DC0 - DC1
+             A3   = 2*(C0-C1) +   DC0 + DC1
+d473 8
+a480 8
+C            C0   = F1(I2,J2,L2)*(1-DX)*(1-DY)*(1-DZ)
+C            C0   = C0 + F1(I3,J2,L2)  * DX*(1-DY)*(1-DZ)
+C            C0   = C0 + F1(I2,J3,L2)  * (1-DX)*DY*(1-DZ)
+C            C0   = C0 + F1(I3,J3,L2)  * DX*DY*(1-DZ)
+C            C0   = C0 + F1(I2,J2,L3)  * (1-DX)*(1-DY)*DZ
+C            C0   = C0 + F1(I3,J2,L3)  * DX*(1-DY)*DZ
+C            C0   = C0 + F1(I2,J3,L3)  * (1-DX)*DY*DZ
+C            C0   = C0 + F1(I3,J3,L3)  * DX*DY*DZ
+a483 3
+
+
+
+@
+
+
+1.7
+log
+@FBS3_N added,
+@
+text
+@d100 1
+d115 10
+a124 3
+             I3 = MODULO(I,NX) + 1
+             J3 = MODULO(J,NY) + 1
+             L3 = MODULO(L,NZ) + 1
+d127 23
+a149 16
+             A0  = F1(I2,J2,L2)
+             A1  = X1(I2,J2,L2)
+             A2  = 3*( F1(I3,J2,L2)-A0) - 2*A1-X1(I3,J2,L2)
+             A3  = 2*(-F1(I3,J2,L2)+A0) +   A1+X1(I3,J2,L2)
+             ADX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0 = F1(I2,J3,L2)
+             A1 = X1(I2,J3,L2)
+             A2 = 3*( F1(I3,J3,L2)-A0) - 2*A1 - X1(I3,J3,L2)
+             A3 = 2*(-F1(I3,J3,L2)+A0) +   A1 + X1(I3,J3,L2)
+             BDX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0  = Y1(I2,J2,L2)
+             A1  = XY2(I2,J2,L2)
+             A2  = 3*( Y1(I3,J2,L2)-A0) -2*A1 - XY2(I3,J2,L2)
+             A3  = 2*(-Y1(I3,J2,L2)+A0) +  A1 + XY2(I3,J2,L2)
+d152 6
+a157 4
+             A0 = Y1(I2,J3,L2)
+             A1 = XY2(I2,J3,L2)
+             A2 = 3*( Y1(I3,J3,L2)-A0) - 2*A1 - XY2(I3,J3,L2)
+             A3 = 2*(-Y1(I3,J3,L2)+A0) +   A1 + XY2(I3,J3,L2)
+d160 4
+a163 4
+             A0 = ADX
+             A1 = DADX
+             A2 = 3*(BDX - ADX) - 2*DADX - DBDX
+             A3 = 2*(ADX - BDX) +   DADX + DBDX
+d165 1
+a165 1
+             C0 = A0+A1*DY+A2*DY**2+A3*DY**3
+d168 22
+a189 16
+             A0  = Z1(I2,J2,L2)
+             A1  = XZ2(I2,J2,L2)
+             A2  = 3*( Z1(I3,J2,L2)-A0) - 2*A1-XZ2(I3,J2,L2)
+             A3  = 2*(-Z1(I3,J2,L2)+A0) +   A1+XZ2(I3,J2,L2)
+             ADX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0 = Z1(I2,J3,L2)
+             A1 = XZ2(I2,J3,L2)
+             A2 = 3*( Z1(I3,J3,L2)-A0) - 2*A1 - XZ2(I3,J3,L2)
+             A3 = 2*(-Z1(I3,J3,L2)+A0) +   A1 + XZ2(I3,J3,L2)
+             BDX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0  = YZ2(I2,J2,L2)
+             A1  = XYZ(I2,J2,L2)
+             A2  = 3*( YZ2(I3,J2,L2)-A0) -2*A1 - XYZ(I3,J2,L2)
+             A3  = 2*(-YZ2(I3,J2,L2)+A0) +  A1 + XYZ(I3,J2,L2)
+d192 6
+a197 4
+             A0 = YZ2(I2,J3,L2)
+             A1 = XYZ(I2,J3,L2)
+             A2 = 3*( YZ2(I3,J3,L2)-A0) - 2*A1 - XYZ(I3,J3,L2)
+             A3 = 2*(-YZ2(I3,J3,L2)+A0) +   A1 + XYZ(I3,J3,L2)
+d200 4
+a203 4
+             A0 = ADX
+             A1 = DADX
+             A2 = 3*(BDX - ADX) - 2*DADX - DBDX
+             A3 = 2*(ADX - BDX) +   DADX + DBDX
+d205 1
+a205 1
+             DC0 = A0+A1*DY+A2*DY**2+A3*DY**3
+d208 22
+a229 16
+             A0  = F1(I2,J2,L3)
+             A1  = X1(I2,J2,L3)
+             A2  = 3*( F1(I3,J2,L3)-A0) - 2*A1-X1(I3,J2,L3)
+             A3  = 2*(-F1(I3,J2,L3)+A0) +  A1+X1(I3,J2,L3)
+             ADX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0 = F1(I2,J3,L3)
+             A1 = X1(I2,J3,L3)
+             A2 = 3*( F1(I3,J3,L3)-A0) - 2*A1 - X1(I3,J3,L3)
+             A3 = 2*(-F1(I3,J3,L3)+A0) +   A1 + X1(I3,J3,L3)
+             BDX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0  = Y1 (I2,J2,L3)
+             A1  = XY2(I2,J2,L3)
+             A2  = 3*( Y1(I3,J2,L3)-A0) - 2*A1 - XY2(I3,J2,L3)
+             A3  = 2*(-Y1(I3,J2,L3)+A0) +   A1 + XY2(I3,J2,L3)
+d232 6
+a237 4
+             A0 = Y1 (I2,J3,L3)
+             A1 = XY2(I2,J3,L3)
+             A2 = 3*( Y1(I3,J3,L3)-A0) - 2*A1 - XY2(I3,J3,L3)
+             A3 = 2*(-Y1(I3,J3,L3)+A0) +   A1 + XY2(I3,J3,L3)
+d240 4
+a243 4
+             A0 = ADX
+             A1 = DADX
+             A2 = 3*(BDX - ADX) - 2*DADX - DBDX
+             A3 = 2*(ADX - BDX) +   DADX + DBDX
+d245 1
+a245 1
+             C1 = A0+A1*DY+A2*DY**2+A3*DY**3
+d248 22
+a269 16
+             A0  = Z1 (I2,J2,L3)
+             A1  = XZ2(I2,J2,L3)
+             A2  = 3*( Z1(I3,J2,L3)-A0) - 2*A1-XZ2(I3,J2,L3)
+             A3  = 2*(-Z1(I3,J2,L3)+A0) +   A1+XZ2(I3,J2,L3)
+             ADX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0 = Z1 (I2,J3,L3)
+             A1 = XZ2(I2,J3,L3)
+             A2 = 3*( Z1(I3,J3,L3)-A0) - 2*A1 - XZ2(I3,J3,L3)
+             A3 = 2*(-Z1(I3,J3,L3)+A0) +   A1 + XZ2(I3,J3,L3)
+             BDX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0  = YZ2(I2,J2,L3)
+             A1  = XYZ(I2,J2,L3)
+             A2  = 3*( YZ2(I3,J2,L3)-A0) -2*A1 - XYZ(I3,J2,L3)
+             A3  = 2*(-YZ2(I3,J2,L3)+A0) +  A1 + XYZ(I3,J2,L3)
+d272 6
+a277 4
+             A0 = YZ2(I2,J3,L3)
+             A1 = XYZ(I2,J3,L3)
+             A2 = 3*( YZ2(I3,J3,L3)-A0) - 2*A1 - XYZ(I3,J3,L3)
+             A3 = 2*(-YZ2(I3,J3,L3)+A0) +   A1 + XYZ(I3,J3,L3)
+d280 4
+a283 4
+             A0 = ADX
+             A1 = DADX
+             A2 = 3*(BDX - ADX) - 2*DADX - DBDX
+             A3 = 2*(ADX - BDX) +   DADX + DBDX
+d285 1
+a285 1
+             DC1 = A0+A1*DY+A2*DY**2+A3*DY**3
+d290 9
+a298 9
+C            A0 = F(0)
+C            A1 = F'(0)
+C            A2 = 3*(F(1)-F(0)) - 2*F'(0) - F'(1)
+C            A3 = 2*(F(0)-F(1)) + F'(0) + F'(1)
+
+C            A0 = C0
+C            A1 = DC0
+             A2 = 3*(C1-C0) - 2*DC0 - DC1
+             A3 = 2*(C0-C1) +   DC0 + DC1
+d303 8
+a310 8
+C            C0 = F1(I2,J2,L2)*(1-DX)*(1-DY)*(1-DZ)
+C            C0 = C0 + F1(I3,J2,L2)  * DX*(1-DY)*(1-DZ)
+C            C0 = C0 + F1(I2,J3,L2)  * (1-DX)*DY*(1-DZ)
+C            C0 = C0 + F1(I3,J3,L2)  * DX*DY*(1-DZ)
+C            C0 = C0 + F1(I2,J2,L3)  * (1-DX)*(1-DY)*DZ
+C            C0 = C0 + F1(I3,J2,L3)  * DX*(1-DY)*DZ
+C            C0 = C0 + F1(I2,J3,L3)  * (1-DX)*DY*DZ
+C            C0 = C0 + F1(I3,J3,L3)  * DX*DY*DZ
+d315 1
+d317 1
+a317 1
+C      ------------------ FBS3_N -------------------------------
+d329 1
+a329 1
+       REAL          :: F1 (NX, NY,NZ)    ! DATA CUBE 
+d347 1
+d362 10
+a371 3
+             I3 = MODULO(I,NX) + 1
+             J3 = MODULO(J,NY) + 1
+             L3 = MODULO(L,NZ) + 1
+d374 23
+a396 16
+             A0  = F1(I2,J2,L2)
+             A1  = X1(I2,J2,L2)
+             A2  = 3*( F1(I3,J2,L2)-A0) - 2*A1-X1(I3,J2,L2)
+             A3  = 2*(-F1(I3,J2,L2)+A0) +   A1+X1(I3,J2,L2)
+             ADX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0 = F1(I2,J3,L2)
+             A1 = X1(I2,J3,L2)
+             A2 = 3*( F1(I3,J3,L2)-A0) - 2*A1 - X1(I3,J3,L2)
+             A3 = 2*(-F1(I3,J3,L2)+A0) +   A1 + X1(I3,J3,L2)
+             BDX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0  = Y1(I2,J2,L2)
+             A1  = XY2(I2,J2,L2)
+             A2  = 3*( Y1(I3,J2,L2)-A0) -2*A1 - XY2(I3,J2,L2)
+             A3  = 2*(-Y1(I3,J2,L2)+A0) +  A1 + XY2(I3,J2,L2)
+d399 6
+a404 4
+             A0 = Y1(I2,J3,L2)
+             A1 = XY2(I2,J3,L2)
+             A2 = 3*( Y1(I3,J3,L2)-A0) - 2*A1 - XY2(I3,J3,L2)
+             A3 = 2*(-Y1(I3,J3,L2)+A0) +   A1 + XY2(I3,J3,L2)
+d407 4
+a410 4
+             A0 = ADX
+             A1 = DADX
+             A2 = 3*(BDX - ADX) - 2*DADX - DBDX
+             A3 = 2*(ADX - BDX) +   DADX + DBDX
+d412 1
+a412 1
+             C0 = A0+A1*DY+A2*DY**2+A3*DY**3
+d415 22
+a436 16
+             A0  = Z1(I2,J2,L2)
+             A1  = XZ2(I2,J2,L2)
+             A2  = 3*( Z1(I3,J2,L2)-A0) - 2*A1-XZ2(I3,J2,L2)
+             A3  = 2*(-Z1(I3,J2,L2)+A0) +   A1+XZ2(I3,J2,L2)
+             ADX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0 = Z1(I2,J3,L2)
+             A1 = XZ2(I2,J3,L2)
+             A2 = 3*( Z1(I3,J3,L2)-A0) - 2*A1 - XZ2(I3,J3,L2)
+             A3 = 2*(-Z1(I3,J3,L2)+A0) +   A1 + XZ2(I3,J3,L2)
+             BDX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0  = YZ2(I2,J2,L2)
+             A1  = XYZ(I2,J2,L2)
+             A2  = 3*( YZ2(I3,J2,L2)-A0) -2*A1 - XYZ(I3,J2,L2)
+             A3  = 2*(-YZ2(I3,J2,L2)+A0) +  A1 + XYZ(I3,J2,L2)
+d439 6
+a444 4
+             A0 = YZ2(I2,J3,L2)
+             A1 = XYZ(I2,J3,L2)
+             A2 = 3*( YZ2(I3,J3,L2)-A0) - 2*A1 - XYZ(I3,J3,L2)
+             A3 = 2*(-YZ2(I3,J3,L2)+A0) +   A1 + XYZ(I3,J3,L2)
+d447 4
+a450 4
+             A0 = ADX
+             A1 = DADX
+             A2 = 3*(BDX - ADX) - 2*DADX - DBDX
+             A3 = 2*(ADX - BDX) +   DADX + DBDX
+d452 1
+a452 1
+             DC0 = A0+A1*DY+A2*DY**2+A3*DY**3
+d455 22
+a476 16
+             A0  = F1(I2,J2,L3)
+             A1  = X1(I2,J2,L3)
+             A2  = 3*( F1(I3,J2,L3)-A0) - 2*A1-X1(I3,J2,L3)
+             A3  = 2*(-F1(I3,J2,L3)+A0) +  A1+X1(I3,J2,L3)
+             ADX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0 = F1(I2,J3,L3)
+             A1 = X1(I2,J3,L3)
+             A2 = 3*( F1(I3,J3,L3)-A0) - 2*A1 - X1(I3,J3,L3)
+             A3 = 2*(-F1(I3,J3,L3)+A0) +   A1 + X1(I3,J3,L3)
+             BDX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0  = Y1 (I2,J2,L3)
+             A1  = XY2(I2,J2,L3)
+             A2  = 3*( Y1(I3,J2,L3)-A0) - 2*A1 - XY2(I3,J2,L3)
+             A3  = 2*(-Y1(I3,J2,L3)+A0) +   A1 + XY2(I3,J2,L3)
+d479 6
+a484 4
+             A0 = Y1 (I2,J3,L3)
+             A1 = XY2(I2,J3,L3)
+             A2 = 3*( Y1(I3,J3,L3)-A0) - 2*A1 - XY2(I3,J3,L3)
+             A3 = 2*(-Y1(I3,J3,L3)+A0) +   A1 + XY2(I3,J3,L3)
+d487 4
+a490 4
+             A0 = ADX
+             A1 = DADX
+             A2 = 3*(BDX - ADX) - 2*DADX - DBDX
+             A3 = 2*(ADX - BDX) +   DADX + DBDX
+d492 1
+a492 1
+             C1 = A0+A1*DY+A2*DY**2+A3*DY**3
+d495 22
+a516 16
+             A0  = Z1 (I2,J2,L3)
+             A1  = XZ2(I2,J2,L3)
+             A2  = 3*( Z1(I3,J2,L3)-A0) - 2*A1-XZ2(I3,J2,L3)
+             A3  = 2*(-Z1(I3,J2,L3)+A0) +   A1+XZ2(I3,J2,L3)
+             ADX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0 = Z1 (I2,J3,L3)
+             A1 = XZ2(I2,J3,L3)
+             A2 = 3*( Z1(I3,J3,L3)-A0) - 2*A1 - XZ2(I3,J3,L3)
+             A3 = 2*(-Z1(I3,J3,L3)+A0) +   A1 + XZ2(I3,J3,L3)
+             BDX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+             A0  = YZ2(I2,J2,L3)
+             A1  = XYZ(I2,J2,L3)
+             A2  = 3*( YZ2(I3,J2,L3)-A0) -2*A1 - XYZ(I3,J2,L3)
+             A3  = 2*(-YZ2(I3,J2,L3)+A0) +  A1 + XYZ(I3,J2,L3)
+d519 6
+a524 4
+             A0 = YZ2(I2,J3,L3)
+             A1 = XYZ(I2,J3,L3)
+             A2 = 3*( YZ2(I3,J3,L3)-A0) - 2*A1 - XYZ(I3,J3,L3)
+             A3 = 2*(-YZ2(I3,J3,L3)+A0) +   A1 + XYZ(I3,J3,L3)
+d527 4
+a530 4
+             A0 = ADX
+             A1 = DADX
+             A2 = 3*(BDX - ADX) - 2*DADX - DBDX
+             A3 = 2*(ADX - BDX) +   DADX + DBDX
+d532 1
+a532 1
+             DC1 = A0+A1*DY+A2*DY**2+A3*DY**3
+d537 9
+a545 9
+C            A0 = F(0)
+C            A1 = F'(0)
+C            A2 = 3*(F(1)-F(0)) - 2*F'(0) - F'(1)
+C            A3 = 2*(F(0)-F(1)) + F'(0) + F'(1)
+
+C            A0 = C0
+C            A1 = DC0
+             A2 = 3*(C1-C0) - 2*DC0 - DC1
+             A3 = 2*(C0-C1) +   DC0 + DC1
+d550 8
+a557 8
+C            C0 = F1(I2,J2,L2)*(1-DX)*(1-DY)*(1-DZ)
+C            C0 = C0 + F1(I3,J2,L2)  * DX*(1-DY)*(1-DZ)
+C            C0 = C0 + F1(I2,J3,L2)  * (1-DX)*DY*(1-DZ)
+C            C0 = C0 + F1(I3,J3,L2)  * DX*DY*(1-DZ)
+C            C0 = C0 + F1(I2,J2,L3)  * (1-DX)*(1-DY)*DZ
+C            C0 = C0 + F1(I3,J2,L3)  * DX*(1-DY)*DZ
+C            C0 = C0 + F1(I2,J3,L3)  * (1-DX)*DY*DZ
+C            C0 = C0 + F1(I3,J3,L3)  * DX*DY*DZ
+d561 3
+@
+
+
+1.6
+log
+@many var. renamed
+@
+text
+@d27 1
+a27 1
+C   FUNCTION FBS3(X,Y,Z, NXLD,NX,NY,NZ, F1,F0,X1,Y1,Z1,XY2,XZ2,YZ2)      *
+d29 3
+a31 3
+C   PURPOSE: 3D FOUIER-BASED TRICUBIC SPLINE INTERPOLATION             *
+C               BETWEEN VOXELS.                                        *
+C    ALGORITHM IS FAIRLY FAST AND PRESERVES FINE DETAILS OF IMAGES     *
+d33 8
+d52 1
+a52 1
+C       A3 = 2*(F(0)-F(1)) +  F'(0) + F'(1)                             *
+d83 1
+d274 205
+d481 2
+a482 2
+       SUBROUTINE FBS3_PREP(F0, NXLD, NX, NY, NZ,
+     &                      X1, Y1, Z1, XY2, XZ2, YZ2)
+d569 1
+d574 1
+@
+
+
+1.5
+log
+@MOD --> MODULO
+@
+text
+@d27 1
+a27 1
+C   FUNCTION FBS3(X,Y,Z,NXLD,NX,NY,NZ,F1,F0,X1,Y1,Z1,XY2,XZ2,YZ2)      *
+d44 1
+a44 1
+C       A3 = 2*(F(0)-F(1)) + F'(0) + F'(1)                             *
+d64 3
+a66 4
+       FUNCTION FBS3(X, Y, Z, 
+     &               NXLD, NX, NY, NZ,
+     &               F1, F0,
+     &               X1, Y1, Z1,
+a67 3
+C      XYZ3 = F0
+       REAL              :: X,  Y,  Z
+       INTEGER           :: NXLD, NX, NY, NZ
+d69 22
+a90 17
+       REAL              :: F1  (NXLD, NY,NZ)
+       REAL              :: F0  (NXLD, NY,NZ)
+       REAL              :: X1  (NXLD, NY,NZ)
+       REAL              :: Y1  (NXLD, NY,NZ)
+       REAL              :: Z1  (NXLD, NY,NZ)
+       REAL              :: XY2 (NXLD, NY,NZ)
+       REAL              :: XZ2 (NXLD, NY,NZ)
+       REAL              :: YZ2 (NXLD, NY,NZ)
+
+       INTEGER           :: I, J, L
+       INTEGER           :: I2,J2,L2
+       INTEGER           :: I3,J3,L3
+
+       REAL              :: DX, DY, DZ
+       REAL              :: A0, A1, A2, A3
+       REAL              :: ADX, BDX, DADX, DBDX
+       REAL              :: C0, DC0, C1, DC1
+d112 2
+a113 2
+             A2  = 3*(F1(I3,J2,L2)-A0)-2*A1-X1(I3,J2,L2)
+             A3  = 2*(A0-F1(I3,J2,L2))+A1+X1(I3,J2,L2)
+d118 2
+a119 2
+             A2 = 3*(F1(I3,J3,L2)-A0) - 2*A1 - X1(I3,J3,L2)
+             A3 = 2*(A0-F1(I3,J3,L2)) +   A1 + X1(I3,J3,L2)
+d124 2
+a125 2
+             A2  = 3*(Y1(I3,J2,L2)-A0) -2*A1 - XY2(I3,J2,L2)
+             A3  = 2*(A0-Y1(I3,J2,L2)) +  A1 + XY2(I3,J2,L2)
+d130 2
+a131 2
+             A2 = 3*(Y1(I3,J3,L2)-A0) - 2*A1 - XY2(I3,J3,L2)
+             A3 = 2*(A0-Y1(I3,J3,L2)) +   A1 + XY2(I3,J3,L2)
+d144 2
+a145 2
+             A2  = 3*(Z1(I3,J2,L2)-A0)-2*A1-XZ2(I3,J2,L2)
+             A3  = 2*(A0-Z1(I3,J2,L2))+A1+XZ2(I3,J2,L2)
+d150 2
+a151 2
+             A2 = 3*(Z1(I3,J3,L2)-A0) - 2*A1 - XZ2(I3,J3,L2)
+             A3 = 2*(A0-Z1(I3,J3,L2)) +   A1 + XZ2(I3,J3,L2)
+d155 3
+a157 3
+             A1  = F0(I2,J2,L2)
+             A2  = 3*(YZ2(I3,J2,L2)-A0) -2*A1 - F0(I3,J2,L2)
+             A3  = 2*(A0-YZ2(I3,J2,L2)) +  A1 + F0(I3,J2,L2)
+d161 3
+a163 3
+             A1 = F0(I2,J3,L2)
+             A2 = 3*(YZ2(I3,J3,L2)-A0) - 2*A1 - F0(I3,J3,L2)
+             A3 = 2*(A0-YZ2(I3,J3,L2)) +   A1 + F0(I3,J3,L2)
+d176 2
+a177 2
+             A2  = 3*(F1(I3,J2,L3)-A0)-2*A1-X1(I3,J2,L3)
+             A3  = 2*(A0-F1(I3,J2,L3))+A1+X1(I3,J2,L3)
+d182 2
+a183 2
+             A2 = 3*(F1(I3,J3,L3)-A0) - 2*A1 - X1(I3,J3,L3)
+             A3 = 2*(A0-F1(I3,J3,L3)) +   A1 + X1(I3,J3,L3)
+d186 1
+a186 1
+             A0  = Y1(I2,J2,L3)
+d188 2
+a189 2
+             A2  = 3*(Y1(I3,J2,L3)-A0) -2*A1 - XY2(I3,J2,L3)
+             A3  = 2*(A0-Y1(I3,J2,L3)) +  A1 + XY2(I3,J2,L3)
+d192 1
+a192 1
+             A0 = Y1(I2,J3,L3)
+d194 2
+a195 2
+             A2 = 3*(Y1(I3,J3,L3)-A0) - 2*A1 - XY2(I3,J3,L3)
+             A3 = 2*(A0-Y1(I3,J3,L3)) +   A1 + XY2(I3,J3,L3)
+d206 1
+a206 1
+             A0  = Z1(I2,J2,L3)
+d208 2
+a209 2
+             A2  = 3*(Z1(I3,J2,L3)-A0)-2*A1-XZ2(I3,J2,L3)
+             A3  = 2*(A0-Z1(I3,J2,L3))+A1+XZ2(I3,J2,L3)
+d212 1
+a212 1
+             A0 = Z1(I2,J3,L3)
+d214 2
+a215 2
+             A2 = 3*(Z1(I3,J3,L3)-A0) - 2*A1 - XZ2(I3,J3,L3)
+             A3 = 2*(A0-Z1(I3,J3,L3)) +   A1 + XZ2(I3,J3,L3)
+d219 3
+a221 3
+             A1  = F0(I2,J2,L3)
+             A2  = 3*(YZ2(I3,J2,L3)-A0) -2*A1 - F0(I3,J2,L3)
+             A3  = 2*(A0-YZ2(I3,J2,L3)) +  A1 + F0(I3,J2,L3)
+d225 3
+a227 3
+             A1 = F0(I2,J3,L3)
+             A2 = 3*(YZ2(I3,J3,L3)-A0) - 2*A1 - F0(I3,J3,L3)
+             A3 = 2*(A0-YZ2(I3,J3,L3)) +   A1 + F0(I3,J3,L3)
+d248 1
+a248 1
+             A3 = 2*(C0-C1) + DC0 + DC1
+d252 10
+a261 10
+C             TRI-LINEAR (just an example)
+C             C0 = F1(I2,J2,L2)*(1-DX)*(1-DY)*(1-DZ)
+C             C0 = C0 + F1(I3,J2,L2)*DX*(1-DY)*(1-DZ)
+C             C0 = C0 + F1(I2,J3,L2)*(1-DX)*DY*(1-DZ)
+C             C0 = C0 + F1(I3,J3,L2)*DX*DY*(1-DZ)
+C             C0 = C0 + F1(I2,J2,L3)*(1-DX)*(1-DY)*DZ
+C             C0 = C0 + F1(I3,J2,L3)*DX*(1-DY)*DZ
+C             C0 = C0 + F1(I2,J3,L3)*(1-DX)*DY*DZ
+C             C0 = C0 + F1(I3,J3,L3)*DX*DY*DZ
+C             FBS3 = C0/8.0
+d270 7
+a276 7
+       REAL              :: F0  (NXLD, NY,NZ)
+       REAL              :: X1  (NXLD, NY,NZ)
+       REAL              :: Y1  (NXLD, NY,NZ)
+       REAL              :: Z1  (NXLD, NY,NZ)
+       REAL              :: XY2 (NXLD, NY,NZ)
+       REAL              :: XZ2 (NXLD, NY,NZ)
+       REAL              :: YZ2 (NXLD, NY,NZ)
+d287 1
+d291 2
+d341 2
+a342 2
+                Y1(2*K+1,J+1,L+1)  =  F0(2*K+2,J+1,L+1) * WY(J)
+                Y1(2*K+2,J+1,L+1)  = -F0(2*K+1,J+1,L+1) * WY(J)
+d353 2
+a354 2
+                Z1(2*K+1,J+1,L+1)   =  F0(2*K+2,J+1,L+1)  * WZ(L)
+                Z1(2*K+2,J+1,L+1)   = -F0(2*K+1,J+1,L+1)  * WZ(L)
+d359 3
+a363 2
+                F0(2*K+1,J+1,L+1)   =  XY2(2*K+2,J+1,L+1) * WZ(L)
+                F0(2*K+2,J+1,L+1)   = -XY2(2*K+1,J+1,L+1) * WZ(L)
+d369 1
+d371 1
+a371 1
+       CALL  FMRS_3(X1,NX,NY,NZ,INV)
+d373 1
+a373 1
+       CALL  FMRS_3(Y1,NX,NY,NZ,INV)
+d375 1
+a375 1
+       CALL  FMRS_3(Z1,NX,NY,NZ,INV)
+d383 1
+a383 1
+       CALL  FMRS_3(F0,NX,NY,NZ,INV)
+@
+
+
+1.4
+log
+@gpk's changes
+@
+text
+@d72 1
+d100 7
+a106 6
+             I2 = MOD(I-1,NX) + 1
+             J2 = MOD(J-1,NY) + 1
+             L2 = MOD(L-1,NZ) + 1
+             I3 = MOD(I,NX) + 1
+             J3 = MOD(J,NY) + 1
+             L3 = MOD(L,NZ) + 1
+@
+
+
+1.3
+log
+@OMP added
+@
+text
+@d3 1
+a3 1
+C  FBS3      NEW                        OCT 2011    GREGORY KISHCHENKO *                                                                           *
+d29 2
+a30 2
+C   PURPOSE: RESAMPLING OF 3D IMAGES BY FOUIER-BASED TRICUBIC SPLINE   *
+C                 INTERPOLATION BETWEEN VOXELS.                        *
+d54 1
+a54 1
+C   by formula for derivatives' calculation using 3D Fourier transform.*         .    *
+d59 1
+a59 1
+C   the data from neighboring points.                                  *                        *
+d64 2
+a65 1
+       FUNCTION FBS3(X, Y, Z, NXLD, NX, NY, NZ,
+d70 1
+a70 2
+
+       DOUBLE PRECISION  :: X,  Y,  Z
+d72 8
+a79 11
+       REAL              :: F1  (0:NX-1, 0:NY-1,0:NZ-1)
+       REAL              :: F0  (0:NXLD-1, 0:NY-1,0:NZ-1)
+       REAL              :: X1  (0:NXLD-1, 0:NY-1,0:NZ-1)
+       REAL              :: Y1  (0:NXLD-1, 0:NY-1,0:NZ-1)
+       REAL              :: Z1  (0:NXLD-1, 0:NY-1,0:NZ-1)
+       REAL              :: XY2 (0:NXLD-1, 0:NY-1,0:NZ-1)
+       REAL              :: XZ2 (0:NXLD-1, 0:NY-1,0:NZ-1)
+       REAL              :: YZ2 (0:NXLD-1, 0:NY-1,0:NZ-1)
+
+
+       REAL              :: DX, DY, DZ
+d85 1
+d90 1
+d93 1
+a93 1
+	     L  = FLOOR(Z)
+d99 6
+a104 10
+             I  = I + NX/2
+             J  = J + NY/2
+	     L  = L + NZ/2
+
+             I2 = MODULO(I,NX)
+             J2 = MODULO(J,NY)
+             L2 = MODULO(L,NZ)
+             I3 = MODULO(I+1,NX)
+             J3 = MODULO(J+1,NY)
+             L3 = MODULO(L+1,NZ)
+a234 1
+
+d236 1
+a236 2
+C
+C            where A0, A1, A2, and A3 are given by
+d249 1
+a249 1
+C             TRI-LINEAR (just a test)
+a261 1
+
+a265 9
+  
+       REAL              :: F0  (0:NXLD-1, 0:NY-1,0:NZ-1)
+       INTEGER           :: NXLD, NX, NY, NZ
+       REAL              :: X1  (0:NXLD-1, 0:NY-1,0:NZ-1)
+       REAL              :: Y1  (0:NXLD-1, 0:NY-1,0:NZ-1)
+       REAL              :: Z1  (0:NXLD-1, 0:NY-1,0:NZ-1)
+       REAL              :: XY2 (0:NXLD-1, 0:NY-1,0:NZ-1)
+       REAL              :: XZ2 (0:NXLD-1, 0:NY-1,0:NZ-1)
+       REAL              :: YZ2 (0:NXLD-1, 0:NY-1,0:NZ-1)
+d267 7
+d275 2
+a276 2
+
+C      AUTOMATIC ARRAYS
+d280 3
+a283 4
+       INTEGER           :: K, J, L
+
+       REAL, PARAMETER   :: PI = 3.14159265358979323846
+	
+d287 1
+a287 2
+       A4 = PI*2/NXLD
+c$omp  parallel do private(k)
+a290 1
+
+d293 1
+a293 2
+       A4 = PI*2/NY
+c$omp  parallel do private(j)
+a296 1
+
+a298 1
+c$omp  parallel do private(j)
+d303 1
+a303 2
+       A4 = PI*2/NZ
+c$omp  parallel do private(l)
+a306 1
+          
+d308 1
+a308 1
+c$omp  parallel do private(l)
+d313 10
+a322 3
+c$omp  parallel do private(k,a4,j,l)
+       DO K=0,NXLD/2-1
+          A4 = WX(K)
+d324 3
+a326 3
+             DO L=0,NZ-1
+                X1(2*K,J,L)   =  F0(2*K+1,J,L) * A4
+                X1(2*K+1,J,L) = -F0(2*K,J,L)   * A4
+d331 3
+a333 4
+c$omp  parallel do private(j,a4,l,k)
+       DO J=0,NY-1
+          A4 = WY(J)
+          DO L=0,NZ-1
+d335 4
+a338 4
+                Y1(2*K,J,L)   =  F0(2*K+1,J,L) * A4
+                Y1(2*K+1,J,L) = -F0(2*K,J,L)   * A4
+                XY2(2*K,J,L)   =  X1(2*K+1,J,L) * A4
+                XY2(2*K+1,J,L) = -X1(2*K,J,L)   * A4
+d343 1
+a343 1
+c$omp  parallel do private(l,a4,j,k)
+a344 1
+          A4 = WZ(L)
+d347 11
+a357 10
+                Z1(2*K,J,L)     =  F0(2*K+1,J,L)  * A4
+                Z1(2*K+1,J,L)   = -F0(2*K,J,L)    * A4
+                XZ2(2*K,J,L)    =  X1(2*K+1,J,L)  * A4
+                XZ2(2*K+1,J,L)  = -X1(2*K,J,L)    * A4
+                YZ2(2*K,J,L)    =  Y1(2*K+1,J,L)  * A4
+                YZ2(2*K+1,J,L)  = -Y1(2*K,J,L)    * A4
+C               XYZ3(2*K,J,L)   =  XY2(2*K+1,J,L) * A4
+C               XYZ3(2*K+1,J,L) = -XY2(2*K,J,L)   * A4
+                F0(2*K,J,L)     =  XY2(2*K+1,J,L) * A4
+                F0(2*K+1,J,L)   = -XY2(2*K,J,L)   * A4
+@
+
+
+1.2
+log
+@bug fixed
+@
+text
+@d299 1
+d307 1
+d314 1
+d320 1
+d326 1
+d331 1
+d342 1
+d355 1
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d27 1
+a27 1
+C   FUNCTION FBS3(F1,F2,NX, NY, NZ, NX2,NY2,NZ2, NXLD)               *
+d69 1
+a69 1
+  
+d72 9
+a80 8
+       REAL              :: Q1  (0:NX-1, 0:NY-1,0:NZ-1)
+       REAL              :: F0  (0:NX-1, 0:NY-1,0:NZ-1)
+       REAL              :: X1  (0:NX-1, 0:NY-1,0:NZ-1)
+       REAL              :: Y1  (0:NX-1, 0:NY-1,0:NZ-1)
+       REAL              :: Z1  (0:NX-1, 0:NY-1,0:NZ-1)
+       REAL              :: XY2 (0:NX-1, 0:NY-1,0:NZ-1)
+       REAL              :: XZ2 (0:NX-1, 0:NY-1,0:NZ-1)
+       REAL              :: YZ2 (0:NX-1, 0:NY-1,0:NZ-1)
+d92 4
+a95 3
+             I  = INT(X)
+             J  = INT(Y)
+	     L  = INT(Z)
+d100 4
+d256 11
+d293 1
+a293 1
+       REAL, PARAMETER   :: PI2 = 2*3.14159265358979323846
+d298 1
+a298 2
+
+       A4 = PI2/NXLD
+d305 1
+a305 1
+       A4 = PI2/NY
+d311 1
+d316 1
+a316 1
+       A4 = PI2/NZ
+d320 1
+a320 1
+
+a321 1
+
+a379 2
+
+C      XYZ3 = F0
+@

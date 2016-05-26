@@ -1,0 +1,3655 @@
+head	1.12;
+access;
+symbols
+	pre_getangas:1.8
+	pre_GPL2010:1.8
+	pre_var_equation:1.8
+	pre_fftwrings:1.8
+	pre_opfiles:1.6
+	src:1.6
+	best-code:1.6
+	x-named-regs:1.5
+	x:1.5
+	v13-00:1.5
+	pre_GPL:1.3;
+locks; strict;
+comment	@c @;
+
+
+1.12
+date	2014.01.14.14.54.33;	author leith;	state Exp;
+branches;
+next	1.11;
+
+1.11
+date	2013.04.16.13.05.46;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2012.04.19.14.18.47;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2012.04.16.18.54.24;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2007.12.04.18.02.56;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2007.11.20.17.25.16;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2006.01.06.15.21.20;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2005.10.17.19.31.44;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2005.10.17.17.37.30;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2004.04.06.15.29.41;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2004.01.30.20.26.05;	author pawel;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2004.01.21.16.55.21;	author pawel;	state Exp;
+branches;
+next	;
+
+
+desc
+@manipulate pdb files
+,.
+@
+
+
+1.12
+log
+@updated, prompts, == ..
+@
+text
+@C **********************************************************************
+C *  PDB
+C=**********************************************************************
+C=* From: SPIDER - MODULAR IMAGE PROCESSING SYSTEM                     *
+C=* Copyright (C)2004, 2014 P. A. Penczek                                   *
+C=*                                                                    *
+C=* University of Texas - Houston Medical School                       *
+C=* Email:  pawel.a.penczek@@uth.tmc.edu                                *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* This program is distributed in the hope that it will be useful,    *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+C=* General Public License for more details.                           *
+C=*                                                                    *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+C=*                                                                    *
+C=**********************************************************************
+
+	SUBROUTINE PDB
+
+        INCLUDE 'CMBLOCK.INC'
+
+        IF (FCHAR(4:6) == 'CG3') THEN
+C          ------------------------- 'PDB GRAVITY'
+           CALL PDBCG3
+
+        ELSEIF (FCHAR(4:5) == 'IF') THEN
+C          ------------------------- 'GET PDB FILE PARAMETERS'
+	   CALL PDBIF
+
+	ELSEIF (FCHAR(4:5) == 'SH') THEN
+C          ------------------------- 'PDB SHIFT
+	   CALL PDBSH
+
+	ELSEIF (FCHAR(4:7) == 'RT3A') THEN
+C          ------------------------- 'PDB ROTATE AROUND AN ARBITRARY POINT
+	   CALL PDBRT3A
+
+	ELSEIF (FCHAR(4:7) == 'RT3L') THEN
+C          ------------------------- 'PDB ROTATE AROUND A LINE DEFINED by Two points
+	   CALL PDBRT3L
+
+	ELSEIF (FCHAR(4:6) == 'RT3') THEN
+C          ------------------------- 'PDB ROTATE AROUND AN ARBITRARY POINT
+	   CALL PDBRT3
+
+	ELSEIF (FCHAR(4:6) == 'STP') THEN
+C          ------------------------- 'COPY SPIDER COORDINATES TO PDB FORMAT'
+	   CALL SPTOPDB
+
+	ELSEIF (FCHAR(4:6) == 'PTS') THEN
+C          ------------------------- 'COPY PDB FILE TO SPIDER FORMAT'
+	   CALL PDBTOSP
+	ENDIF
+
+	END
+
+C **********************************************************************
+
+	SUBROUTINE PDBSH
+
+        INCLUDE 'CMLIMIT.INC'
+	INCLUDE 'CMBLOCK.INC'
+        CHARACTER (LEN=MAXNAM) :: PDBFILE,TRFILE
+	CHARACTER *80  RECLIN,HEAD*10, NULL*1,ATOM*4,RESIDUE*3
+	LOGICAL        EX,FLAGCELLDIM,FLAGATOM,ZNUM,COMBIND
+
+	DATA  LUN2,LUN3/25,26/
+
+	NATOM  = 1
+	LENREC = 0
+        CALL OPAUXFILE(.TRUE.,PDBFILE,NULL,LUN2,LENREC,'O',
+     &                 'PDB INPUT',.TRUE.,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+        CALL OPAUXFILE(.TRUE.,PDBFILE,NULL,LUN3,LENREC,'N',
+     &                 'PDB OUTPUT',.TRUE.,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+	
+	CALL RDPRM3S(SXT,SYT,SZT,NOT_USED,
+     &               'X, Y, & Z SHIFT IN ANGSTROMS:',IRTFLG)
+
+C       CHANGE COORDINATE SYSTEM 
+ 	SX =  SYT
+ 	SY =  SXT
+ 	SZ = -SZT
+
+70	READ(LUN2,30) RECLIN
+30	FORMAT(A80)
+
+	IF (RECLIN(1:4) .NE. 'ATOM' .AND.
+     &      RECLIN(1:4) .NE. 'END'  .AND.
+     & 	    RECLIN(1:4) .NE. 'TER' ) THEN
+	    WRITE(LUN3,30) RECLIN
+	    GOTO 70 
+
+	ELSEIF (RECLIN(1:4) == 'ATOM') THEN
+	   READ(RECLIN,75) HEAD,N,ATOM,NULL,RESIDUE,NULL,NR2,
+     &                     NULL,XO,YO,ZO,
+     &                     OCCUPANCY,TEMPERATURE,N
+75	   FORMAT(A6,I5,1X,A4,A1,A3,1X,A1,I4,A1,3X,3F8.3,2F6.2,1X,I3)	
+
+	   X = XO + SX
+	   Y = YO + SY
+	   Z = ZO + SZ
+
+C          REMOVED ALTERATION DEC 07 al
+C          ALTERED NOV 07 al AFTER RECEIVING BUG REPORT
+C           TEMP = X
+C           X    = Y
+C           Y    = TEMP
+C           Z    = -Z 
+
+	   WRITE(RECLIN(7:11),80) NATOM
+80	   FORMAT(I5)
+
+	   NATOM = NATOM + 1
+	   WRITE(RECLIN(31:54),85) X,Y,Z
+85	   FORMAT(3F8.3)
+
+	   WRITE(LUN3,30) RECLIN
+	   GOTO 70
+
+	ELSEIF (RECLIN(1:3) == 'TER') THEN
+	   WRITE(RECLIN(7:11),80)NATOM
+	   WRITE(LUN3,30)RECLIN
+	   NATOM = NATOM+1
+	   GOTO 70
+
+        ELSEIF (RECLIN(1:3) == 'END') THEN
+	   WRITE(LUN3,30)RECLIN
+	   GOTO 999
+	ELSE
+	   GOTO 70
+	ENDIF
+
+999	CLOSE(LUN2)
+	CLOSE(LUN3)
+	END
+
+
+C **********************************************************************
+C*
+C*Rotate PDB file around an arbitrary center
+C*
+C********************************************
+
+	SUBROUTINE PDBRT3A
+
+	INCLUDE 'CMBLOCK.INC'
+	INCLUDE 'CMLIMIT.INC'
+        CHARACTER (LEN=MAXNAM) :: PDBFILE,TRFILE  
+      
+        CHARACTER *80 RECLIN,HEAD*10, NULL*1,ATOM*4,RESIDUE*3
+	LOGICAL       EX,FLAGCELLDIM,FLAGATOM,ZNUM,COMBIND
+	DOUBLE PRECISION RM(3,3)
+
+	DATA  LUN2,LUN3/25,26/
+
+	NATOM=1
+	LENREC=0
+	CALL OPAUXFILE(.TRUE.,PDBFILE,NULL,LUN2,LENREC,'O',
+     &                 'PDB INPUT',.TRUE.,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+ 
+	CALL OPAUXFILE(.TRUE.,PDBFILE,NULL,LUN3,LENREC,'N',
+     &                 'PDB OUTPUT',.TRUE.,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+	CALL RDPRM3S(PHI,THETA,PSI,NOT_USED,
+     &              'PHI, THETA, PSI:',IRTFLG)
+
+	CALL  BLDR(RM,PSI,THETA,PHI)
+
+	CALL RDPRM3S(XC,YC,ZC,NOT_USED,
+     &     'CENTER OF ROTATION IN ANGSTROMS X,Y,Z: ',IRTFLG)
+
+70	READ(LUN2,30) RECLIN
+30	FORMAT(A80)
+
+	IF (RECLIN(1:4) .NE. 'ATOM' .AND.
+     &      RECLIN(1:4).NE.'END'.AND.
+     & 	    RECLIN(1:4).NE.'TER' ) THEN
+	   WRITE(LUN3,30) RECLIN
+	   GOTO 70 
+
+	ELSEIF (RECLIN(1:4) == 'ATOM') THEN
+	   READ(RECLIN,75) HEAD,N,ATOM,NULL,RESIDUE,NULL,NR2,
+     &                     NULL,XO,YO,ZO,
+     &                     OCCUPANCY,TEMPERATURE,N
+75	   FORMAT(A6,I5,1X,A4,A1,A3,1X,A1,I4,A1,3X,3F8.3,2F6.2,1X,I3)	
+C	   WRITE(*,*) XO,YO,ZO
+
+C          CHANGE COORDINATE SYSTEM
+	   W  = XO
+	   XO = YO
+	   YO = W
+	   ZO = -ZO
+	   XO = XO-XC
+	   YO = YO-YC
+	   ZO = ZO-ZC
+
+C          AFTER ROTATION CHANGE IT BACK, THAT'S WHY THE ORDER OF 
+C          X,Y IS CHANGED AND Z HAS INVERTED SIGN
+
+	   Y = RM(1,1)*XO+RM(1,2)*YO+RM(1,3)*ZO+XC
+	   X = RM(2,1)*XO+RM(2,2)*YO+RM(2,3)*ZO+YC
+	   Z = -(RM(3,1)*XO+RM(3,2)*YO+RM(3,3)*ZO+ZC)
+	   WRITE(RECLIN(7:11),80) NATOM
+80	   FORMAT(I5)
+	   NATOM = NATOM+1
+	   WRITE(RECLIN(31:54),85)  X,Y,Z
+85	   FORMAT(3F8.3)
+	   WRITE(LUN3,30)RECLIN
+	   GOTO 70
+
+	ELSEIF (RECLIN(1:3) == 'TER') THEN
+	   WRITE(RECLIN(7:11),80)NATOM
+	   WRITE(LUN3,30)RECLIN
+	   NATOM = NATOM + 1
+	   GOTO 70
+
+        ELSEIF (RECLIN(1:3) == 'END') THEN
+	   WRITE(LUN3,30)RECLIN
+	   GOTO 999
+
+	ELSE
+	   GOTO 70
+	ENDIF
+
+999	CLOSE(LUN2)
+	CLOSE(LUN3)
+	END
+
+
+C **********************************************************************
+C*
+C*Rotate PDB file around a line defined by two points in 3D space
+C*
+C********************************************
+
+	SUBROUTINE PDBRT3L
+
+	INCLUDE 'CMBLOCK.INC'
+	INCLUDE 'CMLIMIT.INC'
+
+        CHARACTER (LEN=MAXNAM) :: PDBFILE,TRFILE
+        CHARACTER *80 RECLIN,HEAD*10, NULL*1,ATOM*4,RESIDUE*3
+	LOGICAL          :: EX,FLAGCELLDIM,FLAGATOM,ZNUM,COMBIND
+	DOUBLE PRECISION :: RM(3,3),R1(3,3),R2(3,3),R3(3,3)
+
+        REAL, PARAMETER  :: QUADPI = 3.14159265358979323846 
+        REAL, PARAMETER  :: DGR_TO_RAD = (QUADPI/180)
+
+	DATA  LUN2,LUN3/25,26/
+
+	NATOM  = 1
+	LENREC = 0
+	CALL OPAUXFILE(.TRUE.,PDBFILE,NULL,LUN2,LENREC,'O',
+     &                 'PDB INPUT',.TRUE.,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+30	FORMAT(A80)
+ 
+	CALL OPAUXFILE(.TRUE.,PDBFILE,NULL,LUN3,LENREC,'N',
+     &                 'PDB OUTPUT',.TRUE.,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+	CALL RDPRM1S(ALPHA,NOT_USED,'ROTATION ANGLE ALPHA',IRTFLG)
+
+	CALL RDPRM3S(X1,Y1,Z1,NOT_USED,
+     &        'FIRST POINT DEFINING ROTATION AXIS IN ANGSTROMS X,Y,Z',
+     &        IRTFLG)
+
+	CALL RDPRM3S(X2,Y2,Z2,NOT_USED,
+     &       'SECOND POINT DEFINING ROTATION AXIS IN ANGSTROMS X,Y,Z',
+     &       IRTFLG)
+
+	XX    = X2-X1
+	YY    = Y2-Y1
+	ZZ    = Z2-Z1
+
+#if defined (SP_GFORTRAN)
+	PSI   = -ATAN2(YY, XX)                / DGR_TO_RAD
+	THETA =  ATAN2(ZZ, SQRT(XX*XX+YY*YY)) / DGR_TO_RAD
+#else
+	PSI   = -ATAN2D(YY, XX)
+	THETA =  ATAN2D(ZZ, SQRT(XX*XX+YY*YY))
+#endif
+
+	CALL  BLDR(R1,PSI,THETA,90.0)
+	CALL  BLDR(R2,0.0,ALPHA,0.0)
+
+C       -1
+C       R   U(ALPHA) R
+
+         DO  11  I=1,3
+            DO  11  J=1,3
+               R3(J,I)=0.0
+               DO  11  K=1,3
+11       R3(J,I)=R3(J,I)+R2(K,I)*R1(J,K)
+
+         DO  12  I=1,3
+            DO  12  J=1,3
+               RM(J,I)=0.0
+               DO  12  K=1,3
+12       RM(J,I)=RM(J,I)+R1(I,K)*R3(J,K)
+
+70	READ(LUN2,30) RECLIN
+	IF (RECLIN(1:4) .NE. 'ATOM' .AND.
+     &      RECLIN(1:4) .NE. 'END'  .AND.
+     &      RECLIN(1:4) .NE. 'TER' ) THEN
+	    WRITE(LUN3,30) RECLIN
+	    GOTO 70 
+
+	ELSEIF (RECLIN(1:4) == 'ATOM') THEN
+	   READ(RECLIN,75) HEAD,N,ATOM,NULL,RESIDUE,NULL,NR2,
+     &                     NULL,XO,YO,ZO,
+     &                     OCCUPANCY,TEMPERATURE,N
+75	   FORMAT(A6,I5,1X,A4,A1,A3,1X,A1,I4,A1,3X,3F8.3,2F6.2,1X,I3)	
+C	   WRITE(*,*) XO,YO,ZO
+
+C          CHANGE COORDINATE SYSTEM
+	   W  = XO
+	   XO = YO
+	   YO = W
+	   ZO = -ZO
+	   XO = XO-X1
+	   YO = YO-Y1
+	   ZO = ZO-Z1
+
+C          AFTER ROTATION CHANGE IT BACK, THAT'S WHY THE ORDER OF X,Y IS CHANGED
+C          AND Z HAS INVERTED SIGN
+
+	   Y=RM(1,1)*XO+RM(1,2)*YO+RM(1,3)*ZO+X1
+	   X=RM(2,1)*XO+RM(2,2)*YO+RM(2,3)*ZO+Y1
+	   Z=-(RM(3,1)*XO+RM(3,2)*YO+RM(3,3)*ZO+Z1)
+	   WRITE(RECLIN(7:11),80) NATOM
+80	   FORMAT(I5)
+	   NATOM = NATOM+1
+	   WRITE(RECLIN(31:54),85)  X,Y,Z
+85	   FORMAT(3F8.3)
+	   WRITE(LUN3,30)RECLIN
+	   GOTO 70
+
+	ELSEIF (RECLIN(1:3) == 'TER') THEN
+	   WRITE(RECLIN(7:11),80)NATOM
+	   WRITE(LUN3,30)RECLIN
+	   NATOM = NATOM + 1
+	   GOTO 70
+
+        ELSEIF (RECLIN(1:3) == 'END') THEN
+	   WRITE(LUN3,30)RECLIN
+	   GOTO 999
+
+	ELSE
+	   GOTO 70
+	ENDIF
+
+999	CLOSE(LUN2)
+	CLOSE(LUN3)
+	END
+
+C **********************************************************************
+C*
+C* Copy SPIDER document file to a PDB file
+C*
+C********************************************
+
+	SUBROUTINE SPTOPDB
+
+	INCLUDE 'CMBLOCK.INC'
+	INCLUDE 'CMLIMIT.INC'
+
+        REAL     :: DLIST(7)
+
+        CHARACTER (LEN=MAXNAM) :: PDBFILE,TRFILE
+ 	CHARACTER *95 RECLIN,HEAD*10, NULL*1,ATOM*4
+	CHARACTER *95 ANAM*4,RESIDUE*3,PHEAD*5,SENQ*1
+	LOGICAL   EX,FLAGCELLDIM,FLAGATOM,ZNUM,COMBIND
+
+	DATA  LUN2,LUN3/25,26/
+
+	OPEN(99,FILE='ttt')
+
+	PHEAD  = 'ATOM '
+	LENREC = 0
+
+30	FORMAT(A80)
+        CALL OPAUXFILE(.TRUE.,PDBFILE,NULL,LUN2,LENREC,'O',
+     &                 'SPIDER DOCUMENT',.TRUE.,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+        CALL OPAUXFILE(.TRUE.,PDBFILE,NULL,LUN3,LENREC,'N',
+     &                 'PDB OUTPUT',.TRUE.,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+	NCOUNT = 0
+	DO
+
+  	!READ(LUN2,30,END=701) TRFILE
+	!IF (TRFILE(1:2) ==' ;') CYCLE
+c33	!FORMAT(I5,1X,I1,7G12.6)
+	!READ(TRFILE,33)NATOM,MMM,XO,YO,ZO, CATOM,TEMPERATURE,XSEN,XNUL
+
+        CALL LUNDOCREDNXT(LUN2,IKEY,DLIST,7, UNUSED,ICOUNT,IRTFLG)
+        write(6,*) ikey,icount, dlist(1)
+	IF (IRTFLG .NE. 0) EXIT
+
+	IF (ICOUNT < 1) CYCLE
+
+        NATOM       = IKEY
+        MMM         = ICOUNT
+        XO          = DLIST(1)
+        YO          = DLIST(2)
+        ZO          = DLIST(3)
+        CATOM       = DLIST(4)
+        TEMPERATURE = DLIST(5)
+        XSEN        = DLIST(6)
+        XNUL        = DLIST(7)
+
+	INUL        = INT(XNUL)
+	IRES        = INT(CATOM/10000.)
+	NR2         = INT(XSEN/1000.)
+	ISEN        = INT(REAL(MOD(INT(XSEN),1000))/10.)
+	OCCUPANCY   = REAL(MOD(INT(XSEN),2))
+	
+	    IF (IRES == 1) THEN
+		RESIDUE ='LEU'
+	    ElSEIF (IRES == 2) THEN
+		RESIDUE ='THR'
+	    ELSEIF (IRES == 3) THEN
+		RESIDUE ='GLY'
+	    ELSEIF (IRES == 4) THEN
+		RESIDUE ='SER'
+	    ELSEIF (IRES == 5) THEN
+		RESIDUE ='VAL'
+	    ELSEIF (IRES == 6) THEN
+		RESIDUE ='PHE'
+	    ELSEIF (IRES == 7) THEN
+		RESIDUE ='ALA'
+	    ELSEIF (IRES == 8) THEN
+		RESIDUE ='LYS'
+       	    ELSEIF (IRES == 9) THEN
+		RESIDUE ='ARG'
+	    ELSEIF (IRES == 10) THEN
+		RESIDUE ='PRO'
+            ELSEIF (IRES == 11) THEN
+		RESIDUE ='TAU'
+	    ELSEIF (IRES == 12) THEN
+		RESIDUE ='HIS'
+    	    ELSEIF (IRES == 13) THEN
+		RESIDUE ='GLU'
+	    ELSEIF (IRES == 14) THEN
+		RESIDUE ='GLY'
+	    ELSEIF (IRES == 15) THEN
+		RESIDUE ='TYR'
+	    ELSEIF (IRES == 16) THEN
+		RESIDUE ='CYS'
+  	    ELSEIF (IRES == 17) THEN
+		RESIDUE ='TRY'
+	    ELSEIF (IRES == 18) THEN
+		RESIDUE ='ISO'
+	    ELSEIF (IRES == 19) THEN
+		RESIDUE ='MET'
+	    ELSEIF (IRES == 20) THEN
+		RESIDUE ='ILE'
+	    ENDIF
+cc
+ 	    IF (ISEN == 1) THEN
+		SENQ = 'A'
+	    ELSEIF (ISEN == 2) THEN
+		SENQ ='B'
+	    ELSEIF (ISEN == 3) THEN
+		SENQ = 'C'
+	    ELSEIF (ISEN == 4) THEN
+		SENQ = 'D'
+	    ELSEIF (ISEN == 5) THEN
+		SENQ = 'E'
+	    ELSEIF (ISEN == 6) THEN
+		SENQ = 'F'
+	    ELSEIF (ISEN == 7) THEN
+		SENQ = 'G'
+	    ELSEIF (ISEN == 8) THEN
+		SENQ = 'H'
+     	    ELSEIF (ISEN == 9) THEN
+		SENQ = 'I'
+	    ELSEIF (ISEN == 10) THEN
+		SENQ = 'J'
+	    ELSEIF (ISEN == 11) THEN
+		SENQ = 'K'
+	    ELSEIF (ISEN == 12) THEN
+		SENQ = 'L'
+	    ELSEIF (ISEN == 13) THEN
+		SENQ = 'M'
+	    ELSEIF (ISEN == 14) THEN
+		SENQ = 'N'
+	    ELSEIF (ISEN == 15) THEN
+		SENQ = 'O'
+	    ELSEIF (ISEN == 16) THEN
+		SENQ = 'P'
+	    ELSEIF (ISEN == 17) THEN
+		SENQ = 'Q'
+	    ENDIF
+C
+	    IF (INUL == 0) THEN
+		NULL =' '
+	    ELSEIF (INUL == 1) THEN
+		NULL ='A'
+	    ELSEIF (INUL == 2) THEN
+		NULL ='B'
+	    ELSEIF (INUL == 3) THEN
+		NULL ='C'
+	    ELSEIF (INUL == 4) THEN
+		NULL ='D'
+	    ELSEIF (INUL == 5) THEN
+		NULL ='E'
+	    ELSEIF (INUL == 6) THEN
+		NULL ='F'
+	    ELSEIF (INUL == 7) THEN
+		NULL ='G'
+	    ELSEIF (INUL == 8) THEN
+		NULL ='H'
+     	    ELSEIF (INUL == 9) THEN
+		NULL ='I'
+	    ELSEIF (INUL == 10) THEN
+		NULL ='J'
+	    ELSEIF (INUL == 11) THEN
+		NULL ='K'
+	    ELSEIF (INUL == 12) THEN
+		NULL ='L'
+	    ELSEIF (INUL == 13) THEN
+		NULL ='M'
+	    ELSEIF (INUL == 14) THEN
+		NULL ='N'
+	    ELSEIF (INUL == 15) THEN
+		NULL ='O'
+	    ELSEIF (INUL == 16) THEN
+		NULL ='P'
+	    ELSEIF (INUL == 17) THEN
+		NULL ='Q'
+	    ELSEIF (INUL == 18) THEN
+		NULL ='R'
+	    ELSEIF (INUL == 19) THEN
+		NULL ='S'
+	    ELSEIF (INUL == 20) THEN
+		NULL ='T'
+	    ELSEIF (INUL == 21) THEN
+		NULL ='U'
+	    ELSEIF (INUL == 22) THEN
+		NULL ='V'
+	   ELSE
+	        NULL =' '
+	   ENDIF
+	   NCATOM = INT(REAL(MOD(INT(CATOM),10000))/100.)	
+	   NPOS   = MOD(INT(CATOM),100)
+	
+	   IF (NCATOM == 1) THEN
+              ANAM =' H  '
+	   ELSEIF (NCATOM == 6) THEN
+		
+		IF (NPOS == 0) THEN
+		    ANAM =' C  '
+		ELSEIF (NPOS == 1) THEN
+		    ANAM =' CA '
+		ELSEIF (NPOS == 2) THEN
+		    ANAM =' CB '
+		ELSEIF (NPOS == 3) THEN
+		    ANAM =' CE1'
+		ELSEIF (NPOS == 4) THEN
+		    ANAM =' CE2'
+		ELSEIF (NPOS == 5) THEN
+		    ANAM =' CD '
+		ELSEIF (NPOS == 6) THEN
+		    ANAM =' CD1'
+		ELSEIF (NPOS == 7) THEN
+		    ANAM =' CD2'
+		ELSEIF (NPOS == 8) THEN
+		    ANAM =' CG '
+		ELSEIF (NPOS == 9) THEN
+		    ANAM =' CG1'
+		ELSEIF (NPOS == 10) THEN
+		    ANAM =' CG2'
+		ENDIF
+	   ELSEIF (NCATOM == 7) THEN
+		IF (NPOS == 0) THEN
+		    ANAM =' N  '
+		ELSEIF (NPOS == 1) THEN
+		    ANAM =' N1'
+		ELSEIF (NPOS == 2) THEN
+		    ANAM =' NH2'
+		ELSEIF (NPOS == 3) THEN
+		    ANAM =' NE2'
+		ELSEIF (NPOS == 4) THEN
+		    ANAM =' NZ '
+		ENDIF
+	   ELSEIF (NCATOM == 8) THEN
+		IF (NPOS == 0) THEN
+		    ANAM =' O  '
+		ELSEIF (NPOS == 1) THEN
+		    ANAM =' OH'
+		ELSEIF (NPOS == 2) THEN
+		    ANAM =' OE1'
+		ELSEIF (NPOS == 3) THEN
+		    ANAM =' OE2'
+		ELSEIF (NPOS == 4) THEN
+		    ANAM =' OG1'
+		ELSEIF (NPOS == 5) THEN
+		    ANAM =' OD1'
+		ELSEIF (NPOS == 6) THEN
+		    ANAM =' OXT'
+		ENDIF
+	   ELSEIF (NCATOM == 16) THEN
+		IF (NPOS == 0) THEN
+		    ANAM =' S  '
+		ELSEIF (NPOS == 1) THEN
+		    ANAM =' SG '
+		ELSEIF (NPOS == 2) THEN
+		    ANAM =' SD '
+		ENDIF
+	   ENDIF
+	   NCOUNT = NCOUNT + 1
+
+	   WRITE(98,*) XNUL,INUL
+	   WRITE(LUN3,76)PHEAD,NCOUNT,ANAM,RESIDUE,SENQ,NR2,
+     &                   NULL,XO,YO,ZO,
+     &                   OCCUPANCY, TEMPERATURE,ANAM(2:2)
+76	   FORMAT(A5,1X,I5,1X,A4,1X,A3,1X,A1,I4,1A,3X,3F8.3,2F6.2,
+     &        '           ',1A)
+	   IF (NCATOM == 8 .AND. NPOS == 6) THEN
+	      NCOUNT = NCOUNT+1
+	      WRITE(LUN3,77)NCOUNT,RESIDUE,SENQ,NR2
+	   ENDIF
+77	   FORMAT('TER   ',I5,6X,A3,1X,A1,I4)	
+	ENDDO	
+
+701     WRITE(LUN3,62)
+62	FORMAT('END')
+
+	CLOSE(LUN2)
+	CLOSE(LUN3)
+	CLOSE(99)
+
+	END
+
+C **********************************************************************
+C*
+C* Copy PDB file to a SPIDER document file
+C*
+C********************************************
+
+	SUBROUTINE PDBTOSP
+
+	INCLUDE 'CMBLOCK.INC'
+	INCLUDE 'CMLIMIT.INC'
+
+	PARAMETER  (NLIST=8)
+      	REAL	   DLIST(NLIST)
+        CHARACTER  (LEN=MAXNAM) :: PDBFILE,TRFILE   
+        CHARACTER  *95 RECLIN,HEAD*10, NULL*1,ATOM*4,RESIDUE*3
+	CHARACTER  *95 NULL1*1,NULL2*1
+	LOGICAL    EX,FLAGCELLDIM,FLAGATOM,ZNUM,COMBIND
+
+	DATA  LUN2,LUN3/25,26/
+
+30	FORMAT(A95)
+	LENREC = 0
+	CALL OPAUXFILE(.TRUE.,PDBFILE,NULL,LUN2,LENREC,'O',
+     &                 'PDB INPUT',.TRUE.,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+31	FORMAT(' ;  ',A60)
+	NATOM = 0
+
+70	READ(LUN2,30) RECLIN
+	IF (RECLIN(1:4) == 'ATOM') THEN
+	   READ(RECLIN,75)HEAD,N,ATOM,NULL,RESIDUE,NULL1,NR2,
+     &          NULL2,XO,YO,ZO,
+     &         OCCUPANCY,TEMPERATURE,N
+75	   FORMAT(A6,I5,1X,A4,A1,A3,1X,A1,I4,A1,3X,3F8.3,2F6.2,1X,I3)	
+
+C I AM NOT SURE ABOUT THE NEXT LINE....
+C	     IF (OCCUPANCY.GE.1) THEN
+
+		IF (ATOM(2:2) == 'H') THEN
+		   VATOM =100.
+CCarbon
+		ELSEIF (ATOM(2:2) == 'C') THEN
+		   VATOM =600.
+			IF (ATOM(3:3) == 'A') THEN
+				 VATOM =601
+			ELSEIF (ATOM(3:3) == 'B') THEN
+				 VATOM =602
+			ELSEIF (ATOM(3:4) == 'E1')THEN
+			  	VATOM =603
+			ELSEIF (ATOM(3:4) == 'E2') THEN
+				VATOM =604
+			ELSEIF (ATOM(3:3) == 'D') THEN	
+				VATOM =605
+			ELSEIF (ATOM(3:4) == 'D1') THEN
+				VATOM =606
+			ELSEIF (ATOM(3:4) == 'D2') THEN
+				VATOM =607				
+			ELSEIF (ATOM(3:3) == 'G') THEN
+				VATOM =608
+			ELSEIF (ATOM(3:4) == 'G1') THEN
+				VATOM =609	
+			ELSEIF (ATOM(3:4) == 'G2') THEN
+				VATOM =610
+			ELSEIF (ATOM(3:3) == 'Z') THEN
+				VATOM =611
+			ENDIF
+CNitrogen
+		ELSEIF (ATOM(2:2) == 'N') THEN
+		   VATOM = 700.
+			IF (ATOM(3:4) == 'H1') THEN
+			  	VATOM =701
+			    ELSEIF (ATOM(3:4) == 'H2') THEN
+				VATOM =702.
+			    ELSEIF (ATOM(3:3) == 'E')THEN
+				VATOM =703.
+			    ELSEIF (ATOM(3:4) == 'E2') THEN
+				VATOM =704.
+			    ELSEIF (ATOM(3:3) == 'Z') THEN
+				VATOM =705.
+			ENDIF
+CS	
+	        ELSEIF (ATOM(2:2) == 'S') THEN
+		   VATOM = 1600.
+			IF (ATOM(3:3) == 'G') THEN
+				VATOM =1601.
+			ELSEIF (ATOM(3:3) == 'D') THEN
+				VATOM =1602.
+			ENDIF
+CP	
+		ELSEIF (ATOM(2:2) == 'P') THEN
+		      VATOM = 1500.
+COxygen
+		ELSEIF (ATOM(2:2) == 'O') THEN
+		   VATOM = 800.
+		   IF (ATOM(3:3) == 'H') THEN
+			 VATOM = 801.
+		   ELSEIF (ATOM(3:4) == 'E1') THEN
+			 VATOM = 802.
+		   ELSEIF (ATOM(3:4) == 'E2') THEN
+			VATOM = 803.
+		   ELSEIF (ATOM(3:4) == 'G1') THEN
+			VATOM = 804.
+		   ELSEIF (ATOM(3:4) == 'D1') THEN
+			VATOM = 805.
+		   ELSEIF (ATOM(3:4) == 'XT') THEN
+			VATOM = 806.
+		   ENDIF
+		ENDIF
+CResidue
+	    IF (RESIDUE(1:3) == 'LEU') THEN
+		IRES=1
+	    ElSEIF (RESIDUE(1:3) == 'THR') THEN
+		IRES=2
+	    ELSEIF (RESIDUE(1:3) == 'GLY') THEN
+		IRES=3
+	    ELSEIF (RESIDUE(1:3) == 'SER') THEN
+		IRES=4
+	    ELSEIF (RESIDUE(1:3) == 'VAL') THEN
+		IRES=5
+	    ELSEIF (RESIDUE(1:3) == 'PHE') THEN
+		IRES=6
+	    ELSEIF (RESIDUE(1:3) == 'ALA') THEN
+		IRES=7
+	    ELSEIF (RESIDUE(1:3) == 'LYS') THEN
+		IRES=8
+       	    ELSEIF (RESIDUE(1:3) == 'ARG') THEN
+		IRES=9
+	    ELSEIF (RESIDUE(1:3) == 'PRO') THEN
+		IRES=10
+            ELSEIF (RESIDUE(1:3) == 'TAU') THEN
+		IRES=11
+	    ELSEIF (RESIDUE(1:3) == 'HIS') THEN
+		IRES=12
+    	    ELSEIF (RESIDUE(1:3) == 'GLU') THEN
+		IRES=13
+	    ELSEIF (RESIDUE(1:3) == 'GLY') THEN
+		IRES=14
+	    ELSEIF (RESIDUE(1:3) == 'TYR') THEN
+		IRES=15
+	    ELSEIF (RESIDUE(1:3) == 'CYS') THEN
+		IRES=16
+  	    ELSEIF (RESIDUE(1:3) == 'TRY') THEN
+		IRES=17
+	    ELSEIF (RESIDUE(1:3) == 'ISO') THEN
+		IRES=18
+	    ELSEIF (RESIDUE(1:3) == 'MET') THEN
+		IRES=19
+	    ELSEIF (RESIDUE(1:3) == 'ILE') THEN
+		IRES=20
+	    ENDIF
+CCSequence
+	    IF (NULL1(1:1) == 'A') THEN
+		ISEN=1
+	    ELSEIF (NULL1(1:1) == 'B') THEN
+		ISEN=2
+	    ELSEIF (NULL1(1:1) == 'C') THEN
+		ISEN=3
+	    ELSEIF (NULL1(1:1) == 'D') THEN
+		ISEN=4
+	    ELSEIF (NULL1(1:1) == 'E') THEN
+		ISEN=5
+	    ELSEIF (NULL1(1:1) == 'F') THEN
+		ISEN=6
+	    ELSEIF (NULL1(1:1) == 'G') THEN
+		ISEN=7
+	    ELSEIF (NULL1(1:1) == 'H') THEN
+		ISEN=8
+     	    ELSEIF (NULL1(1:1) == 'I') THEN
+		ISEN=9
+	    ELSEIF (NULL1(1:1) == 'J') THEN
+		ISEN=10
+	    ELSEIF (NULL1(1:1) == 'K') THEN
+		ISEN=11
+	    ELSEIF (NULL1(1:1) == 'L') THEN
+		ISEN=12
+	    ELSEIF (NULL1(1:1) == 'M') THEN
+		ISEN=13
+	    ELSEIF (NULL1(1:1) == 'N') THEN
+		ISEN=14
+	    ELSEIF (NULL1(1:1) == 'O') THEN
+		ISEN=15
+	    ELSEIF (NULL1(1:1) == 'P') THEN
+		ISEN=16
+	    ELSEIF (NULL1(1:1) == 'Q') THEN
+		ISEN=17
+	   ENDIF
+	   IF (NULL2 == ' ') THEN
+		INUL=0
+	   ELSEIF (NULL2 == 'A') THEN
+	        INUL=1	 	
+	   ELSEIF (NULL2 == 'B') THEN
+		INUL=2
+	   ELSEIF (NULL2 == 'C') THEN
+	        INUL=3	 	
+	   ELSEIF (NULL2 == 'D') THEN
+	        INUL=4	
+	   ELSEIF (NULL2 == 'E') THEN
+	        INUL=5	 	
+	   ELSEIF (NULL2 == 'F') THEN
+		INUL=6
+	   ELSEIF (NULL2 == 'G') THEN
+	        INUL=7	 	
+	   ELSEIF (NULL2 == 'H') THEN
+	        INUL=8	
+	   ELSEIF (NULL2 == 'I') THEN
+	        INUL=9	
+	   ELSEIF (NULL2 == 'J') THEN
+	        INUL=10	 	
+	   ELSEIF (NULL2 == 'K') THEN
+		INUL=11
+	   ELSEIF (NULL2 == 'L') THEN
+	        INUL=12	 	
+	   ELSEIF (NULL2 == 'M') THEN
+	        INUL=13
+	   ELSEIF (NULL2 == 'N') THEN
+	        INUL=14	 	
+	   ELSEIF (NULL2 == 'O') THEN
+		INUL=15
+	   ELSEIF (NULL2 == 'P') THEN
+	        INUL=16	 	
+	   ELSEIF (NULL2 == 'Q') THEN
+	        INUL=17	
+	   ELSEIF (NULL2 == 'R') THEN
+	        INUL=18	
+	   ELSEIF (NULL2 == 'S') THEN
+	        INUL=19	 	
+	   ELSEIF (NULL2 == 'T') THEN
+		INUL=20
+	   ELSEIF (NULL2 == 'U') THEN
+	        INUL=21	 	
+	   ELSEIF (NULL2 == 'V') THEN
+		INUL=22
+	   ENDIF  
+	    
+
+           NATOM    = NATOM + 1
+
+	   DLIST(1) = NATOM
+	   DLIST(2) = XO
+	   DLIST(3) = YO
+           DLIST(4) = ZO
+           DLIST(5) = IRES * 10000. + VATOM
+	   DLIST(6) = TEMPERATURE
+           DLIST(7) = NR2*1000. + ISEN*10. + OCCUPANCY
+	   DLIST(8) = INUL
+	   CALL SAVD(LUN3,DLIST,NLIST,IRTFLG)
+	   GOTO 70
+
+        ELSEIF (RECLIN(1:3) == 'END') THEN
+	   CLOSE(LUN2)
+	   CALL SAVDC
+	   CLOSE(LUN3)
+	   RETURN
+
+	ELSE
+	   GOTO 70
+	ENDIF
+
+	END
+
+C **********************************************************************
+C*
+C* Calculate center of gravity of a PDB file
+C*
+C********************************************
+
+	SUBROUTINE PDBCG3
+
+	INCLUDE 'CMBLOCK.INC'
+        INCLUDE 'CMLIMIT.INC' 
+	REAL, ALLOCATABLE, DIMENSION (:) :: R_TMP
+        CHARACTER (LEN=MAXNAM) :: PDBFILE,TRFILE        
+        CHARACTER *80 RECLIN,HEAD*10, NULL*1,ATOM*4,RESIDUE*3
+	LOGICAL       EX,FLAGCELLDIM,FLAGATOM,ZNUM,COMBIND
+
+	DATA  LUN2,LUN3/25,26/
+
+	LENREC = 0
+	CALL OPAUXFILE(.TRUE.,PDBFILE,NULL,LUN2,LENREC,'O',
+     &                 'PDB INPUT',.TRUE.,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+ 
+	NATOM=0
+	UX=0.0
+	UY=0.0
+	UZ=0.0
+	TMASS=0.0
+
+70	READ(LUN2,30) RECLIN
+30	FORMAT(A80)
+
+	IF (RECLIN(1:6) == 'HEADER') THEN
+           GOTO 70
+
+	ELSEIF (RECLIN(1:4) == 'ATOM') THEN
+	   READ(RECLIN,75) HEAD,N,ATOM,NULL,RESIDUE,NULL,NR2,
+     &                     NULL,XO,YO,ZO,
+     &                     OCCUPANCY,TEMPERATURE,N
+75	   FORMAT(A6,I5,1X,A4,A1,A3,1X,A1,I4,A1,3X,3F8.3,2F6.2,1X,I3)	
+C	   WRITE(*,*) XO,YO,ZO
+
+C            I AM NOT SURE ABOUT THE NEXT LINE....
+	     IF (OCCUPANCY .GE. 1) THEN
+		IF (ATOM(2:2) == 'H') THEN
+		   VATOM = 1.0
+		ELSEIF (ATOM(2:2) == 'C') THEN
+		   VATOM = 6.0
+		ELSEIF (ATOM(2:2) == 'N') THEN
+		   VATOM = 7.0
+		ELSEIF (ATOM(2:2) == 'O') THEN
+		   VATOM = 8.0
+	        ELSEIF (ATOM(2:2) == 'S') THEN
+		   VATOM = 16.0
+		ELSEIF (ATOM(2:2) == 'P') THEN
+		   VATOM = 15.0
+		ELSEIF (ATOM(2:2) == 'X' .AND. ATOM(1:3) == 'OXT')
+     &             THEN
+C                  TRNA THREE PRIME TERMINAL
+		   VATOM = 8.0
+		ELSE
+		   WRITE(*, *) 'SPECIAL ATOM ENCOUNTERED IN:'
+		   WRITE(*,*) RECLIN 
+	           STOP
+		ENDIF
+C	        VATOM = VATOM*OCCUPANCY
+	     ELSE 
+	        VATOM = OCCUPANCY
+	     ENDIF
+	   TMASS = TMASS+VATOM
+           UX    = UX+XO*VATOM
+           UY    = UY+YO*VATOM
+           UZ    = UZ+ZO*VATOM
+           NATOM = NATOM+1
+	   GOTO 70
+
+        ELSEIF (RECLIN(1:3) == 'END') THEN
+	   UX = UX/TMASS
+	   UY = UY/TMASS
+	   UZ = UZ/TMASS
+
+	   WRITE(*,780)  NATOM
+780	   FORMAT(' Number of atoms encountered:',I0)
+
+	   WRITE(*,781)  UX,UY,UZ
+781	   FORMAT('  Center of gravity of PDB file',/,3(2x,g12.4))
+
+C          CHANGE COORDINATE SYSTEM
+	   SX = UY
+	   SY = UX
+	   SZ = -UZ
+
+	   WRITE(*,782)  SX,SY,SZ
+782	   FORMAT('  Center of gravity of PDB file in SPIDER coords'
+     &		  ,/,3(2x,g12.4))
+
+	   ALLOCATE (R_TMP(6))
+	   NREG     = 7
+	   R_TMP(1) = UX
+	   R_TMP(2) = UY
+	   R_TMP(3) = UZ
+	   R_TMP(4) = SX
+	   R_TMP(5) = SY
+	   R_TMP(6) = SZ
+	   R_TMP(7) = NATOM
+	   CALL REG_SET_NSELA(NREG,R_TMP,.FALSE.,IRTFLG)
+	   DEALLOCATE(R_TMP)
+	   CLOSE(LUN2) 
+	   RETURN	
+	ELSE
+	   GOTO 70
+	ENDIF
+
+	CLOSE(LUN2)
+	END
+
+C **********************************************************************
+C*
+C* Copy PDB file to a SPIDER document file
+C*
+C********************************************
+
+	SUBROUTINE PDBIF
+
+	INCLUDE 'CMBLOCK.INC'
+	INCLUDE 'CMLIMIT.INC'
+ 
+	PARAMETER  (NLIST=4,NRG=6)
+      	REAL	               :: DLIST(NLIST)
+	REAL	               :: DLIST1(NLIST)
+	REAL                   :: R_TMP(NRG)   
+        CHARACTER (LEN=MAXNAM) :: PDBFILE,DOCNAM,COMMENT
+        CHARACTER (LEN=80)     :: RECLIN
+        CHARACTER (LEN=10)     :: HEAD
+	CHARACTER (LEN=6 )     :: NULL
+	CHARACTER (LEN=4)      :: ATOM
+	CHARACTER (LEN=3)      :: RESIDUE
+	LOGICAL                :: EX,FLAGCELLDIM,FLAGATOM,ZNUM,COMBIND
+
+        LOGICAL                :: ADDEXT,GETNAME,ISOLD
+        LOGICAL                :: APPEND,MESSAGE,NEWFILE
+        INTEGER                :: NLET,LUNDOCNO,IRTFLG
+
+        INTEGER, PARAMETER     :: LUN2    = 80
+        INTEGER, PARAMETER     :: LUNDOCN = 81
+
+	LENREC = 0
+	CALL OPAUXFILE(.TRUE.,PDBFILE,NULL,LUN2,LENREC,'O',
+     &                 'PDB INPUT',.TRUE.,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+        ADDEXT  = .TRUE.
+        GETNAME = .TRUE.
+        ISOLD   = .FALSE.
+        APPEND  = .FALSE.
+        MESSAGE = .TRUE. 
+        IRTFLG  = -8         ! NO IC USE
+
+        CALL OPENDOC(DOCNAM,ADDEXT,NLET,LUNDOCN,LUNDOCNO,GETNAME,
+     &      'PARAMETER DOC',ISOLD,APPEND,MESSAGE,NEWFILE,IRTFLG)
+
+C         123456789 123456789 123456789 123456789 123456789 123456789
+        COMMENT =
+     &   '  Cell constants, Cell angles, Origins, Scales, Atom numbers'
+        CALL LUNDOCPUTCOM(LUNDOCNO,COMMENT(1:60),IRTFLG)
+
+80	FORMAT(A80)
+90	FORMAT(' ',A,A)
+
+35	FORMAT(A6,3(2X,F7.4),3F7.4)
+36	FORMAT(A6,4X,3F10.4,5X,F10.4)
+
+	NCOUNT = 0
+	NATOM  = 0
+	NTERM  = 0
+	NHET   = 0
+	NPR    = 0
+
+        WRITE(6,*) ' '
+70	READ(LUN2,80) RECLIN
+
+	IF ( RECLIN(1:4) == 'JRNL') THEN
+	   WRITE(6,90) RECLIN         
+	   GOTO 70
+
+	ELSEIF (RECLIN(13:23) == 'FIT TO DATA') THEN
+            WRITE(*,90) RECLIN(12:60)
+            DO NPR=1,6
+               READ(LUN2,80) RECLIN
+               WRITE(6,90) RECLIN(12:60)
+            ENDDO
+            GOTO 70
+
+	ELSEIF (RECLIN(13:21) == 'DATA USED') THEN
+            WRITE(6,90) RECLIN(12:60)
+            DO NPR=1,6
+               READ(LUN2,80) RECLIN
+               WRITE(6,90)RECLIN(12:60)
+            ENDDO
+            GOTO 70
+
+	ELSEIF (RECLIN(14:20) == 'PROGRAM') THEN
+            WRITE(6,90) 'USED PROGRAM',RECLIN(21:60)         
+            GOTO 70
+
+	ELSEIF (RECLIN(1:6) == 'CRYST1') THEN
+            NLEN = lnblnk(RECLIN)
+	    WRITE(6,90) RECLIN(1:NLEN)	
+
+	    READ(RECLIN(1:54),35)NULL,DLIST(2:4),DLIST1(2:4)
+	    NCOUNT     = NCOUNT+1
+	    DLIST(1)   = NCOUNT
+	    R_TMP(1:3) = DLIST(2:4)	
+            CALL LUNDOCWRTDAT(LUNDOCNO,NCOUNT,DLIST(2),3,IRTFLG)
+	    !CALL SAVD(LUNDOCNO,DLIST,NLIST,IRTFLG)
+
+	    NCOUNT    = NCOUNT+1
+	    DLIST1(1) = NCOUNT
+	    DLIST(:)  = DLIST1(:)		
+            CALL LUNDOCWRTDAT(LUNDOCNO,NCOUNT,DLIST(2),3,IRTFLG)
+	    !CALL SAVD(LUNDOCNO,DLIST,NLIST,IRTFLG)
+	    GOTO 70
+
+	ELSEIF (RECLIN(1:3) == 'ORI') THEN	
+	    NCOUNT   = NCOUNT+1
+	    DLIST(1) = NCOUNT	
+	    READ(RECLIN,36) NULL,DLIST(2:4),XX
+            CALL LUNDOCWRTDAT(LUNDOCNO,NCOUNT,DLIST(2),3,IRTFLG)
+	    !CALL SAVD(LUNDOCNO,DLIST,NLIST,IRTFLG)
+	    GOTO 70
+
+	ELSEIF (RECLIN(1:3) == 'SCA') THEN
+	    NCOUNT   = NCOUNT+1
+	    DLIST(1) = NCOUNT	
+	    READ(RECLIN,36)NULL,DLIST(2:4),XX
+            CALL LUNDOCWRTDAT(LUNDOCNO,NCOUNT,DLIST(2),3,IRTFLG)
+	    !CALL SAVD(LUNDOCNO,DLIST,NLIST,IRTFLG)
+	    GOTO 70
+
+	ELSEIF (RECLIN(1:4) == 'ATOM') THEN
+	    NATOM = NATOM+1
+	    GOTO 70
+
+	ELSEIF (RECLIN(1:3) == 'TER') THEN
+	    NTERM = NTERM+1
+	    GOTO 70
+
+	ELSEIF (RECLIN(1:3) == 'HET') THEN
+	    NHET = NHET+1
+	    GOTO 70
+
+        ELSEIF (RECLIN(1:3) == 'END') THEN
+            CLOSE(LUN2)
+            NCOUNT   = NCOUNT+1
+            DLIST(1) = NCOUNT
+            DLIST(2) = NATOM
+            DLIST(3) = NTERM
+            DLIST(4) = NHET
+
+            CALL LUNDOCWRTDAT(LUNDOCNO,NCOUNT,DLIST(2),3,IRTFLG)
+            !CALL SAVD(LUNDOCNO,DLIST,NLIST,IRTFLG)
+            CALL SAVDC
+            CLOSE(LUNDOCNO)
+
+            XNATOM   = REAL(NATOM)
+            XNTERM   = REAL(NTERM)
+            XNHET    = REAL(NHET)
+            R_TMP(4) = XNATOM
+            R_TMP(5) = XNTERM
+            R_TMP(6) = XNHET
+            CALL REG_SET_NSELA(NRG,R_TMP,.FALSE.,IRTFLG)
+
+            WRITE(6,*) ' '
+            RETURN
+
+	ELSE
+            GOTO 70 
+	ENDIF
+
+	END
+
+
+C **********************************************************************
+
+	SUBROUTINE PDBRT3
+
+	INCLUDE 'CMBLOCK.INC'
+	INCLUDE 'CMLIMIT.INC'
+        CHARACTER (LEN=MAXNAM) :: PDBFILE,TRFILE
+        CHARACTER *80  RECLIN,HEAD*10, NULL*1,ATOM*4,RESIDUE*3
+	LOGICAL        EX,FLAGCELLDIM,FLAGATOM,ZNUM,COMBIND
+	DOUBLE PRECISION RM(3,3)
+
+	DATA  LUN2,LUN3/25,26/
+
+	NATOM  = 1
+	LENREC = 0
+	CALL OPAUXFILE(.TRUE.,PDBFILE,NULL,LUN2,LENREC,'O',
+     &                 'PDB INPUT',.TRUE.,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+	CALL OPAUXFILE(.TRUE.,PDBFILE,NULL,LUN3,LENREC,'N',
+     &                 'PDB OUTPUT',.TRUE.,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+   	CALL RDPRM3S(PHI, THETA, PSI,NOT_USED,
+     &              'PHI, THETA, PSI: ',IRTFLG)
+
+	CALL BLDR(RM,PSI,THETA,PHI)
+
+70	READ(LUN2,30) RECLIN
+30	FORMAT(A80)
+
+	IF (RECLIN(1:4) .NE. 'ATOM' .AND. 
+     &          RECLIN(1:4) .NE. 'END' .AND.
+     & 	        RECLIN(1:4) .NE. 'TER' ) THEN
+	   WRITE(LUN3,30) RECLIN
+	   GOTO 70 
+
+	ELSEIF (RECLIN(1:4) == 'ATOM') THEN
+	   READ(RECLIN,75) HEAD,N,ATOM,NULL,RESIDUE,NULL,NR2,
+     &                     NULL,XO,YO,ZO,
+     &                     OCCUPANCY,TEMPERATURE,N
+75	   FORMAT(A6,I5,1X,A4,A1,A3,1X,A1,I4,A1,3X,3F8.3,2F6.2,1X,I3)	
+C	   WRITE(*,*) XO,YO,ZO
+
+c          CHANGE COORDINATE SYSTEM
+	   W  = XO
+	   XO = YO
+	   YO = W
+	   ZO = -ZO
+
+C          AFTER ROTATION CHANGE IT BACK, THAT'S WHY THE ORDER OF X,Y 
+C          IS CHANGED AND Z HAS INVERTED SIGN
+	   Y=RM(1,1)*XO+RM(1,2)*YO+RM(1,3)*ZO
+	   X=RM(2,1)*XO+RM(2,2)*YO+RM(2,3)*ZO
+	   Z=-(RM(3,1)*XO+RM(3,2)*YO+RM(3,3)*ZO)
+	   WRITE(RECLIN(7:11),80) NATOM
+80	   FORMAT(I5)
+	   NATOM=NATOM+1
+	   WRITE(RECLIN(31:54),85)  X,Y,Z
+85	   FORMAT(3F8.3)
+	   WRITE(LUN3,30)RECLIN
+	   GOTO 70
+
+	ELSEIF (RECLIN(1:3) == 'TER') THEN
+	   WRITE(RECLIN(7:11),80)NATOM
+	   WRITE(LUN3,30)RECLIN
+	   NATOM=NATOM+1
+	   GOTO 70
+
+        ELSEIF (RECLIN(1:3) == 'END') THEN
+	   WRITE(LUN3,30)RECLIN
+	   GOTO 999
+
+	ELSE
+	   GOTO 70
+	ENDIF
+
+999	CLOSE(LUN2)
+	CLOSE(LUN3)
+	END
+@
+
+
+1.11
+log
+@(SP_GFORTRAN) ATAN2D --> ATAN2
+@
+text
+@d5 1
+a5 1
+C=* Copyright (C)2004, P. A. Penczek                                   *
+d31 1
+a31 1
+        IF (FCHAR(4:6) .EQ. 'CG3') THEN
+d35 1
+a35 1
+        ELSEIF (FCHAR(4:5) .EQ. 'IF') THEN
+d39 1
+a39 1
+	ELSEIF (FCHAR(4:5) .EQ. 'SH') THEN
+d43 1
+a43 1
+	ELSEIF (FCHAR(4:7) .EQ. 'RT3A') THEN
+d47 1
+a47 1
+	ELSEIF (FCHAR(4:7) .EQ. 'RT3L') THEN
+d51 1
+a51 1
+	ELSEIF (FCHAR(4:6) .EQ. 'RT3') THEN
+d55 1
+a55 1
+	ELSEIF (FCHAR(4:6) .EQ. 'STP') THEN
+d59 1
+a59 1
+	ELSEIF (FCHAR(4:6) .EQ. 'PTS') THEN
+d63 1
+d89 1
+a89 1
+     &               'SHIFT IN ANGSTROMS SXT, SYT, SZT: ',IRTFLG)
+d105 1
+a105 1
+	ELSEIF (RECLIN(1:4) .EQ. 'ATOM') THEN
+d115 1
+a115 1
+C REMOVED ALTERATION DEC 07 al
+d132 1
+a132 1
+	ELSEIF (RECLIN(1:3) .EQ. 'TER') THEN
+d138 1
+a138 1
+        ELSEIF (RECLIN(1:3) .EQ. 'END') THEN
+d179 1
+a179 1
+     &     'ROTATION ANGLE IN DEGREES PHI, THETA, PSI: ',IRTFLG)
+d195 1
+a195 1
+	ELSEIF (RECLIN(1:4) .EQ. 'ATOM') THEN
+d225 1
+a225 1
+	ELSEIF (RECLIN(1:3) .EQ. 'TER') THEN
+d231 1
+a231 1
+        ELSEIF (RECLIN(1:3) .EQ. 'END') THEN
+d324 1
+a324 1
+	ELSEIF (RECLIN(1:4) .EQ. 'ATOM') THEN
+d354 1
+a354 1
+	ELSEIF (RECLIN(1:3) .EQ. 'TER') THEN
+d360 1
+a360 1
+        ELSEIF (RECLIN(1:3) .EQ. 'END') THEN
+d382 3
+d388 1
+a388 1
+	LOGICAL EX,FLAGCELLDIM,FLAGATOM,ZNUM,COMBIND
+d394 1
+a394 1
+	PHEAD='ATOM '
+d396 1
+d399 1
+a399 1
+     &                 'SPIDER INPUT',.TRUE.,IRTFLG)
+d406 1
+a406 1
+	NCOUNT=0
+d408 27
+a434 2
+55	READ(LUN2,30,END=701) TRFILE
+	IF (TRFILE(1:2) .EQ.' ;') GOTO 55
+d436 40
+a475 49
+	READ(TRFILE,33)NATOM,MMM,XO,YO,ZO,CATOM,TEMPERATURE,XSEN,XNUL
+
+cc==decoding
+
+	INUL=INT(XNUL)
+	IRES=INT(CATOM/10000.)
+	NR2=INT(XSEN/1000.)
+	ISEN=INT(REAL(MOD(INT(XSEN),1000))/10.)
+	OCCUPANCY=REAL(MOD(INT(XSEN),2))	
+	    IF (IRES.EQ.1) THEN
+		RESIDUE='LEU'
+	    ElSEIF (IRES.EQ.2) THEN
+		RESIDUE='THR'
+	    ELSEIF (IRES.EQ.3) THEN
+		RESIDUE='GLY'
+	    ELSEIF (IRES.EQ.4) THEN
+		RESIDUE='SER'
+	    ELSEIF (IRES.EQ.5) THEN
+		RESIDUE='VAL'
+	    ELSEIF (IRES.EQ.6) THEN
+		RESIDUE='PHE'
+	    ELSEIF (IRES.EQ.7) THEN
+		RESIDUE='ALA'
+	    ELSEIF (IRES.EQ.8) THEN
+		RESIDUE='LYS'
+       	    ELSEIF (IRES.EQ.9) THEN
+		RESIDUE='ARG'
+	    ELSEIF (IRES.EQ.10) THEN
+		RESIDUE='PRO'
+            ELSEIF (IRES.EQ.11) THEN
+		RESIDUE='TAU'
+	    ELSEIF (IRES.EQ.12) THEN
+		RESIDUE='HIS'
+    	    ELSEIF (IRES.EQ.13) THEN
+		RESIDUE='GLU'
+	    ELSEIF (IRES.EQ.14) THEN
+		RESIDUE='GLY'
+	    ELSEIF (IRES.EQ.15) THEN
+		RESIDUE='TYR'
+	    ELSEIF (IRES.EQ.16) THEN
+		RESIDUE='CYS'
+  	    ELSEIF (IRES.EQ.17) THEN
+		RESIDUE='TRY'
+	    ELSEIF (IRES.EQ.18) THEN
+		RESIDUE='ISO'
+	    ELSEIF (IRES.EQ.19) THEN
+		RESIDUE='MET'
+	    ELSEIF (IRES.EQ.20) THEN
+		RESIDUE='ILE'
+d478 35
+a512 35
+ 	    IF (isen.EQ.1) THEN
+		SENQ='A'
+	    ELSEIF (isen.EQ.2) THEN
+		SENQ='B'
+	    ELSEIF (isen.EQ.3) THEN
+		SENQ='C'
+	    ELSEIF (isen.EQ.4) THEN
+		SENQ='D'
+	    ELSEIF (isen.EQ.5) THEN
+		SENQ='E'
+	    ELSEIF (isen.EQ.6) THEN
+		SENQ='F'
+	    ELSEIF (isen.EQ.7) THEN
+		SENQ='G'
+	    ELSEIF (isen.EQ.8) THEN
+		SENQ='H'
+     	    ELSEIF (isen.EQ.9) THEN
+		SENQ='I'
+	    ELSEIF (isen.EQ.10) THEN
+		SENQ='J'
+	    ELSEIF (isen.EQ.11) THEN
+		SENQ='K'
+	    ELSEIF (isen.EQ.12) THEN
+		SENQ='L'
+	    ELSEIF (isen.EQ.13) THEN
+		SENQ='M'
+	   ELSEIF (isen.EQ.14) THEN
+		SENQ='N'
+	    ELSEIF (isen.EQ.15) THEN
+		SENQ='O'
+	    ELSEIF (isen.EQ.16) THEN
+		SENQ='P'
+	    ELSEIF (isen.EQ.17) THEN
+		SENQ='Q'
+	   ENDIF
+d514 46
+a559 46
+	   IF (INUL.EQ.0) THEN
+		NULL=' '
+	    ELSEIF (INUL.EQ.1) THEN
+		NULL='A'
+	    ELSEIF (INUL.EQ.2) THEN
+		NULL='B'
+	    ELSEIF (INUL.EQ.3) THEN
+		NULL='C'
+	    ELSEIF (INUL.EQ.4) THEN
+		NULL='D'
+	    ELSEIF (INUL.EQ.5) THEN
+		NULL='E'
+	    ELSEIF (INUL.EQ.6) THEN
+		NULL='F'
+	    ELSEIF (INUL.EQ.7) THEN
+		NULL='G'
+	    ELSEIF (INUL.EQ.8) THEN
+		NULL='H'
+     	    ELSEIF (INUL.EQ.9) THEN
+		NULL='I'
+	    ELSEIF (INUL.EQ.10) THEN
+		NULL='J'
+	    ELSEIF (INUL.EQ.11) THEN
+		NULL='K'
+	    ELSEIF (INUL.EQ.12) THEN
+		NULL='L'
+	    ELSEIF (INUL.EQ.13) THEN
+		NULL='M'
+	    ELSEIF (INUL.EQ.14) THEN
+		NULL='N'
+	    ELSEIF (INUL.EQ.15) THEN
+		NULL='O'
+	    ELSEIF (INUL.EQ.16) THEN
+		NULL='P'
+	    ELSEIF (INUL.EQ.17) THEN
+		NULL='Q'
+	    ELSEIF (INUL.EQ.18) THEN
+		NULL='R'
+	    ELSEIF (INUL.EQ.19) THEN
+		NULL='S'
+	    ELSEIF (INUL.EQ.20) THEN
+		NULL='T'
+	    ELSEIF (INUL.EQ.21) THEN
+		NULL='U'
+	    ELSEIF (INUL.EQ.22) THEN
+		NULL='V'
+d561 1
+a561 1
+	        NULL=' '
+d566 3
+a568 3
+	   IF (NCATOM.EQ.1) THEN
+		ANAM=' H  '
+	   ELSEIF (NCATOM.EQ.6) THEN
+d570 22
+a591 22
+		IF (NPOS.EQ.0) THEN
+		    ANAM=' C  '
+		ELSEIF (NPOS.EQ.1) THEN
+		    ANAM=' CA '
+		ELSEIF (NPOS.EQ.2) THEN
+		    ANAM=' CB '
+		ELSEIF (NPOS.EQ.3) THEN
+		    ANAM=' CE1'
+		ELSEIF (NPOS.EQ.4) THEN
+		    ANAM=' CE2'
+		ELSEIF (NPOS.EQ.5) THEN
+		    ANAM=' CD '
+		ELSEIF (NPOS.EQ.6) THEN
+		    ANAM=' CD1'
+		ELSEIF (NPOS.EQ.7) THEN
+		    ANAM=' CD2'
+		ELSEIF (NPOS.EQ.8) THEN
+		    ANAM=' CG '
+		ELSEIF (NPOS.EQ.9) THEN
+		    ANAM=' CG1'
+		ELSEIF (NPOS.EQ.10) THEN
+		    ANAM=' CG2'
+d593 11
+a603 11
+	   ELSEIF (NCATOM.EQ.7) THEN
+		IF (NPOS.EQ.0) THEN
+		    ANAM=' N  '
+		ELSEIF (NPOS.EQ.1) THEN
+		    ANAM=' N1'
+		ELSEIF (NPOS.EQ.2) THEN
+		    ANAM=' NH2'
+		ELSEIF (NPOS.EQ.3) THEN
+		    ANAM=' NE2'
+		ELSEIF (NPOS.EQ.4) THEN
+		    ANAM=' NZ '
+d605 15
+a619 15
+	   ELSEIF (NCATOM.EQ.8) THEN
+		IF (NPOS.EQ.0) THEN
+		    ANAM=' O  '
+		ELSEIF (NPOS.EQ.1) THEN
+		    ANAM=' OH'
+		ELSEIF (NPOS.EQ.2) THEN
+		    ANAM=' OE1'
+		ELSEIF (NPOS.EQ.3) THEN
+		    ANAM=' OE2'
+		ELSEIF (NPOS.EQ.4) THEN
+		    ANAM=' OG1'
+		ELSEIF (NPOS.EQ.5) THEN
+		    ANAM=' OD1'
+		ELSEIF (NPOS.EQ.6) THEN
+		    ANAM=' OXT'
+d621 7
+a627 7
+	   ELSEIF (NCATOM.EQ.16) THEN
+		IF (NPOS.EQ.0) THEN
+		    ANAM=' S  '
+		ELSEIF (NPOS.EQ.1) THEN
+		    ANAM=' SG '
+		ELSEIF (NPOS.EQ.2) THEN
+		    ANAM=' SD '
+d630 1
+a630 1
+	   NCOUNT=NCOUNT+1
+d632 1
+a632 1
+	   WRITE(98,*)XNUL,INUL
+d638 2
+a639 2
+	   IF (NCATOM.EQ.8.AND.NPOS.EQ.6) THEN
+	      NCOUNT=NCOUNT+1
+a644 1
+33	FORMAT(I5,1X,I1,7G12.6)
+d651 1
+d666 5
+a670 5
+      	REAL	DLIST(NLIST)
+        CHARACTER (LEN=MAXNAM) :: PDBFILE,TRFILE   
+        CHARACTER *95 RECLIN,HEAD*10, NULL*1,ATOM*4,RESIDUE*3
+	CHARACTER *95 NULL1*1,NULL2*1
+	LOGICAL EX,FLAGCELLDIM,FLAGATOM,ZNUM,COMBIND
+d681 1
+a681 1
+	NATOM=0
+d684 1
+a684 1
+	IF (RECLIN(1:4) .EQ. 'ATOM') THEN
+d693 2
+a694 2
+		IF (ATOM(2:2) .EQ. 'H') THEN
+		   VATOM=100.
+d696 24
+a719 24
+		ELSEIF (ATOM(2:2) .EQ. 'C') THEN
+		   VATOM=600.
+			IF (ATOM(3:3).EQ.'A') THEN
+				 VATOM=601
+			ELSEIF (ATOM(3:3).EQ.'B') THEN
+				 VATOM=602
+			ELSEIF (ATOM(3:4).EQ.'E1')THEN
+			  	VATOM=603
+			ELSEIF (ATOM(3:4).EQ.'E2') THEN
+				VATOM=604
+			ELSEIF (ATOM(3:3).EQ.'D') THEN	
+				VATOM=605
+			ELSEIF (ATOM(3:4).EQ.'D1') THEN
+				VATOM=606
+			ELSEIF (ATOM(3:4).EQ.'D2') THEN
+				VATOM=607				
+			ELSEIF (ATOM(3:3).EQ.'G') THEN
+				VATOM=608
+			ELSEIF (ATOM(3:4).EQ.'G1') THEN
+				VATOM=609	
+			ELSEIF (ATOM(3:4).EQ.'G2') THEN
+				VATOM=610
+			ELSEIF (ATOM(3:3).EQ.'Z') THEN
+				VATOM=611
+d722 12
+a733 12
+		ELSEIF (ATOM(2:2) .EQ. 'N') THEN
+		   VATOM=700.
+			IF (ATOM(3:4).EQ.'H1') THEN
+			  	VATOM=701
+			    ELSEIF (ATOM(3:4).EQ.'H2') THEN
+				VATOM=702.
+			    ELSEIF (ATOM(3:3).EQ.'E')THEN
+				VATOM=703.
+			    ELSEIF (ATOM(3:4).EQ.'E2') THEN
+				VATOM=704.
+			    ELSEIF (ATOM(3:3).EQ.'Z') THEN
+				VATOM=705.
+d736 6
+a741 6
+	        ELSEIF (ATOM(2:2) .EQ. 'S') THEN
+		   VATOM=1600.
+			IF (ATOM(3:3).EQ.'G') THEN
+				VATOM=1601.
+			ELSEIF (ATOM(3:3).EQ.'D') THEN
+				VATOM=1602.
+d744 2
+a745 2
+		ELSEIF (ATOM(2:2) .EQ. 'P') THEN
+		      VATOM=1500.
+d747 14
+a760 14
+		ELSEIF (ATOM(2:2) .EQ. 'O') THEN
+		   VATOM=800.
+		   IF (ATOM(3:3) .EQ. 'H') THEN
+			 VATOM=801.
+		   ELSEIF (ATOM(3:4) .EQ. 'E1') THEN
+			 VATOM=802.
+		   ELSEIF (ATOM(3:4) .EQ. 'E2') THEN
+			VATOM=803.
+		   ELSEIF (ATOM(3:4) .EQ. 'G1') THEN
+			VATOM=804.
+		   ELSEIF (ATOM(3:4) .EQ. 'D1') THEN
+			VATOM=805.
+		   ELSEIF (ATOM(3:4) .EQ. 'XT') THEN
+			VATOM=806.
+d764 1
+a764 1
+	    IF (RESIDUE(1:3).EQ.'LEU') THEN
+d766 1
+a766 1
+	    ElSEIF (RESIDUE(1:3).EQ.'THR') THEN
+d768 1
+a768 1
+	    ELSEIF (RESIDUE(1:3).EQ.'GLY') THEN
+d770 1
+a770 1
+	    ELSEIF (RESIDUE(1:3).EQ.'SER') THEN
+d772 1
+a772 1
+	    ELSEIF (RESIDUE(1:3).EQ.'VAL') THEN
+d774 1
+a774 1
+	    ELSEIF (RESIDUE(1:3).EQ.'PHE') THEN
+d776 1
+a776 1
+	    ELSEIF (RESIDUE(1:3).EQ.'ALA') THEN
+d778 1
+a778 1
+	    ELSEIF (RESIDUE(1:3).EQ.'LYS') THEN
+d780 1
+a780 1
+       	    ELSEIF (RESIDUE(1:3).EQ.'ARG') THEN
+d782 1
+a782 1
+	    ELSEIF (RESIDUE(1:3).EQ.'PRO') THEN
+d784 1
+a784 1
+            ELSEIF (RESIDUE(1:3).EQ.'TAU') THEN
+d786 1
+a786 1
+	    ELSEIF (RESIDUE(1:3).EQ.'HIS') THEN
+d788 1
+a788 1
+    	    ELSEIF (RESIDUE(1:3).EQ.'GLU') THEN
+d790 1
+a790 1
+	    ELSEIF (RESIDUE(1:3).EQ.'GLY') THEN
+d792 1
+a792 1
+	    ELSEIF (RESIDUE(1:3).EQ.'TYR') THEN
+d794 1
+a794 1
+	    ELSEIF (RESIDUE(1:3).EQ.'CYS') THEN
+d796 1
+a796 1
+  	    ELSEIF (RESIDUE(1:3).EQ.'TRY') THEN
+d798 1
+a798 1
+	    ELSEIF (RESIDUE(1:3).EQ.'ISO') THEN
+d800 1
+a800 1
+	    ELSEIF (RESIDUE(1:3).EQ.'MET') THEN
+d802 1
+a802 1
+	    ELSEIF (RESIDUE(1:3).EQ.'ILE') THEN
+d806 1
+a806 1
+	    IF (NULL1(1:1).EQ.'A') THEN
+d808 1
+a808 1
+	    ELSEIF (NULL1(1:1).EQ.'B') THEN
+d810 1
+a810 1
+	    ELSEIF (NULL1(1:1).EQ.'C') THEN
+d812 1
+a812 1
+	    ELSEIF (NULL1(1:1).EQ.'D') THEN
+d814 1
+a814 1
+	    ELSEIF (NULL1(1:1).EQ.'E') THEN
+d816 1
+a816 1
+	    ELSEIF (NULL1(1:1).EQ.'F') THEN
+d818 1
+a818 1
+	    ELSEIF (NULL1(1:1).EQ.'G') THEN
+d820 1
+a820 1
+	    ELSEIF (NULL1(1:1).EQ.'H') THEN
+d822 1
+a822 1
+     	    ELSEIF (NULL1(1:1).EQ.'I') THEN
+d824 1
+a824 1
+	    ELSEIF (NULL1(1:1).EQ.'J') THEN
+d826 1
+a826 1
+	    ELSEIF (NULL1(1:1).EQ.'K') THEN
+d828 1
+a828 1
+	    ELSEIF (NULL1(1:1).EQ.'L') THEN
+d830 1
+a830 1
+	    ELSEIF (NULL1(1:1).EQ.'M') THEN
+d832 1
+a832 1
+	   ELSEIF (NULL1(1:1).EQ.'N') THEN
+d834 1
+a834 1
+	    ELSEIF (NULL1(1:1).EQ.'O') THEN
+d836 1
+a836 1
+	    ELSEIF (NULL1(1:1).EQ.'P') THEN
+d838 1
+a838 1
+	    ELSEIF (NULL1(1:1).EQ.'Q') THEN
+d841 1
+a841 1
+	   IF (NULL2.EQ.' ') THEN
+d843 1
+a843 1
+	   ELSEIF (NULL2.EQ.'A') THEN
+d845 1
+a845 1
+	   ELSEIF (NULL2.EQ.'B') THEN
+d847 1
+a847 1
+	   ELSEIF (NULL2.EQ.'C') THEN
+d849 1
+a849 1
+	   ELSEIF (NULL2.EQ.'D') THEN
+d851 1
+a851 1
+	   ELSEIF (NULL2.EQ.'E') THEN
+d853 1
+a853 1
+	   ELSEIF (NULL2.EQ.'F') THEN
+d855 1
+a855 1
+	   ELSEIF (NULL2.EQ.'G') THEN
+d857 1
+a857 1
+	   ELSEIF (NULL2.EQ.'H') THEN
+d859 1
+a859 1
+	   ELSEIF (NULL2.EQ.'I') THEN
+d861 1
+a861 1
+	   ELSEIF (NULL2.EQ.'J') THEN
+d863 1
+a863 1
+	   ELSEIF (NULL2.EQ.'K') THEN
+d865 1
+a865 1
+	   ELSEIF (NULL2.EQ.'L') THEN
+d867 1
+a867 1
+	   ELSEIF (NULL2.EQ.'M') THEN
+d869 1
+a869 1
+	   ELSEIF (NULL2.EQ.'N') THEN
+d871 1
+a871 1
+	   ELSEIF (NULL2.EQ.'O') THEN
+d873 1
+a873 1
+	   ELSEIF (NULL2.EQ.'P') THEN
+d875 1
+a875 1
+	   ELSEIF (NULL2.EQ.'Q') THEN
+d877 1
+a877 1
+	   ELSEIF (NULL2.EQ.'R') THEN
+d879 1
+a879 1
+	   ELSEIF (NULL2.EQ.'S') THEN
+d881 1
+a881 1
+	   ELSEIF (NULL2.EQ.'T') THEN
+d883 1
+a883 1
+	   ELSEIF (NULL2.EQ.'U') THEN
+d885 1
+a885 1
+	   ELSEIF (NULL2.EQ.'V') THEN
+d890 1
+a890 1
+           NATOM=NATOM+1
+d892 8
+a899 8
+	   DLIST(1)=NATOM
+	   DLIST(2)=XO
+	   DLIST(3)=YO
+           DLIST(4)=ZO
+           DLIST(5)=IRES*10000.+VATOM
+	   DLIST(6)=TEMPERATURE
+           DLIST(7)=NR2*1000.+ISEN*10.+occupancy
+	   DLIST(8)=INUL
+d902 2
+a903 1
+        ELSEIF (RECLIN(1:3) .EQ. 'END') THEN
+d908 1
+d912 1
+d946 1
+a946 1
+	IF (RECLIN(1:6) .EQ. 'HEADER') THEN
+d949 1
+a949 1
+	ELSEIF (RECLIN(1:4) .EQ. 'ATOM') THEN
+d958 13
+a970 13
+		IF (ATOM(2:2) .EQ. 'H') THEN
+		   VATOM=1.0
+		ELSEIF (ATOM(2:2) .EQ. 'C') THEN
+		   VATOM=6.0
+		ELSEIF (ATOM(2:2) .EQ. 'N') THEN
+		   VATOM=7.0
+		ELSEIF (ATOM(2:2) .EQ. 'O') THEN
+		   VATOM=8.0
+	        ELSEIF (ATOM(2:2) .EQ. 'S') THEN
+		   VATOM=16.0
+		ELSEIF (ATOM(2:2) .EQ. 'P') THEN
+		   VATOM=15.0
+		ELSEIF (ATOM(2:2) .EQ. 'X' .AND. ATOM(1:3) .EQ. 'OXT')
+d973 1
+a973 1
+		   VATOM=8.0
+d981 1
+a981 1
+	        VATOM=OCCUPANCY
+d983 5
+a987 5
+	   TMASS=TMASS+VATOM
+           UX=UX+XO*VATOM
+           UY=UY+YO*VATOM
+           UZ=UZ+ZO*VATOM
+           NATOM=NATOM+1
+d990 4
+a993 4
+        ELSEIF (RECLIN(1:3) .EQ. 'END') THEN
+	   UX=UX/TMASS
+	   UY=UY/TMASS
+	   UZ=UZ/TMASS
+d996 1
+a996 1
+780	   FORMAT(' Number of atoms encountered:',I6)
+d1039 2
+a1040 1
+	INCLUDE 'CMLIMIT.INC' 
+d1042 14
+a1055 7
+      	REAL	DLIST(NLIST)
+	REAL	DLIST1(NLIST)
+	REAL    R_TMP(NRG)   
+        CHARACTER (LEN=MAXNAM) :: PDBFILE,TRFILE
+        CHARACTER *80 RECLIN,HEAD*10
+	CHARACTER *80 NULL*6,ATOM*4,RESIDUE*3
+	LOGICAL       EX,FLAGCELLDIM,FLAGATOM,ZNUM,COMBIND
+d1057 2
+a1058 1
+	DATA  LUN2,LUN3/25,26/
+d1060 1
+a1060 1
+	LENREC=0
+d1065 18
+a1082 4
+30	FORMAT(A80)
+ 
+31	FORMAT(' ;  ',A60)
+33	FORMAT(A30)
+a1084 6
+37	FORMAT(' ;',A21)
+	NCOUNT=0
+	NATOM=0
+	NTERM=0
+	NHET=0
+	NPR=0
+d1086 11
+a1096 3
+70	READ(LUN2,30) RECLIN
+	IF ( RECLIN(1:4) .EQ. 'JRNL') THEN
+	   WRITE(*,30)RECLIN         
+d1099 2
+a1100 2
+	ELSEIF (RECLIN(13:23) .EQ. 'FIT TO DATA') THEN
+            WRITE(*,*) RECLIN(12:60)
+d1102 2
+a1103 2
+               READ(LUN2,30) RECLIN
+               WRITE(*,*)RECLIN(12:60)
+d1107 2
+a1108 2
+	ELSEIF (RECLIN(13:21) .EQ. 'DATA USED') THEN
+            WRITE(*,*) RECLIN(12:60)
+d1110 2
+a1111 2
+               READ(LUN2,30) RECLIN
+               WRITE(*,*)RECLIN(12:60)
+d1115 2
+a1116 2
+	ELSEIF (RECLIN(14:20) .EQ. 'PROGRAM') THEN
+            WRITE(*,*) 'USED PROGRAM',RECLIN(21:60)         
+d1119 4
+a1122 2
+	ELSEIF (RECLIN(1:6) .EQ. 'CRYST1') THEN
+	    WRITE(*,*) RECLIN	
+d1124 11
+a1134 8
+	    NCOUNT=NCOUNT+1
+	    DLIST(1)=NCOUNT
+	    R_TMP(1:3)=DLIST(2:4)	
+	    CALL SAVD(LUN3,DLIST,NLIST,IRTFLG)
+	    NCOUNT=NCOUNT+1
+	    DLIST1(1)=NCOUNT
+	    DLIST(:)=DLIST1(:)		
+	    CALL SAVD(LUN3,DLIST,NLIST,IRTFLG)
+d1137 6
+a1142 5
+	ELSEIF (RECLIN(1:3) .EQ. 'ORI') THEN	
+	    NCOUNT=NCOUNT+1
+	    DLIST(1)=NCOUNT	
+	    READ(RECLIN,36)NULL,DLIST(2:4),XX
+	    CALL SAVD(LUN3,DLIST,NLIST,IRTFLG)
+d1145 3
+a1147 3
+	ELSEIF (RECLIN(1:3) .EQ. 'SCA') THEN
+	    NCOUNT=NCOUNT+1
+	    DLIST(1)=NCOUNT	
+d1149 2
+a1150 1
+	    CALL SAVD(LUN3,DLIST,NLIST,IRTFLG)
+d1153 2
+a1154 2
+	ELSEIF (RECLIN(1:4) .EQ. 'ATOM') THEN
+	    NATOM=NATOM+1
+d1157 2
+a1158 2
+	ELSEIF (RECLIN(1:3) .EQ. 'TER') THEN
+	    NTERM=NTERM+1
+d1161 2
+a1162 2
+	ELSEIF (RECLIN(1:3) .EQ. 'HET') THEN
+	    NHET=NHET+1
+d1165 1
+a1165 1
+        ELSEIF (RECLIN(1:3) .EQ. 'END') THEN
+d1167 8
+a1174 6
+            NCOUNT=NCOUNT+1
+            DLIST(1)=NCOUNT
+            DLIST(2)=NATOM
+            DLIST(3)=NTERM
+            DLIST(4)=NHET
+            CALL SAVD(LUN3,DLIST,NLIST,IRTFLG)
+d1176 8
+a1183 7
+            CLOSE(LUN3)
+            XNATOM=REAL(NATOM)
+            XNTERM=REAL(NTERM)
+            XNHET=REAL(NHET)
+            R_TMP(4)=XNATOM
+            R_TMP(5)=xNTERM
+            R_TMP(6)=XNHET
+d1185 2
+d1188 1
+d1195 1
+d1220 1
+a1220 1
+     &              'ROTATION ANGLES PHI, THETA, PSI: ',IRTFLG)
+d1233 1
+a1233 1
+	ELSEIF (RECLIN(1:4) .EQ. 'ATOM') THEN
+d1259 1
+a1259 1
+	ELSEIF (RECLIN(1:3) .EQ. 'TER') THEN
+d1265 1
+a1265 1
+        ELSEIF (RECLIN(1:3) .EQ. 'END') THEN
+@
+
+
+1.10
+log
+@\bad -ATAN2D(YY, XX)                / DGR_TO_RAD fixec
+@
+text
+@d291 2
+a292 2
+	PSI   = -ATAN2D(YY, XX)                / DGR_TO_RAD
+	THETA =  ATAN2D(ZZ, SQRT(XX*XX+YY*YY)) / DGR_TO_RAD
+@
+
+
+1.9
+log
+@#if defined (SP_GFORTRAN)
+	PSI   = -ATAN2(YY*DGR_TO_RAD, XX*DGR_TO_RAD)
+	THETA =  ATAN2(ZZ*DGR_TO_RAD, SQRT(XX*XX+YY*YY)*DGR_TO_RAD)
+@
+text
+@d291 2
+a292 2
+	PSI   = -ATAN2(YY*DGR_TO_RAD, XX*DGR_TO_RAD)
+	THETA =  ATAN2(ZZ*DGR_TO_RAD, SQRT(XX*XX+YY*YY)*DGR_TO_RAD)
+@
+
+
+1.8
+log
+@removed shift coordinate alteration
+@
+text
+@d253 1
+d256 5
+a260 2
+	LOGICAL       EX,FLAGCELLDIM,FLAGATOM,ZNUM,COMBIND
+	DOUBLE PRECISION RM(3,3),R1(3,3),R2(3,3),R3(3,3)
+d289 8
+a296 2
+	PSI   = -ATAN2D(YY,XX)
+	THETA = ATAN2D(ZZ,SQRT(XX*XX+YY*YY))
+@
+
+
+1.7
+log
+@*** empty log message ***
+@
+text
+@d114 1
+d116 4
+a119 4
+           TEMP = X
+           X    = Y
+           Y    = TEMP
+           Z    = -Z 
+@
+
+
+1.6
+log
+@_nsela param
+@
+text
+@a7 1
+C=*                                                                    *
+d30 1
+a30 1
+        INCLUDE 'CMLIMIT.INC' 
+d33 1
+d35 2
+a36 4
+           CALL PDBCG3
+           RETURN
+		ELSEIF (FCHAR(4:5) .EQ. 'IF') THEN
+C          ------------------------- 'GET pdb file parameters'
+d38 1
+a38 1
+	   RETURN
+d42 1
+a42 1
+	    RETURN
+d44 1
+a44 1
+C          ------------------------- 'PDB ROTATE AROUND AN ARBITURY POINT
+d46 1
+a46 1
+	   RETURN
+d48 1
+a48 1
+C          ------------------------- 'PDB ROTATE AROUND A LINE Defined by Two points
+d50 1
+a50 1
+	    RETURN
+d52 1
+a52 1
+C          ------------------------- 'PDB ROTATE AROUND AN ARBITURY POINT
+d54 1
+a54 1
+	   RETURN
+d56 1
+a56 1
+C          ------------------------- 'Copy spider coordinates to pdb format'
+d58 1
+a58 1
+	   RETURN
+d60 1
+a60 1
+C          ------------------------- 'Copy pdb file to spider format'
+a61 1
+	   RETURN
+d64 1
+d66 1
+d68 2
+d71 4
+a74 3
+	CHARACTER *80 PDBFILE, RECLIN,HEAD*10, NULL*1,ATOM*4,RESIDUE*3
+	CHARACTER *80 TRFILE
+	LOGICAL EX,FLAGCELLDIM,FLAGATOM,ZNUM,COMBIND
+d76 2
+a77 1
+	NATOM=1
+a78 1
+30	FORMAT(A80)
+d88 6
+a93 8
+     &     'Shift in Agstroms sx, sy, sz: ',IRTFLG)
+c change coordinate system
+	SX=SYT
+	SY=SXT
+	SZ=-SZT
+900	READ(LUN2,30) RECLIN
+	IF(RECLIN(1:6) .NE. 'HEADER') GOTO 900
+	WRITE(LUN3,30)RECLIN
+d96 43
+a138 27
+	IF(RECLIN(1:4) .NE. 'ATOM'.AND.RECLIN(1:4).NE.'END'.AND.
+     & 	 RECLIN(1:4).NE.'TER' ) THEN
+	WRITE(LUN3,30) RECLIN
+	GOTO 70 
+	ELSEIF(RECLIN(1:4) .EQ. 'ATOM') THEN
+	READ(RECLIN,75) HEAD,N,ATOM,NULL,RESIDUE,NULL,NR2,NULL,XO,YO,ZO,
+     &  OCCUPANCY,TEMPERATURE,N
+75	FORMAT(A6,I5,1X,A4,A1,A3,1X,A1,I4,A1,3X,3F8.3,2F6.2,1X,I3)	
+C	WRITE(*,*) XO,YO,ZO
+	X=XO+SX
+	Y=YO+SY
+	Z=ZO+SZ
+	WRITE(RECLIN(7:11),80) NATOM
+80	FORMAT(I5)
+	NATOM=NATOM+1
+	WRITE(RECLIN(31:54),85)  X,Y,Z
+85	FORMAT(3F8.3)
+	WRITE(LUN3,30)RECLIN
+	GOTO 70
+	ELSEIF(RECLIN(1:3) .EQ. 'TER') THEN
+	WRITE(RECLIN(7:11),80)NATOM
+	WRITE(LUN3,30)RECLIN
+	NATOM=NATOM+1
+	GOTO 70
+        ELSEIF(RECLIN(1:3) .EQ. 'END') THEN
+	WRITE(LUN3,30)RECLIN
+	GOTO 999
+d140 1
+a140 1
+	GOTO 70
+d142 1
+d146 3
+a148 3
+CC-------------------------------------------------------------
+C*******************************************
+C*
+a151 1
+C*
+d153 1
+d155 1
+d157 5
+a161 3
+        CHARACTER *80 PDBFILE, RECLIN,HEAD*10, NULL*1,ATOM*4,RESIDUE*3
+	CHARACTER *80 TRFILE
+	LOGICAL EX,FLAGCELLDIM,FLAGATOM,ZNUM,COMBIND
+d163 1
+d165 1
+a170 1
+30	FORMAT(A80)
+a175 1
+c255	FORMAT('Rotation angles phi, theta, psi: ',$)
+d177 2
+a178 2
+     &     'ROTATE ANGLE IN DEGREE PHI,THETA,PSI: ',IRTFLG)
+C	READ(*,*) 
+d180 1
+a180 2
+c	WRITE(*,226)
+c226	FORMAT('Center of rotation in Angstrom X,Y,Z: ',$)
+d182 2
+a183 6
+     &     'Center of rotation in Angstrom X,Y,Z: ',IRTFLG)
+c	READ(*,*) XC,YC,ZC
+900	READ(LUN2,30) RECLIN
+	IF(RECLIN(1:6) .NE. 'HEADER') GOTO 900
+	WRITE(LUN3,30)RECLIN
+C
+d185 48
+a232 37
+	IF(RECLIN(1:4) .NE. 'ATOM'.AND.RECLIN(1:4).NE.'END'.AND.
+     & 	 RECLIN(1:4).NE.'TER' ) THEN
+	WRITE(LUN3,30) RECLIN
+	GOTO 70 
+	ELSEIF(RECLIN(1:4) .EQ. 'ATOM') THEN
+	READ(RECLIN,75) HEAD,N,ATOM,NULL,RESIDUE,NULL,NR2,NULL,XO,YO,ZO,
+     &  OCCUPANCY,TEMPERATURE,N
+75	FORMAT(A6,I5,1X,A4,A1,A3,1X,A1,I4,A1,3X,3F8.3,2F6.2,1X,I3)	
+C	WRITE(*,*) XO,YO,ZO
+c change coordinate system
+	W=XO
+	XO=YO
+	YO=W
+	ZO=-ZO
+	XO=XO-XC
+	YO=YO-YC
+	ZO=ZO-ZC
+C  After rotation change it back, that's why the order of x,y is changed
+c  and z has inverted sign
+	Y=RM(1,1)*XO+RM(1,2)*YO+RM(1,3)*ZO+XC
+	X=RM(2,1)*XO+RM(2,2)*YO+RM(2,3)*ZO+YC
+	Z=-(RM(3,1)*XO+RM(3,2)*YO+RM(3,3)*ZO+ZC)
+	WRITE(RECLIN(7:11),80) NATOM
+80	FORMAT(I5)
+	NATOM=NATOM+1
+	WRITE(RECLIN(31:54),85)  X,Y,Z
+85	FORMAT(3F8.3)
+	WRITE(LUN3,30)RECLIN
+	GOTO 70
+	ELSEIF(RECLIN(1:3) .EQ. 'TER') THEN
+	WRITE(RECLIN(7:11),80)NATOM
+	WRITE(LUN3,30)RECLIN
+	NATOM=NATOM+1
+	GOTO 70
+        ELSEIF(RECLIN(1:3) .EQ. 'END') THEN
+	WRITE(LUN3,30)RECLIN
+	GOTO 999
+d234 1
+a234 1
+	GOTO 70
+d236 1
+d240 3
+a242 3
+CCC============================================================
+C*******************************************
+C*
+a245 1
+C*
+d247 1
+d249 1
+d251 4
+a254 3
+        CHARACTER *80 PDBFILE, RECLIN,HEAD*10, NULL*1,ATOM*4,RESIDUE*3
+	CHARACTER *80 TRFILE
+	LOGICAL EX,FLAGCELLDIM,FLAGATOM,ZNUM,COMBIND
+d256 1
+d258 3
+a260 2
+	NATOM=1
+	LENREC=0
+d271 16
+a286 23
+	
+c250	WRITE(*,255)
+c255	FORMAT('Rotation angle alpha: ',$)
+	CALL RDPRM1S(ALPHA,NOT_USED,'Rotation angle alpha:',IRTFLG)
+c	READ(*,*) ALPHA
+c	WRITE(*,226)
+C226	FORMAT(
+C     &	'First  point defining rotation axis in Angstroms X,Y,Z: ',$)
+	CALL RDPRM3S(X1,Y1,Z1,NOT_USED,'First  point defining rotation axis in 
+     & Angstroms X,Y,Z',
+     &     IRTFLG)
+C	READ(*,*) X1,Y1,Z1
+c	WRITE(*,227)
+C227	FORMAT(
+C     &	'Second point defining rotation axis in Angstroms X,Y,Z: ',$)
+	CALL RDPRM3S(X2,Y2,Z2,NOT_USED,'Second point defining rotation axis in 
+     &  Angstroms X,Y,Z',IRTFLG)
+c	READ(*,*) X2,Y2,Z2
+	XX=X2-X1
+	YY=Y2-Y1
+	ZZ=Z2-Z1
+	PSI=-ATAN2D(YY,XX)
+	THETA=ATAN2D(ZZ,SQRT(XX*XX+YY*YY))
+d289 4
+a292 3
+C  -1
+C R   U(ALPHA) R
+C
+d294 3
+a296 3
+         DO  11  J=1,3
+         R3(J,I)=0.0
+         DO  11  K=1,3
+d298 1
+d300 3
+a302 3
+         DO  12  J=1,3
+         RM(J,I)=0.0
+         DO  12  K=1,3
+d304 1
+a304 4
+900	READ(LUN2,30) RECLIN
+	IF(RECLIN(1:6) .NE. 'HEADER') GOTO 900
+	WRITE(LUN3,30)RECLIN
+C
+d306 46
+a351 37
+	IF(RECLIN(1:4) .NE. 'ATOM'.AND.RECLIN(1:4).NE.'END'.AND.
+     & 	 RECLIN(1:4).NE.'TER' ) THEN
+	WRITE(LUN3,30) RECLIN
+	GOTO 70 
+	ELSEIF(RECLIN(1:4) .EQ. 'ATOM') THEN
+	READ(RECLIN,75) HEAD,N,ATOM,NULL,RESIDUE,NULL,NR2,NULL,XO,YO,ZO,
+     &  OCCUPANCY,TEMPERATURE,N
+75	FORMAT(A6,I5,1X,A4,A1,A3,1X,A1,I4,A1,3X,3F8.3,2F6.2,1X,I3)	
+C	WRITE(*,*) XO,YO,ZO
+c change coordinate system
+	W=XO
+	XO=YO
+	YO=W
+	ZO=-ZO
+	XO=XO-X1
+	YO=YO-Y1
+	ZO=ZO-Z1
+C  After rotation change it back, that's why the order of x,y is changed
+c  and z has inverted sign
+	Y=RM(1,1)*XO+RM(1,2)*YO+RM(1,3)*ZO+X1
+	X=RM(2,1)*XO+RM(2,2)*YO+RM(2,3)*ZO+Y1
+	Z=-(RM(3,1)*XO+RM(3,2)*YO+RM(3,3)*ZO+Z1)
+	WRITE(RECLIN(7:11),80) NATOM
+80	FORMAT(I5)
+	NATOM=NATOM+1
+	WRITE(RECLIN(31:54),85)  X,Y,Z
+85	FORMAT(3F8.3)
+	WRITE(LUN3,30)RECLIN
+	GOTO 70
+	ELSEIF(RECLIN(1:3) .EQ. 'TER') THEN
+	WRITE(RECLIN(7:11),80)NATOM
+	WRITE(LUN3,30)RECLIN
+	NATOM=NATOM+1
+	GOTO 70
+        ELSEIF(RECLIN(1:3) .EQ. 'END') THEN
+	WRITE(LUN3,30)RECLIN
+	GOTO 999
+d353 1
+a353 1
+	GOTO 70
+d355 1
+d359 2
+a360 3
+CC============================================================================
+C*******************************************
+C*
+a363 1
+C*
+d365 1
+d367 6
+a372 2
+ 	CHARACTER *95 PDBFILE, RECLIN,HEAD*10, NULL*1,ATOM*4
+	CHARACTER *95 TRFILE,ANAM*4,RESIDUE*3,PHEAD*5,SENQ*1
+d374 1
+d376 3
+a378 1
+	OPEN(99,file='ttt')
+d393 1
+a393 1
+	IF(TRFILE(1:2).EQ.' ;') GOTO 55
+d398 1
+d402 1
+a402 1
+	ISEN=INT(real(MOD(INT(XSEN),1000))/10.)
+d404 1
+a404 1
+	    IF(IRES.EQ.1) THEN
+d406 1
+a406 1
+	    ElSEIF(IRES.EQ.2) THEN
+d408 1
+a408 1
+	    ELSEIF(IRES.EQ.3) THEN
+d410 1
+a410 1
+	    ELSEIF(IRES.EQ.4) THEN
+d412 1
+a412 1
+	    ELSEIF(IRES.EQ.5) THEN
+d414 1
+a414 1
+	    ELSEIF(IRES.EQ.6) THEN
+d416 1
+a416 1
+	    ELSEIF(IRES.EQ.7) THEN
+d418 1
+a418 1
+	    ELSEIF(IRES.EQ.8) THEN
+d420 1
+a420 1
+       	    ELSEIF(IRES.EQ.9) THEN
+d422 1
+a422 1
+	    ELSEIF(IRES.EQ.10) THEN
+d424 1
+a424 1
+            ELSEIF(IRES.EQ.11) THEN
+d426 1
+a426 1
+	    ELSEIF(IRES.EQ.12) THEN
+d428 1
+a428 1
+    	    ELSEIF(IRES.EQ.13) THEN
+d430 1
+a430 1
+	    ELSEIF(IRES.EQ.14) THEN
+d432 1
+a432 1
+	    ELSEIF(IRES.EQ.15) THEN
+d434 1
+a434 1
+	    ELSEIF(IRES.EQ.16) THEN
+d436 1
+a436 1
+  	    ELSEIF(IRES.EQ.17) THEN
+d438 1
+a438 1
+	    ELSEIF(IRES.EQ.18) THEN
+d440 1
+a440 1
+	    ELSEIF(IRES.EQ.19) THEN
+d442 1
+a442 1
+	    ELSEIF(IRES.EQ.20) THEN
+d446 1
+a446 1
+ 	    IF(isen.EQ.1) THEN
+d448 1
+a448 1
+	    ELSEIF(isen.EQ.2) THEN
+d450 1
+a450 1
+	    ELSEIF(isen.EQ.3) THEN
+d452 1
+a452 1
+	    ELSEIF(isen.EQ.4) THEN
+d454 1
+a454 1
+	    ELSEIF(isen.EQ.5) THEN
+d456 1
+a456 1
+	    ELSEIF(isen.EQ.6) THEN
+d458 1
+a458 1
+	    ELSEIF(isen.EQ.7) THEN
+d460 1
+a460 1
+	    ELSEIF(isen.EQ.8) THEN
+d462 1
+a462 1
+     	    ELSEIF(isen.EQ.9) THEN
+d464 1
+a464 1
+	    ELSEIF(isen.EQ.10) THEN
+d466 1
+a466 1
+	    ELSEIF(isen.EQ.11) THEN
+d468 1
+a468 1
+	    ELSEIF(isen.EQ.12) THEN
+d470 1
+a470 1
+	    ELSEIF(isen.EQ.13) THEN
+d472 1
+a472 1
+	   ELSEIF(isen.EQ.14) THEN
+d474 1
+a474 1
+	    ELSEIF(isen.EQ.15) THEN
+d476 1
+a476 1
+	    ELSEIF(isen.EQ.16) THEN
+d478 1
+a478 1
+	    ELSEIF(isen.EQ.17) THEN
+d482 1
+a482 1
+	   IF(INUL.EQ.0) THEN
+d484 1
+a484 1
+	    ELSEIF(INUL.EQ.1) THEN
+d486 1
+a486 1
+	    ELSEIF(INUL.EQ.2) THEN
+d488 1
+a488 1
+	    ELSEIF(INUL.EQ.3) THEN
+d490 1
+a490 1
+	    ELSEIF(INUL.EQ.4) THEN
+d492 1
+a492 1
+	    ELSEIF(INUL.EQ.5) THEN
+d494 1
+a494 1
+	    ELSEIF(INUL.EQ.6) THEN
+d496 1
+a496 1
+	    ELSEIF(INUL.EQ.7) THEN
+d498 1
+a498 1
+	    ELSEIF(INUL.EQ.8) THEN
+d500 1
+a500 1
+     	    ELSEIF(INUL.EQ.9) THEN
+d502 1
+a502 1
+	    ELSEIF(INUL.EQ.10) THEN
+d504 1
+a504 1
+	    ELSEIF(INUL.EQ.11) THEN
+d506 1
+a506 1
+	    ELSEIF(INUL.EQ.12) THEN
+d508 1
+a508 1
+	    ELSEIF(INUL.EQ.13) THEN
+d510 1
+a510 1
+	    ELSEIF(INUL.EQ.14) THEN
+d512 1
+a512 1
+	    ELSEIF(INUL.EQ.15) THEN
+d514 1
+a514 1
+	    ELSEIF(INUL.EQ.16) THEN
+d516 1
+a516 1
+	    ELSEIF(INUL.EQ.17) THEN
+d518 1
+a518 1
+	    ELSEIF(INUL.EQ.18) THEN
+d520 1
+a520 1
+	    ELSEIF(INUL.EQ.19) THEN
+d522 1
+a522 1
+	    ELSEIF(INUL.EQ.20) THEN
+d524 1
+a524 1
+	    ELSEIF(INUL.EQ.21) THEN
+d526 1
+a526 1
+	    ELSEIF(INUL.EQ.22) THEN
+d531 2
+a532 2
+	   NCATOM=INT(real(MOD(INT(CATOM),10000))/100.)	
+	   NPOS=MOD(INT(CATOM),100)
+d534 1
+a534 1
+	   IF(NCATOM.EQ.1) THEN
+d536 1
+a536 1
+	   ELSEIF(NCATOM.EQ.6) THEN
+d538 1
+a538 1
+		IF(NPOS.EQ.0) THEN
+d540 1
+a540 1
+		ELSEIF(NPOS.EQ.1) THEN
+d542 1
+a542 1
+		ELSEIF(NPOS.EQ.2) THEN
+d544 1
+a544 1
+		ELSEIF(NPOS.EQ.3) THEN
+d546 1
+a546 1
+		ELSEIF(NPOS.EQ.4) THEN
+d548 1
+a548 1
+		ELSEIF(NPOS.EQ.5) THEN
+d550 1
+a550 1
+		ELSEIF(NPOS.EQ.6) THEN
+d552 1
+a552 1
+		ELSEIF(NPOS.EQ.7) THEN
+d554 1
+a554 1
+		ELSEIF(NPOS.EQ.8) THEN
+d556 1
+a556 1
+		ELSEIF(NPOS.EQ.9) THEN
+d558 1
+a558 1
+		ELSEIF(NPOS.EQ.10) THEN
+d561 2
+a562 2
+	   ELSEIF(NCATOM.EQ.7) THEN
+		IF(NPOS.EQ.0) THEN
+d564 1
+a564 1
+		ELSEIF(NPOS.EQ.1) THEN
+d566 1
+a566 1
+		ELSEIF(NPOS.EQ.2) THEN
+d568 1
+a568 1
+		ELSEIF(NPOS.EQ.3) THEN
+d570 1
+a570 1
+		ELSEIF(NPOS.EQ.4) THEN
+d573 2
+a574 2
+	   ELSEIF(NCATOM.EQ.8) THEN
+		IF(NPOS.EQ.0) THEN
+d576 1
+a576 1
+		ELSEIF(NPOS.EQ.1) THEN
+d578 1
+a578 1
+		ELSEIF(NPOS.EQ.2) THEN
+d580 1
+a580 1
+		ELSEIF(NPOS.EQ.3) THEN
+d582 1
+a582 1
+		ELSEIF(NPOS.EQ.4) THEN
+d584 1
+a584 1
+		ELSEIF(NPOS.EQ.5) THEN
+d586 1
+a586 1
+		ELSEIF(NPOS.EQ.6) THEN
+d589 2
+a590 2
+	   ELSEIF(NCATOM.EQ.16) THEN
+		IF(NPOS.EQ.0) THEN
+d592 1
+a592 1
+		ELSEIF(NPOS.EQ.1) THEN
+d594 1
+a594 1
+		ELSEIF(NPOS.EQ.2) THEN
+d598 7
+a604 5
+	NCOUNT=NCOUNT+1
+	write(98,*)xnul,inul
+	WRITE(LUN3,76)PHEAD,NCOUNT,ANAM,RESIDUE,SENQ,NR2,NULL,XO,YO,ZO,
+     &   OCCUPANCY, TEMPERATURE,ANAM(2:2)
+76	FORMAT(A5,1X,I5,1X,A4,1X,A3,1X,A1,I4,1A,3X,3F8.3,2F6.2,
+d606 5
+a610 5
+	IF(NCATOM.EQ.8.AND.NPOS.EQ.6) THEN
+	    NCOUNT=NCOUNT+1
+	    WRITE(LUN3,77)NCOUNT,RESIDUE,SENQ,NR2
+	ENDIF
+77	FORMAT('TER   ',I5,6X,A3,1X,A1,I4)	
+d612 1
+a612 1
+C
+d616 1
+d619 1
+a619 1
+	close(99)
+d621 2
+a622 3
+CC====================================================================
+C*******************************************
+C*
+a625 1
+C*
+d627 1
+d629 1
+d631 2
+d634 4
+a637 3
+      	REAL	DLIST(NLIST)   
+        CHARACTER *95 PDBFILE, RECLIN,HEAD*10, NULL*1,ATOM*4,RESIDUE*3
+	CHARACTER *95 TRFILE,NULL1*1,NULL2*1
+d639 1
+d641 1
+d643 1
+a643 1
+	LENREC=0
+a647 1
+
+d652 8
+a659 4
+	IF(RECLIN(1:4) .EQ. 'ATOM') THEN
+	READ(RECLIN,75) HEAD,N,ATOM,NULL,RESIDUE,NULL1,NR2,NULL2,XO,YO,ZO,
+     &  OCCUPANCY,TEMPERATURE,N
+75	FORMAT(A6,I5,1X,A4,A1,A3,1X,A1,I4,A1,3X,3F8.3,2F6.2,1X,I3)	
+a660 3
+C I am not sure about the next line....
+C	     IF(OCCUPANCY.GE.1) THEN
+C
+d666 1
+a666 1
+			IF(ATOM(3:3).EQ.'A') THEN
+d668 1
+a668 1
+			ELSEIF(ATOM(3:3).EQ.'B') THEN
+d670 1
+a670 1
+			ELSEIF(ATOM(3:4).EQ.'E1')THEN
+d672 1
+a672 1
+			ELSEIF(ATOM(3:4).EQ.'E2') THEN
+d674 1
+a674 1
+			ELSEIF(ATOM(3:3).EQ.'D') THEN	
+d676 1
+a676 1
+			ELSEIF(ATOM(3:4).EQ.'D1') THEN
+d678 1
+a678 1
+			ELSEIF(ATOM(3:4).EQ.'D2') THEN
+d680 1
+a680 1
+			ELSEIF(ATOM(3:3).EQ.'G') THEN
+d682 1
+a682 1
+			ELSEIF(ATOM(3:4).EQ.'G1') THEN
+d684 1
+a684 1
+			ELSEIF(ATOM(3:4).EQ.'G2') THEN
+d686 1
+a686 1
+			ELSEIF(ATOM(3:3).EQ.'Z') THEN
+d692 1
+a692 1
+			IF(ATOM(3:4).EQ.'H1') THEN
+d694 1
+a694 1
+			    ELSEIF(ATOM(3:4).EQ.'H2') THEN
+d696 1
+a696 1
+			    ELSEIF(ATOM(3:3).EQ.'E')THEN
+d698 1
+a698 1
+			    ELSEIF(ATOM(3:4).EQ.'E2') THEN
+d700 1
+a700 1
+			    ELSEIF(ATOM(3:3).EQ.'Z') THEN
+d706 1
+a706 1
+			IF(ATOM(3:3).EQ.'G') THEN
+d708 1
+a708 1
+			ELSEIF(ATOM(3:3).EQ.'D') THEN
+d717 1
+a717 1
+		   IF(ATOM(3:3) .EQ. 'H') THEN
+d719 1
+a719 1
+		   ELSEIF(ATOM(3:4) .EQ. 'E1') THEN
+d721 1
+a721 1
+		   ELSEIF(ATOM(3:4) .EQ. 'E2') THEN
+d723 1
+a723 1
+		   ELSEIF(ATOM(3:4) .EQ. 'G1') THEN
+d725 1
+a725 1
+		   ELSEIF(ATOM(3:4) .EQ. 'D1') THEN
+d727 1
+a727 1
+		   ELSEIF(ATOM(3:4) .EQ. 'XT') THEN
+d732 1
+a732 1
+	    IF(RESIDUE(1:3).EQ.'LEU') THEN
+d734 1
+a734 1
+	    ElSEIF(RESIDUE(1:3).EQ.'THR') THEN
+d736 1
+a736 1
+	    ELSEIF(RESIDUE(1:3).EQ.'GLY') THEN
+d738 1
+a738 1
+	    ELSEIF(RESIDUE(1:3).EQ.'SER') THEN
+d740 1
+a740 1
+	    ELSEIF(RESIDUE(1:3).EQ.'VAL') THEN
+d742 1
+a742 1
+	    ELSEIF(RESIDUE(1:3).EQ.'PHE') THEN
+d744 1
+a744 1
+	    ELSEIF(RESIDUE(1:3).EQ.'ALA') THEN
+d746 1
+a746 1
+	    ELSEIF(RESIDUE(1:3).EQ.'LYS') THEN
+d748 1
+a748 1
+       	    ELSEIF(RESIDUE(1:3).EQ.'ARG') THEN
+d750 1
+a750 1
+	    ELSEIF(RESIDUE(1:3).EQ.'PRO') THEN
+d752 1
+a752 1
+            ELSEIF(RESIDUE(1:3).EQ.'TAU') THEN
+d754 1
+a754 1
+	    ELSEIF(RESIDUE(1:3).EQ.'HIS') THEN
+d756 1
+a756 1
+    	    ELSEIF(RESIDUE(1:3).EQ.'GLU') THEN
+d758 1
+a758 1
+	    ELSEIF(RESIDUE(1:3).EQ.'GLY') THEN
+d760 1
+a760 1
+	    ELSEIF(RESIDUE(1:3).EQ.'TYR') THEN
+d762 1
+a762 1
+	    ELSEIF(RESIDUE(1:3).EQ.'CYS') THEN
+d764 1
+a764 1
+  	    ELSEIF(RESIDUE(1:3).EQ.'TRY') THEN
+d766 1
+a766 1
+	    ELSEIF(RESIDUE(1:3).EQ.'ISO') THEN
+d768 1
+a768 1
+	    ELSEIF(RESIDUE(1:3).EQ.'MET') THEN
+d770 1
+a770 1
+	    ELSEIF(RESIDUE(1:3).EQ.'ILE') THEN
+d774 1
+a774 1
+	    IF(NULL1(1:1).EQ.'A') THEN
+d776 1
+a776 1
+	    ELSEIF(NULL1(1:1).EQ.'B') THEN
+d778 1
+a778 1
+	    ELSEIF(NULL1(1:1).EQ.'C') THEN
+d780 1
+a780 1
+	    ELSEIF(NULL1(1:1).EQ.'D') THEN
+d782 1
+a782 1
+	    ELSEIF(NULL1(1:1).EQ.'E') THEN
+d784 1
+a784 1
+	    ELSEIF(NULL1(1:1).EQ.'F') THEN
+d786 1
+a786 1
+	    ELSEIF(NULL1(1:1).EQ.'G') THEN
+d788 1
+a788 1
+	    ELSEIF(NULL1(1:1).EQ.'H') THEN
+d790 1
+a790 1
+     	    ELSEIF(NULL1(1:1).EQ.'I') THEN
+d792 1
+a792 1
+	    ELSEIF(NULL1(1:1).EQ.'J') THEN
+d794 1
+a794 1
+	    ELSEIF(NULL1(1:1).EQ.'K') THEN
+d796 1
+a796 1
+	    ELSEIF(NULL1(1:1).EQ.'L') THEN
+d798 1
+a798 1
+	    ELSEIF(NULL1(1:1).EQ.'M') THEN
+d800 1
+a800 1
+	   ELSEIF(NULL1(1:1).EQ.'N') THEN
+d802 1
+a802 1
+	    ELSEIF(NULL1(1:1).EQ.'O') THEN
+d804 1
+a804 1
+	    ELSEIF(NULL1(1:1).EQ.'P') THEN
+d806 1
+a806 1
+	    ELSEIF(NULL1(1:1).EQ.'Q') THEN
+d809 1
+a809 1
+	   IF(NULL2.EQ.' ') THEN
+d811 1
+a811 1
+	   ELSEIF(NULL2.EQ.'A') THEN
+d813 1
+a813 1
+	   ELSEIF(NULL2.EQ.'B') THEN
+d815 1
+a815 1
+	   ELSEIF(NULL2.EQ.'C') THEN
+d817 1
+a817 1
+	   ELSEIF(NULL2.EQ.'D') THEN
+d819 1
+a819 1
+	   ELSEIF(NULL2.EQ.'E') THEN
+d821 1
+a821 1
+	   ELSEIF(NULL2.EQ.'F') THEN
+d823 1
+a823 1
+	   ELSEIF(NULL2.EQ.'G') THEN
+d825 1
+a825 1
+	   ELSEIF(NULL2.EQ.'H') THEN
+d827 1
+a827 1
+	   ELSEIF(NULL2.EQ.'I') THEN
+d829 1
+a829 1
+	   ELSEIF(NULL2.EQ.'J') THEN
+d831 1
+a831 1
+	   ELSEIF(NULL2.EQ.'K') THEN
+d833 1
+a833 1
+	   ELSEIF(NULL2.EQ.'L') THEN
+d835 1
+a835 1
+	   ELSEIF(NULL2.EQ.'M') THEN
+d837 1
+a837 1
+	   ELSEIF(NULL2.EQ.'N') THEN
+d839 1
+a839 1
+	   ELSEIF(NULL2.EQ.'O') THEN
+d841 1
+a841 1
+	   ELSEIF(NULL2.EQ.'P') THEN
+d843 1
+a843 1
+	   ELSEIF(NULL2.EQ.'Q') THEN
+d845 1
+a845 1
+	   ELSEIF(NULL2.EQ.'R') THEN
+d847 1
+a847 1
+	   ELSEIF(NULL2.EQ.'S') THEN
+d849 1
+a849 1
+	   ELSEIF(NULL2.EQ.'T') THEN
+d851 1
+a851 1
+	   ELSEIF(NULL2.EQ.'U') THEN
+d853 1
+a853 1
+	   ELSEIF(NULL2.EQ.'V') THEN
+d858 1
+a858 1
+         NATOM=NATOM+1
+d860 15
+a874 15
+	 DLIST(1)=NATOM
+	 DLIST(2)=XO
+	 DLIST(3)=YO
+         DLIST(4)=ZO
+         DLIST(5)=IRES*10000.+VATOM
+	 DLIST(6)=TEMPERATURE
+         DLIST(7)=NR2*1000.+ISEN*10.+occupancy
+	 DLIST(8)=INUL
+	CALL SAVD(LUN3,DLIST,NLIST,IRTFLG)
+	 GOTO 70
+        ELSEIF(RECLIN(1:3) .EQ. 'END') THEN
+	CLOSE(LUN2)
+	CALL SAVDC
+	CLOSE(LUN3)
+	 RETURN
+d876 1
+a876 1
+	GOTO 70
+d879 2
+a880 5
+CC===================================================================
+*******************************************
+C*
+C*
+C*Calculate center of gravity of a PDB file
+d882 1
+d885 1
+d887 1
+d891 4
+a894 3
+        CHARACTER *80 PDBFILE, RECLIN,HEAD*10, NULL*1,ATOM*4,RESIDUE*3
+	CHARACTER *80 TRFILE
+	LOGICAL EX,FLAGCELLDIM,FLAGATOM,ZNUM,COMBIND
+d896 2
+a897 1
+	LENREC=0
+a900 1
+30	FORMAT(A80)
+d907 1
+a907 3
+900	READ(LUN2,30) RECLIN
+	IF(RECLIN(1:6) .NE. 'HEADER') GOTO 900
+C
+d909 14
+a922 7
+	IF(RECLIN(1:4) .EQ. 'ATOM') THEN
+	READ(RECLIN,75) HEAD,N,ATOM,NULL,RESIDUE,NULL,NR2,NULL,XO,YO,ZO,
+     &  OCCUPANCY,TEMPERATURE,N
+75	FORMAT(A6,I5,1X,A4,A1,A3,1X,A1,I4,A1,3X,3F8.3,2F6.2,1X,I3)	
+C	WRITE(*,*) XO,YO,ZO
+C I am not sure about the next line....
+	     IF(OCCUPANCY.GE.1) THEN
+d953 35
+a987 30
+	GOTO 70
+        ELSEIF(RECLIN(1:3) .EQ. 'END') THEN
+	 UX=UX/TMASS
+	 UY=UY/TMASS
+	 UZ=UZ/TMASS
+	 WRITE(*,780)  NATOM
+780	FORMAT(' Number of atoms encountered:',I6)
+	 WRITE(*,781)  UX,UY,UZ
+781	FORMAT('  Center of gravity of PDB file',/,3(2x,g12.4))
+c change coordinate system
+	 SX=UY
+	 SY=UX
+	 SZ=-UZ
+	 WRITE(*,782)  SX,SY,SZ
+782	FORMAT('  Center of gravity of PDB file in SPIDER coords'
+     &		,/,3(2x,g12.4))
+	ALLOCATE (R_TMP(6))
+	NREG=7
+	R_TMP(1)=UX
+	R_TMP(2)=UY
+	R_TMP(3)=UZ
+	R_TMP(4)=SX
+	R_TMP(5)=SY
+	R_TMP(6)=SZ
+	R_TMP(7)=NATOM
+	CALL REG_SET_NSELA(NREG,R_TMP,.FALSE.,IRTFLG)
+	DEALLOCATE(R_TMP)
+	 CLOSE(LUN2) 
+	 RETURN	
+C	 GOTO 15
+d989 1
+a989 1
+	GOTO 70
+d991 1
+d994 2
+a995 3
+CC===========================================================================
+C*******************************************
+C*
+a998 1
+C*
+d1000 1
+d1002 1
+d1008 6
+a1013 4
+	REAL   R_TMP(NRG)   
+        CHARACTER *80 PDBFILE, RECLIN,HEAD*10
+	CHARACTER *80 TRFILE, NULL*6,ATOM*4,RESIDUE*3
+	LOGICAL EX,FLAGCELLDIM,FLAGATOM,ZNUM,COMBIND
+d1015 1
+d1033 1
+d1035 26
+a1060 22
+	IF(RECLIN(1:4) .EQ. 'JRNL') THEN
+	WRITE(*,30)RECLIN         
+	 GOTO 70
+	ELSEIF(RECLIN(13:23) .EQ. 'FIT TO DATA') THEN
+		WRITE(*,*)RECLIN(12:60)
+		DO NPR=1,6
+	 	    READ(LUN2,30) RECLIN
+		    WRITE(*,*)RECLIN(12:60)
+		ENDDO
+	 GOTO 70
+	ELSEIF(RECLIN(13:21) .EQ. 'DATA USED') THEN
+		WRITE(*,*)RECLIN(12:60)
+		DO NPR=1,6
+	 	    READ(LUN2,30) RECLIN
+		    WRITE(*,*)RECLIN(12:60)
+		ENDDO
+	 GOTO 70
+	ELSEIF(RECLIN(14:20) .EQ. 'PROGRAM') THEN
+	    WRITE(*,*)'USED PROGRAM',RECLIN(21:60)         
+	 GOTO 70
+	ELSEIF(RECLIN(1:6) .EQ. 'CRYST1') THEN
+	    WRITE(*,*)RECLIN	
+d1072 1
+a1072 1
+	ELSEIF(RECLIN(1:3) .EQ. 'ORI') THEN	
+d1079 1
+a1079 1
+	ELSEIF(RECLIN(1:3) .EQ. 'SCA') THEN
+d1085 2
+a1086 1
+	ELSEIF(RECLIN(1:4) .EQ. 'ATOM') THEN
+d1089 2
+a1090 1
+	ELSEIF(RECLIN(1:3) .EQ. 'TER') THEN
+d1093 2
+a1094 1
+	ELSEIF(RECLIN(1:3) .EQ. 'HET') THEN
+d1097 19
+a1115 18
+        ELSEIF(RECLIN(1:3) .EQ. 'END') THEN
+	CLOSE(LUN2)
+	NCOUNT=NCOUNT+1
+	DLIST(1)=NCOUNT
+	DLIST(2)=NATOM
+	DLIST(3)=NTERM
+	DLIST(4)=NHET
+	CALL SAVD(LUN3,DLIST,NLIST,IRTFLG)
+	CALL SAVDC
+	CLOSE(LUN3)
+	XNATOM=REAL(NATOM)
+	XNTERM=REAL(NTERM)
+	XNHET=REAL(NHET)
+	R_TMP(4)=XNATOM
+	R_TMP(5)=xNTERM
+	R_TMP(6)=XNHET
+	CALL REG_SET_NSELA(NRG,R_TMP,.FALSE.,IRTFLG)
+	RETURN
+d1117 1
+a1117 1
+	GOTO 70 
+d1119 1
+d1121 3
+a1123 1
+CC===================================================================
+d1125 1
+d1127 4
+a1130 3
+        CHARACTER *80 PDBFILE, RECLIN,HEAD*10, NULL*1,ATOM*4,RESIDUE*3
+	CHARACTER *80 TRFILE
+	LOGICAL EX,FLAGCELLDIM,FLAGATOM,ZNUM,COMBIND
+d1132 1
+d1134 3
+a1136 2
+	NATOM=1
+	LENREC=0
+a1140 2
+30	FORMAT(A80)
+ 
+d1145 1
+a1145 1
+250	CALL RDPRM3S(PHI, THETA, PSI,NOT_USED,
+d1148 1
+a1148 4
+	CALL  BLDR(RM,PSI,THETA,PHI)
+900	READ(LUN2,30) RECLIN
+	IF(RECLIN(1:6) .NE. 'HEADER') GOTO 900
+	WRITE(LUN3,30)RECLIN
+d1151 8
+a1158 4
+	IF(RECLIN(1:4) .NE. 'ATOM' .AND. RECLIN(1:4).NE.'END'.AND.
+     & 	   RECLIN(1:4) .NE.'TER' ) THEN
+	WRITE(LUN3,30) RECLIN
+	GOTO 70 
+d1160 35
+a1194 29
+	READ(RECLIN,75) HEAD,N,ATOM,NULL,RESIDUE,NULL,NR2,NULL,XO,YO,ZO,
+     &  OCCUPANCY,TEMPERATURE,N
+75	FORMAT(A6,I5,1X,A4,A1,A3,1X,A1,I4,A1,3X,3F8.3,2F6.2,1X,I3)	
+C	WRITE(*,*) XO,YO,ZO
+c       change coordinate system
+	W=XO
+	XO=YO
+	YO=W
+	ZO=-ZO
+C  After rotation change it back, that's why the order of x,y is changed
+c  and z has inverted sign
+	Y=RM(1,1)*XO+RM(1,2)*YO+RM(1,3)*ZO
+	X=RM(2,1)*XO+RM(2,2)*YO+RM(2,3)*ZO
+	Z=-(RM(3,1)*XO+RM(3,2)*YO+RM(3,3)*ZO)
+	WRITE(RECLIN(7:11),80) NATOM
+80	FORMAT(I5)
+	NATOM=NATOM+1
+	WRITE(RECLIN(31:54),85)  X,Y,Z
+85	FORMAT(3F8.3)
+	WRITE(LUN3,30)RECLIN
+	GOTO 70
+	ELSEIF(RECLIN(1:3) .EQ. 'TER') THEN
+	WRITE(RECLIN(7:11),80)NATOM
+	WRITE(LUN3,30)RECLIN
+	NATOM=NATOM+1
+	GOTO 70
+        ELSEIF(RECLIN(1:3) .EQ. 'END') THEN
+	WRITE(LUN3,30)RECLIN
+	GOTO 999
+d1196 1
+a1196 1
+	GOTO 70
+d1198 1
+@
+
+
+1.5
+log
+@Pawels GPL License used
+@
+text
+@a26 2
+C **********************************************************************
+C***********************************************************************
+d924 1
+a924 1
+	CALL REG_SET_NSELA(NREG,R_TMP,IRTFLG)
+d1042 1
+a1042 1
+	CALL REG_SET_NSELA(NRG,R_TMP,IRTFLG)
+d1068 2
+a1070 6
+	
+c250	WRITE(*,255)
+c255	FORMAT($)
+c	READ(*,*) PHI,THETA,PSI
+250	CALL RDPRM3S(phi, theta, psi,NOT_USED,
+     &    'Rotation angles phi, theta, psi: ',IRTFLG)
+d1075 1
+a1075 1
+C
+d1077 2
+a1078 2
+	IF(RECLIN(1:4) .NE. 'ATOM'.AND.RECLIN(1:4).NE.'END'.AND.
+     & 	 RECLIN(1:4).NE.'TER' ) THEN
+d1081 1
+a1081 1
+	ELSEIF(RECLIN(1:4) .EQ. 'ATOM') THEN
+d1086 1
+a1086 1
+c change coordinate system
+a1116 1
+CCC=============================================================================
+@
+
+
+1.4
+log
+@gpl license
+@
+text
+@a0 1
+
+d5 1
+a5 1
+C=* Copyright (C)2002, P. A. Penczek                                   *
+d27 2
+a33 1
+
+d39 1
+a39 2
+
+        ELSEIF (FCHAR(4:5) .EQ. 'IF') THEN
+a42 1
+
+a46 1
+
+a50 1
+
+a54 1
+
+a58 1
+
+a62 1
+
+a66 1
+
+a68 2
+
+
+a69 1
+
+a70 1
+
+a75 1
+
+@
+
+
+1.3
+log
+@bad NUL= & FORMAT line fixed (would not compile)
+@
+text
+@d1 2
+a2 2
+C **************************************************************************
+C *  SPIDER - MODULAR IMAGE PROCESSING SYSTEM.
+d4 24
+a27 7
+C *  COPYRIGHT (C)2004, P.A.Penczek
+C *  University of Texas - Houston Medical School
+C *  pawel.a.penczek@@uth.tmc.edu
+C *    THE CONTENTS OF THIS DOCUMENT CANNOT BE CHANGED WITHOUT WRITTEN
+C *    PERMISSION OF THE AUTHOR                          *
+C **************************************************************************
+C***********************************************************************
+d33 1
+d39 2
+a40 1
+		ELSEIF (FCHAR(4:5) .EQ. 'IF') THEN
+d44 1
+d49 1
+d54 1
+d59 1
+d64 1
+d69 1
+d74 1
+d77 4
+a80 1
+CCC*************************************************************************
+d82 1
+d88 1
+@
+
+
+1.2
+log
+@I/O corrected
+@
+text
+@d473 1
+a473 1
+	    NUL=' '
+d546 1
+a546 1
+76	FORMAT(A5,1X,I5,1X,A4,1X,A3,1X,A1,I4,1A,3X,3F8.3,2F6.2
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@a28 4
+	ELSEIF (FCHAR(4:6) .EQ. 'RT3') THEN
+C          ------------------------- 'PDB ROTATE AROUND AN ARBITURY POINT
+	   CALL PDBRT3
+	   RETURN
+d37 4
+d59 1
+a59 3
+15	WRITE(*,25)
+25	FORMAT('Input PDB file: ',$)
+        READ(*,30)PDBFILE
+d61 3
+a63 7
+        INQUIRE(FILE=PDBFILE,EXIST=EX)
+        IF(.NOT. EX) THEN
+	WRITE(*,32) PDBFILE 
+32	FORMAT('FILE  ',A20,'  DOES NOT EXIST.')
+  	GOTO 15
+	ENDIF
+	OPEN(LUN2,FILE=PDBFILE)
+d65 3
+a67 5
+45      WRITE(*,46)
+46	FORMAT('Output PDB file: ',$)
+        READ(*,30) PDBFILE
+	OPEN(LUN3,FILE=PDBFILE)
+
+a68 3
+c250	WRITE(*,255)
+c255	FORMAT('Shift in Agstroms sx, sy, sz: ',$)
+c	READ(*,*) SXT,SYT,SZT
+d78 1
+a78 1
+C
+d129 4
+a132 3
+15	WRITE(*,25)
+25	FORMAT('Input PDB file: ',$)
+        READ(*,30)PDBFILE
+d134 4
+a137 19
+        INQUIRE(FILE=PDBFILE,EXIST=EX)
+        IF(.NOT. EX) THEN
+	WRITE(*,32) PDBFILE 
+32	FORMAT('FILE  ',A20,'  DOES NOT EXIST.')
+  	GOTO 15
+	ENDIF
+	OPEN(LUN2,FILE=PDBFILE)
+
+45      WRITE(*,46)
+46	FORMAT('Output PDB file: ',$)
+16        READ(*,30) PDBFILE
+	INQUIRE(FILE=PDBFILE,EXIST=EX)
+	IF(.NOT. EX) THEN
+	OPEN(LUN3,FILE=PDBFILE)
+	ELSE
+	WRITE(*,33) PDBFILE 
+33	FORMAT('FILE  ',A30,'FILE EXISTS,GIVE ANOTHER NAME:')
+	GOTO 45
+	ENDIF
+a138 2
+	
+c250	WRITE(*,255)
+d213 5
+a217 3
+15	WRITE(*,25)
+25	FORMAT('Input PDB file: ',$)
+        READ(*,30)PDBFILE
+d219 4
+a222 7
+        INQUIRE(FILE=PDBFILE,EXIST=EX)
+        IF(.NOT. EX) THEN
+	WRITE(*,32) PDBFILE 
+32	FORMAT('FILE  ',A20,'  DOES NOT EXIST.')
+  	GOTO 15
+	ENDIF
+	OPEN(LUN2,FILE=PDBFILE)
+a223 5
+45      WRITE(*,46)
+46	FORMAT('Output PDB file: ',$)
+        READ(*,30) PDBFILE
+	OPEN(LUN3,FILE=PDBFILE)
+
+d325 10
+a334 24
+15	WRITE(*,25)
+25	FORMAT('Input SPIDER document file: ',$)
+        READ(*,30)PDBFILE
+30	FORMAT(A95)
+        INQUIRE(FILE=PDBFILE,EXIST=EX)
+        IF(.NOT. EX) THEN
+	WRITE(*,32) PDBFILE 
+32	FORMAT('FILE  ',A20,'  DOES NOT EXIST.')
+	RETURN
+	ENDIF
+	OPEN(LUN2,FILE=PDBFILE)
+	WRITE(*,26)
+26	FORMAT('Output PDB file: ',$)
+64        READ(*,30) TRFILE
+	INQUIRE(FILE=TRFILE,EXIST=EX)
+	IF(.NOT.EX) THEN
+	OPEN(LUN3,FILE=TRFILE)	
+	WRITE(LUN3,61) 
+61	FORMAT('HEADER')
+	ELSE
+	WRITE(*,63)
+63	FORMAT('Output PDB file exists, give another name: ',$)
+	GOTO 64
+	ENDIF
+a577 3
+15	WRITE(*,25)
+25	FORMAT('Input PDB file: ',$)
+        READ(*,30)PDBFILE
+d579 5
+a583 10
+        INQUIRE(FILE=PDBFILE,EXIST=EX)
+        IF(.NOT. EX) THEN
+	WRITE(*,32) PDBFILE 
+32	FORMAT('FILE  ',A20,'  DOES NOT EXIST.')
+	RETURN
+	ENDIF
+	OPEN(LUN2,FILE=PDBFILE)
+C	WRITE(*,26)
+C26	FORMAT('Output SPIDER document file: ',$)
+C        READ(*,30) TRFILE
+d831 4
+a834 3
+15	WRITE(*,25)
+25	FORMAT('Input PDB file: ',$)
+        READ(*,30)PDBFILE
+d836 1
+a836 9
+        INQUIRE(FILE=PDBFILE,EXIST=EX)
+        IF(.NOT. EX) THEN
+	WRITE(*,32) PDBFILE 
+32	FORMAT('FILE  ',A20,'  DOES NOT EXIST.')
+	RETURN
+	ENDIF
+	OPEN(LUN2,FILE=PDBFILE)
+
+
+d909 3
+a911 2
+	DEALLOCATE(R_TMP) 
+	 RETURN
+d916 1
+d937 5
+a941 3
+15	WRITE(*,25)
+25	FORMAT('Input PDB file: ',$)
+        READ(*,30)PDBFILE
+d943 1
+a943 11
+        INQUIRE(FILE=PDBFILE,EXIST=EX)
+        IF(.NOT. EX) THEN
+	WRITE(*,32) PDBFILE 
+32	FORMAT('FILE  ',A20,'  DOES NOT EXIST.')
+	RETURN
+	ENDIF
+	OPEN(LUN2,FILE=PDBFILE)
+C	WRITE(*,26)
+C26	FORMAT('Output SPIDER document file: ',$)
+C        READ(*,30) TRFILE
+
+d1041 5
+a1045 3
+15	WRITE(*,25)
+25	FORMAT('Input PDB file: ',$)
+        READ(*,30)PDBFILE
+d1047 4
+a1050 7
+        INQUIRE(FILE=PDBFILE,EXIST=EX)
+        IF(.NOT. EX) THEN
+	WRITE(*,32) PDBFILE 
+32	FORMAT('FILE  ',A20,'  DOES NOT EXIST.')
+  	GOTO 15
+	ENDIF
+	OPEN(LUN2,FILE=PDBFILE)
+a1051 4
+45      WRITE(*,46)
+46	FORMAT('Output PDB file: ',$)
+        READ(*,30) PDBFILE
+	OPEN(LUN3,FILE=PDBFILE)
+@

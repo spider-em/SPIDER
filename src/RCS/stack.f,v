@@ -1,0 +1,1044 @@
+head	1.15;
+access;
+symbols
+	pre_getangas:1.13
+	GPL2010:1.13
+	pre_GPL2010:1.12
+	pre_var_equation:1.12
+	pre_fftwrings:1.12
+	pre_opfiles:1.12
+	src:1.12
+	best-code:1.12
+	x-named-regs:1.12
+	x:1.12
+	v13-00:1.12
+	pre_GPL:1.10
+	prec_CA:1.10
+	noindx:1.7
+	Bproc:1.6
+	oct21:1.5
+	last77:1.5;
+locks; strict;
+comment	@c @;
+
+
+1.15
+date	2013.05.22.15.24.17;	author leith;	state Exp;
+branches;
+next	1.14;
+
+1.14
+date	2013.05.22.14.20.46;	author leith;	state Exp;
+branches;
+next	1.13;
+
+1.13
+date	2010.06.24.13.27.02;	author leith;	state Exp;
+branches;
+next	1.12;
+
+1.12
+date	2005.10.17.19.59.44;	author leith;	state Exp;
+branches;
+next	1.11;
+
+1.11
+date	2005.10.17.17.55.46;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2003.06.13.13.01.45;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2003.05.28.19.16.21;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2003.02.18.21.49.35;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2002.03.11.14.07.46;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	99.11.10.23.11.22;	author yuchen;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	98.12.18.15.27.46;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	98.02.17.19.52.16;	author pawel;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	97.10.15.14.29.14;	author pawel;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	94.05.13.14.11.34;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	94.05.13.12.53.10;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@unix specific source code with preprocessor lines
+@
+
+
+1.15
+log
+@revert to older SK as handles volume stacking
+@
+text
+@
+
+C++*********************************************************************
+C
+C STACK.F      LONG FILENAMES                      JAN 89 ARDEAN LEITH
+C              REWRITE                             MAY 13 ArDean Leith
+C
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2013  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C    STACK()
+C
+C    PURPOSE:  STACK 2-D SLICES INTO 3-D IMAGE
+C              CAN OPERATE ON IMAGE SERIES
+C
+C    NOTE:     OBSOLETE   USE 'CP TO VOL' INSTEAD!!
+C
+C--*******************************************************************
+
+ 	SUBROUTINE STACK()
+
+        INCLUDE 'CMBLOCK.INC' 
+        INCLUDE 'CMLIMIT.INC' 
+
+        CHARACTER(LEN=MAXNAM) :: FILNM1,FILNM2,FILENM,FILPAT,FILDUM
+        CHARACTER(LEN=1)      :: NULL = CHAR(0)
+
+        INTEGER,PARAMETER     :: LUNI = 21 
+        INTEGER,PARAMETER     :: LUNO = 23
+
+        COMMON /IOBUF/ BUF(NBUFSIZ)
+
+C       USE FILE OPEN TO FIND VALUES TO USE FOR NX, NY
+        MAXIM  = 0
+	IFOUND = -4
+        CALL OPFILEC(0,.TRUE.,FILNM1,LUNI,'O',IFORM,NX,NY,NZ,
+     &               MAXIM,'FIRST',.FALSE.,IRTFLG)
+	IFOUND = 0
+        IF (IRTFLG .NE. 0) RETURN
+	CLOSE(LUNI)
+        NLET = lnblnk(FILNM1)
+        IF (NLET .LE. 0) NLET = LEN(FILNM1)
+
+C       FIND NUMBER OF FIRST FILE
+	CALL FILCAD(FILNM1,FILPAT,N1,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+C       FIND NUMBER OF LAST FILE
+	CALL FILERD(FILNM2,NLET,NULL,'LAST',IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+	CALL FILCAD(FILNM2,FILDUM,N2,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+        NFILES = N2 - N1 + 1
+
+        IF (NZ .LE. 1) THEN
+           NZS = NFILES
+        ELSE
+C          FIND TOTAL NUMBER OF SLICES
+           NZS = 0
+	   DO  IFILE=1,NFILES
+
+C            CREATE CURRENT INPUT FILE NAME
+             CALL FILGET(FILPAT,FILNM2,NLET,N1+IFILE-1,IRTFLG)
+             IF (IRTFLG .NE. 0) THEN
+                CALL ERRT(2,'STACK',NE)
+                GOTO 9900
+             ENDIF
+
+C            OPEN INPUT FILE TO GET NZT
+             MAXIM  = 0
+	     IFOUND = -4
+             CALL OPFILEC(0,.FALSE.,FILNM2,LUNI,'O',IFORM,
+     &                NXT,NYT,NZT,MAXIM,'DUMMY',.FALSE.,IRTFLG)
+	     IFOUND = 0
+             IF (IRTFLG .NE. 0) GOTO 9900
+	     IF (NXT.NE.NX .OR. NYT.NE.NY) THEN
+                CALL ERRT(1,'STACK ',NE)
+                GOTO 9900
+             ENDIF
+             CLOSE(LUNI)
+
+             NZS = NZS + NZT
+           ENDDO
+        ENDIF
+
+C       OPEN OUTPUT VOLUME
+	IFORM  = 3
+        MAXIM  = 0
+        CALL OPFILEC(0,.TRUE.,FILENM,LUNO,'U',IFORM,NX,NY,NZS,
+     &                   MAXIM,'OUTPUT',.FALSE.,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+        WRITE(NOUT,*) ' '
+
+        IRECOUT = 0
+	DO  IFILE=1,NFILES
+
+C         CREATE CURRENT INPUT FILE NAME
+          CALL FILGET(FILPAT,FILNM2,NLET,N1+IFILE-1,IRTFLG)
+          IF (IRTFLG .NE. 0) THEN
+             CALL ERRT(2,'STACK',NE)
+             GOTO 9900
+          ENDIF
+
+C         OPEN INPUT FILE
+          CALL OPFILEC(0,.FALSE.,FILNM2,LUNI,'O',IFORM,
+     &                NXT,NYT,NZT,MAXIM,'DUMMY',.FALSE.,IRTFLG)
+          IF (IRTFLG .NE. 0) GOTO 9900
+	  IF (NXT.NE.NX .OR. NYT.NE.NY) THEN
+             CALL ERRT(1,'STACK ',NE)
+             GOTO 9900
+          ENDIF
+
+          DO  IRECIN=1,NY*NZT
+             CALL REDLIN(LUNI,BUF,NX,IRECIN)
+             IRECOUT = IRECOUT + 1
+	     IF (IRECOUT .GT. NY * NZS) THEN
+                CALL ERRT(102,'RECORD LIMIT (NY*NZ)',NY*NZ)
+                GOTO 9900
+             ENDIF
+             CALL WRTLIN(LUNO,BUF,NX,IRECOUT)
+	  ENDDO
+          CLOSE(LUNI)
+	ENDDO
+
+
+9900    CLOSE(LUNI)
+        CLOSE(LUNO)
+
+	END
+
+
+
+C     --------------------- STACK_REPLACE ----------------------------
+
+      SUBROUTINE STACK_REPLACE()
+
+      IMPLICIT NONE
+      INCLUDE 'CMBLOCK.INC'
+      INCLUDE 'CMLIMIT.INC'
+
+      REAL,    ALLOCATABLE   :: BUFIMG(:)
+
+      CHARACTER (LEN=MAXNAM) :: FILOUT,FILIN
+
+      INTEGER                :: ITYPE,NX,NY,NZ,NXI,NYI,NZI
+      INTEGER                :: IZ,NPIX,NDUM,NOT_USED
+      INTEGER                :: ISLICE,MAXIM,IRTFLG
+
+      INTEGER,PARAMETER      :: LUNIN     = 21 
+      INTEGER,PARAMETER      :: LUNOUT    = 23
+
+C     OPEN EXISTING OUTPUT (3D) FILE
+      MAXIM = 0
+      CALL OPFILEC(0,.TRUE.,FILOUT,LUNOUT,'O',
+     &               ITYPE,NX,NY,NZ,
+     &               MAXIM,'OUTPUT VOLUME',.FALSE.,IRTFLG)
+      IF (IRTFLG .NE. 0) RETURN
+
+      NPIX = NX * NY
+      ALLOCATE(BUFIMG(NPIX),STAT=IRTFLG)
+      IF (IRTFLG .NE. 0) THEN 
+         CALL ERRT(46,'STACK, BUFIMG',NPIX)
+         GOTO 9999
+      ENDIF
+
+      IF (VERBOSE) WRITE(NOUT,*) ' '
+
+      ISLICE = 0
+
+      DO                   ! ENDLESS LOOP
+
+C        OPEN FIRST OR NEXT INPUT FILE
+         MAXIM = 0
+         CALL OPFILEC(0,.TRUE.,FILIN,LUNIN,'O',ITYPE,NXI,NYI,NZI,
+     &                MAXIM,'INPUT',.FALSE.,IRTFLG)
+
+C        CONTINUE UNTIL ASTERICK RECEIVED FOR INPUT FILENAME
+         IF (IRTFLG .NE. 0) GOTO 9999
+
+         IF (NXI.NE.NX .OR. NYI.NE.NY) THEN
+            CALL ERRT(101,'INCOMPATIBLE SIZES',NDUM)
+            GOTO 9999
+         ENDIF
+
+        ISLICE = ISLICE + 1
+        CALL RDPRI1S(ISLICE,NOT_USED,'SLICE NUMBER',IRTFLG)
+
+        IF (ISLICE <= 0 .OR. ISLICE > NZ) THEN
+           CALL ERRT(102,'SLICE OUT OF RANGE',NZ)
+           GOTO 9999
+        ENDIF
+
+        CALL REDVOL(LUNIN,NX,NY,1,1,BUFIMG,IRTFLG)
+
+        CALL WRTVOL(LUNOUT,NX,NY,ISLICE,ISLICE,BUFIMG,IRTFLG)
+
+        CLOSE(LUNIN)
+
+C       CONTINUE UNTIL ASTERICK RECEIVED FOR INPUT FILENAME
+      ENDDO
+
+9999  IF (ALLOCATED(BUFIMG)) DEALLOCATE(BUFIMG)
+
+      IF (VERBOSE) WRITE(NOUT,*) ' '
+
+      CLOSE(LUNIN)
+      CLOSE(LUNOUT)
+      
+      END
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+@
+
+
+1.14
+log
+@rewrite
+@
+text
+@d30 1
+a30 1
+C    STACK(LUNI,LUNO,OPTION)
+d35 1
+a35 1
+C    NOTE:     OSOLETER USE 'CP TO VOL' INSTEAD!!
+d39 1
+a39 1
+      SUBROUTINE STACK
+d41 63
+a103 90
+      IMPLICIT NONE
+      INCLUDE 'CMBLOCK.INC'
+      INCLUDE 'CMLIMIT.INC'
+
+      REAL,    ALLOCATABLE   :: BUFIMG(:)
+
+      CHARACTER (LEN=MAXNAM) :: FILOUT,FILNAM,FILPAT,FILNM1,FILNM2
+
+      CHARACTER (LEN=1)      :: NULL = CHAR(0)
+
+      INTEGER                :: ITYPE,NX,NY,NZ
+      INTEGER                :: IZ,NPIX,NLETF
+      INTEGER                :: NLET,NLETV,LOCAST
+      INTEGER                :: NUM1,NLET2,NUM2,NUM
+      INTEGER                :: MAXIM,IRTFLG
+
+      INTEGER,PARAMETER      :: LUNIN     = 21 
+      INTEGER,PARAMETER      :: LUNOUT    = 23
+
+      INTEGER                :: lnblnkn
+ 
+C     OPEN FIRST INPUT FILE 
+      MAXIM = 0   ! NO STACK OP
+      CALL OPFILEC(0,.TRUE.,FILNM1,LUNIN,'O',
+     &             ITYPE,NX,NY,NZ,
+     &             MAXIM,'FIRST',.FALSE.,IRTFLG)
+      IF (IRTFLG .NE. 0)  GOTO 9999
+      CLOSE(LUNIN)
+
+      IF (NZ > 1) THEN
+         CALL ERRT(102,'OPERATION DOES NOT WORK ON VOLUMES',NZ)
+         GOTO 9999
+      ENDIF
+
+      LOCAST = INDEX(FILNM1,'*')
+      IF (LOCAST > 1) THEN
+         CALL ERRT(102,'OPERATION DOES NOT USE TEMPLATES',NZ)
+         GOTO 9999
+      ENDIF
+
+C     CONVERT DIGITS AT END OF FILE NAME INTO INTEGER: NUM1 
+      CALL FILCAD(FILNM1,FILPAT,NUM1,IRTFLG)
+
+C     FIND NAME OF LAST FILE
+      CALL FILERD(FILNM2,NLET2,NULL,'LAST',IRTFLG)
+      IF (IRTFLG .NE. 0) GOTO 9999
+
+C     CONVERT DIGITS AT END OF FILE NAME INTO INTEGER: NUM2 
+      CALL FILCAD(FILNM2,FILPAT,NUM2,IRTFLG)
+      IF (IRTFLG .NE. 0) GOTO 9999
+
+
+      NPIX = NX * NY
+      ALLOCATE(BUFIMG(NPIX),STAT=IRTFLG)
+      IF (IRTFLG .NE. 0) THEN 
+         CALL ERRT(46,'STACK, BUFIMG',NPIX)
+         GOTO 9999
+      ENDIF
+
+      NZ = NUM2 - NUM1 + 1
+    
+C     OPEN OUTPUT VOLUME
+      CALL OPFILEC(LUNIN,.TRUE.,FILOUT,LUNOUT,'U',
+     &             ITYPE,NX,NY,NZ,
+     &             MAXIM,'OUTPUT VOLUME',.FALSE.,IRTFLG)
+      IF (IRTFLG .NE. 0)  GOTO 9999
+
+      NLETV = lnblnkn(FILOUT)
+        
+      IF (VERBOSE) WRITE(NOUT,*) ' '
+
+      IZ = 0
+
+      DO NUM = NUM1,NUM2           ! LOOP OVER INPUT FILES
+
+         IZ = IZ + 1               ! OUTPUT SLICE
+
+C        PUT FILE NUMBER INTO PATTERN
+         CALL FILGET(FILPAT,FILNAM,NLET,NUM,IRTFLG)
+         IF (IRTFLG .NE. 0) GOTO 9999 
+
+C        OPEN INPUT FILE 
+         MAXIM = 0
+         CALL OPFILEC(0,.FALSE.,FILNAM,LUNIN,'O',
+     &                ITYPE,NX,NY,NZ,
+     &                MAXIM,'',.FALSE.,IRTFLG)
+         IF (IRTFLG .NE. 0)  GOTO 9999
+         IF (NZ > 1) THEN
+            CALL ERRT(102,'OPERATION DOES NOT WORK ON VOLUMES',NZ)
+            GOTO 9999
+d105 46
+a150 25
+ 
+         NLETF = lnblnkn(FILNAM)
+         IF (VERBOSE) WRITE(6,'(1X,4A,I6)')
+     &                FILNAM(:NLETF),'  --> ',
+     &                FILOUT(:NLETV),'  Z:',IZ
+
+C        READ INPUT IMAGE
+         CALL REDVOL(LUNIN,NX,NY, 1,1,BUFIMG,IRTFLG)
+         IF (IRTFLG .NE. 0) GOTO 9999 
+         CLOSE(LUNIN)
+
+C        SAVE OUTPUT IMAGE AS VOLUME SLICE
+         CALL WRTVOL(LUNOUT,NX,NY, IZ,IZ,BUFIMG,IRTFLG)
+         IF (IRTFLG .NE. 0) GOTO 9999 
+
+      ENDDO
+
+9999  IF (ALLOCATED(BUFIMG)) DEALLOCATE(BUFIMG)
+
+      IF (VERBOSE) WRITE(NOUT,*) ' '
+
+      CLOSE(LUNIN)
+      CLOSE(LUNOUT)
+      
+      END
+@
+
+
+1.13
+log
+@GPL_2010
+@
+text
+@d2 1
+d5 2
+a6 1
+C STACK.F                                                LONG FILENAMES
+d12 1
+a12 1
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+d32 2
+a33 1
+C    PURPOSE:   STACK 2-D SLICES INTO 3-D IMAGE
+d35 1
+a35 4
+C    PARAMETERS:
+C	  LUNI	  LOGICAL UNIT NUMBER OF INPUT FILE
+C	  LUNO	  LOGICAL UNIT NUMBER OF OUTPUT FILE
+C	  OPTION  OPTION -- F(4)
+d39 163
+a201 1
+	SUBROUTINE STACK(LUNI,LUNO,OPTION)
+d203 2
+a204 2
+        INCLUDE 'CMBLOCK.INC' 
+        INCLUDE 'CMLIMIT.INC' 
+d206 4
+a209 2
+        CHARACTER(LEN=MAXNAM) :: FILNM1,FILNM2,FILENM,FILPAT,FILDUM
+        COMMON /COMMUN/FILNM1,FILNM2,FILENM,FILPAT,FILDUM
+d211 2
+a212 59
+        COMMON /IOBUF/ BUF(NBUFSIZ)
+
+        CHARACTER(LEN=*) :: OPTION
+        CHARACTER(LEN=1) :: NULL
+
+	NULL = CHAR(0)
+
+	IF (OPTION .EQ. 'R') GOTO 200
+
+C       ------------------------------------------------------------ SK
+C       USE FILE OPEN TO FIND VALUES TO USE FOR NSAM, NROW
+        MAXIM  = 0
+	IFOUND = -4
+        CALL OPFILEC(0,.TRUE.,FILNM1,LUNI,'O',IFORM,NSAM,NROW,NSLICE,
+     &               MAXIM,'FIRST',.FALSE.,IRTFLG)
+	IFOUND = 0
+        IF (IRTFLG .NE. 0) RETURN
+	CLOSE(LUNI)
+        NLET = lnblnk(FILNM1)
+        IF (NLET .LE. 0) NLET = LEN(FILNM1)
+
+C       FIND NUMBER OF FIRST FILE
+	CALL FILCAD(FILNM1,FILPAT,N1,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+C       FIND NUMBER OF LAST FILE
+	CALL FILERD(FILNM2,NLET,NULL,'LAST',IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+	CALL FILCAD(FILNM2,FILDUM,N2,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+        NFILES = N2 - N1 + 1
+
+        IF (NSLICE .LE. 1) THEN
+           NSLICES = NFILES
+        ELSE
+C          FIND TOTAL NUMBER OF SLICES
+           NSLICES = 0
+	   DO  IFILE=1,NFILES
+
+C            CREATE CURRENT INPUT FILE NAME
+             CALL FILGET(FILPAT,FILNM2,NLET,N1+IFILE-1,IRTFLG)
+             IF (IRTFLG .NE. 0) THEN
+                CALL ERRT(2,'STACK',NE)
+                GOTO 9900
+             ENDIF
+
+C            OPEN INPUT FILE TO GET NSLICET
+             MAXIM  = 0
+	     IFOUND = -4
+             CALL OPFILEC(0,.FALSE.,FILNM2,LUNI,'O',IFORM,
+     &                NSAMT,NROWT,NSLICET,MAXIM,'DUMMY',.FALSE.,IRTFLG)
+	     IFOUND = 0
+             IF (IRTFLG .NE. 0) GOTO 9900
+	     IF (NSAMT.NE.NSAM .OR. NROWT.NE.NROW) THEN
+                CALL ERRT(1,'STACK ',NE)
+                GOTO 9900
+             ENDIF
+             CLOSE(LUNI)
+d214 3
+a216 2
+             NSLICES = NSLICES + NSLICET
+           ENDDO
+d219 1
+a219 60
+C       OPEN OUTPUT VOLUME
+	IFORM  = 3
+        MAXIM  = 0
+        CALL OPFILEC(0,.TRUE.,FILENM,LUNO,'U',IFORM,NSAM,NROW,NSLICES,
+     &                   MAXIM,'OUTPUT',.FALSE.,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+        WRITE(NOUT,*) ' '
+
+        IRECOUT = 0
+	DO  IFILE=1,NFILES
+
+C         CREATE CURRENT INPUT FILE NAME
+          CALL FILGET(FILPAT,FILNM2,NLET,N1+IFILE-1,IRTFLG)
+          IF (IRTFLG .NE. 0) THEN
+             CALL ERRT(2,'STACK',NE)
+             GOTO 9900
+          ENDIF
+
+C         OPEN INPUT FILE
+          CALL OPFILEC(0,.FALSE.,FILNM2,LUNI,'O',IFORM,
+     &                NSAMT,NROWT,NSLICET,MAXIM,'DUMMY',.FALSE.,IRTFLG)
+          IF (IRTFLG .NE. 0) GOTO 9900
+	  IF (NSAMT.NE.NSAM .OR. NROWT.NE.NROW) THEN
+             CALL ERRT(1,'STACK ',NE)
+             GOTO 9900
+          ENDIF
+
+          DO  IRECIN=1,NROW*NSLICET
+             CALL REDLIN(LUNI,BUF,NSAM,IRECIN)
+             IRECOUT = IRECOUT + 1
+	     IF (IRECOUT .GT. NROW * NSLICES) THEN
+                CALL ERRT(102,'RECORD LIMIT (NROW*NSLICE)',NROW*NSLICE)
+                GOTO 9900
+             ENDIF
+             CALL WRTLIN(LUNO,BUF,NSAM,IRECOUT)
+	  ENDDO
+          CLOSE(LUNI)
+	ENDDO
+
+        GOTO 9900
+
+C       --------------------------------------------------------- 'SK R'
+
+ 200    MAXIM = 0
+C       OPEN EXISTING OUTPUT (3D) FILE
+        CALL OPFILEC(0,.TRUE.,FILENM,LUNO,'O',IFORM,NSAM,NROW,NSLICE,
+     &                MAXIM,'THREED',.FALSE.,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+        WRITE(NOUT,*) ' '
+
+C       OPEN FIRST OR NEXT INPUT FILE
+ 210    MAXIM = 0
+        CALL OPFILEC(0,.TRUE.,FILNM1,LUNI,'O',IFORM,NSAMI,NROWI,NSLICEI,
+     &               MAXIM,'INPUT',.FALSE.,IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 9900
+
+	IF (NSAMI.NE.NSAM .OR. NROWI.NE.NROW) THEN
+           CALL ERRT(1,'STACK ',NE)
+           GOTO 9900
+        ENDIF
+d221 1
+a221 5
+	CALL RDPRMI(ISLICE,IDUM,NOT_USED,'SLICE NUMBER')
+	IF (ISLICE .LE. 0 .OR. ISLICE .GT. NSLICE) THEN
+           CALL ERRT(19,'STACK',NE)
+           GOTO 9900
+        ENDIF
+d223 1
+a223 6
+        DO  IRECIN=1,NROW
+          CALL REDLIN(LUNI,BUF,NSAM,IRECIN)
+          IRECOUT = (ISLICE-1) * NROW + IRECIN
+	  CALL WRTLIN(LUNO,BUF,NSAM,IRECOUT)
+	ENDDO
+	CLOSE(LUNI)
+d226 28
+a253 1
+	GOTO 210
+a254 1
+C       ----------------------------------------------------------
+a255 2
+9900    CLOSE(LUNI)
+        CLOSE(LUNO)
+a256 2
+        RETURN
+	END
+@
+
+
+1.12
+log
+@GPL License fixed
+@
+text
+@a6 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d8 5
+a12 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d14 1
+a14 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d19 1
+a19 1
+C=* This program is distributed in the hope that it will be useful,    *
+d21 1
+a21 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a22 1
+C=*                                                                    *
+d24 1
+a24 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.11
+log
+@HRI GPL License used
+@
+text
+@a2 1
+C++************************************************************************
+a6 1
+C * SPIDER - MODULAR IMAGE PROCESSING SYSTEM.    AUTHOR: J.FRANK       *
+d10 1
+a10 1
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *  
+a29 6
+
+C * COPYRIGHT (C)1985, 2003. HEALTH RESEARCH INCORPORATED (HRI),       *
+C * ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+C * THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO HRI AND ARE NOT   *
+C * TO BE DISCLOSED TO OTHERS OR USED FOR PURPOSES OTHER THAN INTENDED *
+C * WITHOUT WRITTEN APPROVAL OF HRI.                                   *
+@
+
+
+1.10
+log
+@bug with single images
+@
+text
+@d2 1
+d9 24
+@
+
+
+1.9
+log
+@can handle volumes now
+@
+text
+@d68 1
+a68 1
+           NSLICES = 1
+@
+
+
+1.8
+log
+@opfilec
+@
+text
+@d6 8
+a13 9
+C **************************************************************************
+C *  SPIDER - MODULAR IMAGE PROCESSING SYSTEM.  AUTHOR: J.FRANK            *
+C *  COPYRIGHT (C)1981,1987, WADSWORTH CENTER FOR LABORATORIES AND         *
+C *  RESEARCH, NEW YORK STATE DEPARTMENT OF HEALTH, ALBANY, NY 12201.      *
+C *    THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO THE CENTER FOR     *
+C *    LABORATORIES AND RESEARCH AND ARE NOT TO BE DISCLOSED TO OTHERS OR  *
+C *    USED FOR PURPOSES OTHER THAN INTENDED WITHOUT WRITTEN APPROVAL OF   *
+C *    THE CENTER FOR LABORATORIES AND RESEARCH 			   *
+C **************************************************************************
+d34 1
+a34 1
+	COMMON         BUF(1)
+d36 2
+a37 2
+        CHARACTER *(*) OPTION
+        CHARACTER *1   NULL
+d65 1
+a65 2
+C       NUMBER OF SLICES IS BASED ON NUMBER OF INPUT FILES
+	NFILES = N2 - N1 + 1
+d67 32
+a98 1
+C       OPEN OUTPUT 3D FILE
+d101 1
+a101 1
+        CALL OPFILEC(0,.TRUE.,FILENM,LUNO,'U',IFORM,NSAM,NROW,NFILES,
+d106 1
+d113 1
+a113 1
+             GOTO 9910
+d119 1
+a119 1
+          IF (IRTFLG .NE. 0) GOTO 9910
+d122 1
+a122 1
+             GOTO 9910
+d125 1
+a125 1
+          DO  IRECIN=1,NROW
+d127 5
+a131 1
+             IRECOUT = (IFILE-1) * NROW + IRECIN
+d137 1
+a137 2
+C       CLOSE(LUNO)
+        RETURN
+d139 1
+a139 1
+C       ---------------------------------------------------------- SK R
+d152 1
+a152 1
+        IF (IRTFLG .NE. 0) GOTO 9910
+d177 2
+a179 2
+9900    CLOSE(LUNI)
+9910	CLOSE(LUNO)
+@
+
+
+1.7
+log
+@nloop,iloop_removed
+@
+text
+@d30 1
+d32 1
+a32 2
+
+        CHARACTER *81  FILNM1,FILNM2,FILENM,FILPAT,FILDUM
+d44 1
+a44 1
+C       ------------------------------------------------------------SK
+d48 2
+a49 2
+        CALL OPFIL(.TRUE.,FILNM1,LUNI,'O',NSAM,NROW,NSLICE,
+     &                   MAXIM,'FIRST',.FALSE.,IRTFLG)
+d72 1
+a72 1
+        CALL OPFIL(.TRUE.,FILENM,LUNO,'U',NSAM,NROW,NFILES,
+d87 2
+a88 2
+          CALL OPFIL(.FALSE.,FILNM2,LUNI,'O',NSAMT,NROWT,NSLICET,
+     &                   MAXIM,'DUMMY',.FALSE.,IRTFLG)
+d110 2
+a111 2
+        CALL OPFIL(.TRUE.,FILENM,LUNO,'O',NSAM,NROW,NSLICE,
+     &                   MAXIM,'THREED',.FALSE.,IRTFLG)
+d117 2
+a118 2
+        CALL OPFIL(.TRUE.,FILNM1,LUNI,'O',NSAMI,NROWI,NSLICEI,
+     &                   MAXIM,'INPUT',.FALSE.,IRTFLG)
+@
+
+
+1.6
+log
+@a
+@
+text
+@d126 1
+a126 1
+	CALL RDPRMI(ISLICE,IDUM,NLOOP,ILOOP,'SLICE NUMBER')
+@
+
+
+1.5
+log
+@udated opfil usage
+@
+text
+@d30 1
+a30 1
+CNO_SAVE
+@
+
+
+1.4
+log
+@nosave
+@
+text
+@d4 2
+a5 2
+C STACK.FOR
+C                                        LONG FILENAMES
+d30 6
+a35 2
+        COMMON /COMMUN/ FILNM1,FILNM2,FILENM,FILPAT,FILDUM
+	COMMON ADUM(80),BUF(1)
+a37 1
+        CHARACTER *81  FILNM1,FILNM2,FILENM,FILPAT,FILDUM
+d39 4
+a42 2
+CNO_SAVE
+	NULL=CHAR(0)
+d44 7
+a50 2
+	IF (OPTION .EQ. 'R')GOTO 200
+	CALL FILERD(FILNM1,NLETP,NULL,'FIRST',IRTFLG)
+d52 3
+d56 1
+d60 1
+a62 1
+
+a64 6
+	NREC=N2-N1+1
+
+  	CALL FILERD(FILENM,NLET,NULL,'OUTPUT',IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+C       CALL OPEN TO FIND VALUES FOR NSAM,NROW
+d66 2
+a67 6
+	IFOUND = -4
+	CALL OPENF(FILNM1,LUNI,NSAM,NROW,'OLD',NF,NDUM)
+	IF (IFORM.NE.1.AND.IFORM.NE.3)GOTO 9100
+	IFOUND = 0
+	CLOSE(LUNI)
+	IFORM = 3
+d69 30
+a98 16
+	CALL OPENF(FILENM,LUNO,NSAM,NROW,'UNKNOWN',NF,NREC)
+	IF (NF.EQ.1) GOTO 9300
+	IF (IFORM.NE.1.AND. IFORM.NE.3) GOTO 9100
+	IFORM = 1
+
+	DO  KREC=1,NREC
+          CALL FILGET(FILPAT,FILNM2,NLETP,N1+KREC-1,IRTFLG)
+          IF (IRTFLG .NE. 0) GOTO 9000
+
+          CALL OPENF(FILNM2,LUNI,NSAM,NROW,'OLD',NF,NDUM)
+          IF (IFORM.NE.1.AND.IFORM.NE.3) GOTO 9100
+          IF (NF.EQ.1) GOTO 9300
+          DO  KROW=1,NROW
+            CALL REDLIN(LUNI,BUF,NSAM,KROW)
+            KSL=(KREC-1)*NROW+KROW
+            CALL WRTLIN(LUNO,BUF,NSAM,KSL)
+d102 3
+a104 1
+	GOTO 9910
+d106 1
+d108 28
+a135 19
+200     CALL FILERD(FILENM,NLET,NULL,'THREED',IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+	CALL OPENF(FILENM,LUNO,NSAM,NROW,'OLD',NF,NSLICE)
+	IF (IFORM.NE.1 .AND. IFORM.NE.3) GOTO 9100
+	IF (NF.EQ.1) GOTO 9300
+
+210	CALL FILERD(FILNM1,NLET,NULL,'INPUT ',IRTFLG)
+	IF (IRTFLG .NE. 0) GOTO 9910
+	CALL OPENF(FILNM1,LUNI,NSAMI,NROWI,'OLD',NF,NDUM)
+	IF (IFORM.NE.1.AND.IFORM.NE.3)GOTO 9100
+	IF (NF.EQ.1)GOTO 9300
+	IF (NSAMI.NE.NSAM.OR.NROWI.NE.NROW)GOTO 9200
+	CALL RDPRMI(ISLICE,IDUM,NLOOP,ILOOP,'SLICE NUMBER$')
+	IF (ISLICE .GT. NSLICE) GOTO 9900
+
+        DO  I=1,NROW
+          CALL REDLIN(LUNI,BUF,NSAM,I)
+          KSL=(ISLICE-1)*NROW+I
+	  CALL WRTLIN(LUNO,BUF,NSAM,KSL)
+d138 2
+d142 1
+a142 8
+9000	IER = 19
+	GOTO 9900
+9100	IER = 2
+	GOTO 9900
+9200	IER = 1
+	GOTO 9900
+9300	IER =4
+	GOTO 9900
+a143 1
+9900	CALL ERRT(IER,'STACK ',NE)
+d145 1
+d147 1
+@
+
+
+1.3
+log
+@*** empty log message ***
+@
+text
+@a28 1
+#ifdef SP_UNIX
+a29 3
+#else
+        INCLUDE 'COMMON1:CMBLOCK.INC' 
+#endif
+d36 1
+a36 1
+
+a121 1
+	RETURN
+@
+
+
+1.2
+log
+@cpp_lines_added
+@
+text
+@d74 1
+a74 1
+	DO 100 KREC=1,NREC
+d81 1
+a81 1
+          DO 90 KROW=1,NROW
+d85 1
+a85 1
+90        CONTINUE
+d87 1
+a87 1
+100	CONTINUE
+d106 1
+a106 1
+        DO 250 I=1,NROW
+d109 2
+a110 1
+250	CALL WRTLIN(LUNO,BUF,NSAM,KSL)
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d29 3
+d33 1
+@

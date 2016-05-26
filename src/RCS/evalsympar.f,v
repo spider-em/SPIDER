@@ -1,0 +1,303 @@
+head	1.8;
+access;
+symbols
+	pre_getangas:1.8
+	GPL2010:1.8
+	pre_GPL2010:1.7
+	pre_var_equation:1.7
+	pre_fftwrings:1.7
+	pre_opfiles:1.7
+	src:1.7
+	best-code:1.6
+	named-reg:1.6
+	x-named-regs:1.5
+	x:1.5
+	v13-00:1.4
+	pre_GPL:1.3
+	prec_CA:1.2
+	noindx:1.2;
+locks; strict;
+comment	@c @;
+
+
+1.8
+date	2010.06.24.13.25.33;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2006.04.06.17.22.42;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2005.12.12.15.26.44;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2005.11.15.21.50.47;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2005.10.17.21.02.23;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2003.11.24.17.25.18;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2002.07.02.18.05.53;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2002.06.28.16.25.07;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.8
+log
+@GPL_2010
+@
+text
+@
+C++*********************************************************************
+C
+C  EVALSYMPAR.F -- CREATED 6/8/02 ARDEAN LEITH 
+C                 [] DEFAULT FOR VARIABLES         OCT 2005 ARDEAN LEITH
+C
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C EVALSYMPAR(SYMPARIN,SYMPAROUT,NCHARV,IRTFLG)
+C
+C PURPOSE: SUBSTITUTE FOR <>,X,I IN SYMPARVAL FROM HIGHER LEVELS
+C             
+C PARAMETERS:     SYMPARIN     SYMBOLIC PARAMETER VALUE        SENT
+C                 SYMPAROUT    SYMBOLIC PARAMETER VALUE        RETURNED
+C                 NCHARV       LENGTH OF SYMPAROUT             RETURNED
+C                 IRTFLG       ERROR FLAG (0 IS NORMAL)        RETURNED
+C
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C--*********************************************************************
+
+      SUBROUTINE EVALSYMPAR(SYMPARIN,SYMPAROUT,NCHARV,IRTFLG)
+
+      INCLUDE 'CMBLOCK.INC'
+      INCLUDE 'CMLIMIT.INC'
+
+      CHARACTER(LEN=*) ::        SYMPARIN,SYMPAROUT
+      CHARACTER(LEN=MAXNAM) ::   SYMPARINT
+
+C     FOR LOCAL SYMBOLIC PARAMETER HANDLING 
+      INTEGER, DIMENSION(MAXPRC) :: IPSTACK,IPNUMSTACK,IPARNUM
+      COMMON /QSTR_STUFF1/ ISTOP,ITI,ITIN,IWHERE,IPSTACK,
+     &                     IPNUMSTACK,IPARNUM
+
+      SYMPAROUT = SYMPARIN
+      NCHARV    = LEN(SYMPARIN)
+
+C     SYMPARIN MAY CONTAIN PARAMETER SUBSTITUTION FROM HIGHER PROCS.
+C     IF SO, SUBSTITUTE THE VALUES FROM THE HIGHER LEVEL PROCS. NOW
+      IF (ISTOP .GT. 1) THEN
+         SYMPARINT = SYMPARIN
+
+         DO ILEVEL = ISTOP - 1,1,-1
+           SYMPARINT = SYMPAROUT
+
+C          SEE IF ANY VARIABLE STRING ARRIVED IN SYMPARIN 
+           IF (INDEX(SYMPARINT(1:NCHARV),'<') .GT. 0) THEN
+C             CONVERT OLD STYLE VARIABLE DELIMITERS TO []
+              DO I = 1,NCHARV
+                 IF (SYMPARINT(I:I) .EQ. '<') SYMPARINT(I:I) = '['
+                 IF (SYMPARINT(I:I) .EQ. '>') SYMPARINT(I:I) = ']'
+              ENDDO
+           ENDIF
+C          MAY NEED VARIABLE SUBSTITUTION
+           CALL SUBSYMPAR(SYMPARINT,SYMPAROUT,NCHARV,ILEVEL,IRTFLG)
+
+C          SEE IF NEED TO CONVERT OLD x11 REGISTER FORMAT 
+           IX = SCAN(SYMPAROUT(1:NCHARV),'xX')
+           IF (IX .GT. 0) THEN
+C             CONVERT OLD x11 REGISTER FORMAT TO TO NEW: [name] FORMAT
+              CALL DEXREG(SYMPAROUT,NCHARV)
+           ENDIF
+
+C          MAY WANT TO SUBSTITUTE. FOR REGS? FROM SYMPARINT?
+           ISUB = SCAN(SYMPAROUT(1:NCHARV), '{[*')
+           IF (ISUB .GT. 0) THEN
+C             SUBSTITUTE FOR: {***[]}  {---[]}  ***[]  ${ENV}  .1[] 
+C             PASS THE CURRENT REGISTER SET TO FILNAMSUB
+C             WILL STOP IN ERRT IN FILNAMSUB IF THERE IS AN ERROR
+
+              CALL FILNAMSUB(SYMPAROUT,NCHARV,-1,IRTFLG)
+           ENDIF
+           IF (INDEX(SYMPARINT,'<') .LE. 0) EXIT
+         ENDDO
+      ENDIF
+    
+      IRTFLG = 0
+
+      RETURN
+      END
+
+@
+
+
+1.7
+log
+@multiple [] sub not correct on fr
+@
+text
+@a7 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d9 5
+a13 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d15 1
+a15 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d20 1
+a20 1
+C=* This program is distributed in the hope that it will be useful,    *
+d22 1
+a22 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a23 1
+C=*                                                                    *
+d25 1
+a25 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.6
+log
+@native named registers
+@
+text
+@d70 6
+a75 7
+           CALL CHARINSIDE(SYMPARINT,'<','>',.FALSE.,.FALSE., 
+     &                     IGOANG,IENDANG,NANG)
+           IF (IGOANG .GT. 0) THEN
+C             NEED VARIABLE SUBSTITUTION
+              SYMPARINT(IGOANG:IGOANG)   = '['
+              SYMPARINT(IENDANG:IENDANG) = ']'
+              CALL SUBSYMPAR(SYMPARINT,SYMPAROUT,NCHARV,ILEVEL,IRTFLG)
+d77 2
+@
+
+
+1.5
+log
+@named register support
+@
+text
+@d79 6
+a84 3
+C          MAY WANT TO SUBSTITUTE. FOR REGS?
+           CALL CHARINSIDE(SYMPAROUT(1:NCHARV),'{','}',.TRUE.,.FALSE., 
+     &                     IGOSUB,IENDSUB,NSUB)
+d86 5
+a90 4
+           IF (NSUB .GT. 0) THEN
+C             NEED REGISTER SUBSTITUTION
+C             PASS THE CURRENT REGISTER (PARAM) SET TO FILNAMSUB
+C             SUBSTITUTE FOR {+++X??} OR {---X??} IN SYMPAROUT STRING
+d93 1
+a93 1
+              CALL FILNAMSUB(SYMPAROUT,NCHARV,.TRUE.,ILEVEL+1,IRTFLG)
+@
+
+
+1.4
+log
+@GPL License fixed
+@
+text
+@d5 1
+d69 7
+a75 4
+C          SEE IF ANY PARAMETER STRING IN SYMPARIN 
+           IF (INDEX(SYMPARINT,'<') .GT. 0) THEN
+
+C             '<LABEL> --> NEED SYMBOLIC PARAMETER SUBSTITUTION
+@
+
+
+1.3
+log
+@NLOG
+@
+text
+@d7 23
+a29 6
+C * SPIDER - MODULAR IMAGE PROCESSING SYSTEM.    AUTHOR: J.FRANK       *
+C * COPYRIGHT (C)1985, 2002. HEALTH RESEARCH INCORPORATED (HRI),       *
+C * ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+C * THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO HRI AND ARE NOT   *
+C * TO BE DISCLOSED TO OTHERS OR USED FOR PURPOSES OTHER THAN INTENDED *
+C * WITHOUT WRITTEN APPROVAL OF HRI.                                   *
+@
+
+
+1.2
+log
+@iparnum
+@
+text
+@d37 1
+a37 1
+      COMMON /QSTR_STUFF1/ ISTOP,ITI,ITIN,IWHERE,NLOG,IPSTACK,
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d35 2
+a36 2
+C     FOR SYMBOLIC PARAMETER HANDLING 
+      INTEGER, DIMENSION(MAXPRC) :: IPSTACK,IPNUMSTACK
+d38 1
+a38 1
+     &                     IPNUMSTACK
+@

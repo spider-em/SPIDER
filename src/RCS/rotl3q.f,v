@@ -1,0 +1,296 @@
+head	1.5;
+access;
+symbols
+	pre_getangas:1.5
+	GPL2010:1.5
+	pre_GPL2010:1.4
+	pre_var_equation:1.4
+	pre_fftwrings:1.4
+	pre_opfiles:1.4
+	src:1.4
+	best-code:1.4
+	x-named-regs:1.4
+	x:1.4
+	v13-00:1.4
+	pre_GPL:1.3
+	prec_CA:1.3
+	noindx:1.3;
+locks; strict;
+comment	@c @;
+
+
+1.5
+date	2010.06.24.13.26.48;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2005.10.17.20.57.07;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2002.07.23.17.09.30;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2002.05.07.18.59.13;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2002.05.07.18.16.37;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.5
+log
+@GPL_2010
+@
+text
+@
+C++*********************************************************************
+C
+C ROTL3Q.F                            TRI QUAD  May 4 2002 ArDean Leith
+C
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C  ROTL3Q(LUN2,Q1,NSAM,NROW,NSLICE,P1,P2,ALPHA)
+C
+C  PURPOSE: ROTATE VOLUME AROUND LINE USING TRI-QUADRATIC INTERP.
+C
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C--*********************************************************************
+
+         SUBROUTINE ROTL3Q(LUN2,Q1,NSAM,NROW,NSLICE,P1,P2,ALPHA)
+
+         REAL, DIMENSION(3)               :: P1,P2
+         REAL, DIMENSION(NSAM,NROW,NSLICE):: Q1
+
+         REAL, DIMENSION(NSAM)            :: Q2
+         DOUBLE PRECISION,DIMENSION(3)    :: QR
+         DOUBLE PRECISION,DIMENSION(3,3)  :: RM,R1,R3
+         DOUBLE PRECISION                 :: DX,DY,DZ,XD,YD,ZD,DTEMP
+
+         INTEGER, PARAMETER               :: NSIZE = 27
+         INTEGER, DIMENSION(NSIZE)        :: X,Y,Z
+         REAL, DIMENSION(NSIZE)           :: F
+
+	 PARAMETER (QUADPI = 3.141592653589793238462643383279502884197)
+	 PARAMETER (RAD_TO_DGR = (180.0/QUADPI))
+
+C        SET THE KNOWN COORDINATE GRID
+	 DO  L=1,NSIZE,3
+	    X(L)   = -1
+	    X(L+1) = 0
+	    X(L+2) = 1
+	    Y(L)   = MOD(L/3,3)-1
+	    Y(L+1) = MOD(L/3,3)-1
+	    Y(L+2) = MOD(L/3,3)-1
+	 ENDDO
+	 DO  L=1,NSIZE
+	    Z(L) = (L-1)/9-1
+	 ENDDO
+
+
+	 XD = P2(1) - P1(1)
+	 YD = P2(2) - P1(2)
+	 ZD = P2(3) - P1(3)
+
+         IF (ALPHA.EQ.0.0 .OR.
+     &      (XD.EQ.0.0.AND.YD.EQ.0.0.AND.ZD.EQ.0.0)) THEN
+C           NO ROTATION NEEDED
+            CALL WRTVOL(LUN2,NSAM,NROW,1,NSLICE,Q1,IRTFLG)
+            RETURN
+         ENDIF
+
+	PSI   = -RAD_TO_DGR * ATAN2(YD,XD)
+        DTEMP = SQRT(XD*XD+YD*YD)
+	THETA =  RAD_TO_DGR * ATAN2(ZD,DTEMP)
+
+	CALL BLDR(R1,PSI,THETA,90.0)
+	CALL BLDR(RM,0.0,ALPHA,0.0)
+
+         DO I=1,3
+            DO J=1,3
+               R3(J,I) = 0.0
+               DO K=1,3
+                  R3(J,I) = R3(J,I) + RM(K,I) * R1(J,K)
+	       ENDDO
+	    ENDDO
+	 ENDDO
+
+         DO I=1,3
+            DO J=1,3
+               RM(J,I) = 0.0
+               DO K=1,3
+                  RM(J,I) = RM(J,I) + R1(I,K) * R3(J,K)
+	       ENDDO
+	    ENDDO
+	 ENDDO
+
+         IREC  = 0
+
+	 DO IZ=1,NSLICE
+	    ZZ = IZ - P1(3)
+
+	    DO IY=1,NROW
+	       YY = IY - P1(2)
+
+               DO  IX=1,NSAM
+                 XX = IX - P1(1)
+
+                 QR(1) = RM(1,1)*XX+RM(2,1)*YY+RM(3,1)*ZZ+P1(1)
+                 QR(2) = RM(1,2)*XX+RM(2,2)*YY+RM(3,2)*ZZ+P1(2)
+                 QR(3) = RM(1,3)*XX+RM(2,3)*YY+RM(3,3)*ZZ+P1(3)
+
+C                IOX..  INTEGER LOCATION IN 1...NSAM ARRAY
+                 IOX = FLOOR(QR(1))   
+                 IOY = FLOOR(QR(2))   
+                 IOZ = FLOOR(QR(3))   
+
+C                DX.. OFFSET FROM INTEGER ARRAY
+                 DX  = QR(1) - IOX
+                 DY  = QR(2) - IOY
+                 DZ  = QR(3) - IOZ
+
+                 IF ((IOX .GT. 1 .AND. IOX .LT. NSAM ) .AND.
+     &               (IOY .GT. 1 .AND. IOY .LT. NROW ) .AND.
+     &               (IOZ .GT. 1 .AND. IOZ .LT. NSLICE )) THEN
+C                   ROTATED POSITION IS INSIDE OF VOLUME
+
+C                   FIND INTENSITIES ON 3x3x3 COORDINATE GRID
+                    DO L = 1,NSIZE
+                       I    = IOX + X(L)
+                       J    = IOY + Y(L)
+                       K    = IOZ + Z(L)
+                       F(L) = Q1(I,J,K)
+                    ENDDO
+
+C                   EVALUATE INTENSITY AT PX,PY,PZ
+                    Q2(IX) = TRIQUAD(DX,DY,DZ,F)
+                 ELSE
+C                   ROTATED POSITION IS OUTSIDE VOLUME
+                    Q2(IX) = Q1(IX,IY,IZ)
+                ENDIF
+              ENDDO
+              IREC = IREC + 1
+              CALL WRTLIN(LUN2,Q2,NSAM,IREC)
+
+           ENDDO
+        ENDDO
+        END
+
+
+@
+
+
+1.4
+log
+@GPL License fixed
+@
+text
+@a6 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d8 5
+a12 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d14 1
+a14 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d19 1
+a19 1
+C=* This program is distributed in the hope that it will be useful,    *
+d21 1
+a21 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a22 1
+C=*                                                                    *
+d24 1
+a24 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.3
+log
+@wrtvol param added
+@
+text
+@d2 1
+a2 1
+C++************************************************************************
+d7 23
+a29 6
+C * SPIDER - MODULAR IMAGE PROCESSING SYSTEM.    AUTHOR: J.FRANK       *
+C * COPYRIGHT (C)1985, 2001. HEALTH RESEARCH INCORPORATED (HRI),       *
+C * ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+C * THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO HRI AND ARE NOT   *
+C * TO BE DISCLOSED TO OTHERS OR USED FOR PURPOSES OTHER THAN INTENDED *
+C * WITHOUT WRITTEN APPROVAL OF HRI.                                   *
+d37 1
+a37 1
+C--************************************************************************
+@
+
+
+1.2
+log
+@*** empty log message ***
+@
+text
+@d60 1
+a60 1
+            CALL WRTVOL(LUN2,NSAM,NROW,NSLICE,Q1,IRTFLG)
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d30 1
+a30 2
+         DOUBLE PRECISION                 :: DX,DY,DZ
+         DOUBLE PRECISION QR(3),DX,DY,DZ
+d64 4
+a67 2
+	PSI   = -RAD_TO_DGR*ATAN2(YD,XD)
+	THETA =  RAD_TO_DGR*ATAN2(Z,SQRT(XD*XD+YD*YD))
+d133 1
+a133 1
+
+@

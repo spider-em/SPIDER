@@ -13,7 +13,7 @@ C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2015  Health Research Inc.,                         *
+C=* Copyright 1985-2016  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -135,7 +135,7 @@ C       DETERMINE CURRENT FILE ENDED-NESS
 
         !write(6,*) ' mapc,mapr,maps: ',mapc,mapr,maps
 
-        SAMEENDFILE = ((MAPC.EQ.1) .OR. (MAPR.EQ.1) .OR. (MAPS.EQ.1))
+        SAMEENDFILE = ((MAPC == 1) .OR. (MAPR == 1) .OR. (MAPS == 1))
 
         BIGENDFILE = ((      SAMEENDFILE .AND.       BIGENDARCH) .OR.
      &                (.NOT. SAMEENDFILE .AND. .NOT. BIGENDARCH))
@@ -174,11 +174,11 @@ C       GET MAP TYPE FROM INPUT FILE
         LENMAP = lnblnkn(MAP)
         IF (LENMAP <= 0) THEN
 C           OLD STYLE, MRC MAP OR UNKNOWN FILE TYPE
-            WRITE(NOUT,*) ' *** BLANK MAP STRING IN CCP4 FILE'
+            WRITE(NOUT,*) ' *** BLANK MAP STRING IN MRC FILE'
 
         ELSEIF (MAP .NE. 'MAP ') THEN
 C           OLD STYLE, MRC MAP OR UNKNOWN FILE TYPE
-            WRITE(NOUT,*) ' *** BAD MAP STRING IN CCP4 FILE: ',MAP
+            WRITE(NOUT,*) ' *** BAD MAP STRING IN MRC FILE: ',MAP
         ENDIF
 
         CALL MVNFLIP(HEADBUF( 1), NX,     FLIP) 

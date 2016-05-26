@@ -1,0 +1,570 @@
+head	1.5;
+access;
+symbols
+	pre_getangas:1.4
+	GPL2010:1.4
+	pre_GPL2010:1.3
+	pre_var_equation:1.3
+	pre_fftwrings:1.3
+	pre_opfiles:1.3
+	src:1.3
+	best-code:1.3
+	x-named-regs:1.3
+	x:1.3
+	v13-00:1.3
+	pre_GPL:1.1;
+locks; strict;
+comment	@c @;
+
+
+1.5
+date	2014.04.24.16.26.06;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2010.06.24.13.27.16;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2005.10.17.20.42.46;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2005.10.17.18.33.09;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2004.11.19.18.38.29;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.5
+log
+@comments, header comments, nx, ==
+@
+text
+@C ++********************************************************************
+C                                                                      *
+C   WATERSHED           K WAS WRONG                MAR 01 ARDEAN LEITH *
+C                                                                      *
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C                                                                      *
+C  WATERSHED(LUN1,LUN2,NX,NY,NZ,FMINT)                         *
+C                                                                      *
+C  PURPOSE: WATERSHED                                                  *
+C                                                                      *
+C  PARAMETERS:                                                         *
+C                                                                      *
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C***********************************************************************
+
+        SUBROUTINE WATERSHED(LUN1,LUN2,NX,NY,NZ,FMINT)
+
+        INCLUDE 'CMBLOCK.INC'
+ 
+        REAL, ALLOCATABLE   :: VOL(:),VOLOUT(:)
+
+        NPIX = NX * NY * NZ
+
+        ALLOCATE (VOL(NPIX),VOLOUT(NPIX),STAT=IRTFLG)
+
+        IF (IRTFLG .NE. 0) THEN 
+           MWANT = NPIX * 2
+           CALL ERRT(46,'WATERSHED; VOL..',MWANT)
+           RETURN
+        ENDIF
+
+        IF (NZ == 1)  THEN
+C          FOR IMAGE
+
+C          READ INPUT VOLUME
+           CALL REDVOL(LUN1,NX,NY,1,1,VOL,IRTFLG)
+           IF (IRTFLG .NE. 0) GOTO 9999 
+
+           CALL WATER2(VOL,VOLOUT,NX,NY,FMINT,IRTFLG)
+           IF (IRTFLG .NE. 0) GOTO 9999 
+
+C          CREATE OUTPUT VOLUME
+           CALL WRTVOL(LUN2,NX,NY,1,1,VOLOUT,IRTFLG)
+           IF (IRTFLG .NE. 0) GOTO 9999 
+
+
+        ELSE
+C          FOR VOLUME
+           CALL ERRT(101,'NOT IMPLEMENT FOR VOLUMES',NE)
+           GOTO 9999
+
+        ENDIF
+
+9999    IF (ALLOCATED(VOL))    DEALLOCATE(VOL)
+        IF (ALLOCATED(VOLOUT)) DEALLOCATE(VOLOUT)
+       
+        END
+
+C       ----------------- WATER2 -------------------------------------
+
+        SUBROUTINE WATER2(XIMG,XOUT,NX,NY,FMINT,IRTFLG)
+
+        REAL              :: XIMG(NX*NY),XOUT(NX*NY)
+
+        REAL, ALLOCATABLE :: XSORT(:),RLOC(:)
+        REAL, ALLOCATABLE :: NEXTPIX(:)
+
+        INCLUDE 'CMBLOCK.INC'
+ 
+        IRTFLG     = 1
+        NPIX       = NX * NY
+
+        NQUESIZE = NPIX
+
+        ALLOCATE (XSORT(NPIX),RLOC(NPIX),NEXTPIX(NQUESIZE), 
+     &           STAT=IRTFLG)
+        IF (IRTFLG .NE. 0) THEN 
+           MWANT = NPIX * 2 + NQUESIZE
+           CALL ERRT(46,'WATER2, RLOC,... ',MWANT)
+           RETURN
+        ENDIF
+
+        DO IPIX = 1,NPIX
+           XSORT(IPIX) = XIMG(IPIX)
+           RLOC(IPIX)  = IPIX
+        ENDDO
+
+C       SORT THE PIXELS (SORT IS A SINGLETON SORT), RLOC IS REORDERD
+        CALL SORT(XSORT,XOUT,RLOC,NPIX)
+
+C       SET CURRENT SEGMENTATION LEVEL
+        RLEVEL     = 1.0
+        NLEVEL     = 0
+
+C       INITIALIZE ARRAY XOUT
+        XOUT   = -1.0
+
+        DO IPIX = 1,NPIX             ! LOOP OVER ALL SORTED PIXELS
+           ILOC = RLOC(IPIX)         ! STARTING PIXEL LOCATION
+
+C          UPDATE LEVEL
+           IF (NLEVEL > 0) THEN
+              RLEVEL = RLEVEL + 1.0
+              NLEVEL = 0
+
+              DO I=1,NPIX
+                 IF(XOUT(I) == 0) XOUT(I) = -1
+              ENDDO
+           ENDIF
+
+C          PUT STARTING PIXEL IN QUE
+           IQUE          = 0
+           NQUE          = 1
+           NEXTPIX(NQUE) = ILOC
+C          write(6,*)' ----------- stack( ',nstack,'): ',ILOC
+
+           DO WHILE(IQUE < NQUE) 
+
+C             GET NEXT PIXEL FROM QUE
+              IQUE  = IQUE + 1
+              ISLOC = NEXTPIX(IQUE)
+c             write(6,*)' from stack( ',istack,') got: ',ISLOC
+
+              IF (XOUT(ISLOC) <= 0.0) THEN
+C                PIXEL NOT VISITED OR SET YET 
+
+C                GIVE UNVISITED PIXEL CURRENT WATERSHED LEVEL
+                 XOUT(ISLOC) = RLEVEL
+
+c                write(6,*)' XOUT(',ISLOC,'): ',RLEVEL
+
+C                INCREMENT NUMBER OF PIXELS IN AT THIS LEVEL
+                 NLEVEL = NLEVEL + 1
+
+C                PLACE PIXEL'S UNVISITED HIGHER NEIGHBORS IN QUE
+
+C                UPPER
+                 NEIGH = ISLOC - NX
+                 IF (NEIGH > 0 .AND. 
+     &                XOUT(NEIGH) < 0.0 .AND.
+     &               (XIMG(NEIGH) >=  XIMG(ISLOC))) THEN
+                     NQUE = NQUE + 1
+                     IF (NQUE > NQUESIZE) THEN
+                        CALL ERRT(102,' QUE OVERFLOW',NQUE)
+                        RETURN
+                     ENDIF
+                     NEXTPIX(NQUE) = NEIGH
+                     XOUT(NEIGH)   = 0.0
+                 ENDIF
+
+C                LOWER
+                 NEIGH = ISLOC + NX
+                 IF (NEIGH <= NPIX .AND. 
+     &                XOUT(NEIGH) < 0.0 .AND.
+     &               (XIMG(NEIGH) >= XIMG(ISLOC))) THEN
+                     NQUE = NQUE + 1
+                     IF (NQUE > NQUESIZE) THEN
+                        CALL ERRT(102,'QUE OVERFLOW',NQUE)
+                        RETURN
+                     ENDIF
+                     NEXTPIX(NQUE) = NEIGH
+                     XOUT(NEIGH)   = 0.0
+                 ENDIF
+
+C                LEFT
+                 NEIGH = ISLOC - 1
+                 IF (MOD(NEIGH,NX) > 0 .AND. 
+     &               XOUT(NEIGH) < 0 .AND.
+     &               (XIMG(NEIGH) >= XIMG(ISLOC))) THEN
+                     NQUE = NQUE + 1
+                     IF (NQUE > NQUESIZE) THEN
+                        CALL ERRT(102,'QUE OVERFLOW',NQUE)
+                        RETURN
+                     ENDIF
+                     NEXTPIX(NQUE) = NEIGH
+                     XOUT(NEIGH)   = 0.0
+                 ENDIF
+
+C                RIGHT
+                 NEIGH = ISLOC + 1 
+                 IF (MOD(ISLOC,NX) > 0 .AND.
+     &               XOUT(NEIGH) < 0 .AND.
+     &              (XIMG(NEIGH) >= XIMG(ISLOC))) THEN
+                     NQUE = NQUE + 1
+                     IF (NQUE > NQUESIZE) THEN
+                        CALL ERRT(102,'QUE OVERFLOW',NQUE)
+                        RETURN
+                     ENDIF
+                     NEXTPIX(NQUE) = NEIGH
+                     XOUT(NEIGH)   = 0.0
+                 ENDIF
+
+C                UPPER-LEFT
+                 NEIGH = ISLOC - NX - 1 
+                 IF (NEIGH > 0 .AND.
+     &               MOD(NEIGH,NX) > 0 .AND.
+     &               XOUT(NEIGH) < 0 .AND.
+     &              (XIMG(NEIGH) >= XIMG(ISLOC))) THEN
+                     NQUE = NQUE + 1
+                     IF (NQUE > NQUESIZE) THEN
+                        CALL ERRT(102,'QUE OVERFLOW',NQUE)
+                        RETURN
+                     ENDIF
+                     NEXTPIX(NQUE) = NEIGH
+                     XOUT(NEIGH)   = 0.0
+                 ENDIF
+
+C                LOWER-LEFT
+                 NEIGH = ISLOC + NX - 1 
+                 IF (NEIGH <= NPIX .AND.
+     &               MOD(NEIGH,NX) > 0 .AND.
+     &               XOUT(NEIGH) < 0 .AND.
+     &              (XIMG(NEIGH) >= XIMG(ISLOC))) THEN
+                     NQUE = NQUE + 1
+                     IF (NQUE > NQUESIZE) THEN
+                        CALL ERRT(102,'QUE OVERFLOW',NQUE)
+                        RETURN
+                     ENDIF
+                     NEXTPIX(NQUE) = NEIGH
+                     XOUT(NEIGH)   = 0.0
+                 ENDIF
+
+C                UPPER-RIGHT
+                 NEIGH = ISLOC - NX + 1 
+                 IF (NEIGH > 0 .AND.
+     &               MOD(ISLOC,NX) > 0 .AND.
+     &               XOUT(NEIGH)   < 0 .AND.
+     &              (XIMG(NEIGH) >= XIMG(ISLOC))) THEN
+                     NQUE = NQUE + 1
+                     IF (NQUE > NQUESIZE) THEN
+                        CALL ERRT(102,'QUE OVERFLOW',NQUE)
+                        RETURN
+                     ENDIF
+                     NEXTPIX(NQUE) = NEIGH
+                     XOUT(NEIGH)   = 0.0
+                 ENDIF
+
+C                LOWER-RIGHT
+                 NEIGH = ISLOC + NX + 1 
+                 IF (NEIGH <= NPIX .AND.
+     &               MOD(ISLOC,NX) > 0 .AND.
+     &               XOUT(NEIGH) < 0 .AND.
+     &              (XIMG(NEIGH) >= XIMG(ISLOC))) THEN
+                     NQUE = NQUE + 1
+                     IF (NQUE > NQUESIZE) THEN
+                        CALL ERRT(102,'QUE OVERFLOW',NQUE)
+                        RETURN
+                     ENDIF
+                     NEXTPIX(NQUE) = NEIGH
+                     XOUT(NEIGH)   = 0.0
+                 ENDIF
+
+              ENDIF  ! END OF: IF (XOUT(ISLOC) <= 0  .AND......
+           ENDDO     ! END OF: DO WHILE (IQUE <= NQUE)
+
+           NSHEDS = RLEVEL
+           IF (NLEVEL > 0) THEN
+              WRITE(NOUT,90)NSHEDS,NLEVEL
+ 90           FORMAT('  WATERSHED: ',I0,'  HAS: ',I0,' PIXELS')
+           ENDIF
+
+        ENDDO        ! END OF: IPIX = 1,NPIX  LOOP OVER SORTED PIXELS
+       
+        NSHEDS = RLEVEL
+        IF (NLEVEL <= 0) NSHEDS = NSHEDS -1
+        WRITE(NOUT,*)' ' 
+        WRITE(NOUT,*)' WATERSHEDS: ',NSHEDS 
+
+        IRTFLG = 0
+        END
+@
+
+
+1.4
+log
+@GPL_2010
+@
+text
+@d3 1
+a3 1
+C   WATERSHED           K WAS WRONG MAR 01 ARDEAN LEITH                                                        *
+d27 1
+a27 1
+C  MEDIAN(LUN1,LUN2,NSAM,NROW,NSLICE)                                                                    *
+d29 1
+a29 1
+C  PURPOSE: MEDIAN FILTRATION USING BOX OR CROSS PATTERN KERNAL                                                           *
+a32 2
+C IMAGE_PROCESSING_ROUTINE                                             *
+C                                                                      *
+d36 1
+a36 1
+        SUBROUTINE WATERSHED(LUN1,LUN2,NSAM,NROW,NSLICE,FMINT)
+d40 1
+a40 1
+        REAL, ALLOCATABLE, DIMENSION(:) :: VOL,VOLOUT
+d42 1
+a42 1
+        NPIX = NSAM * NROW * NSLICE
+d48 1
+a48 1
+           CALL ERRT(46,'CE WA, VOL ',MWANT)
+d52 1
+a52 1
+        IF (NSLICE .EQ. 1)  THEN
+d56 1
+a56 1
+           CALL REDVOL(LUN1,NSAM,NROW,1,1,VOL,IRTFLG)
+d59 1
+a59 1
+           CALL WATER2(VOL,VOLOUT,NSAM,NROW,FMINT,IRTFLG)
+d63 1
+a63 1
+           CALL WRTVOL(LUN2,NSAM,NROW,1,1,VOLOUT,IRTFLG)
+d81 1
+a81 1
+        SUBROUTINE WATER2(XIMG,XOUT,NSAM,NROW,FMINT,IRTFLG)
+d83 1
+a83 1
+        REAL, DIMENSION(NSAM*NROW)          :: XIMG,XOUT
+d85 2
+a86 2
+        REAL, ALLOCATABLE, DIMENSION(:)     :: XSORT,RLOC
+        REAL, ALLOCATABLE, DIMENSION(:)     :: NEXTPIX
+a89 1
+
+d91 1
+a91 1
+        NPIX       = NSAM * NROW
+d98 2
+a99 2
+           MWANT = NPIX * 3 + NQUESIZE
+           CALL ERRT(46,'CE WA, RLOC,... ',MWANT)
+d122 1
+a122 1
+           IF (NLEVEL .GT. 0) THEN
+d127 1
+a127 1
+                 IF(XOUT(I) .EQ. 0) XOUT(I) = -1
+d137 1
+a137 1
+           DO WHILE(IQUE .LT. NQUE) 
+d144 1
+a144 1
+              IF (XOUT(ISLOC) .LE. 0.0) THEN
+d158 4
+a161 4
+                 NEIGH = ISLOC - NSAM
+                 IF (NEIGH .GT. 0 .AND. 
+     &                XOUT(NEIGH) .LT. 0.0 .AND.
+     &               (XIMG(NEIGH) .GE.  XIMG(ISLOC))) THEN
+d163 1
+a163 1
+                     IF (NQUE .GT. NQUESIZE) THEN
+d172 4
+a175 4
+                 NEIGH = ISLOC + NSAM
+                 IF (NEIGH .LE. NPIX .AND. 
+     &                XOUT(NEIGH) .LT. 0.0 .AND.
+     &               (XIMG(NEIGH) .GE. XIMG(ISLOC))) THEN
+d177 1
+a177 1
+                     IF (NQUE .GT. NQUESIZE) THEN
+d187 3
+a189 3
+                 IF (MOD(NEIGH,NSAM) .GT. 0 .AND. 
+     &               XOUT(NEIGH) .LT. 0 .AND.
+     &               (XIMG(NEIGH) .GE. XIMG(ISLOC))) THEN
+d191 1
+a191 1
+                     IF (NQUE .GT. NQUESIZE) THEN
+d201 3
+a203 3
+                 IF (MOD(ISLOC,NSAM) .GT. 0 .AND.
+     &               XOUT(NEIGH) .LT. 0 .AND.
+     &              (XIMG(NEIGH) .GE. XIMG(ISLOC))) THEN
+d205 1
+a205 1
+                     IF (NQUE .GT. NQUESIZE) THEN
+d214 5
+a218 5
+                 NEIGH = ISLOC - NSAM - 1 
+                 IF (NEIGH .GT. 0 .AND.
+     &               MOD(NEIGH,NSAM) .GT. 0 .AND.
+     &               XOUT(NEIGH) .LT. 0 .AND.
+     &              (XIMG(NEIGH) .GE. XIMG(ISLOC))) THEN
+d220 1
+a220 1
+                     IF (NQUE .GT. NQUESIZE) THEN
+d229 5
+a233 5
+                 NEIGH = ISLOC + NSAM - 1 
+                 IF (NEIGH .LE. NPIX .AND.
+     &               MOD(NEIGH,NSAM) .GT. 0 .AND.
+     &               XOUT(NEIGH) .LT. 0 .AND.
+     &              (XIMG(NEIGH) .GE. XIMG(ISLOC))) THEN
+d235 1
+a235 1
+                     IF (NQUE .GT. NQUESIZE) THEN
+d244 5
+a248 5
+                 NEIGH = ISLOC - NSAM + 1 
+                 IF (NEIGH .GT. 0 .AND.
+     &               MOD(ISLOC,NSAM) .GT. 0 .AND.
+     &               XOUT(NEIGH) .LT. 0 .AND.
+     &              (XIMG(NEIGH) .GE. XIMG(ISLOC))) THEN
+d250 1
+a250 1
+                     IF (NQUE .GT. NQUESIZE) THEN
+d259 5
+a263 5
+                 NEIGH = ISLOC + NSAM + 1 
+                 IF (NEIGH .LE. NPIX .AND.
+     &               MOD(ISLOC,NSAM) .GT. 0 .AND.
+     &               XOUT(NEIGH) .LT. 0 .AND.
+     &              (XIMG(NEIGH) .GE. XIMG(ISLOC))) THEN
+d265 1
+a265 1
+                     IF (NQUE .GT. NQUESIZE) THEN
+d273 2
+a274 2
+              ENDIF  ! END OF: IF (XOUT(ISLOC) .LE. 0  .AND......
+           ENDDO     ! END OF: DO WHILE (IQUE .LE. NQUE)
+d277 1
+a277 1
+           IF (NLEVEL .GT. 0) THEN
+d279 1
+a279 1
+ 90           FORMAT('  WATERSHED: ',I8,'  HAS: ',I8,' PIXELS')
+d285 1
+a285 1
+        IF (NLEVEL .LE. 0) NSHEDS = NSHEDS -1
+@
+
+
+1.3
+log
+@GPL License fixed
+@
+text
+@a5 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d7 5
+a11 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d13 1
+a13 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d18 1
+a18 1
+C=* This program is distributed in the hope that it will be useful,    *
+d20 1
+a20 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a21 1
+C=*                                                                    *
+d23 1
+a23 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.2
+log
+@HRI GPL License used
+@
+text
+@a5 1
+C * SPIDER - MODULAR IMAGE PROCESSING SYSTEM.    AUTHOR: J.FRANK       *
+d9 1
+a9 1
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *  
+a28 6
+
+C * COPYRIGHT (C)1985, 1999. HEALTH RESEARCH INCORPORATED (HRI),       *
+C * ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+C * THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO HRI AND ARE NOT   *
+C * TO BE DISCLOSED TO OTHERS OR USED FOR PURPOSES OTHER THAN INTENDED *
+C * WITHOUT WRITTEN APPROVAL OF HRI.                                   *
+@
+
+
+1.1
+log
+@new
+@
+text
+@d7 24
+@
+

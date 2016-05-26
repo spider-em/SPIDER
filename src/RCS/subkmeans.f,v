@@ -1,0 +1,860 @@
+head	1.12;
+access;
+symbols
+	pre_getangas:1.11
+	GPL2010:1.11
+	pre_GPL2010:1.10
+	pre_var_equation:1.9
+	pre_fftwrings:1.8
+	pre_opfiles:1.8
+	src:1.8
+	best-code:1.8
+	x-named-regs:1.8
+	x:1.8
+	v13-00:1.8
+	pre_GPL:1.7
+	prec_CA:1.6
+	noindx:1.6
+	Bproc:1.6
+	oct21:1.6
+	last77:1.5;
+locks; strict;
+comment	@c @;
+
+
+1.12
+date	2013.02.05.15.50.27;	author leith;	state Exp;
+branches;
+next	1.11;
+
+1.11
+date	2010.06.24.13.27.03;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2009.08.26.17.55.01;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2009.06.12.14.24.14;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2005.10.17.21.09.53;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2003.10.16.16.46.19;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	99.06.04.21.02.19;	author pawel;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	97.10.15.14.29.16;	author pawel;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	97.08.25.19.19.19;	author pawel;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	97.08.25.13.31.13;	author pawel;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	95.10.10.18.37.55;	author pawel;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	94.05.13.12.53.12;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@copied from USER2:[PSIDER.CMSREF] on 11 May 1994
+@
+
+
+1.12
+log
+@prompts
+@
+text
+@C++*********************************************************************
+C
+C SUBKMEANS.F
+C                  OUTPUT COMMENTS                JUN 2009 ARDEAN LEITH
+C
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C SUBKMEANS
+C
+C	W():       WEIGHTS TO BE USED PER OBJECT.
+C	INUM():	   FACTORS TO BE USED TO BE USED.
+C	NFAC:      NUMBER OF FACTORS TO BE USED
+C	NFTOT:     TOTAL NUMBER OF FACTORS USED FOR MULTIVARIATE 
+C                  STATISTICAL ANALYSIS (MSA) I.E; CORAN OR PCA.
+C	NOBJ:      NUMBER OF OBJECTS.
+C       KCLASS:    NUMBER OF CLUSTERS
+C       X(M,L):    COORDINATES OF EACH OBJECT
+C       IC(M):     CLUSTER TO WHICH OBJECT M BELONGS.
+C       CM(L,N):   COORDINATES OF THE CENTROIDS OF EACH CLUSTER.
+C       WSS(N):    SUM OF THE SQUARED DISTANCES OF ALL OBJECTS
+C                  (IN A CLUSTER) TO THEIR CENTROID.
+C       NC(N):     NUMBER OF OBJECTS IN EACH CLUSTER.
+C       D:         SUM OF E(N)
+C                  (THIS HAS TO BE REDUCED AFTER EACH NEW CLUSTERING)
+C       TYPE:      TYPE OF INPUT FILE e.g. _PIX, _IMC, _SEQ
+C
+C	CALLS:
+C	  NEWKMEANS, FILSEQP, FILGET, SAVDN1, SAVD, SAVDC
+C
+C	NOTE: FILE ON UNIT=LUNF IS ALREADY OPEN.
+C             CLOSE THE FILE ON RETURN FROM THIS ROUTINE.
+C
+C--*********************************************************************
+
+        SUBROUTINE SUBKMEANS(X, CM, NIMI,IC, NC, WSS, AT, NOBJ, NFAC,
+     &                       KCLASS, W, NFTOT, COO, INUM, BB, WW, DB,
+     &                       IX_DIM,USE_DISK,ISEED,LUNF,LUND,ITYPE)
+
+        INCLUDE 'CMBLOCK.INC' 
+        INCLUDE 'CMLIMIT.INC' 
+
+        REAL                  :: X(NFAC,IX_DIM), CM(NFAC,KCLASS)
+        INTEGER               :: IC(NOBJ), NIMI(NOBJ), NC(KCLASS)
+        REAL                  :: WSS(KCLASS)
+        REAL                  :: AT(NFAC), W(NFAC), COO(NFTOT)
+        INTEGER               :: INUM(NFAC)
+        REAL                  :: DLIST(3)
+
+        LOGICAL               :: USE_DISK,NEWFILE
+        CHARACTER(LEN=MAXNAM) :: FINPAT,FINP,DOCNAM
+        INTEGER               :: IDUM(1)
+
+C	SQUARE ROOTS OF THE WEIGHTS.
+        DO J = 1, NFAC
+           W(J) = SQRT(W(J))
+        ENDDO
+
+	IF (ISEED .EQ. 0)  THEN
+C	   IC(NOBJ): ASSIGN A CLUSTER TO EACH OBJECT. 
+           I = 1
+           DO WHILE (I .LE. NOBJ)
+              K = 1
+              DO WHILE (K .LE. KCLASS)
+                 IC(I) = K
+                 K     = K + 1
+                 I     = I + 1
+              ENDDO
+           ENDDO
+	ELSE
+C          RANDOM ASSIGNMENT
+	   T = 1.0/FLOAT(KCLASS)
+	   I = 1
+	   DO WHILE (I .LE. NOBJ)
+	      Q  = RAND_P(ISEED)
+	      QT = T
+	      K  = 1
+	      DO WHILE (QT .LE. Q)
+	         QT = QT +T 
+	         K  = K + 1
+	      ENDDO
+	      IC(I) = K
+	      I     = I + 1
+	   ENDDO
+	ENDIF
+
+        IDR = 0
+        CALL NEWKMEANS(NOBJ,NFAC,X,IC,KCLASS,CM,WSS,NC,D,IDR,
+     &               INUM,NIMI,W,COO,NFTOT,IX_DIM,USE_DISK,LUNF,ITYPE)
+
+C       CALCULATE CITERIA ...
+
+c$omp   parallel do if(nfac.ge.64), private(i)
+	DO I = 1,NFAC
+           AT(I) = 0.0
+        ENDDO
+
+        DO L = 1,NOBJ
+c$omp     parallel do if(nfac.ge.64), private(i)
+          DO I = 1,NFAC
+            AT(I) = AT(I) + X(I,L)
+          ENDDO
+        ENDDO
+
+c$omp   parallel do if(nfac.ge.64), private(i)
+        DO I = 1,NFAC
+          AT(I) = AT(I)/NOBJ
+        ENDDO
+
+        BB = 0.0
+c$omp   parallel do if(nfac.ge.64), private(i,j),reduction(+:bb)
+        DO I = 1,NFAC
+           DO J = 1,KCLASS
+              BB = BB + (CM(I,J) - AT(I))**2
+           ENDDO
+        ENDDO
+
+C	REWIND THE UNIT=LUNF
+
+        IF (USE_DISK) THEN
+           IF (ITYPE .EQ. 1) THEN
+C             UNFORMATTED FILE FOR _SEQ IMAGE DATA
+              CALL REW(LUNF,1)
+           ELSE
+C             FORMATTED FILE FOR IMAGE OR PIXEL COOR.
+              CALL REWF(LUNF,1)
+           ENDIF
+        ENDIF
+
+	DO I=1,KCLASS
+ 	   WSS(I) = 0.0
+	ENDDO
+
+        DO L = 1, NOBJ
+          IF (USE_DISK) THEN
+             IF (ITYPE .EQ. 1) THEN
+C               UNFORMATTED FILE FOR _SEQ IMAGE DATA
+                READ(LUNF)   (COO(J), J = 1, NFTOT),FDUM
+             ELSE
+C               FORMATTED FILE FOR IMAGE OR PIXEL COOR.
+                READ(LUNF,*) (COO(J), J = 1, NFTOT),FDUM,FDUM,FDUM,FDUM
+             ENDIF
+
+             DO J = 1, NFAC
+                X(J,IX_DIM) = W(J) * COO(INUM(J))
+             ENDDO
+             K = IX_DIM
+          ELSE
+             K = L
+          ENDIF
+
+          WW = 0.0
+c$omp     parallel do if(nfac.ge.64), private(i),reduction(+:ww)
+          DO I = 1, NFAC
+              WW = WW + (X(I,K) - CM(I,IC(L)))**2
+          ENDDO
+	  WSS(IC(L)) = WSS(IC(L))+WW
+        ENDDO
+        WW = 0.0
+	DO I=1,KCLASS
+ 	   WW = WW + WSS(I)
+	ENDDO
+
+C       Davis-Bouldin criterium
+	DB = 0.0
+	DO J=1,KCLASS
+	   RK = -1.0
+	   DO I=1,KCLASS
+	      IF (I.NE.J)  THEN
+	         SMK = 0.0
+c$omp            parallel do if(nfac.ge.64), private(l),reduction(+:smk)
+	         DO L=1,NFAC
+ 	            SMK = SMK + (CM(L,J) - CM(L,I))**2
+	         ENDDO
+c$omp            end parallel do 
+	         RJK = (WSS(J) + WSS(I) ) / SMK
+	         RK  = AMAX1(RK,RJK)
+	      ENDIF
+	   ENDDO
+ 	   DB = DB + RK
+	ENDDO
+
+	DB = DB / K
+
+C	WRITE THE OBJECTS IN EACH CLASS TO A FILE.
+        NMAX = 0
+        CALL FILSEQP(FINPAT,NLET,IDUM,NMAX,NIMA,
+     &        'SELECTION DOC FILE TEMPLATE (e.g.: SEL***)',IRTFLG)
+
+C	LOOK THROUGH IC(), PUT ALL OBJECTS BELONGING TO CLASS IN FILE. 
+
+        DO ICLASS = 1, KCLASS
+
+C	  CREATE A FILENAME FOR CLASS ICLASS
+          CALL FILGET(FINPAT,FINP,NLET,ICLASS,IRTFLG)
+
+C	  NUMBER OF OBJECT IN THIS GROUP
+          IGRP = 0
+          NLS  = 2
+	  DO I = 1, NOBJ
+            IF (ICLASS .EQ. IC(I)) THEN
+
+C             THE OBJECT BELONG TO CLASS ICLASS, STORE IT.
+              IGRP     = IGRP + 1
+              DLIST(1) = IGRP
+              DLIST(2) = NIMI(I)
+              IAP      = 0
+              CALL SAVDN1(LUND,FINP,DLIST,NLS,IGRP-1,IAP)
+            ENDIF
+	  ENDDO
+
+C         CLOSE EACH CLASS FILE OPENED BY SAVDN1 ROUTINE.
+          CLOSE(LUND)
+	ENDDO
+
+        CALL  SAVDC
+
+C       OPEN OUTPUT DOC FILE NAME
+        CALL OPENDOC(DOCNAM,.TRUE.,NLET,LUND,NICDOCO,.TRUE.,
+     &         'CLASS MEMBERSHIP DOC FILE',
+     &         .FALSE.,.FALSE.,.TRUE.,NEWFILE,IRTFLG)
+        IF (IRTFLG .NE. 0)  GOTO 9999
+
+        CALL LUNDOCPUTCOM(NICDOCO,
+     &                    'KEY, IMAGE/ELEMENT,    CLASS ',IRTFLG)
+
+        DO I = 1, NOBJ
+           DLIST(1) = NIMI(I)
+           DLIST(2) = IC(I)
+           CALL LUNDOCWRTDAT(NICDOCO,I, DLIST,2,IRTFLG)
+        ENDDO
+
+9999    CLOSE(LUND)
+        CLOSE(LUNF)
+
+        END
+@
+
+
+1.11
+log
+@GPL_2010
+@
+text
+@d30 11
+a40 11
+C	W():	WEIGHTS TO BE USED PER OBJECT.
+C	INUM():	FACTORS TO BE USED TO BE USED.
+C	NFAC:	NUMBER OF FACTORS TO BE USED
+C	NFTOT:	TOTAL NUMBER OF FACTORS USED FOR MULTIVARIATE STATISTICAL
+C	 	ANALYSIS (MSA) I.E; CORAN OR PCA.
+C	NOBJ	NUMBER OF OBJECTS.
+C       KCLASS   : NUMBER OF CLUSTERS
+C       X(M,L)   : COORDINATES OF EACH OBJECT
+C       IC(M)    : CLUSTER TO WHICH OBJECT M BELONGS.
+C       CM(L,N)  : COORDINATES OF THE CENTROIDS OF EACH CLUSTER.
+C       WSS(N)   : SUM OF THE SQUARED DISTANCES OF ALL OBJECTS
+d42 2
+a43 2
+C       NC(N)    : NUMBER OF OBJECTS IN EACH CLUSTER.
+C       D        : SUM OF E(N)
+d45 1
+a45 1
+C       TYPE     : TYPE OF INPUT FILE e.g. _PIX, _IMC, _SEQ
+d207 1
+a207 1
+     &                'TEMPLATE FILENAME (e.g.: SEL***)',IRTFLG)
+d209 1
+a209 1
+C	LOOKING THROUGH IC(), PUT ALL OBJECTS BELONGING TO CLASS IN FILE. 
+d239 2
+a240 1
+     &         'OBJECT DOCUMENT',.FALSE.,.FALSE.,.TRUE.,NEWFILE,IRTFLG)
+@
+
+
+1.10
+log
+@LUNF, * BUG
+@
+text
+@d7 4
+a10 3
+C=* This file is part of:                                              * 
+C=* SPIDER - Modular Image Processing System.   Author: J. FRANK       *
+C=* Copyright 1985-2009  Health Research Inc.                          *
+d21 1
+a21 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a22 1
+C=*                                                                    *
+d24 1
+a24 1
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *       
+@
+
+
+1.9
+log
+@Comment in doc file
+@
+text
+@d7 5
+a11 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2009  Health Research Inc.                      *
+d13 1
+a13 6
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+C=*                                                                    *
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d18 1
+a18 1
+C=* This program is distributed in the hope that it will be useful,    *
+d24 1
+a24 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+d45 1
+d62 6
+a67 6
+        DIMENSION    X(NFAC,IX_DIM), CM(NFAC,KCLASS)
+        DIMENSION    IC(NOBJ), NIMI(NOBJ), NC(KCLASS), WSS(KCLASS)
+        DIMENSION    AT(NFAC),W(NFAC), COO(NFTOT), INUM(NFAC)
+
+        PARAMETER                (NLIST = 3)
+        REAL                  :: DLIST(NLIST)
+d141 1
+d144 1
+d156 2
+a157 1
+                READ(LUNF)   (COO(J), J = 1, NFTOT)
+d159 2
+a160 1
+                READ(LUNF,*) (COO(J), J = 1, NFTOT)
+d194 1
+@
+
+
+1.8
+log
+@GPL License fixed
+@
+text
+@d4 1
+d8 1
+a8 1
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d69 2
+a70 2
+        PARAMETER    (NLIST = 3)
+        DIMENSION    DLIST(NLIST)
+d72 3
+a74 3
+        LOGICAL               :: USE_DISK
+        CHARACTER(LEN=MAXNAM) :: FINPAT,FINP
+        INTEGER               :: ILIST(1)
+d204 1
+a204 1
+        CALL FILSEQP(FINPAT,NLET,ILIST,NMAX,NIMA,
+d207 1
+a207 2
+C	LOOKING THROUGH IC(), PUT ALL OBJECTS BELONGING TO THE SAME
+C	CLASS IN A FILE. 
+d233 10
+d244 3
+a246 4
+           DLIST(1) = I
+           DLIST(2) = NIMI(I)
+           DLIST(3) = IC(I)
+           CALL SAVD(LUND, DLIST, NLIST, IRTFLG)
+d249 1
+a249 2
+        CALL  SAVDC
+        CLOSE(LUND)
+@
+
+
+1.7
+log
+@CA & CL rewrite
+@
+text
+@d1 1
+a1 1
+C++************************************************************************
+d6 23
+a28 6
+C * SPIDER - MODULAR IMAGE PROCESSING SYSTEM.    AUTHOR: J.FRANK       *
+C * COPYRIGHT (C)1985, 2003. HEALTH RESEARCH INCORPORATED (HRI),       *
+C * ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+C * THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO HRI AND ARE NOT   *
+C * TO BE DISCLOSED TO OTHERS OR USED FOR PURPOSES OTHER THAN INTENDED *
+C * WITHOUT WRITTEN APPROVAL OF HRI.                                   *
+d55 1
+a55 1
+C--************************************************************************
+@
+
+
+1.6
+log
+@OpenMP
+@
+text
+@d3 1
+a3 1
+C $$ SUBKMEANS.FOR
+d5 8
+a12 9
+C **************************************************************************
+C *  SPIDER - MODULAR IMAGE PROCESSING SYSTEM.  AUTHOR: J.FRANK            *
+C *  COPYRIGHT (C)1981,1987, WADSWORTH CENTER FOR LABORATORIES AND         *
+C *  RESEARCH, NEW YORK STATE DEPARTMENT OF HEALTH, ALBANY, NY 12201.      *
+C *  THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO THE CENTER FOR       *
+C *  LABORATORIES AND RESEARCH AND ARE NOT TO BE DISCLOSED TO OTHERS OR    *
+C *  USED FOR PURPOSES OTHER THAN INTENDED WITHOUT WRITTEN APPROVAL OF     *
+C *  THE CENTER FOR LABORATORIES AND RESEARCH   			   *
+C **************************************************************************
+d14 1
+a15 3
+C
+C $$ SUBKMEANS.FOR
+C
+a20 1
+C	X()	DATA OBJECTS.
+d22 9
+d35 2
+a36 2
+C	NOTE: file on unit=111 is already open.
+C             close the file on return from this routine.
+d40 18
+a57 15
+        SUBROUTINE  SUBKMEANS(X, CM, NIMI,IC, NC, WSS, AT, NOBJ, NFAC,
+     &                        KCLASS, W, NFTOT, COO, INUM, BB, WW, DB,
+     &                        X_DIM,USE_DISK,ISEED)
+
+        INTEGER NLIST,NOBJ,NFAC,KCLASS,NFTOT,X_DIM
+        DIMENSION  X(NFAC,X_DIM), CM(NFAC,KCLASS)
+        DIMENSION  IC(NOBJ), NIMI(NOBJ), NC(KCLASS), WSS(KCLASS)
+        DIMENSION  AT(NFAC),W(NFAC), COO(NFTOT), INUM(NFAC)
+        PARAMETER  (NLIST = 3)
+        DIMENSION  DLIST(NLIST)
+        LOGICAL USE_DISK
+        CHARACTER*80 FINPAT,FINP
+        INTEGER*4 ILIST(1)
+        INTEGER NMAX,J,NIMA,NLET,X42,IGRP,IAP,L,I
+        DATA  NDOUT/55/
+d60 14
+a73 13
+          W(J) = SQRT(W(J))
+        END DO
+	IF(ISEED.EQ.0)  THEN
+C	IC(NOBJ): ASSIGN A CLUSTER TO EACH OBJECT. 
+        I = 1
+        DO WHILE (I .LE. NOBJ)
+          K = 1
+          DO WHILE (K .LE. KCLASS)
+            IC(I) = K
+            K = K + 1
+            I = I + 1
+          END DO
+        END DO
+d75 14
+a88 15
+C  Random assignment
+	T=1.0/FLOAT(KCLASS)
+        I = 1
+        DO WHILE (I .LE. NOBJ)
+	Q=RAND_P(ISEED)
+	QT=T
+          K = 1
+          DO WHILE (QT.LE.Q)
+	  QT=QT+T 
+          K = K + 1
+          END DO
+         IC(I) = K
+         I = I + 1
+        END DO
+	
+d90 1
+a90 13
+C
+C       NOBJ     : NUMBER OF OBJECTS
+C       KCLASS   : NUMBER OF CLUSTERS
+C       NFAC     : NUMBER OF (FACTORS) DIMENSION IN THE COORD. SYSTEM
+C       X(M,L)   : COORDINATES OF EACH OBJECT
+C       IC(M)    : CLUSTER TO WHICH OBJECT M BELONGS.
+C       CM(L,N)  : COORDINATES OF THE CENTROIDS OF EACH CLUSTER.
+C       WSS(N)   : SUM OF THE SQUARED DISTANCES OF ALL OBJECTS
+C                  (IN A CLUSTER) TO THEIR CENTROID.
+C       NC(N)     : NUMBER OF OBJECTS IN EACH CLUSTER.
+C       D        : SUM OF E(N)
+C                  (this has to be reduced after each new clustering)
+C
+d92 4
+a95 2
+        CALL  NEWKMEANS(NOBJ,NFAC,X,IC,KCLASS,CM,WSS,NC,D,IDR,
+     $                  INUM,NIMI,W,COO,NFTOT,X_DIM,USE_DISK)
+d97 8
+a104 10
+C
+C  Calculate citeria ...
+C
+c$omp parallel do if(nfac.ge.64), private(i)
+	DO I = 1, NFAC
+          AT(I) = 0.0
+        END DO
+        DO L = 1, NOBJ
+c$omp parallel do if(nfac.ge.64), private(i)
+          DO I = 1, NFAC
+d106 5
+a110 4
+          END DO
+        END DO
+c$omp parallel do if(nfac.ge.64), private(i)
+        DO I = 1, NFAC
+d112 2
+a113 1
+        END DO
+d115 19
+a133 11
+c$omp parallel do if(nfac.ge.64), private(i,j),reduction(+:bb)
+        DO I = 1, NFAC
+          DO J = 1, KCLASS
+            BB = BB + (CM(I,J) - AT(I))**2
+          END DO
+        END DO
+C	REWIND THE UNIT=111
+C	
+        IF (USE_DISK) CALL REW(111,1)
+	DO    I=1,KCLASS
+ 	  WSS(I)=0.0
+d135 1
+d137 11
+a147 6
+          IF(USE_DISK) THEN
+            READ(111)   (COO(J), J = 1, NFTOT)
+            DO J = 1, NFAC
+              X(J,X_DIM) = W(J) * COO(INUM(J))
+            END DO
+            K = X_DIM
+d149 3
+a151 2
+            K = L
+          END IF
+d153 9
+a161 9
+c$omp parallel do if(nfac.ge.64), private(i),reduction(+:ww)
+         DO I = 1, NFAC
+            WW = WW + (X(I,K) - CM(I,IC(L)))**2
+          END DO
+	WSS(IC(L))=WSS(IC(L))+WW
+        END DO
+          WW = 0.0
+	DO    I=1,KCLASS
+ 	  WW=WW+WSS(I)
+d163 17
+a179 12
+C
+C  Davis-Bouldin criterium
+C
+	DB=0.0
+	DO    J=1,KCLASS
+	RK=-1.0
+	DO  I=1,KCLASS
+	IF(I.NE.J)  THEN
+	SMK=0.0
+c$omp parallel do if(nfac.ge.64), private(l),reduction(+:smk)
+	DO    L=1,NFAC
+ 	  SMK=SMK+(CM(L,J)-CM(L,I))**2
+d181 3
+a183 8
+	RJK=(WSS(J)+WSS(I))/SMK
+	RK=AMAX1(RK,RJK)
+	ENDIF
+	ENDDO
+ 	DB=DB+RK
+	ENDDO
+	DB=DB/K
+C
+a184 2
+C                       
+
+d186 2
+a187 2
+        CALL  FILSEQP(FINPAT,NLET,ILIST,NMAX,NIMA,
+     &                'TEMPLATE FILENAME (ex: SEL***)',IRTFLG)
+a188 1
+C
+d191 2
+a192 2
+C
+        DO X42 = 1, KCLASS
+d194 2
+a195 2
+C	  CREATE A FILENAME FOR CLASS X42
+          CALL FILGET(FINPAT,FINP,NLET,X42,IRTFLG)
+d199 1
+a199 1
+          NLS=2
+d201 1
+a201 1
+            IF (X42 .EQ. IC(I)) THEN
+d203 2
+a204 2
+C             THE OBJECT BELONG TO CLASS X42, STORE IT.
+              IGRP = IGRP + 1
+d207 4
+a210 4
+              IAP = 0
+              CALL SAVDN1(NDOUT,FINP,DLIST,NLS,IGRP-1,IAP)
+            END IF
+	  END DO
+d213 3
+a215 2
+          CLOSE(NDOUT)
+	END DO
+d217 5
+a221 5
+          DLIST(1) = I
+          DLIST(2) = NIMI(I)
+          DLIST(3) = IC(I)
+44        CALL  SAVD(NDOUT, DLIST, NLIST, IRTFLG)
+        END DO
+d224 3
+a226 2
+        CLOSE(NDOUT)
+        CLOSE(111)
+@
+
+
+1.5
+log
+@*** empty log message ***
+@
+text
+@a49 1
+CNO_SAVE
+d102 1
+a102 1
+c$doacross if(nfac.ge.64), local(i)
+d107 1
+a107 1
+c$doacross if(nfac.ge.64), local(i)
+d112 1
+a112 1
+c$doacross if(nfac.ge.64), local(i)
+d117 1
+a117 1
+c$doacross if(nfac.ge.64), local(i,j),reduction(bb)
+a122 1
+
+d140 2
+a141 2
+c$doacross if(nfac.ge.64), local(i),reduction(ww)
+          DO I = 1, NFAC
+d156 2
+a157 2
+	DO  6502  I=1,KCLASS
+	IF(I.EQ.J)  GOTO  6502
+d159 1
+a159 1
+c$doacross if(nfac.ge.64), local(l),reduction(smk)
+d165 2
+a166 1
+6502	CONTINUE
+@
+
+
+1.4
+log
+@corrected
+@
+text
+@d128 3
+a130 2
+	DO  5601  I=1,KCLASS
+5601	WSS(I)=0.0
+d149 3
+a151 2
+	DO  5602  I=1,KCLASS
+5602	WW=WW+WSS(I)
+d156 1
+a156 1
+	DO  6501  J=1,KCLASS
+d162 3
+a164 2
+	DO  6503  L=1,NFAC
+6503	SMK=SMK+(CM(L,J)-CM(L,I))**2
+d168 2
+a169 1
+6501	DB=DB+RK
+@
+
+
+1.3
+log
+@||
+@
+text
+@d39 1
+a39 1
+        INTEGER NLIST,NOBJ,NFAC,KCLASS, NFTOT,X_DIM
+a95 6
+        IF(USE_DISK) THEN
+          X_DIM = 1
+        ELSE
+          X_DIM = NOBJ
+        END IF
+
+d98 1
+a98 1
+     $                  INUM,NIMI,W, COO,NFTOT,X_DIM,USE_DISK)
+@
+
+
+1.2
+log
+@nosave
+@
+text
+@d109 2
+a110 1
+        DO I = 1, NFAC
+d114 1
+d119 1
+d124 1
+d147 1
+d165 1
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d50 1
+a50 1
+
+@

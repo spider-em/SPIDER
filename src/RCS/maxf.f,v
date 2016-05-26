@@ -1,0 +1,489 @@
+head	1.8;
+access;
+symbols
+	pre_getangas:1.8
+	GPL2010:1.8
+	pre_GPL2010:1.7
+	pre_var_equation:1.7
+	pre_fftwrings:1.7
+	pre_opfiles:1.7
+	src:1.7
+	best-code:1.7
+	x-named-regs:1.7
+	x:1.7
+	v13-00:1.7
+	pre_GPL:1.5
+	prec_CA:1.5
+	noindx:1.5
+	Bproc:1.5
+	oct21:1.5
+	last77:1.4;
+locks; strict;
+comment	@c @;
+
+
+1.8
+date	2010.06.24.13.26.08;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2005.10.17.20.04.43;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2005.10.17.17.59.55;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	99.09.08.16.59.23;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	98.01.26.14.52.05;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	97.10.10.17.47.22;	author pawel;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	96.12.30.16.56.03;	author pawel;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	94.05.13.12.50.02;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@copied from USER2:[PSIDER.CMSREF] on 11 May 1994
+@
+
+
+1.8
+log
+@GPL_2010
+@
+text
+@
+C ++********************************************************************
+C                                                                      *
+C                                                                      *
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C   MAXF(NOUT,LUN1,LUN2,NSAM1,NROW1,NSAM2,NROW2,IXB,IYB)
+C
+C   PARAMETERS:
+C         LUN1          LOGICAL UNIT NUMBER
+C         LUN2          LOGICAL UNIT NUMBER 
+C         NSAM1,NROW1   DIMENSIONS OF IMAGE
+C         NSAM2,NROW2   DIMENSIONS OF IMAGE
+C         IXB,IYB
+C
+C--*********************************************************************
+
+      SUBROUTINE MAXF(LUN1,LUN2,NSAM1,NROW1,NSAM2,NROW2,
+     &                IXB,IYB,KX,KY,C,FINT,IDUMP,R,CRIT)
+
+C     DANGEROUS TO USE CMBLOCK DUE TO USE OF AV HERE!
+      COMMON /UNITS/LUN,NIN,NOUT,NECHO,IFOUND,NPROC,NDAT
+
+      INCLUDE 'CMLIMIT.INC'
+      COMPLEX        BUF(1)
+      COMMON /IOBUF/ BUFF(NBUFSIZ)
+      EQUIVALENCE    (BUF,BUFF)
+
+C     PEAK ARRAY SIZE
+      PARAMETER (NREFLM = 200)
+      COMPLEX   CDUM
+      INTEGER   HINDDUM,KINDDUM
+      REAL      FINTDUM,KXDUM,KYDUM
+      COMMON    CDUM(NREFLM),HINDDUM(NREFLM),KINDDUM(NREFLM),
+     &          FINTDUM(NREFLM),KXDUM(NREFLM),KYDUM(NREFLM),AREA(1)
+C     WARNING:  TVWN3 PASSES STUFF IN UNLABELED COMMON, HERE ONLY
+C               AREA IS USED DIRECTLY FROM THE COMMON
+
+      COMPLEX  C
+      REAL     IMAX,IMAX1
+
+      IYA   = KX+NROW1/2 - IYB/2
+      IXA   = KY+NSAM1/2-  IXB/2+1
+      IMAX  = 0
+      FINT  = 0.0
+      NA    = 0
+      R2    = R**2
+      NWIN2 = IYB*IXB
+
+C     DO LOOP TO FIND MAX OF WINDOW VALUES LOGICALLY SHOULD BE:
+C     IYA-1+K AND IXA-1+I.  BUT IT WORKS RIGHT THIS WAY!
+
+      DO  K=1,IYB
+         CALL REDLIN(LUN1,BUFF,NSAM1,IYA+K)
+         IF (IDUMP.EQ.1) WRITE(NDAT,99)(BUFF(IXA+I),I=1,IXB)
+99       FORMAT(1X,12G10.3)
+         DO  I=1,IXB
+           B = BUFF(IXA+I)
+           FINT = FINT+B
+           NA = NA+1
+           AREA(NA) = B
+           IF(B.GT.IMAX) THEN
+             IMAX=B
+             KX=K
+             KY=I
+           ENDIF
+	ENDDO
+      ENDDO
+
+      IF(R.GT.FLOAT(IYB)) GOTO 174
+
+C     COMPUTE AVERAGE OF AREA OUTSIDE REFLECTION
+      NAV = 0
+      AV = 0.
+      DO  K = 1,IYB
+        NOFF = (K-1)*IXB
+        K2 = (K-KX)**2
+        DO  I = 1,IXB
+           IF (FLOAT(K2)+FLOAT((I-KY)**2).GE.R2) THEN
+              AV = AV +AREA(NOFF+I)
+              NAV = NAV+1
+           ELSE
+              AREA(NOFF+I) = -1000.
+           ENDIF
+	ENDDO
+      ENDDO
+      AV = AV / FLOAT(NAV)
+
+C     NOW COMPUTE STANDARD DEVIATION OF OUTSIDE AREA
+C     AND APPLY THRESHOLD CRITERION
+
+      SIG = 0.
+      DO  I = 1,NWIN2
+         IF (AREA(I).GE.-999.) SIG = SIG+(AREA(I)-AV)**2
+      ENDDO
+
+      SIG = SQRT(SIG/FLOAT(NAV))
+      IF (IMAX-AV.LT.CRIT*SIG) THEN
+         FINT = -1.
+         RETURN
+      ENDIF
+
+C     WRITE(NDAT,700) KX,KY
+C174  KX=KX-NROW1/2+IYA
+C     KY=KY-NSAM1/2-1+IXA
+174   KY=KY-NROW1/2+IYA
+      KX=KX-NSAM1/2-1+IXA
+      KXF = KX
+      KYF = KY
+      IF (KX .LT. 0) THEN
+         KYF = -KY
+         KXF = -KX
+      ENDIF
+
+C     FIND LOCATION IN FOURIER FILE
+175   CONTINUE
+      IF (KYF .GE. 0)  THEN
+         ITREC=KYF
+      ELSE
+	 ITREC=KYF+NROW1+1
+      ENDIF
+      CALL REDLIN(LUN2,BUF,NSAM2,ITREC)
+C     WRITE(NOUT,700) KXF,KYF,ITREC,NADDR
+
+      C = BUF(KX+1)
+C     IF (PHF.NE.1.) C=CONJG(C)
+      IF (KXF.EQ.0) C=CONJG(C)
+      IMAX1 = IMAX-AV
+C     WRITE(NDAT,181)C,IMAX,IMAX1,AV,SIG
+181   FORMAT(1X,6G12.3)
+
+      RETURN
+      END
+@
+
+
+1.7
+log
+@GPL License fixed
+@
+text
+@a5 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d7 5
+a11 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d13 1
+a13 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d18 1
+a18 1
+C=* This program is distributed in the hope that it will be useful,    *
+d20 1
+a20 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a21 1
+C=*                                                                    *
+d23 1
+a23 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.6
+log
+@HRI GPL License used
+@
+text
+@a5 2
+C * SPIDER - MODULAR IMAGE PROCESSING SYSTEM.    AUTHOR: J.FRANK      **
+C *  SPIDER - MODULAR IMAGE PROCESSING SYSTEM.    AUTHOR: J.FRANK      *
+d9 1
+a9 1
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *  
+a28 6
+
+C *  COPYRIGHT (C)1985, 1996 HEALTH RESEARCH INCORPORATED, ALBANY, NY. *
+C * THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO HEALTH            *
+C * RESEARCH INC. AND ARE NOT TO BE DISCLOSED TO OTHERS OR USED        *
+C * FOR PURPOSES OTHER THAN INTENDED WITHOUT WRITTEN APPROVAL OF       *
+C * HEALTH RESEARCH INC.                                               *
+a40 1
+C--************************************************************************
+@
+
+
+1.5
+log
+@CMLIMIT.INC
+@
+text
+@d6 1
+d8 24
+d48 1
+@
+
+
+1.4
+log
+@used commons
+@
+text
+@a27 1
+CNO_SAVE
+d31 1
+a31 1
+      PARAMETER      (NBUFSIZE = 17008)
+d33 1
+a33 1
+      COMMON /IOBUF/ BUFF(NBUFSIZE)
+@
+
+
+1.3
+log
+@*** empty log message ***
+@
+text
+@d2 11
+a12 1
+C++***********************************************************************
+d14 1
+a14 1
+C $$ MAXF:
+d16 1
+a16 2
+C       CALL MAXF(NOUT,LUN1,LUN2,NSAM1,NROW1,NSAM2,NROW2,IXB,IYB)
+C
+d21 1
+a21 2
+C         IXB
+C         IYB
+d26 5
+a30 1
+     &             IXB,IYB,KX,KY,C,FINT,IDUMP,R,CRIT)
+d32 16
+a47 1
+      COMPLEX  C,BUF(1)
+a48 3
+      COMMON   ADUM(80),BUFF(1200),AREA(1)
+      COMMON /UNITS/LUN,NIN,NOUT,NECHO,IFOUND,NPROC,NDAT
+      EQUIVALENCE(BUF,BUFF)
+d50 6
+a55 6
+      IYA  = KX+NROW1/2 - IYB/2
+      IXA  = KY+NSAM1/2-  IXB/2+1
+      IMAX = 0
+      FINT = 0.
+      NA   = 0
+      R2   = R**2
+d57 4
+a60 5
+C
+C
+C DO LOOP TO FIND MAX OF WINDOW VALUES LOGICALLY SHOULD BE:
+C IYA-1+K AND IXA-1+I.  BUT IT WORKS RIGHT THIS WAY!
+C
+d63 1
+a63 1
+         IF(IDUMP.EQ.1) WRITE(NDAT,99)(BUFF(IXA+I),I=1,IXB)
+d77 1
+a77 1
+C
+d80 1
+a80 1
+C COMPUTE AVERAGE OF AREA OUTSIDE REFLECTION
+d87 6
+a92 6
+          IF(FLOAT(K2)+FLOAT((I-KY)**2).GE.R2) THEN
+            AV = AV +AREA(NOFF+I)
+            NAV = NAV+1
+          ELSE
+            AREA(NOFF+I) = -1000.
+          ENDIF
+d95 5
+a99 5
+      AV = AV/FLOAT(NAV)
+C
+C NOW COMPUTE STANDARD DEVIATION OF OUTSIDE AREA
+C AND APPLY THRESHOLD CRITERION
+C
+d102 1
+a102 1
+        IF(AREA(I).GE.-999.) SIG = SIG+(AREA(I)-AV)**2
+d106 3
+a108 3
+      IF(IMAX-AV.LT.CRIT*SIG) THEN
+        FINT = -1.
+        RETURN
+d112 2
+a113 2
+C174   KX=KX-NROW1/2+IYA
+C      KY=KY-NSAM1/2-1+IXA
+d118 3
+a120 3
+      IF(KX.LT.0) THEN
+        KYF = -KY
+        KXF = -KX
+d123 1
+a123 1
+C  FIND LOCATION IN FOURIER FILE
+d125 5
+a129 13
+C175   CALL FFIND(NSAM2,NROW2,KXF,KYF,ITREC,NADDR,PHF)
+C 700  FORMAT(1X,6I9)
+C      IF (ITREC .GT. NROW2 .OR. ITREC .LT. 1) THEN
+C        CALL ERRT(7,'MAXF  ',NE)
+C        FINT = -1.
+C       WRITE(NOUT,700) KXF,KYF,ITREC,NADDR
+C        RETURN
+C      ENDIF
+	IF(KYF.GE.0)  THEN
+	ITREC=KYF
+	ELSE
+	ITREC=KYF+NROW1+1
+	ENDIF
+d132 4
+a135 3
+      C=BUF(KX+1)
+C      IF(PHF.NE.1.) C=CONJG(C)
+      IF(KXF.EQ.0) C=CONJG(C)
+d140 1
+@
+
+
+1.2
+log
+@corrected?
+@
+text
+@d38 1
+a38 1
+      DO 150 K=1,IYB
+d42 1
+a42 1
+         DO 100 I=1,IXB
+d52 2
+a53 2
+100      CONTINUE
+150   CONTINUE
+d60 1
+a60 1
+      DO 170 K = 1,IYB
+d63 1
+a63 1
+        DO 165 I = 1,IXB
+d70 2
+a71 2
+165     CONTINUE
+170   CONTINUE
+d78 1
+a78 1
+      DO 200 I = 1,NWIN2
+d80 1
+a80 1
+200   CONTINUE
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d89 4
+a92 2
+174   KX=KX-NROW1/2+IYA
+      KY=KY-NSAM1/2-1+IXA
+d101 6
+a106 6
+
+175   CALL FFIND(NSAM2,NROW2,KXF,KYF,ITREC,NADDR,PHF)
+ 700  FORMAT(1X,6I9)
+      IF (ITREC .GT. NROW2 .OR. ITREC .LT. 1) THEN
+        CALL ERRT(7,'MAXF  ',NE)
+        FINT = -1.
+d108 7
+a114 3
+        RETURN
+      ENDIF
+
+d117 3
+a119 2
+      C=BUF(NADDR)
+      IF(PHF.NE.1.) C=CONJG(C)
+a123 1
+      RETURN
+@

@@ -1,0 +1,436 @@
+head	1.8;
+access;
+symbols
+	pre_getangas:1.8
+	GPL2010:1.8
+	pre_GPL2010:1.7
+	pre_var_equation:1.6
+	pre_fftwrings:1.6
+	pre_opfiles:1.6
+	src:1.6
+	best-code:1.6
+	named-reg:1.6
+	x-named-regs:1.6
+	x:1.6
+	v13-00:1.5
+	pre_GPL:1.4
+	prec_CA:1.4
+	noindx:1.3;
+locks; strict;
+comment	@c @;
+
+
+1.8
+date	2010.06.24.13.26.27;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2009.06.26.13.41.48;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2005.11.15.21.51.04;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2005.10.17.21.05.19;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2003.09.04.13.08.18;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2002.07.02.18.21.30;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2002.06.28.16.24.30;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2002.06.27.19.38.55;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.8
+log
+@GPL_2010
+@
+text
+@
+C++*********************************************************************
+C
+C    PARSESYMPAR             
+C                 REWRITTEN FROM RDPR             JUNE 2002 ARDEAN LEITH
+C                 [] DEFAULT FOR VARIABLES        OCT  2005 ARDEAN LEITH
+C                 MPI                             JUN  2009 ARDEAN LEITH
+C
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C   PARSESYMPAR(PROMPTNID,RESPONSE,PROMPT,NCHARP,SYMPARID,NCHARI,
+C               SYMPARVAL,NCHARV,CALLERRT,IRTFLG)
+C
+C   PURPOSE:   FIND SYMPARID AND SYMPARVAL FROM INPUT STRING(S)
+C
+C   PARAMETERS: 
+C
+C   CALL TREE:  DRIV1 
+C                v          
+C               SYMPAR       
+C                v 
+C       'FR F'   |-> FILESYMPAR -> ----PARSESYMPAR
+C                |                     SETSYMPAR
+C                |                                     
+C       'FR L'   |-> LOCALSYMPAR   
+C                |     v            
+C          'FR'  |-> RDPRMC ----->  RDPR -> FRSYMPAR  -> PARSESYMPAR                    ^
+C                     ^                                  EVALSYMPAR
+C                     ^                                  SETSYMPAR
+C      ?..? <ID> -----'                              
+C                                                   
+C
+C
+C23456789 123456789 123456789 123456789 123456789 123456789 123456789 12
+C--*********************************************************************
+
+       SUBROUTINE PARSESYMPAR(PROMPTNID,RESPONSE,PROMPT,NCHARP,
+     &                       SYMPARID,NCHARI,
+     &                       SYMPARVAL,NCHARV,CALLERRT,IRTFLG)
+
+      INCLUDE 'CMBLOCK.INC'
+      INCLUDE 'CMLIMIT.INC'
+
+      CHARACTER (LEN=*) ::       PROMPTNID,RESPONSE,PROMPT,SYMPARID
+      CHARACTER (LEN=*) ::       SYMPARVAL
+      CHARACTER(LEN=1) ::        NULL
+      LOGICAL       ::           FROMBACK,CALLERRT
+
+      CALL SET_MPI(ICOMM,MYPID,MPIERR)
+
+      NULL      = CHAR(0)
+      IRTFLG    = 1
+
+      SYMPARID  = NULL
+      SYMPARVAL = NULL
+      PROMPT    = NULL
+
+      IF (PROMPTNID .NE. NULL) THEN
+C        SEE IF THERE IS A PROMPT STRING IN PROMPTNID STRING
+         CALL CHARINSIDE(PROMPTNID,'?','?',.FALSE.,.FALSE.,
+     &                   IPQ1,IPQ2,NCHARP)
+
+         IF (CALLERRT .AND. NCHARP .LT. 3) THEN
+            IF (MYPID .LE. 0) THEN
+               WRITE(NDAT,*)' *** NO PROMPT (?PROMPT?) IN: ',PROMPTNID
+            ENDIF
+            CALL ERRT(101,'PARSESYMPAR',NE)
+            RETURN
+         ENDIF
+
+         IF (NCHARP .GT. 0) PROMPT = PROMPTNID(IPQ1:IPQ2) // NULL
+
+C        SEE IF THERE IS A VARIABLE NAME STRING IN PROMPTNID STRING
+C        IF (NCHARP .GT. 0) HAVE ?...?, FIND LAST VARIABLE <LABEL> STRING 
+         FROMBACK = (NCHARP .GT. 0)
+
+         CALL CHARINSIDE(PROMPTNID,'[',']',.FALSE.,FROMBACK,
+     &                   IP1,IP2,NCHARI)
+         IF (CALLERRT .AND. NCHARI .LT. 3) THEN
+ccc         IF (MYPID .LE. 0) THEN
+ccc            WRITE(NDAT,*)' *** NO VARIABLE NAME ([NAME]) IN: ',
+ccc  &                   PROMPTNID
+ccc         ENDIF
+ccc            CALL ERRT(101,'PARSESYMPAR',NE)
+            RETURN
+         ENDIF
+         IF (NCHARI .GT. 0) THEN
+            SYMPARID                = PROMPTNID(IP1:IP2) // NULL
+            SYMPARID(1:1)           = '<'
+            SYMPARID(NCHARI:NCHARI) = '>'
+         ENDIF
+      ENDIF
+
+
+      IF (RESPONSE .NE. NULL) THEN
+C        SEE IF THERE IS A VARIABLE ID STRING IN RESPONSE STRING
+         CALL CHARINSIDE(RESPONSE,'?','?',.FALSE.,.FALSE.,IPQ,IPQ,NCQ)
+
+C        IF (NCQ .GT. 0) HAVE ?...?, FIND LAST VARIABLE <NAME> STRING 
+         FROMBACK = (NCQ .GT. 0)
+
+         CALL CHARINSIDE(RESPONSE,'[',']',.FALSE.,FROMBACK,
+     &                   IP1,IP2,NCHARI)
+         IF (CALLERRT .AND. NCHARI .LT. 3) THEN
+            IF (MYPID .LE. 0) THEN
+             WRITE(NDAT,*)' *** NO VARIABLE NAME ([NAME]) IN: ',RESPONSE
+            ENDIF
+            CALL ERRT(101,'PARSESYMPAR',NE)
+            RETURN
+         ENDIF
+         IF (NCHARI .GT. 0) THEN
+            SYMPARID = '<' // RESPONSE(IP1+1:IP2-1) // '>' 
+         ENDIF
+
+C        GET VARIABLE VALUE IN RESPONSE STRING
+         NCHARV = 0
+         IF (IP2 .LT. LEN(RESPONSE)) THEN
+            SYMPARVAL = RESPONSE(IP2+1:) // NULL
+            NCHARV    = LEN(RESPONSE) - IP2
+         ENDIF
+      ENDIF
+
+      IRTFLG = 0
+
+      END
+
+
+
+@
+
+
+1.7
+log
+@mpi usage
+@
+text
+@a9 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2009  Health Research Inc.                      *
+d11 5
+a15 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d17 1
+a17 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d22 1
+a22 1
+C=* This program is distributed in the hope that it will be useful,    *
+d24 1
+a24 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a25 1
+C=*                                                                    *
+d27 1
+a27 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.6
+log
+@named register support
+@
+text
+@d7 1
+d11 1
+a11 1
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d61 1
+a61 1
+      SUBROUTINE PARSESYMPAR(PROMPTNID,RESPONSE,PROMPT,NCHARP,
+d73 1
+a73 7
+#ifdef USE_MPI
+      include 'mpif.h'
+      icomm = MPI_COMM_WORLD
+      call MPI_COMM_RANK(icomm, mypid, ierr)
+#else
+      mypid = -1
+#endif
+a146 1
+
+a148 1
+      RETURN
+@
+
+
+1.5
+log
+@GPL License fixed
+@
+text
+@d4 3
+a6 1
+C    PARSESYMPAR             REWRITTEN FROM RDPR   JUNE 02 ARDEAN LEITH
+d71 1
+d74 4
+a77 3
+      integer mypid, comm, ierr
+      comm = MPI_COMM_WORLD
+      call MPI_COMM_RANK(comm, mypid,  IERR)
+d93 3
+a95 7
+#ifdef USE_MPI
+            if (mypid .eq. 0) then
+            WRITE(NDAT,*)'*** NO PROMPT (?PROMPT?) IN: ',PROMPTNID
+            endif
+#else
+            WRITE(NDAT,*)'*** NO PROMPT (?PROMPT?) IN: ',PROMPTNID
+#endif
+d102 2
+a103 2
+C        SEE IF THERE IS A PARAMETER LABEL STRING IN PROMPTNID STRING
+C        IF (NCHARP .GT. 0) HAVE ?...?, FIND LAST PARAMETER <LABEL> STRING 
+d106 1
+a106 1
+         CALL CHARINSIDE(PROMPTNID,'<','>',.FALSE.,FROMBACK,
+d109 4
+a112 9
+#ifdef USE_MPI
+            if (mypid .eq. 0) then 
+            WRITE(NDAT,*)'*** NO PARAMETER LABEL (<LABEL>) IN: ',
+     &                   PROMPTNID
+            endif
+#else
+            WRITE(NDAT,*)'*** NO PARAMETER LABEL (<LABEL>) IN: ',
+     &                   PROMPTNID
+#endif
+d116 5
+a120 1
+         IF (NCHARI .GT. 0) SYMPARID = PROMPTNID(IP1:IP2) // NULL
+d125 1
+a125 1
+C        SEE IF THERE IS A PARAMETER ID STRING IN RESPONSE STRING
+d128 1
+a128 1
+C        IF (NCQ .GT. 0) HAVE ?...?, FIND LAST PARAMETER <LABEL> STRING 
+d131 1
+a131 1
+         CALL CHARINSIDE(RESPONSE,'<','>',.FALSE.,FROMBACK,
+d134 3
+a136 9
+#ifdef USE_MPI
+            if (mypid .eq. 0) then
+            WRITE(NDAT,*)'*** NO PARAMETER LABEL (<LABEL>) IN: ',
+     &                   RESPONSE
+            endif
+#else
+            WRITE(NDAT,*)'*** NO PARAMETER LABEL (<LABEL>) IN: ',
+     &                   RESPONSE
+#endif
+d140 3
+a142 1
+         IF (NCHARI .GT. 0) SYMPARID = RESPONSE(IP1:IP2) // NULL
+d144 1
+a144 1
+C        GET PARAMETER VALUE IN RESPONSE STRING
+@
+
+
+1.4
+log
+@mpi
+@
+text
+@d2 1
+a2 1
+C++************************************************************************
+d7 23
+a29 6
+C * SPIDER - MODULAR IMAGE PROCESSING SYSTEM.    AUTHOR: J.FRANK       *
+C * COPYRIGHT (C)1985, 2002. HEALTH RESEARCH INCORPORATED (HRI),       *
+C * ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+C * THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO HRI AND ARE NOT   *
+C * TO BE DISCLOSED TO OTHERS OR USED FOR PURPOSES OTHER THAN INTENDED *
+C * WITHOUT WRITTEN APPROVAL OF HRI.                                   *
+@
+
+
+1.3
+log
+@iparnum
+@
+text
+@d52 6
+d72 2
+d75 4
+d92 6
+d100 1
+d118 6
+d126 1
+@
+
+
+1.2
+log
+@*** empty log message ***
+@
+text
+@d82 1
+a82 1
+            CALL ERRT(101,'PARSESYMPAR',NE)
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d23 1
+a23 1
+C                 v          
+d25 11
+a35 10
+C                | 
+C       'FR F'   |-> FILESYMPAR -> -------------------v
+C                |                                    v
+C       'FR L'   |-> LOCALSYMPAR -> RDPRMC -----------v  
+C                |                                    v
+C          'FR'  |-> RDPRMC -> RDPR -> FRSYMPAR  -> PARSESYMPAR                    ^
+C                     ^                               v
+C                     ^                             EVALSYMPAR
+C      ?..? <ID> -----'                               v
+C                                                   SETSYMPAR
+d73 2
+a74 2
+C        SEE IF THERE IS A PARAMETER ID STRING IN PROMPTNID STRING
+C        IF (NCHARP .GT. 0) HAVE ?...?, FIND LAST PARAMETER <ID> STRING 
+d80 2
+a81 1
+            WRITE(NDAT,*)'*** NO PARAMETER ID (<ID>) IN: ',PROMPTNID
+d93 1
+a93 1
+C        IF (NCQ .GT. 0) HAVE ?...?, FIND LAST PARAMETER <ID> STRING 
+d99 2
+a100 1
+            WRITE(NDAT,*)'*** NO PARAMETER ID (<ID>) IN: ',RESPONSE
+@

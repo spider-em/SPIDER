@@ -1,0 +1,370 @@
+head	1.6;
+access;
+symbols
+	pre_getangas:1.6
+	GPL2010:1.6
+	pre_GPL2010:1.5
+	pre_var_equation:1.5
+	pre_fftwrings:1.5
+	pre_opfiles:1.5
+	src:1.5
+	best-code:1.5
+	x-named-regs:1.5
+	x:1.5
+	v13-00:1.5
+	pre_GPL:1.4;
+locks; strict;
+comment	@c @;
+
+
+1.6
+date	2010.06.24.13.25.57;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2005.10.17.21.09.32;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2004.05.11.18.40.31;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2004.02.09.17.54.05;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2004.01.21.19.08.03;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2004.01.14.20.35.11;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@new
+@
+
+
+1.6
+log
+@GPL_2010
+@
+text
+@
+C***********************************************************************
+C INCORT
+C                         REWRITTEN      SEP 2003 ARDEAN LEITH
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C  INCORT(NPIX,NUMIM,NFAC,LUNT,USE_PCA,
+C         MATS,EVALS,U,WEIGHTI,WEIGHTP,TRACE,SUMW,IRTFLG)
+C
+C  PARAMETERS:
+C       NPIX	  NUMBER OF PIXELS                              (INPUT)
+C	NUMIM     NUMBER OF IMAGES                              (INPUT)
+C	NFAC 	  NUMBER OF EIGENVECTORS REQUESTED              (INPUT)
+C	LUNT	  TRANSPOSED IMAGE I/O UNIT                     (INPUT)
+C	USE_PCA   CORAN VS PCA FLAG                             (INPUT)
+C	MATS()    MATRIX & EIGENVECTOR ARRAY                    (OUTPUT) 
+C	EVALS()   EIGENVALUE ARRAY                              (OUTPUT)
+C	BLU()     INPUT BUFFER                                  (WORK)
+C	WEIGHTI() SUM OF PIXEL VALUES FOR THIS IMAGE            (INPUT)
+C	WEIGHTP() SUM OF PIXEL VALUES AT THIS PIXEL             (INPUT)
+C	TRACE	  SUM OF THE ELEMENTS ARRAY DIAGONAL            (OUTPUT)
+C	SUMW      SUM OF ALL THE PIXEL VALUES IN ALL IMAGES     (INPUT)
+C	IRTFLG    ERROR FLAG                                    (OUTPUT)
+C
+C  NOTE:  IMAGE ROW & COLUMNS HAVE BEEN TRANSPOSED ALREADY ON UNIT LUNT
+C
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C***********************************************************************
+        
+        SUBROUTINE INCORT(NPIX,NUMIM,NFAC,LUNT,USE_PCA,MATS,
+     &                    EVALS,BLU,WEIGHTI,WEIGHTP,TRACE,SUMW,IRTFLG)
+                                                  
+        INCLUDE 'CMBLOCK.INC'
+
+        REAL                              :: MATS(NUMIM,NUMIM)  
+        REAL                              :: EVALS(NUMIM), BLU(NUMIM)
+        REAL                              :: WEIGHTI(NUMIM) 
+        REAL                              :: WEIGHTP(NPIX)
+        REAL, ALLOCATABLE, DIMENSION(:,:) :: EVECTS
+
+C       AUTOMATIC ARRAYS
+        INTEGER,PARAMETER                 :: LWORK=100
+        REAL                              :: WORK(LWORK*NPIX)
+        INTEGER                           :: IWORK(5*NUMIM)
+        INTEGER                           :: IFAIL(NUMIM)
+
+        LOGICAL                           :: USE_PCA
+
+C       SET MATS ARRAY = 0.0
+        MATS     = 0.0
+
+C       READ ALL THE ROWS. EACH ROW CONTAINS VALUES FROM ONE PIXEL
+        DO I = 1, NPIX
+
+C           READ THE WHOLE PIXEL  IN BLU ARRAY.
+            READ(LUNT,REC=I,IOSTAT=IERR) BLU
+
+C           WE ARE ASSUMING ARRAY IS SYMMETRICAL.
+C	    COMPUTE  MATS(NUMIM,NUMIM) = MATS'. MATS WHERE MATS' IS MATS TRANSPOSE.
+
+            IF (USE_PCA) THEN
+
+C              SUBSTRACT AV. PIXEL VALUE.
+               BLU = BLU - (WEIGHTP(I) / NPIX)
+
+               DO J=1,NUMIM
+                  DO JJ =1,J
+                     MATS(J, JJ) = MATS(J,JJ) + (BLU(J) * BLU(JJ))   
+                     MATS(JJ,J)  = MATS(J,JJ)   
+                  ENDDO
+               ENDDO
+            ELSE
+               PIA = WEIGHTP(I)
+
+               DO J=1,NUMIM
+                  DO JJ =1,J
+                     MATS(J,JJ) = MATS(J,JJ) + (BLU(J) * BLU(JJ)) / PIA 
+                  ENDDO
+               ENDDO
+            ENDIF
+        ENDDO
+
+
+C       ALL THE IMAGES HAVE BEEN READ.
+
+        IF (.NOT. USE_PCA) THEN
+C          WEIGHTI(K) IS THE SUM OF ALL PIXELS IN ONE IMAGE
+           DO J =1,NUMIM
+              DO JJ =1,J
+                 AAA        =  SQRT(WEIGHTI(J) * WEIGHTI(JJ))
+                 MATS(J,JJ) =  MATS(J, JJ) / AAA  -  AAA / SUMW
+              ENDDO
+           ENDDO
+        ENDIF
+
+C       "TRACE" OF A MATRIX IS THE SUM OF THE ELEMENTS ON DIAGONAL
+        TRACE = 0.0
+        DO J=1, NUMIM
+           TRACE = TRACE + MATS(J, J)
+        ENDDO
+
+C       COMPUTE EIGENVALUES AND EIGENVECTORS.
+
+#ifdef  SP_LAPACK
+C       USE LAPACK EIGENVECTOR ROUTINE
+
+        ALLOCATE (EVECTS(NUMIM,NUMIM),STAT=IRTFLG)
+        IF (IRTFLG .NE. 0) THEN
+            MWANT = NUMIM**2
+            CALL ERRT(46,'EVECTS',MWANT)
+            RETURN
+        ENDIF
+
+        LWORKT = LWORK * NPIX 
+        WRITE(NOUT,*) ' Using LAPACK eigenvalues routine.'
+        CALL ssyevx('V', 'A', 'L', NUMIM, MATS, NUMIM, 
+     &              DUM,DUM, IDUM,IDUM,
+     &              0.0, NGOT, EVALS, EVECTS, NUMIM, 
+     &              WORK, LWORKT, IWORK, IFAIL, IRTFLG)
+
+         WRITE(NOUT,*)' RETURNED:',NGOT, 'EIGENVALUES.'
+
+         WRITE(NOUT,*)
+     &        ' USED LWORK: ',LWORKT,'  OPTIMAL LWORK: ', WORK(1)
+
+C        REVERSE ORDER OF EIGENVALUES & EIGENVECTORS 
+         IEND = NGOT / 2
+
+         MATS = EVECTS
+         IF (ALLOCATED(EVECTS)) DEALLOCATE(EVECTS)
+
+         DO I=1,IEND
+            IT         = NGOT-I+1
+            TMP        = EVALS(I)
+            EVALS(I)   = EVALS(IT)
+            EVALS(IT)  = TMP
+
+            BLU        = MATS(:,I)
+            MATS(:,I)  = MATS(:,IT)
+            MATS(:,IT) = BLU(:)
+         ENDDO 
+
+#else
+C       USE SPIDER EIGENVECTOR ROUTINE
+        CALL VPROP(NUMIM,  NUMIM,  MATS, EVALS,  BLU,  IRTFLG)
+#endif       
+        IF (IRTFLG .NE. 0)  THEN
+           CALL ERRT(102,'DIAGONALIZATION FAILURE',IRTFLG)
+           RETURN
+        ENDIF
+
+C       EVALS() HOLDS THE EIGENVALUES 
+C       WHILE MATS() HOLDS THE CORRESPONDING EIGENVECTORS.
+
+c       WRITE(NOUT,*) ' EIGENVALUES:'
+c       WRITE(NOUT,90) (EVALS(K),K=1,NFAC)
+c90     FORMAT(5(1PG12.5,' '))
+c       WRITE(NOUT,*) ' EIGENVECTORS:'
+c       DO I=1,NFAC
+c            WRITE(NOUT,92) (MATS(K,I),K=1,NUMIM)
+c       ENDDO
+c92     FORMAT(5(1PG12.5,' '),/,5(1PG12.5,' '),/,
+c     &        5(1PG12.5,' '),/,5(1PG12.5,' '),/,1(1PG12.5,' ')/)
+
+     
+        IF (.NOT. USE_PCA) THEN
+           DO L=1,NFAC
+              DO K=1,NUMIM
+                MATS(K,L) = MATS(K,L) * SQRT(SUMW / WEIGHTI(K))
+              ENDDO
+           ENDDO
+        ENDIF
+  
+        RETURN
+        END
+
+#ifdef NEVER
+original old SPIDER
+ 1.63677E-06  1.78826E-06  1.87376E-06  1.93852E-06  2.14307E-06  
+ 2.21764E-06  2.31187E-06  2.35837E-06  2.63528E-06  4.35528E-06
+#endif
+@
+
+
+1.5
+log
+@GPL License fixed
+@
+text
+@a5 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d7 5
+a11 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d13 1
+a13 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d18 1
+a18 1
+C=* This program is distributed in the hope that it will be useful,    *
+d20 1
+a20 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a21 1
+C=*                                                                    *
+d23 1
+a23 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.4
+log
+@pixel average
+@
+text
+@d6 23
+a28 6
+C * SPIDER - MODULAR IMAGE PROCESSING SYSTEM.    AUTHOR: J.FRANK       *
+C * COPYRIGHT (C)1985, 2002. HEALTH RESEARCH INCORPORATED (HRI),       *
+C * ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+C * THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO HRI AND ARE NOT   *
+C * TO BE DISCLOSED TO OTHERS OR USED FOR PURPOSES OTHER THAN INTENDED *
+C * WITHOUT WRITTEN APPROVAL OF HRI.                                   *
+@
+
+
+1.3
+log
+@ssyevx work size bug
+@
+text
+@d71 1
+a71 1
+               BLU = BLU - (WEIGHTP(I) / NUMIM)
+@
+
+
+1.2
+log
+@lunt
+@
+text
+@d49 2
+a50 1
+        REAL                              :: WORK(20*NUMIM)
+d112 1
+d121 2
+a122 1
+        LWORK = 20 * NUMIM 
+d126 1
+a126 1
+     &              WORK, LWORK, IWORK, IFAIL, IRTFLG)
+d130 2
+a131 1
+         WRITE(NOUT,*)' USED LWORK: ',LWORK,'  OPTIMAL LWORK: ', WORK(1)
+d151 2
+a152 1
+         CALL VPROP(NUMIM,  NUMIM,  MATS, EVALS,  BLU,  IRTFLG)
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d14 1
+a14 1
+C  INCORT(NPIX,NUMIM,NFAC,LUNS,USE_PCA,
+d21 1
+a21 1
+C	LUNS	  SEQUENTIAL IMAGE I/O UNIT                     (INPUT)
+d32 1
+a32 2
+C  NOTE:  IMAGE ROW & COLUMNS MAY HAVE BEEN TRANSPOSED ALREADY
+C         ON I/O UNIT LUNS
+d37 1
+a37 1
+        SUBROUTINE INCORT(NPIX,NUMIM,NFAC,LUNS,USE_PCA,MATS,
+d62 1
+a62 1
+            READ(LUNS,REC=I,IOSTAT=IERR) BLU
+@

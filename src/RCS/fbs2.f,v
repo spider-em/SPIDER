@@ -1,0 +1,794 @@
+head	1.12;
+access;
+symbols;
+locks; strict;
+comment	@c @;
+
+
+1.12
+date	2012.12.10.19.00.33;	author leith;	state Exp;
+branches;
+next	1.11;
+
+1.11
+date	2012.12.10.15.04.50;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2011.12.22.15.07.01;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2011.12.21.15.10.10;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2011.12.19.15.04.36;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2011.12.14.17.07.17;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2011.12.12.16.55.34;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2011.12.09.13.09.32;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2011.07.29.15.28.05;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2011.07.25.16.05.16;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2011.07.25.14.45.17;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2011.06.16.16.36.41;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.12
+log
+@WX DIM. BUG
+@
+text
+@C **********************************************************************
+C                                                                      *
+C  FBS2    NEW                            JUL  2011 Gregory Kishchenko *
+C          CHKBOUND                       DEC  2011 ArDean Leith       *
+C          NXP                            DEC  2011 ArDean Leith       *
+C          /NXLD, WX DIM. BUG             DEC  2012 Gregory Kishchenko *
+C **********************************************************************
+C=* Author: Gregory Kishchenko                                         *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2012  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C                                                                      *
+C   REAL FUNCTION FBS2(X,Y, NXLD,NX,NY, FDATA,NXP X1,Y1,XY2, CHKBOUND) *
+C                                                                      *
+C   PURPOSE:    2D FOURIER-BASED BICUBIC SPLINE INTERPOLATION          *
+C               BETWEEN PIXELS.                                        *
+C               ALGORITHM IS FAIRLY FAST AND PRESERVES FINE DETAILS    *
+C               OF  IMAGES                                             *
+C                                                                      *
+C   PARAMETERS: X,Y        LOCATION OF PIXEL                     SENT  *
+C               NXLD       FFTW PAD FOR X DIM.                   SENT  *
+C               NX,NY      IMAGE DIMENSIONS                      SENT  *
+C               FDATA      IMAGE                                 SENT  *
+C               NXP        IMAGE X DIMENSION (PAD OR NOT)        SENT  *
+C               X1,Y1,XY2  DERIVATIVES                           SENT  *
+C               CHKBOUND   FLAG TO CHECK VALUES OF LOCATION      SENT  *
+C                                                                      *
+C   If the values of a function F(X) and its first derivatives F'(X)   *
+C   are known at X=0 and X=1, the function can be interpolated on the  *
+C   interval [0,1] as a third degree polynomial (cubic                 *
+C   interpolation formula):                                            *
+C                                                                      *
+C      F(X)=A0 + A1*X + A2*X**2 + A3*X**3                              *
+C                                                                      *
+C       where A0, A1, A2, and A3 are given by                          *
+C       A0 = F(0)                                                      *
+C       A1 = F'(0)                                                     *
+C       A2 = 3*(F(1)-F(0) - 2*F'(0) - F'(1)                            *
+C       A3 = 2*(F(0)-F(1)) + F'(0) + F'(1)                             *
+C                                                                      *
+C     In order to interpolate a two dimensional grid [0,1] × [0,1], we *
+C   sequentially used 1D cubic interpolation formula. First,  we       *
+C   interpolated the intensities and normal to boundaries first        *
+C   derivatives at two horizontal boundary lines [0,0]-[1,0] and       *
+C   [0,1]-[1,1].                                                       *
+C     For intensities' interpolation the intensities and tangential    *
+C   first derivatives in grid nodes were used.                         *
+C     For normal derivatives' interpolation the normal derivatives and *
+C   cross-derivatives in grid nodes were used.                         *
+C     Thereafter we carried out the vertical cubic interpolation on    *
+C   line between 2 horizontal line with a given value of X to obtain   *
+C   the intensity on vertical coordinate Y inside the square cell.     *
+C   This last procedure was done using previously interpolated values  *
+C   of intensities and their first normal derivatives across cell      *
+C   boundaries.                                                        *
+C       The first derivatives dF/dX, dF/dY and a cross-derivative      *
+C   d2F/dXdY  in grid nodes were obtained by calculating 2D            *
+C   Fourier transform of image, and then calculating the inverse       *
+C   Fourier transform of {ik*F(k,l)}, il*F(k,l)}, and {ikl*F(k,l)}.    *
+C      This well-known formula is computationally efficient and very   *
+C   convenient for calculating the derivatives of a  function defined  *
+C   as a discrete data set, and allows to calculate the derivative in  *
+C   any local point without the finite difference approximation        *
+C   involving the data from neighboring points.                        *
+C                                                                      *
+C      The result of this interpolation is similar to those of         *
+C   standard bicubic spline interpolation (the densities and their     *
+C   both derivatives are continuous at boundaries), but has fewer      *
+C   interpolation artifacts, preserving the fine details and sharp     *
+C   boundaries from blurring, because our algorithm involves the       *
+C   densities and three partial derivatives just from 4 pixels         *
+C   surrounding the area for interpolation instead 16 pixels as in     *
+C   standard algorithm with the finite difference approximation.       *
+C                                                                      *
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C***********************************************************************
+
+      REAL FUNCTION FBS2(X,Y, NXLD,NX,NY, FDATA,NXP, X1,Y1,XY2,CHKBOUND)
+
+      IMPLICIT NONE
+
+      REAL    :: X, Y
+      INTEGER :: NXLD,NX,NY
+      REAL    :: FDATA(NXP,  NY)    ! IMAGE ARRAY
+      INTEGER :: NXP                ! IMAGE X DIM.                
+      REAL    :: X1   (NXLD, NY)    ! X  DERIVATIVE OF IMAGE
+      REAL    :: Y1   (NXLD, NY)    ! Y  DERIVATIVE OF IMAGE
+      REAL    :: XY2  (NXLD, NY)    ! XY DERIVATIVE OF IMAGE
+      LOGICAL :: CHKBOUND           ! X,Y MAY BE OUT OF IMAGE?
+
+      INTEGER :: I, J, I2, J2, I3, J3 
+      REAL    :: A0, A1, A2, A3, B1
+      REAL    :: ADX, BDX, DADX, DBDX
+      REAL    :: DX, DY
+      REAL    :: DXSQR,DXCUB
+
+      I     = FLOOR(X)
+      J     = FLOOR(Y)
+
+      DX    = X - I
+      DY    = Y - J
+      DXSQR = DX **2
+      DXCUB = DX **3
+
+      IF (CHKBOUND) THEN
+         I2 = MODULO(I-1,NX) + 1
+         J2 = MODULO(J-1,NY) + 1
+         I3 = MODULO(I  ,NX) + 1
+         J3 = MODULO(J  ,NY) + 1
+      ELSE
+         I2 = I
+         J2 = J
+         I3 = I + 1
+         J3 = J + 1
+      ENDIF
+
+      A0   = FDATA(I2,J2)
+      A1   = X1(I2,J2)
+      A2   = 3*( FDATA(I3,J2)-A0) -2*A1 - X1(I3,J2)
+      A3   = 2*(-FDATA(I3,J2)+A0)  + A1 + X1(I3,J2)
+      ADX  = A0 + A1*DX + A2*DXSQR + A3*DXCUB
+
+      A0   = FDATA(I2,J3)
+      A1   = X1(I2,J3)
+      A2   = 3*( FDATA(I3,J3)-A0) - 2*A1 - X1(I3,J3)
+      A3   = 2*(-FDATA(I3,J3)+A0) +   A1 + X1(I3,J3)
+      BDX  = A0 + A1*DX + A2*DXSQR + A3*DXCUB
+
+      A0   = Y1 (I2,J2)
+      A1   = XY2(I2,J2)
+      A2   = 3*( Y1(I3,J2)-A0) -2*A1 - XY2(I3,J2)
+      A3   = 2*(-Y1(I3,J2)+A0) +  A1 + XY2(I3,J2)
+      DADX = A0 + A1*DX + A2*DXSQR + A3*DXCUB
+
+      A0   = Y1 (I2,J3)
+      A1   = XY2(I2,J3)
+      A2   = 3*( Y1(I3,J3)-A0) - 2*A1 - XY2(I3,J3)
+      A3   = 2*(-Y1(I3,J3)+A0) +   A1 + XY2(I3,J3)
+      DBDX = A0 + A1*DX + A2*DXSQR + A3*DXCUB
+
+      A2   = 3*(BDX - ADX) - 2*DADX - DBDX
+      A3   = 2*(ADX - BDX) +   DADX + DBDX
+
+      FBS2 = ADX + DADX * DY + A2 * DY**2 + A3 * DY**3
+
+      END FUNCTION FBS2 
+
+
+C *********************** FBS2_PREP ************************************
+C                                                                      *
+C   REAL FUNCTION FBS2(X,Y, NXLD,NX,NY, FDATA,NXP X1,Y1,XY2, CHKBOUND) *
+C                                                                      *
+C   PURPOSE:    2D FOURIER-BASED BICUBIC SPLINE INTERPOLATION          *
+C               BETWEEN PIXELS.                                        *
+C               ALGORITHM IS FAIRLY FAST AND PRESERVES FINE DETAILS    *
+C               OF  IMAGES                                             *
+C                                                                      *
+C   PARAMETERS: F0         IMAGE                                 SENT  *
+C               X1,Y1,XY2  DERIVATIVES                           RET   *
+C               NXLD       FFTW PAD FOR X DIM.                   SENT  *
+C               NX,NY      IMAGE DIMENSIONS                      SENT  *
+C                                                                      *
+C                                                                      *
+C **********************************************************************
+
+       SUBROUTINE FBS2_PREP(F0, X1,Y1,XY2, NXLD,NX,NY, IRTFLG)
+
+       IMPLICIT NONE
+
+       REAL              :: F0 (0:NXLD-1,0:NY-1)
+       REAL              :: X1 (0:NXLD-1,0:NY-1) ! X  DERIVATIVE OF F0
+       REAL              :: Y1 (0:NXLD-1,0:NY-1) ! Y  DERIVATIVE OF F0
+       REAL              :: XY2(0:NXLD-1,0:NY-1) ! XY DERIVATIVE OF F0
+
+       INTEGER           :: NXLD, NX, NY, IRTFLG
+
+       REAL              :: WX(0:NXLD/2-1)          
+       REAL              :: WY(0:NY-1)
+            
+       INTEGER           :: INV,I,J
+       REAL              :: A4
+
+c                           PI  = 3.14159265358979323846
+       REAL, PARAMETER   :: PI2 = 6.28318530717958647692
+
+C      FORWARD FFT
+       INV = 1
+       CALL FMRS(F0, NX,NY,1, 0.0D0, .TRUE.,.TRUE., INV, IRTFLG)
+
+C      CALCULATE DERIVATIVES (dFDATA/dX and dFDATA/dY)
+
+       A4 = PI2 / NX
+
+       DO I=0,NXLD/2-1
+          WX(I) = I * A4
+       ENDDO
+
+       A4 = PI2 / NY
+
+       DO J=0,NY/2
+          WY(J) = J * A4
+       ENDDO
+
+       DO J=NY/2+1,NY-1
+          WY(J) = (J-NY)*A4
+       ENDDO
+
+       DO J=0,NY-1
+          DO I=0,NXLD/2-1
+             X1 (2*I,  J) =  F0(2*I+1,J)  * WX(I)
+             X1 (2*I+1,J) = -F0(2*I,  J)  * WX(I)
+             Y1 (2*I,  J) =  F0(2*I+1,J) * WY(J)
+             Y1 (2*I+1,J) = -F0(2*I,  J) * WY(J)
+             XY2(2*I,  J) =  X1(2*I+1,J) * WY(J)
+             XY2(2*I+1,J) = -X1(2*I,  J) * WY(J)
+          ENDDO
+       ENDDO
+
+C      REVERSE FFT
+       INV = -1
+       CALL FMRS(X1,  NX,NY,1, 0.0D0, .TRUE.,.TRUE., INV, IRTFLG)
+
+C      REVERSE FFT
+       INV = -1
+       CALL FMRS(Y1,  NX,NY,1, 0.0D0, .TRUE.,.TRUE., INV, IRTFLG)
+
+C      REVERSE FFT
+       INV = -1
+       CALL FMRS(XY2, NX,NY,1, 0.0D0, .TRUE.,.TRUE., INV, IRTFLG)
+
+       END
+@
+
+
+1.11
+log
+@A4 = 2 * PI / NX bug
+@
+text
+@d6 1
+a6 1
+C          /NXLD BUG                      DEC  2012 Gregory Kishchenko *
+d199 2
+a200 1
+       REAL, PARAMETER   :: PI = 3.14159265358979323846
+d206 1
+a206 1
+       A4 = 2 * PI / NX
+d208 1
+a208 1
+C      CALCULATE DERIVATIVES (dFDATA/dX and dFDATA/dY)
+a212 1
+       WX(NXLD/2) = 0
+d214 3
+a216 2
+       A4 = 2 * PI / NY   
+       DO J=0,NY/2-1
+a218 1
+       WY(NY/2) = 0
+a223 8
+       DO I=0,NXLD/2-1
+          A4 = WX(I)
+          DO J=0,NY-1
+             X1(2*I,  J) =  F0(2*I+1,J) * A4
+             X1(2*I+1,J) = -F0(2*I,  J) * A4
+          ENDDO
+       ENDDO
+
+a224 1
+          A4 = WY(J)
+d226 6
+a231 4
+             Y1 (2*I,  J) =  F0(2*I+1,J) * A4
+             Y1 (2*I+1,J) = -F0(2*I,  J) * A4
+             XY2(2*I,  J) =  X1(2*I+1,J) * A4
+             XY2(2*I+1,J) = -X1(2*I,  J) * A4
+@
+
+
+1.10
+log
+@speed up, replaced DX**2 , and a0
+@
+text
+@d6 1
+d11 1
+a11 1
+C=* Copyright 1985-2011  Health Research Inc.,                         *
+d201 1
+d205 1
+a205 1
+       A4 = 2 * PI / NXLD    
+d242 1
+d246 1
+d250 1
+@
+
+
+1.9
+log
+@comments
+@
+text
+@d79 1
+a79 1
+C   involving the data from neighboring points.                        *                        *
+d110 1
+d112 2
+a113 2
+      I  = FLOOR(X)
+      J  = FLOOR(Y)
+d115 4
+a118 2
+      DX = X - I
+      DY = Y - J
+d136 1
+a136 1
+      ADX  = A0 + A1*DX + A2*DX**2 + A3*DX**3
+d142 1
+a142 1
+      BDX  = A0 + A1*DX + A2*DX**2 + A3*DX**3
+d148 1
+a148 1
+      DADX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+d154 1
+a154 1
+      DBDX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+d156 2
+a157 5
+      A0   = ADX
+      A1   = DADX
+      B1   = DBDX
+      A2   = 3*(BDX - ADX) - 2*A1 - B1
+      A3   = 2*(ADX - BDX) +   A1 + B1
+d159 1
+a159 1
+      FBS2 = A0+A1*DY+A2*DY**2+A3*DY**3
+@
+
+
+1.8
+log
+@parameter nxp added
+@
+text
+@d27 2
+a28 2
+C     
+C   REAL FUNCTION FBS2(X, Y, NX, NY, FDATA, X1, Y1, XY2,CHKBOUND)           *
+d41 1
+a41 1
+C               CHBOUND    FLAG TO CHECK VALUES OF LOCATION      SENT  *
+d141 1
+a141 1
+      A0   = Y1(I2,J2)
+d147 1
+a147 1
+      A0   = Y1(I2,J3)
+d164 16
+a179 1
+C      ------------------ FBS2_PREP ---------------------------
+@
+
+
+1.7
+log
+@X1   (NXLD, NY), many cosmetic
+@
+text
+@d5 1
+d27 2
+a28 2
+C                                                                      *
+C   FUNCTION FBS2(X, Y, NX, NY, FDATA, X1, Y1, XY2,CHKBOUND)           *
+d35 8
+d93 1
+a93 1
+      REAL FUNCTION FBS2(X,Y, NXLD,NX,NY, FDATA, X1,Y1,XY2, CHKBOUND)
+d99 6
+a104 5
+      REAL    :: FDATA(NX,   NY)    ! 2D DATA ARRAY
+      REAL    :: X1   (NXLD, NY)    ! X  DERIVATIVE OF FDATA
+      REAL    :: Y1   (NXLD, NY)    ! Y  DERIVATIVE OF FDATA
+      REAL    :: XY2  (NXLD, NY)    ! XY DERIVATIVE OF FDATA
+      LOGICAL :: CHKBOUND
+@
+
+
+1.6
+log
+@modulo bug, added chkbound parameter
+@
+text
+@d84 1
+a84 1
+      REAL FUNCTION FBS2(X, Y, NX, NY, FDATA, X1, Y1, XY2, CHKBOUND)
+d89 5
+a93 5
+      INTEGER :: NX, NY
+      REAL    :: FDATA(NX, NY)          ! 2D DATA ARRAY
+      REAL    :: X1(NX, NY)             ! X-DERIVATIVE OF FDATA
+      REAL    :: Y1(NX, NY)             ! Y-DERIVATIVE OF FDATA
+      REAL    :: XY2(NX, NY)            ! XY-DERIVATIVE OF FDATA
+d121 2
+a122 2
+      A2   = 3*(FDATA(I3,J2)-A0)-2*A1-X1(I3,J2)
+      A3   = 2*(A0-FDATA(I3,J2))+A1+X1(I3,J2)
+d127 2
+a128 2
+      A2   = 3*(FDATA(I3,J3)-A0) - 2*A1 - X1(I3,J3)
+      A3   = 2*(A0-FDATA(I3,J3)) +   A1 + X1(I3,J3)
+d133 2
+a134 2
+      A2   = 3*(Y1(I3,J2)-A0) -2*A1 - XY2(I3,J2)
+      A3   = 2*(A0-Y1(I3,J2)) +  A1 + XY2(I3,J2)
+d139 2
+a140 2
+      A2   = 3*(Y1(I3,J3)-A0) - 2*A1 - XY2(I3,J3)
+      A3   = 2*(A0-Y1(I3,J3)) +   A1 + XY2(I3,J3)
+d156 1
+a156 1
+       SUBROUTINE FBS2_PREP(F0, X1,Y1, XY2, NXLD, NX,  NY, IRTFLG)
+d161 3
+a163 3
+       REAL              :: X1 (0:NXLD-1,0:NY-1)
+       REAL              :: Y1 (0:NXLD-1,0:NY-1)
+       REAL              :: XY2(0:NXLD-1,0:NY-1)
+a174 2
+
+C      CALCULATE DERIVATIVES (dFDATA/dX and dFDATA/dY)
+d180 2
+d200 2
+a201 2
+             X1(2*I,J)   =  F0(2*I+1,J) * A4
+             X1(2*I+1,J) = -F0(2*I,J)   * A4
+d208 4
+a211 4
+             Y1(2*I,J)   =  F0(2*I+1,J) * A4
+             Y1(2*I+1,J) = -F0(2*I,J)   * A4
+               XY2(2*I,J)   =  X1(2*I+1,J) * A4
+               XY2(2*I+1,J) = -X1(2*I,J)   * A4
+d216 1
+a216 1
+       CALL FMRS(X1, NX,NY,1, 0.0D0, .TRUE.,.TRUE., INV, IRTFLG)
+d219 1
+a219 1
+       CALL FMRS(Y1, NX,NY,1, 0.0D0, .TRUE.,.TRUE., INV, IRTFLG)
+d222 1
+a222 1
+       CALL FMRS(XY2, NX,NY,1, 0.0D0, .TRUE., .TRUE., INV, IRTFLG)
+@
+
+
+1.5
+log
+@FBS --> FBS2
+@
+text
+@d3 2
+a4 2
+C  FBS2    NEW                        July 2011 Gregory Kishchenko *
+C                                                                      *
+d27 1
+a27 1
+C   FUNCTION FBS2(X, Y, NX, NY, FDATA, X1, Y1, XY2)                     *
+d84 1
+a84 1
+      REAL FUNCTION FBS2(X, Y, NX, NY, FDATA, X1, Y1, XY2)
+d94 1
+d101 5
+a105 5
+      IF (X .GE. 0) THEN
+         I = INT(X)
+      ELSE
+         I = INT(X) - 1
+      ENDIF
+d107 5
+a111 2
+      IF (Y .GE. 0) THEN
+         J = INT(Y)
+d113 4
+a116 1
+          J = INT(Y) - 1
+a117 8
+
+      DX   = X - I
+      DY   = Y - J
+
+      I2   = MODULO(I,NX)
+      J2   = MODULO(J,NY)
+      I3   = MODULO(I+1,NX)
+      J3   = MODULO(J+1,NY)
+@
+
+
+1.4
+log
+@comment
+@
+text
+@d3 1
+a3 1
+C  FBS_FAST    NEW                        July 2011 Gregory Kishchenko *
+d27 1
+a27 1
+C   FUNCTION FBS_FAST(X, Y, NX, NY, FDATA, X1, Y1, XY2)                     *
+d84 1
+a84 1
+      REAL FUNCTION FBS_FAST(X, Y, NX, NY, FDATA, X1, Y1, XY2)
+d150 1
+a150 1
+      FBS_FAST = A0+A1*DY+A2*DY**2+A3*DY**3
+d152 1
+a152 1
+      END FUNCTION FBS_FAST 
+d155 1
+a155 1
+C      ------------------ FBS_PREP ---------------------------
+d157 1
+a157 1
+       SUBROUTINE FBS_PREP(F0, X1,Y1, XY2, NXLD, NX,  NY, IRTFLG)
+@
+
+
+1.3
+log
+@*** empty log message ***
+@
+text
+@d47 15
+a61 13
+C      In order to interpolate a two dimensional grid [0,1] x [0,1],   *
+C   we sequentially used 1D cubic interpolation formula. First,        *
+C   we interpolated the intensities at two horizontal boundary         *
+C   lines [0,0]-[1,0] and [0,1]-[1,1] using intensities and normal     *
+C   to boundaries first derivatives in grid nodes. Thus we obtained    *
+C   the intensities at two boundary lines of square cell.              *
+C      Thereafter we carried out cubic interpolation in vertical line  *
+C    between 2 horizontal line with a given value of X to obtain       *
+C    the intensities inside the square cell.                           *
+C       The last procedure was done using previously interpolated      *
+C    values of intensities and their first normal derivatives across   *
+C    cell boundaries (which was also approximated by cubic             *
+C    interpolation at boundaries).                                     *
+d66 5
+a70 5
+C      This well-known formula is very convenient for calculating      *
+C   the derivatives of a  function defined as a discrete data set,     *
+C   and allows to calculate the derivative in any local point          *
+C   without the finite difference approximation involving the          *
+C   data from neighboring points.                                      *
+@
+
+
+1.2
+log
+@used spline
+@
+text
+@d148 1
+a148 1
+      FBP_FAST = A0+A1*DY+A2*DY**2+A3*DY**3
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d3 1
+a3 1
+C  FBF_FAST    NEW                        Jun 2011 Gregory Kishchenko  *
+d27 1
+a27 1
+C   FUNCTION FBF_FAST(X, Y, NX, NY, FDATA, X1, Y1)                     *
+d29 1
+a29 1
+C   PURPOSE:    2D FOURIER-BASED POLYNOMIAL INTERPOLATION              *
+d34 1
+a34 1
+C   If the values of a function F(X) and its first derivatives F'(0)   *
+d36 1
+a36 1
+C   interval [0,1] using a third degree polynomial (cubic              *
+d47 22
+a68 22
+C      In order to interpolate a two dimensional grid, we used this    *
+C   cubic interpolation formula. We interpolated the area              *
+C   [0,1] x [0,1] by first interpolating 2 vertical lines [0,0]-[0,1]  *
+C   and [1,0]-[1,1], and 2 horizontal lines [0,0]-[1,0] and            *
+C   [0,1]-[1,1], and thus obtained the values of function at 4         *
+C   boundaries' lines of square cell. After that we repeated the       *
+C   same procedure to obtain the values inside the square cell. This   *
+C   was done using the obtained values of function and first           *
+C   derivatives  at boundaries in perpendicular to boundaries          *
+C   directions which were approximated by linear interpolation. The    *
+C   final result depends of direction (vertical or horizontal) in      *
+C   which last interpolation was done. Therefore, we carried out       *
+C   interpolation in both direction, and then averaged the obtained    *
+C   values.                                                            *
+C                                                                      *
+C      The first derivatives dF/dX and dF/dY were obtained by          *
+C   by calculating Fourier transform {F}, and then calculating the     *
+C   inverse Fourier transform of {ik*F(k)}. This well-known formula is *
+C   very convenient for calculating the derivatives of a  function     *
+C   defined as a discrete data set, and allows to obtain the           *
+C   derivative in any local point without involving the data from      *
+C   neighboring points (and therefore spatial averaging).              *
+d71 2
+a72 2
+C   standard bicubic interpolation (the densities and their            *
+C   derivatives are continuous at boundaries), but has fewer           *
+d75 3
+a77 2
+C   densities and their derivatives just from 4 pixels surrounding     *
+C   the  point of interest instead 16 pixels as in standard algorithm. *
+d82 1
+a82 1
+      REAL FUNCTION FBP_FAST(X, Y, NX, NY, FDATA, X1, Y1)
+d91 1
+d94 2
+a95 2
+      REAL    :: A0, A1, A2, A3, B1, C1
+      REAL    :: ADX, BDX, ADY, BDY
+d110 2
+a111 2
+      DX = X - I
+      DY = Y - J
+d113 34
+a146 4
+      I2  = MODULO(I,NX)
+      J2  = MODULO(J,NY)
+      I3  = MODULO(I+1,NX)
+      J3  = MODULO(J+1,NY)
+d148 1
+a148 4
+      A0  = FDATA(I2,J2)
+      A1  = X1(I2,J2)
+      A2  = 3*(FDATA(I3,J2)-A0) - 2*A1 - X1(I3,J2)
+      A3  = 2*(A0-FDATA(I3,J2)) +   A1 + X1(I3,J2)
+d150 1
+a150 1
+      ADX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+a151 4
+      A0  = FDATA(I2,J3)
+      A1  = X1(I2,J3)
+      A2  = 3*(FDATA(I3,J3)-A0) - 2*A1 - X1(I3,J3)
+      A3  = 2*(A0-FDATA(I3,J3)) +   A1 + X1(I3,J3)
+d153 1
+a153 1
+      BDX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+d155 1
+a155 5
+      A0  = ADX
+      A1  = Y1(I2,J2)*(1-DX) + Y1(I3,J2)*DX
+      B1  = Y1(I2,J3)*(1-DX) + Y1(I3,J3)*DX
+      A2  = 3*(BDX - ADX) - 2*A1 - B1
+      A3  = 2*(ADX - BDX) +   A1 + B1
+d157 1
+a157 23
+      C1  = A0+A1*DY+A2*DY**2+A3*DY**3
+
+      A0  = FDATA(I2,J2)
+      A1  = Y1(I2,J2)
+      A2  = 3*(FDATA(I2,J3)-A0) - 2*A1 - Y1(I2,J3)
+      A3  = 2*(A0-FDATA(I2,J3)) +   A1 + Y1(I2,J3)
+
+      ADY = A0 + A1*DY + A2*DY**2 + A3*DY**3
+
+      A0  = FDATA(I3,J2)
+      A1  = Y1(I3,J2)
+      A2  = 3*(FDATA(I3,J3)-A0) - 2*A1 - Y1(I3,J3)
+      A3  = 2*(A0-FDATA(I3,J3)) +   A1 + Y1(I3,J3)
+
+      BDY = A0 + A1*DY + A2*DY**2 + A3*DY**3
+
+      A0  = ADY + C1
+      A1  = X1(I2,J2)*(1-DY) + X1(I2,J3)*DY
+      B1  = X1(I3,J2)*(1-DY) + X1(I3,J3)*DY
+      A2  = 3*(BDY - ADY) - 2*A1 - B1
+      A3  = 2*(ADY - BDY) +   A1 + B1
+
+      FBP_FAST = 0.5*(A0 + A1*DX + A2*DX**2 + A3*DX**3)
+d159 4
+a162 1
+      END FUNCTION FBP_FAST 
+a163 10
+
+C      ------------------ FBP_PREP ---------------------------
+
+       SUBROUTINE FBP_PREP(F0, X1,Y1, NXLD, NX,  NY, IRTFLG)
+
+       IMPLICIT NONE
+
+       REAL              :: F0(0:NXLD-1,0:NY-1)
+       REAL              :: X1(0:NXLD-1,0:NY-1)
+       REAL              :: Y1(0:NXLD-1,0:NY-1)
+d209 2
+d219 3
+@

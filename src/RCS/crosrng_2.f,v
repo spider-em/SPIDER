@@ -1,0 +1,1375 @@
+head	1.14;
+access;
+symbols
+	pre_getangas:1.6;
+locks; strict;
+comment	@c @;
+
+
+1.14
+date	2013.01.09.17.15.47;	author leith;	state Exp;
+branches;
+next	1.13;
+
+1.13
+date	2012.03.05.20.39.11;	author leith;	state Exp;
+branches;
+next	1.12;
+
+1.12
+date	2012.03.03.23.02.51;	author leith;	state Exp;
+branches;
+next	1.11;
+
+1.11
+date	2011.11.04.18.44.42;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2011.11.04.17.58.06;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2011.07.28.16.21.52;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2011.04.13.12.09.52;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2011.02.23.17.15.00;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2010.11.23.16.29.15;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2010.10.22.17.42.09;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2010.10.21.17.30.56;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2010.07.14.14.18.37;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2010.07.13.18.45.39;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2010.06.24.17.27.59;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.14
+log
+@reformatted
+@
+text
+@
+
+C++*********************************************************************
+C
+C  CROSRNG_2.F   
+C              TRAP FOR COMPILER ERROR ON ALTIX   FEB 2005 ARDEAN LEITH
+C              REWRITE USING CROSRNG_COM          FEB 2008 ARDEAN LEITH
+C              REWRITE USING FFTW3 RINGS          FEB 2008 ARDEAN LEITH
+C              REMOVED TT                         JUN 2010 ARDEAN LEITH
+C              CONSOLIDATES CROSRNG_E & _M        JUN 2010 ARDEAN LEITH
+C              CROSRNG_2C                         OCT 2010 ARDEAN LEITH
+C              CROSRNG_2C  SIGN BUG  CONJG        APR 2011 ARDEAN LEITH
+C              CROSRNG_2CQ SIGN BUG  CONJG        APR 2011 ARDEAN LEITH
+C              QMAXU = -HUGE(QMAXU)               JUL 2011 ARDEAN LEITH
+C              IRAY1,IRAY2                        NOV 2011 ARDEAN LEITH
+C
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2013  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C CROSRNG_2(CIRCR,CIRCE,LCIRC, NRING,MAXRIN,NUMR,
+C           USE_OMP,FFTW3PLAN,   USE_UN,USE_MIR,                         
+C           ISMIRRORED,QMAX,POS_MAX)
+C
+C PURPOSE: CROSS CORRELATION OF RADIAL RINGS FOR USE IN ROTATIONAL
+C          ALIGNMENT.  CHECKS BOTH STRAIGHT & MIRRORED POSITIONS
+C          USES NUMR TABLE FOR MAPPING INTO Q ARRAY 
+C          USES SIMPLIFIED LOGIC FOR BOUNDARY VALUES, FLOATING PT. ARITH.
+C
+C PARAMETERS:
+C    CIRCR      - FT OF RINGS MULTIPLIED BY WEIGHTS           (SENT)
+C    CIRCE      - FT OF RINGS MULTIPLIED BY WEIGHTS           (SENT)
+C    LCIRC      - SIZE OF CIRCS ARRAYS                        (SENT)
+C    NRING      - NUMBER OF RINGS                             (SENT)
+C    MAXRIN     - LONGEST RING                                (SENT)
+C    NUMR       - RING LOCATION POINTERS                      (SENT)
+C    IRAY1,2    - USE THIS RAY RANGE                          (SENT)
+C    USE_OMP    - USE || OMP                                  (SENT)
+C    FFTW3PLAN  - PLAN FOR REVERSE FFT OF RING                (SENT)
+C    USE_UN     - USE UN MIRRORED                             (SENT)
+C    USE_MIR    - USE MIRRORED                                (SENT)
+C    ISMIRRORED -                                             (RETURNED)
+C    QMAX       - CC MAX                                      (RETURNED)
+C    POS_MAX    - POSITION OF CC MAX                          (RETURNED)
+C
+C  NOTES: AUG 04 ATTEMPTED SPEEDUP USING 
+C       PREMULTIPLY  ARRAYS ie( CIRC12 = CIRC1 * CIRC2) much slower
+C       VARIOUS  OTHER ATTEMPTS  FAILED TO YIELD IMPROVEMENT
+C       THIS IS A VERY IMPORTANT COMPUTE DEMAND IN ALIGNMENT & REFINE.
+C       OPTIONAL LIMIT ON ANGULAR SEARCH SHOULD BE ADDED.
+C       COMPLEX ARRAY ARE USUALLY SLOWER in 2010
+C
+C       THE UNEVEN POLAR SAMPLING IN THE FOURIER DOMAIN, IS DUE TO THE 
+C       INNER RINGS HAVING HAD DENSER SAMPLING, THE VALUES AT THE 
+C       HIGHER FREQUENCIES WOULD HAVE BEEN ZERO ANYWAYS, SO THERE IS 
+C       NO NEED TO "INCLUDE" THEM. 
+
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C--*********************************************************************
+
+cpgi$g opt=3
+
+C       *************  CROSRNG_2CQR *************************************
+
+C       USES COMPLEX VARIABLES INTERNALLY, USUALLY FASTER
+C       USES TRANSFERRED: QU & QM (NON-AUTOMATIC = NOT ON STACK)
+
+        SUBROUTINE CROSRNG_2CQR(CIRCR,CIRCE,LCIRCD2, 
+     &                        NRING,NRAYS,NUMR, 
+     &                        USE_OMP,FFTW3PLAN,
+     &                        USE_UN,USE_MIR,
+     &                        QU,QM,
+     &                        ISMIRRORED,QMAX,POS_MAX,MAXL)
+
+        IMPLICIT NONE
+
+        COMPLEX,  INTENT(IN)  :: CIRCE(LCIRCD2), CIRCR(LCIRCD2)
+        INTEGER,  INTENT(IN)  :: LCIRCD2
+        INTEGER,  INTENT(IN)  :: NUMR(3,NRING)
+        INTEGER,  INTENT(IN)  :: NRING,NRAYS
+        LOGICAL,  INTENT(IN)  :: USE_OMP
+        INTEGER*8,INTENT(IN)  :: FFTW3PLAN  ! STRUCTURE POINTER
+        LOGICAL,  INTENT(IN)  :: USE_UN,USE_MIR
+        COMPLEX,  INTENT(OUT) :: QU(NRAYS/2+1),QM(NRAYS/2+1)
+        LOGICAL,  INTENT(OUT) :: ISMIRRORED
+        REAL,     INTENT(OUT) :: QMAX
+        REAL,     INTENT(OUT) :: POS_MAX
+        INTEGER,  INTENT(OUT) :: MAXL
+
+        REAL                  :: QMAXU,QMAXM
+        REAL                  :: POS_MAXU,POS_MAXM
+        INTEGER               :: I,IGOM1,NVAL,J,JC
+        INTEGER               :: MAXLU,MAXLM
+        INTEGER               :: NUMTH
+
+        IF (USE_UN) THEN
+C          ZERO WHOLE QU ARRAY, STRAIGHT  = CIRCR * CONJG(CIRCE)
+	   QU = 0.0
+        ENDIF
+
+        IF (USE_MIR) THEN
+C          ZERO QM ARRAY,  QM - MIRRORED  = CONJG(CIRCR) * CONJG(CIRCE)
+	   QM = 0.0
+        ENDIF
+
+        DO I=1,NRING
+	   IGOM1 = NUMR(2,I) / 2  
+           NVAL  = NUMR(3,I) / 2     
+
+	   IF (USE_UN .AND. USE_MIR)  THEN
+	      DO J=1,NVAL
+                 JC    = J + IGOM1
+
+C                NON MIRRORED RING SET 
+                 QU(J) = QU(J) + CONJG(CIRCR(JC)) *      (CIRCE(JC))
+
+C                MIRRORED RING SET 
+                 QM(J) = QM(J) + CONJG(CIRCR(JC)) * CONJG(CIRCE(JC))
+ 	      ENDDO
+
+           ELSEIF (USE_UN) THEN
+	      DO J=1,NVAL
+                 JC    = J + IGOM1
+                 QU(J) = QU(J) + CONJG(CIRCR(JC)) *      (CIRCE(JC))
+  	      ENDDO
+
+           ELSEIF (USE_MIR) THEN
+	      DO J=1,NVAL
+                 JC    = J + IGOM1
+                 QM(J) = QM(J) + CONJG(CIRCR(JC)) * CONJG(CIRCE(JC))
+	      ENDDO
+           ENDIF
+	ENDDO
+
+        QMAXU = -HUGE(QMAXU)
+        QMAXM = -HUGE(QMAXM)
+
+        IF (USE_UN) THEN
+C          FOR UN-MIRRORED
+              CALL CROSRNG_COM_R(QU,NRAYS,FFTW3PLAN,
+     &                           QMAXU,POS_MAXU,MAXLU)
+        ENDIF
+
+        IF (USE_MIR) THEN
+C          FOR MIRRORED
+              CALL CROSRNG_COM_R(QM,NRAYS,FFTW3PLAN,
+     &                           QMAXM,POS_MAXM,MAXLM)
+        ENDIF
+
+        IF (QMAXM .GT. QMAXU) THEN
+            ISMIRRORED = .TRUE.
+            QMAX       = QMAXM
+            POS_MAX    = POS_MAXM
+            MAXL       = MAXLM
+        ELSE
+            ISMIRRORED = .FALSE.
+            QMAX       = QMAXU
+            POS_MAX    = POS_MAXU
+            MAXL       = MAXLU
+        ENDIF
+           
+
+        END
+
+
+C       *************  CROSRNG_2CQRR*************************************
+
+C       USES COMPLEX VARIABLES INTERNALLY, USUALLY FASTER
+C       USES TRANSFERRED: QU & QM (NON-AUTOMATIC = NOT ON STACK)
+
+        SUBROUTINE CROSRNG_2CQRR(CIRCR,CIRCE,LCIRCD2, 
+     &                        NRING,NRAYS,NUMR, IRAY1,IRAY2,
+     &                        USE_OMP,FFTW3PLAN,
+     &                        USE_UN,USE_MIR,
+     &                        QU,QM,
+     &                        ISMIRRORED,QMAX,POS_MAX,MAXL)
+
+        IMPLICIT NONE
+
+        COMPLEX,  INTENT(IN)  :: CIRCE(LCIRCD2), CIRCR(LCIRCD2)
+        INTEGER,  INTENT(IN)  :: LCIRCD2
+        INTEGER,  INTENT(IN)  :: NUMR(3,NRING)
+        INTEGER,  INTENT(IN)  :: IRAY1,IRAY2
+        INTEGER,  INTENT(IN)  :: NRING,NRAYS
+        LOGICAL,  INTENT(IN)  :: USE_OMP
+        INTEGER*8,INTENT(IN)  :: FFTW3PLAN  ! STRUCTURE POINTER
+        LOGICAL,  INTENT(IN)  :: USE_UN,USE_MIR
+        COMPLEX,  INTENT(OUT) :: QU(NRAYS/2+1),QM(NRAYS/2+1)
+        LOGICAL,  INTENT(OUT) :: ISMIRRORED
+        REAL,     INTENT(OUT) :: QMAX
+        REAL,     INTENT(OUT) :: POS_MAX
+        INTEGER,  INTENT(OUT) :: MAXL
+
+        REAL                  :: QMAXU,QMAXM
+        REAL                  :: POS_MAXU,POS_MAXM
+        INTEGER               :: I,IGOM1,NVAL,J,JC
+        INTEGER               :: MAXLU,MAXLM
+        INTEGER               :: NUMTH
+
+        IF (USE_UN) THEN
+C          ZERO WHOLE QU ARRAY, STRAIGHT  = CIRCR * CONJG(CIRCE)
+	   QU = 0.0
+        ENDIF
+
+        IF (USE_MIR) THEN
+C          ZERO QM ARRAY,  QM - MIRRORED  = CONJG(CIRCR) * CONJG(CIRCE)
+	   QM = 0.0
+        ENDIF
+
+        DO I=1,NRING
+	   IGOM1 = NUMR(2,I) / 2  
+           NVAL  = NUMR(3,I) / 2     
+
+	   IF (USE_UN .AND. USE_MIR)  THEN
+	      DO J=1,NVAL
+                 JC    = J + IGOM1
+
+C                NON MIRRORED RING SET 
+                 QU(J) = QU(J) + CONJG(CIRCR(JC)) *      (CIRCE(JC))
+
+C                MIRRORED RING SET 
+                 QM(J) = QM(J) + CONJG(CIRCR(JC)) * CONJG(CIRCE(JC))
+ 	      ENDDO
+
+           ELSEIF (USE_UN) THEN
+	      DO J=1,NVAL
+                 JC    = J + IGOM1
+                 QU(J) = QU(J) + CONJG(CIRCR(JC)) *      (CIRCE(JC))
+  	      ENDDO
+
+           ELSEIF (USE_MIR) THEN
+	      DO J=1,NVAL
+                 JC    = J + IGOM1
+                 QM(J) = QM(J) + CONJG(CIRCR(JC)) * CONJG(CIRCE(JC))
+	      ENDDO
+           ENDIF
+	ENDDO
+
+        QMAXU = -HUGE(QMAXU)
+        QMAXM = -HUGE(QMAXM)
+
+        IF (USE_UN) THEN
+C          FOR UN-MIRRORED
+           IF (IRAY1 .EQ. 1 .AND. IRAY2 .EQ. NRAYS) THEN
+              CALL CROSRNG_COM_R(QU,NRAYS,FFTW3PLAN,
+     &                           QMAXU,POS_MAXU,MAXLU)
+           ELSE
+              CALL CROSRNG_COM_RR(QU,NRAYS,IRAY1,IRAY2,FFTW3PLAN,
+     &                            QMAXU,POS_MAXU,MAXLU)
+           ENDIF
+        ENDIF
+
+        IF (USE_MIR) THEN
+C          FOR MIRRORED
+           IF (IRAY1 .EQ. 1 .AND. IRAY2 .EQ. NRAYS) THEN
+              CALL CROSRNG_COM_R(QM,NRAYS,FFTW3PLAN,
+     &                           QMAXM,POS_MAXM,MAXLM)
+           ELSE
+              CALL CROSRNG_COM_RR(QM,NRAYS,IRAY1,IRAY2,FFTW3PLAN,
+     &                            QMAXM,POS_MAXM,MAXLM)
+           ENDIF
+        ENDIF
+
+        IF (QMAXM .GT. QMAXU) THEN
+            ISMIRRORED = .TRUE.
+            QMAX       = QMAXM
+            POS_MAX    = POS_MAXM
+            MAXL       = MAXLM
+        ELSE
+            ISMIRRORED = .FALSE.
+            QMAX       = QMAXU
+            POS_MAX    = POS_MAXU
+            MAXL       = MAXLU
+        ENDIF
+           
+
+        END
+
+
+C********************  CROSRNG_2 *************************************
+
+	SUBROUTINE CROSRNG_2(CIRCR,CIRCE,LCIRC, 
+     &                       NRING,MAXRIN,NUMR,
+     &                       USE_OMP,FFTW3PLAN,
+     &                       USE_UN,USE_MIR,      
+     &                       ISMIRRORED,QMAX,POS_MAX)
+
+C       USES NUMR TABLE FOR MAPPING INTO Q ARRAY 
+C       USES SIMPLIFIED LOGIC FOR BOUNDARY VALUES, FLOATING PT. ARITH.
+C       USES FFT3 OR NATIVE SPIDER, 
+C       CAN DO BOTH/EITHER MIR. & UN-MIR.  NO SGI FFT TT REMAINS
+
+        IMPLICIT NONE
+
+        REAL,             INTENT(IN)  :: CIRCR(LCIRC), CIRCE(LCIRC)
+        INTEGER,          INTENT(IN)  :: LCIRC
+        INTEGER,          INTENT(IN)  :: NUMR(3,NRING)
+        INTEGER,          INTENT(IN)  :: NRING,MAXRIN
+        LOGICAL,          INTENT(IN)  :: USE_OMP
+        INTEGER*8,        INTENT(IN)  :: FFTW3PLAN  ! STRUCTURE POINTER
+        LOGICAL,          INTENT(IN)  :: USE_UN,USE_MIR
+        LOGICAL,          INTENT(OUT) :: ISMIRRORED
+        DOUBLE PRECISION, INTENT(OUT) :: QMAX
+        REAL,             INTENT(OUT) :: POS_MAX
+ 
+        DOUBLE PRECISION              :: QMAXU, QMAXM
+        INTEGER                       :: I,IGOM1,NVAL,J,JC
+        REAL                          :: C1,C2,D1,D2,T1,T3,T2,T4
+        REAL                          :: POS_MAXU,POS_MAXM
+
+C       AUTOMATIC ARRAYS
+        REAL                          :: QU(MAXRIN+2),QM(MAXRIN+2)
+
+        IF (USE_UN) THEN
+C          ZERO WHOLE QU ARRAY, STRAIGHT  = CIRCR * CONJG(CIRCE)
+	   QU = 0.0D0
+        ENDIF
+
+        IF (USE_MIR) THEN
+C          ZERO QM ARRAY,  QM - MIRRORED  = CONJG(CIRCR) * CONJG(CIRCE)
+	   QM = 0.0D0
+        ENDIF
+
+        DO I=1,NRING
+           IGOM1 = NUMR(2,I) - 1
+           NVAL  = NUMR(3,I)     
+
+	   IF (USE_UN .AND. USE_MIR)  THEN
+	      DO J=1,NVAL,2
+	         JC      = J + IGOM1
+
+ 	         C1      = CIRCR(JC)
+ 	         C2      = CIRCR(JC+1)
+                 D1      = CIRCE(JC)
+                 D2      = CIRCE(JC+1)
+
+  	         T1      = C1 * D1
+ 	         T3      = C1 * D2
+ 	         T2      = C2 * D2
+ 	         T4      = C2 * D1
+
+	         QU(J)   = QU(J)   + T1 + T2
+	         QU(J+1) = QU(J+1) - T3 + T4
+	         QM(J)   = QM(J)   + T1 - T2
+	         QM(J+1) = QM(J+1) - T3 - T4
+	      ENDDO
+
+           ELSEIF (USE_UN) THEN
+
+	      DO J=1,NVAL,2
+	         JC      = J + IGOM1
+
+ 	         C1      = CIRCR(JC)
+ 	         C2      = CIRCR(JC+1)
+                 D1      = CIRCE(JC)
+                 D2      = CIRCE(JC+1)
+
+                 T1      = C1 * D1   ! NO FASTER IF T1.. NOT USED
+                 T3      = C1 * D2
+                 T2      = C2 * D2
+                 T4      = C2 * D1
+
+                 QU(J)   = QU(J)   + T1 + T2
+                 QU(J+1) = QU(J+1) - T3 + T4
+ 
+	      ENDDO
+
+           ELSEIF (USE_MIR) THEN
+
+	      DO J=1,NVAL,2
+	         JC     = J + IGOM1
+
+ 	         C1     = CIRCR(JC)
+ 	         C2     = CIRCR(JC+1)
+                 D1     = CIRCE(JC)
+                 D2     = CIRCE(JC+1)
+
+                 T1     = C1 * D1
+                 T3     = C1 * D2
+                 T2     = C2 * D2
+                 T4     = C2 * D1
+
+                 QM(J)   = QM(J)   + T1 - T2
+                 QM(J+1) = QM(J+1) - T3 - T4
+
+	      ENDDO
+           ENDIF
+	ENDDO
+
+        QMAXU = -HUGE(QMAXU)
+        QMAXM = -HUGE(QMAXM)
+
+        IF (USE_UN) THEN
+C          FOR UN-MIRRORED
+           CALL CROSRNG_COM_N(QU,MAXRIN,FFTW3PLAN,QMAXU,POS_MAXU)
+        ENDIF
+
+        IF (USE_MIR) THEN
+C          FOR MIRRORED
+           CALL CROSRNG_COM_N(QM,MAXRIN,FFTW3PLAN,QMAXM,POS_MAXM)
+
+        ENDIF
+
+        IF (QMAXM .GT. QMAXU) THEN
+            ISMIRRORED = .TRUE.
+            QMAX       = QMAXM
+            POS_MAX    = POS_MAXM
+        ELSE
+            ISMIRRORED = .FALSE.
+            QMAX       = QMAXU
+            POS_MAX    = POS_MAXU
+        ENDIF
+
+
+        !write(6,*) 'qmaxs:',qmaxu,qmaxm
+      
+	END
+
+C********************  CROSRNG_2C *************************************
+
+C       USES COMPLEX VARIABLES INTERNALLY, USUALLY FASTER
+C       USES AUTOMATIC: QU & QM 
+
+        SUBROUTINE CROSRNG_2C(CIRCR,CIRCE,LCIRCD2, 
+     &                        NRING,MAXRIN,NUMR,
+     &                        USE_OMP,FFTW3PLAN,
+     &                        USE_UN,USE_MIR,                         
+     &                        ISMIRRORED,QMAX,POS_MAX,MAXL)
+
+        IMPLICIT NONE
+
+        COMPLEX,       INTENT(IN)  :: CIRCE(LCIRCD2), CIRCR(LCIRCD2)
+        INTEGER,       INTENT(IN)  :: LCIRCD2
+        INTEGER,       INTENT(IN)  :: NUMR(3,NRING)
+        INTEGER,       INTENT(IN)  :: NRING,MAXRIN
+        LOGICAL,       INTENT(IN)  :: USE_OMP
+        INTEGER*8,     INTENT(IN)  :: FFTW3PLAN  ! STRUCTURE POINTER
+        LOGICAL,       INTENT(IN)  :: USE_UN,USE_MIR
+        LOGICAL,       INTENT(OUT) :: ISMIRRORED
+        REAL,          INTENT(OUT) :: QMAX
+        REAL,          INTENT(OUT) :: POS_MAX
+        INTEGER,       INTENT(OUT) :: MAXL
+
+C       AUTOMATIC ARRAYS
+        COMPLEX                    :: QU(MAXRIN/2+1),QM(MAXRIN/2+1)
+
+        REAL                       :: QMAXU,QMAXM
+        REAL                       :: POS_MAXU,POS_MAXM
+        INTEGER                    :: I,IGOM1,NVAL,J,JC
+        INTEGER                    :: MAXLU,MAXLM
+        INTEGER                    :: NUMTH
+
+        IF (USE_UN) THEN
+C          ZERO WHOLE QU ARRAY, STRAIGHT  = CIRCR * CONJG(CIRCE)
+	   QU = 0.0
+        ENDIF
+
+        IF (USE_MIR) THEN
+C          ZERO QM ARRAY,  QM - MIRRORED  = CONJG(CIRCR) * CONJG(CIRCE)
+	   QM = 0.0
+        ENDIF
+
+        DO I=1,NRING
+	   IGOM1 = NUMR(2,I) / 2  
+           NVAL  = NUMR(3,I) / 2     
+
+	   IF (USE_UN .AND. USE_MIR)  THEN
+	      DO J=1,NVAL
+	         JC    = J + IGOM1
+
+C                NON MIRRORED RING SET 
+                 QU(J) = QU(J) + CONJG(CIRCR(JC)) *      (CIRCE(JC))
+
+
+C                MIRRORED RING SET 
+                 QM(J) = QM(J) + CONJG(CIRCR(JC)) * CONJG(CIRCE(JC))
+ 	      ENDDO
+
+           ELSEIF (USE_UN) THEN
+	      DO J=1,NVAL
+	         JC    = J + IGOM1
+                 QU(J) = QU(J) + CONJG(CIRCR(JC)) *      (CIRCE(JC))
+	      ENDDO
+
+           ELSEIF (USE_MIR) THEN
+	      DO J=1,NVAL
+	         JC    = J + IGOM1
+                 QM(J) = QM(J) + CONJG(CIRCR(JC)) * CONJG(CIRCE(JC))
+	      ENDDO
+           ENDIF
+	ENDDO
+
+        QMAXU = -HUGE(QMAXU)
+        QMAXM = -HUGE(QMAXM)
+
+        IF (USE_UN) THEN
+C          FOR UN-MIRRORED
+           CALL CROSRNG_COM_R(QU,MAXRIN,FFTW3PLAN,QMAXU,POS_MAXU,MAXLU)
+        ENDIF
+
+        IF (USE_MIR) THEN
+C          FOR MIRRORED
+           CALL CROSRNG_COM_R(QM,MAXRIN,FFTW3PLAN,QMAXM,POS_MAXM,MAXLM)
+        ENDIF
+
+        IF (QMAXM .GT. QMAXU) THEN
+            ISMIRRORED = .TRUE.
+            QMAX       = QMAXM
+            POS_MAX    = POS_MAXM
+            MAXL       = MAXLM
+        ELSE
+            ISMIRRORED = .FALSE.
+            QMAX       = QMAXU
+            POS_MAX    = POS_MAXU
+            MAXL       = MAXLU
+        ENDIF
+           
+
+        END
+
+
+C******************************** CROSRNG_SATU  ***********************
+C
+C  CROSRNG_SATU(CIRCEXP,CIRCREF, NUMR,NRING,LCIRC,FFTW_PLANS,  
+C               NLOCS,NRAYSC, TRANS,CPLX,  USE_UN,USE_MIR,
+C               ISMIRRORED, CCR, ROTMP, IRTFLG)
+ 
+C  
+C  PURPOSE: CARRY OUT  CROSSCORRELATION OF RINGS.
+
+C  SOME PARAMETERS:
+C       CIRCEXP             IMAGE IN POLAR RINGS              (INPUT)
+C       CIRCREF             IMAGE IN POLAR RINGS              (INPUT)
+C       IRTFLG              ERROR FLAG                        (OUTPUT)
+C
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C--*********************************************************************
+
+        SUBROUTINE CROSRNG_SATU(CIRCEXP,CIRCREF, NUMR,NRING,LCIRC,
+     &                          FFTW_PLANS,  NLOCS,NRAYSC,
+     &                          TRANS,CPLX,  USE_UN,USE_MIR,
+     &                          ISMIRRORED, CCR, ROTMP, IRTFLG)
+
+C       NOTE: OFTEN RUNS WITHIN OMP PARALLEL SECTION OF CODE!
+
+        IMPLICIT NONE
+
+        INTEGER                :: NRING,LCIRC
+        INTEGER                :: NUMR(3,NRING) 
+        INTEGER *8             :: FFTW_PLANS(*)  ! STRUCTURE POINTERS
+        REAL                   :: CIRCEXP(LCIRC)
+        INTEGER                :: NLOCS(2,*)
+        INTEGER                :: NRAYSC
+
+        CHARACTER (LEN=9)      :: SETRINGS
+        LOGICAL                :: TRANS          ! TRANSFORMED RAYS
+        LOGICAL                :: CPLX           ! COMPLEX CROSRNG
+        REAL                   :: CIRCREF(LCIRC)
+        LOGICAL                :: USE_UN,USE_MIR
+
+ 	REAL,   INTENT(OUT)    :: ROTMP
+        LOGICAL,INTENT(OUT)    :: ISMIRRORED
+        INTEGER,INTENT(OUT)    :: IRTFLG
+
+	DOUBLE PRECISION       :: CCD
+	REAL,INTENT(OUT)       :: CCR
+
+        LOGICAL, PARAMETER     :: USE_OMP = .FALSE.
+
+        INTEGER                :: MAXRIN,MAXL
+
+        MAXRIN = NUMR(3,NRING) - 2 ! ACTUAL LENGTH OF LONGEST RING
+
+C       CROSS CORRELATION OF POLAR RINGS -----------------------
+
+        IF (TRANS) THEN
+C          USING TRANSFORMED RINGS
+           IF (CPLX) THEN
+C             USING COMPLEX VARIABLES ('AP SHCTC')
+              CALL CROSRNG_TRANS(CIRCREF,CIRCEXP, LCIRC/2,
+     &                           NLOCS,NRAYSC,
+     &                           USE_OMP,FFTW_PLANS(1),
+     &                           USE_UN,USE_MIR,
+     &                           ISMIRRORED,CCD,ROTMP)
+              CCR = CCD    ! CROSRNG_* DOES CALCS IN REAL NOW, SO OK
+        ELSE
+C             NOT USING COMPLEX VARIABLES ('AP SHCTU')
+              CALL CROSRNG_TRANS_NOC(CIRCREF,CIRCEXP, LCIRC/2,
+     &                           NLOCS,NRAYSC,
+     &                           USE_OMP,FFTW_PLANS(1),
+     &                           USE_UN,USE_MIR,
+     &                           ISMIRRORED,CCD,ROTMP)
+              CCR = CCD    ! CROSRNG_* DOES CALCS IN REAL NOW, SO OK
+           ENDIF
+
+        ELSE
+C          USING NON-TRANSFORMED RINGS
+           IF (CPLX) THEN
+C             USING COMPLEX VARIABLES ('AP SHC', 'AP SHCUC')
+              CALL CROSRNG_2C(CIRCREF,CIRCEXP,LCIRC/2,
+     &                        NRING, MAXRIN,NUMR, 
+     &                        USE_OMP,FFTW_PLANS(1),
+     &                        USE_UN,USE_MIR,
+     &                        ISMIRRORED,CCR,ROTMP,MAXL)
+           ELSE
+C             NOT USING COMPLEX VARIABLES ('AP SHCUU')
+              CALL CROSRNG_2(CIRCREF,CIRCEXP,LCIRC,
+     &                       NRING, MAXRIN,NUMR, 
+     &                       USE_OMP,FFTW_PLANS(1),
+     &                       USE_UN,USE_MIR,
+     &                       ISMIRRORED,CCD,ROTMP)
+              CCR = CCD    ! CROSRNG_* DOES CALCS IN REAL NOW, SO OK
+           ENDIF
+        ENDIF
+
+        IRTFLG = 0
+
+        !write(6,'a,2f8.2') ' 0 ccd:',ccd,ccr 
+        END
+
+
+
+
+
+@
+
+
+1.13
+log
+@speed bug fix
+@
+text
+@d21 1
+a21 1
+C=* Copyright 1985-2011  Health Research Inc.,                         *
+d300 2
+a301 1
+	SUBROUTINE CROSRNG_2(CIRCR,CIRCE,LCIRC, NRING,MAXRIN,NUMR,
+d450 11
+a460 11
+        COMPLEX,          INTENT(IN)  :: CIRCE(LCIRCD2), CIRCR(LCIRCD2)
+        INTEGER,          INTENT(IN)  :: LCIRCD2
+        INTEGER,          INTENT(IN)  :: NUMR(3,NRING)
+        INTEGER,          INTENT(IN)  :: NRING,MAXRIN
+        LOGICAL,          INTENT(IN)  :: USE_OMP
+        INTEGER*8,        INTENT(IN)  :: FFTW3PLAN  ! STRUCTURE POINTER
+        LOGICAL,          INTENT(IN)  :: USE_UN,USE_MIR
+        LOGICAL,          INTENT(OUT) :: ISMIRRORED
+        REAL,             INTENT(OUT) :: QMAX
+        REAL,             INTENT(OUT) :: POS_MAX
+        INTEGER,          INTENT(OUT) :: MAXL
+d463 1
+a463 1
+        COMPLEX                       :: QU(MAXRIN/2+1),QM(MAXRIN/2+1)
+d465 5
+a469 5
+        REAL                          :: QMAXU,QMAXM
+        REAL                          :: POS_MAXU,POS_MAXM
+        INTEGER                       :: I,IGOM1,NVAL,J,JC
+        INTEGER                       :: MAXLU,MAXLM
+        INTEGER                       :: NUMTH
+@
+
+
+1.12
+log
+@has both CROSRNG_2CQRR & CROSRNG_2CQR since CROSRNG_2CQR is significantly faster
+@
+text
+@d302 1
+a302 1
+     &                       USE_UN,USE_MIR,                         
+a322 3
+C       AUTOMATIC ARRAYS
+        REAL                          :: QU(MAXRIN+2),QM(MAXRIN+2)
+
+d327 3
+@
+
+
+1.11
+log
+@MAXLM MAXLU ... bug
+@
+text
+@d2 1
+d87 103
+a217 2
+        !write(6,*) ' 2cq use_un,use_mir:',use_un,use_mir
+        !write(6,*) ' 2cqr rays:',iray1,iray2,nrays
+@
+
+
+1.10
+log
+@CROSRNG_2CQR replaces CROSRNG_2CQ with ray limit support
+@
+text
+@d86 1
+a86 1
+     &                        NRING,MAXRIN,NUMR, IRAY1,IRAY2,
+d98 1
+a98 1
+        INTEGER,  INTENT(IN)  :: NRING,MAXRIN
+d102 1
+a102 1
+        COMPLEX,  INTENT(OUT) :: QU(MAXRIN/2+1),QM(MAXRIN/2+1)
+d115 1
+d160 3
+a162 3
+           IF (IRAY1 .EQ. 1 .AND. IRAY2 .EQ. MAXRIN) THEN
+              CALL CROSRNG_COM_RR(QU,MAXRIN,FFTW3PLAN,
+     &                            QMAXU,POS_MAXM,MAXLM)
+d164 2
+a165 2
+              CALL CROSRNG_COM_RR(QU,MAXRIN,IRAY1,IRAY2,FFTW3PLAN,
+     &                            QMAXU,POS_MAXM,MAXLM)
+d171 3
+a173 3
+           IF (IRAY1 .EQ. 1 .AND. IRAY2 .EQ. MAXRIN) THEN
+              CALL CROSRNG_COM_RR(QM,MAXRIN,FFTW3PLAN,
+     &                            QMAXM,POS_MAXM,MAXLM)
+d175 1
+a175 1
+              CALL CROSRNG_COM_RR(QM,MAXRIN,IRAY1,IRAY2,FFTW3PLAN,
+@
+
+
+1.9
+log
+@-HUGE(QMAXM)..
+@
+text
+@d14 1
+d54 1
+d80 1
+a80 1
+C       *************  CROSRNG_2CQ *************************************
+d85 2
+a86 2
+        SUBROUTINE CROSRNG_2CQ(CIRCR,CIRCE,LCIRCD2, 
+     &                        NRING,MAXRIN,NUMR,
+d94 19
+a112 18
+        COMPLEX,          INTENT(IN)  :: CIRCE(LCIRCD2), CIRCR(LCIRCD2)
+        INTEGER,          INTENT(IN)  :: LCIRCD2
+        INTEGER,          INTENT(IN)  :: NUMR(3,NRING)
+        INTEGER,          INTENT(IN)  :: NRING,MAXRIN
+        LOGICAL,          INTENT(IN)  :: USE_OMP
+        INTEGER*8,        INTENT(IN)  :: FFTW3PLAN  ! STRUCTURE POINTER
+        LOGICAL,          INTENT(IN)  :: USE_UN,USE_MIR
+        COMPLEX,          INTENT(OUT) :: QU(MAXRIN/2+1),QM(MAXRIN/2+1)
+        LOGICAL,          INTENT(OUT) :: ISMIRRORED
+        REAL,             INTENT(OUT) :: QMAX
+        REAL,             INTENT(OUT) :: POS_MAX
+        INTEGER,          INTENT(OUT) :: MAXL
+
+        REAL                          :: QMAXU,QMAXM
+        REAL                          :: POS_MAXU,POS_MAXM
+        INTEGER                       :: I,IGOM1,NVAL,J,JC
+        INTEGER                       :: MAXLU,MAXLM
+        INTEGER                       :: NUMTH
+d159 7
+a165 1
+           CALL CROSRNG_COM_R(QU,MAXRIN,FFTW3PLAN,QMAXU,POS_MAXU,MAXLU)
+d170 7
+a176 1
+           CALL CROSRNG_COM_R(QM,MAXRIN,FFTW3PLAN,QMAXM,POS_MAXM,MAXLM)
+a194 2
+
+
+a195 2
+
+
+@
+
+
+1.8
+log
+@CROSRNG_2C  SIGN BUG  CONJG for ap shc
+@
+text
+@d13 1
+d150 3
+a152 3
+!
+        QMAXU = 0.0
+        QMAXM = 0.0
+a163 2
+       
+
+d196 2
+d213 3
+d233 1
+a233 1
+	         JC     = J + IGOM1
+d235 9
+a243 9
+ 	         C1     = CIRCR(JC)
+ 	         C2     = CIRCR(JC+1)
+                 D1     = CIRCE(JC)
+                 D2     = CIRCE(JC+1)
+
+  	         T1     = C1 * D1
+ 	         T3     = C1 * D2
+ 	         T2     = C2 * D2
+ 	         T4     = C2 * D1
+d252 1
+d254 1
+a254 1
+	         JC     = J + IGOM1
+d256 9
+a264 9
+ 	         C1     = CIRCR(JC)
+ 	         C2     = CIRCR(JC+1)
+                 D1     = CIRCE(JC)
+                 D2     = CIRCE(JC+1)
+
+                 T1     = C1 * D1   ! NO FASTER IF T1.. NOT USED
+                 T3     = C1 * D2
+                 T2     = C2 * D2
+                 T4     = C2 * D1
+d272 1
+d293 2
+a294 2
+        QMAXU = 0.0
+        QMAXM = 0.0
+d304 1
+d316 3
+d395 3
+a397 3
+!
+        QMAXU = 0.0
+        QMAXM = 0.0
+@
+
+
+1.7
+log
+@CROSRNG_2CQ added
+@
+text
+@d11 2
+d18 1
+a18 1
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+d80 1
+d110 1
+d127 1
+a127 1
+	         JC    = J + IGOM1
+d130 1
+a130 1
+                 QU(J) = QU(J) +       CIRCR(JC)  * CONJG(CIRCE(JC))
+d138 3
+a140 3
+	         JC    = J + IGOM1
+                 QU(J) = QU(J) +       CIRCR(JC) * CONJG(CIRCE(JC))
+	      ENDDO
+d144 1
+a144 1
+	         JC    = J + IGOM1
+d163 2
+d183 1
+a183 1
+C********************  CROSRNG_2CF *************************************
+d315 1
+d365 2
+a366 1
+                 QU(J) = QU(J) +       CIRCR(JC)  * CONJG(CIRCE(JC))
+d375 1
+a375 1
+                 QU(J) = QU(J) +       CIRCR(JC) * CONJG(CIRCE(JC))
+@
+
+
+1.6
+log
+@removed GETTHREADS SETTHREADS .
+@
+text
+@d75 1
+a75 1
+#ifdef SP_LIBFFTW3
+d77 8
+a84 4
+	SUBROUTINE CROSRNG_2(CIRCR,CIRCE,LCIRC, NRING,MAXRIN,NUMR,
+     &                       USE_OMP,FFTW3PLAN,
+     &                       USE_UN,USE_MIR,                         
+     &                       ISMIRRORED,QMAX,POS_MAX)
+d86 1
+a86 4
+C       USES NUMR TABLE FOR MAPPING INTO Q ARRAY 
+C       USES SIMPLIFIED LOGIC FOR BOUNDARY VALUES, FLOATING PT. ARITH.
+C       USES FFT3 OR NATIVE SPIDER, 
+C       CAN DO BOTH/EITHER MIR. & UN-MIR.  NO SGI FFT TT REMAINS
+d88 2
+a89 2
+        REAL,             INTENT(IN)  :: CIRCR(LCIRC), CIRCE(LCIRC)
+        INTEGER,          INTENT(IN)  :: LCIRC
+d95 1
+d97 1
+a97 1
+        DOUBLE PRECISION, INTENT(OUT) :: QMAX
+d99 1
+a99 3
+ 
+C       AUTOMATIC ARRAYS
+        REAL                          :: QU(MAXRIN+2),QM(MAXRIN+2)
+d101 5
+a105 1
+        DOUBLE PRECISION              :: QMAXU, QMAXM
+d109 1
+a109 1
+	   QU = 0.0D0
+d114 1
+a114 1
+	   QM = 0.0D0
+d118 2
+a119 2
+           IGOM1 = NUMR(2,I) - 1
+           NVAL  = NUMR(3,I)     
+d122 2
+a123 7
+	      DO J=1,NVAL,2
+	         JC     = J + IGOM1
+
+ 	         C1     = CIRCR(JC)
+ 	         C2     = CIRCR(JC+1)
+                 D1     = CIRCE(JC)
+                 D2     = CIRCE(JC+1)
+d125 2
+a126 4
+  	         T1     = C1 * D1
+ 	         T3     = C1 * D2
+ 	         T2     = C2 * D2
+ 	         T4     = C2 * D1
+d128 3
+a130 5
+	         QU(J)   = QU(J)   + T1 + T2
+	         QU(J+1) = QU(J+1) - T3 + T4
+	         QM(J)   = QM(J)   + T1 - T2
+	         QM(J+1) = QM(J+1) - T3 - T4
+	      ENDDO
+d133 3
+a135 16
+	      DO J=1,NVAL,2
+	         JC     = J + IGOM1
+
+ 	         C1     = CIRCR(JC)
+ 	         C2     = CIRCR(JC+1)
+                 D1     = CIRCE(JC)
+                 D2     = CIRCE(JC+1)
+
+                 T1     = C1 * D1   ! NO FASTER IF T1.. NOT USED
+                 T3     = C1 * D2
+                 T2     = C2 * D2
+                 T4     = C2 * D1
+
+                 QU(J)   = QU(J)   + T1 + T2
+                 QU(J+1) = QU(J+1) - T3 + T4
+ 
+d139 3
+a141 16
+	      DO J=1,NVAL,2
+	         JC     = J + IGOM1
+
+ 	         C1     = CIRCR(JC)
+ 	         C2     = CIRCR(JC+1)
+                 D1     = CIRCE(JC)
+                 D2     = CIRCE(JC+1)
+
+                 T1     = C1 * D1
+                 T3     = C1 * D2
+                 T2     = C2 * D2
+                 T4     = C2 * D1
+
+                 QM(J)   = QM(J)   + T1 - T2
+                 QM(J+1) = QM(J+1) - T3 - T4
+
+d145 1
+a145 1
+
+d151 1
+a151 1
+           CALL CROSRNG_COM_N(QU,MAXRIN,FFTW3PLAN,QMAXU,POS_MAXU)
+d156 1
+a156 1
+           CALL CROSRNG_COM_N(QM,MAXRIN,FFTW3PLAN,QMAXM,POS_MAXM)
+d163 1
+d168 1
+d170 9
+a178 2
+      
+	END
+a179 1
+#else
+d182 3
+a184 3
+     &                         USE_OMP,FFTW3PLAN,
+     &                         USE_UN,USE_MIR,                         
+     &                         ISMIRRORED,QMAX,POS_MAX)
+a206 1
+
+d218 1
+a218 2
+	   IGO   = NUMR(2,I)
+           IGOM1 = IGO - 1
+a219 14
+3
+C          NATIVE FFT
+           IF (NVAL .NE. MAXRIN) THEN
+	      T1 = CIRC1(IGO+1) * CIRC2(IGO+1)
+
+              IF (USE_UN)  QU(NVAL+1) = QU(NVAL+1) + T1
+              IF (USE_MIR) QM(NVAL+1) = QM(NVAL+1) + T1
+C	      T(NVAL+1) VALUE WAS NOT CHANGED EVEN IN EARLIEST VERSION!!
+
+	   ELSE
+	      T1 = CIRC1(IGO+1) * CIRC2(IGO+1)
+	      IF (USE_UN)  QU(2) = QU(2) + T1
+	      IF (USE_MIR) QM(2) = QM(2) + T1
+	   ENDIF
+d222 1
+a222 1
+	      DO J=3,NVAL,2
+d225 4
+a228 4
+ 	         C1     = CIRC1(JC)
+ 	         C2     = CIRC1(JC+1)
+                 D1     = CIRC2(JC)
+                 D2     = CIRC2(JC+1)
+d235 4
+a238 4
+	         QU(J)   = QU(J)   + T1 - T2
+	         QU(J+1) = QU(J+1) - T3 - T4
+	         QM(J)   = QM(J)   + T1 + T2
+	         QM(J+1) = QM(J+1) - T3 + T4
+d242 1
+a242 1
+	      DO J=3,NVAL,2
+d245 4
+a248 4
+ 	         C1     = CIRC1(JC)
+ 	         C2     = CIRC1(JC+1)
+                 D1     = CIRC2(JC)
+                 D2     = CIRC2(JC+1)
+d250 4
+a253 7
+  	         T1     = C1 * D1
+ 	         T3     = C1 * D2
+ 	         T2     = C2 * D2
+ 	         T4     = C2 * D1
+
+	         QU(J)   = QU(J)   + T1 - T2
+	         QU(J+1) = QU(J+1) - T3 - T4
+d255 3
+a259 1
+
+d261 1
+a261 1
+	      DO J=3,NVAL,2
+d264 9
+a272 4
+ 	         C1     = CIRC1(JC)
+ 	         C2     = CIRC1(JC+1)
+                 D1     = CIRC2(JC)
+                 D2     = CIRC2(JC+1)
+d274 2
+a275 4
+  	         T1     = C1 * D1
+ 	         T3     = C1 * D2
+ 	         T2     = C2 * D2
+ 	         T4     = C2 * D1
+a276 2
+	         QM(J)   = QM(J)   + T1 + T2
+	         QM(J+1) = QM(J+1) - T3 + T4
+a304 2
+
+#endif
+@
+
+
+1.5
+log
+@CROSRN_COM_N* PARAM. WRONG
+@
+text
+@a389 6
+        CALL GETTHREADS(NUMTH)    ! SAVE ORIGINAL VALUE
+        IF (.NOT. USE_OMP) THEN
+           CALL SETTHREADS(1)     ! USE SINGLE THREAD
+        ENDIF
+
+!c$omp   parallel do private(i,igom1,nval,j,jc)
+d418 1
+a418 6
+!c$omp   end parallel do
+
+        IF (.NOT. USE_OMP) THEN
+           CALL SETTHREADS(NUMTH) ! RESET ORIGINAL VALUE
+        ENDIF
+
+@
+
+
+1.4
+log
+@ CROSRNG_SATU, CROSRNG_2C  parameters
+@
+text
+@d182 1
+a182 2
+           CALL CROSRNG_COM_N(QU,MAXRIN,USE_OMP,FFTW3PLAN,
+     &                        QMAXU,POS_MAXU)
+d187 1
+a187 2
+           CALL CROSRNG_COM_N(QM,MAXRIN,USE_OMP,FFTW3PLAN,
+     &                        QMAXM,POS_MAXM)
+d325 1
+a325 2
+           CALL CROSRNG_COM_N(QU,MAXRIN,USE_OMP,FFTW3PLAN,
+     &                        QMAXU,POS_MAXU)
+d330 1
+a330 2
+           CALL CROSRNG_COM_N(QM,MAXRIN,USE_OMP,FFTW3PLAN,
+     &                        QMAXM,POS_MAXM)
+d378 1
+d382 1
+a382 1
+	   QU = 0.0D0
+d387 6
+a392 1
+	   QM = 0.0D0
+d395 1
+d424 5
+d435 1
+a435 2
+           CALL CROSRNG_COM_R(QU,MAXRIN,USE_OMP,FFTW3PLAN,
+     &                        QMAXU,POS_MAXU,MAXLU)
+d440 1
+a440 2
+           CALL CROSRNG_COM_R(QM,MAXRIN,USE_OMP,FFTW3PLAN,
+     &                        QMAXM,POS_MAXM,MAXLM)
+@
+
+
+1.3
+log
+@opt
+@
+text
+@d10 1
+d65 5
+d73 1
+a73 1
+cpgi$g opt=O3
+d352 2
+a353 1
+C       USES COMPLEX VARIABLES INTERNALLY, USUALLY SLOWER
+d359 1
+a359 1
+     &                        ISMIRRORED,QMAX,POS_MAX)
+d371 1
+a371 1
+        DOUBLE PRECISION, INTENT(OUT) :: QMAX
+d373 1
+d378 1
+a378 1
+        DOUBLE PRECISION              :: QMAXU,QMAXM
+d381 1
+d427 2
+a428 2
+           CALL CROSRNG_COM_N(QU,MAXRIN,USE_OMP,FFTW3PLAN,
+     &                        QMAXU,POS_MAXU)
+d433 2
+a434 2
+           CALL CROSRNG_COM_N(QM,MAXRIN,USE_OMP,FFTW3PLAN,
+     &                        QMAXM,POS_MAXM)
+d441 1
+d446 1
+d450 100
+@
+
+
+1.2
+log
+@CROSRNG_COM_N parameter order, CROSRNG_2C added
+@
+text
+@d67 2
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d62 1
+a62 1
+C       PREMULTIPLY  ARRAYS IE( CIRCRE = CIRCR * CIRCE) much slower
+d106 1
+a106 2
+	   IGO   = NUMR(2,I)
+           IGOM1 = IGO - 1
+a107 1
+           J1    = 1
+d110 1
+a110 1
+	      DO J=J1,NVAL,2
+d130 1
+a130 1
+	      DO J=J1,NVAL,2
+d138 4
+a141 4
+  	         T1     = C1 * D1
+ 	         T3     = C1 * D2
+ 	         T2     = C2 * D2
+ 	         T4     = C2 * D1
+d143 3
+a145 2
+	         QU(J)   = QU(J)   + T1 + T2
+	         QU(J+1) = QU(J+1) - T3 + T4
+d149 1
+a149 1
+	      DO J=J1,NVAL,2
+d157 7
+a163 4
+  	         T1     = C1 * D1
+ 	         T3     = C1 * D2
+ 	         T2     = C2 * D2
+ 	         T4     = C2 * D1
+a164 2
+	         QM(J)   = QM(J)   + T1 - T2
+	         QM(J+1) = QM(J+1) - T3 - T4
+d166 1
+a166 1
+
+d174 2
+a175 1
+           CALL CROSRNG_COM_N(QU,LCIRC,MAXRIN, QMAXU,POS_MAXU,FFTW3PLAN)
+d180 2
+a181 1
+           CALL CROSRNG_COM_N(QM,LCIRC,MAXRIN, QMAXM,POS_MAXM,FFTW3PLAN)
+d239 1
+a239 2
+           J1    = 3
+
+d255 1
+a255 1
+	      DO J=J1,NVAL,2
+d275 1
+a275 1
+	      DO J=J1,NVAL,2
+d295 1
+a295 1
+	      DO J=J1,NVAL,2
+d311 1
+a311 1
+
+d319 2
+a320 1
+           CALL CROSRNG_COM_N(QU,LCIRC,MAXRIN, QMAXU,POS_MAXU,FFTW3PLAN)
+d325 2
+a326 1
+           CALL CROSRNG_COM_N(QM,LCIRC,MAXRIN, QMAXM,POS_MAXM,FFTW3PLAN)
+d343 95
+@

@@ -1,0 +1,1004 @@
+head	1.10;
+access;
+symbols
+	pre_getangas:1.10
+	GPL2010:1.10
+	pre_GPL2010:1.9
+	pre_var_equation:1.9
+	pre_fftwrings:1.9
+	pre_opfiles:1.9
+	src:1.9
+	best-code:1.9
+	x-named-regs:1.9
+	x:1.9
+	v13-00:1.9
+	pre_GPL:1.8
+	prec_CA:1.8
+	noindx:1.8
+	Bproc:1.1;
+locks; strict;
+comment	@c @;
+
+
+1.10
+date	2010.06.24.13.25.26;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2005.10.17.21.06.05;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2002.03.11.14.09.01;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2001.03.14.19.41.54;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2001.02.20.14.59.03;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2001.02.16.20.40.13;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2001.02.14.22.47.55;	author pawel;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2001.02.12.18.41.10;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2001.02.12.16.29.22;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	99.12.27.18.57.30;	author pawel;	state Exp;
+branches;
+next	;
+
+
+desc
+@DI
+@
+
+
+1.10
+log
+@GPL_2010
+@
+text
+@C ++********************************************************************
+C                                                                      *
+C DILATION                      ADDED 'NOFUSE" MAR 01 ARDEAN LEITH                                       *
+C                                                                      *
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C  DILATION
+C  
+C  PURPOSE:  DILATES  A BINARY IMAGE/VOLUME.  WHENEVER THE NUMBER OF
+C            OCCUPIED NEIGHBORING PIXELS EXCEEDS A SPECIFIED LIMIT
+C            A CENTRAL PIXEL IS ASSIGNED                                                                     *
+C **********************************************************************
+
+	SUBROUTINE DILATION(LUN1,LUN2,NSAM,NROW,NSLICE)
+
+	INCLUDE 'CMBLOCK.INC'
+	REAL, ALLOCATABLE, DIMENSION(:,:)   ::  VIN2
+	REAL, ALLOCATABLE, DIMENSION(:,:,:) ::  VIN3
+	CHARACTER (LEN=1) ::                    MODE,NULL
+        LOGICAL ::                              NOFUSE
+
+	NULL = CHAR(0)
+
+C       FCHAR OPTION 'NF' DOESNT FUSE CLUSTERS
+        NOFUSE = (FCHAR(4:5) .EQ. 'NF')
+
+	CALL RDPRMC(MODE,NA,.TRUE.,'BOX OR CROSS NEIGHBORHOOD (B/C)',
+     &               NULL,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+10      CALL RDPRI1S(LENGTH,NOT_USED,'LENGTH OF NEIGHBORHOOD',IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+        IF (LENGTH .LE. 1) THEN
+           CALL ERRT(102,'LENGTH MUST BE GREATER THAN',2) 
+           GOTO 10
+        ENDIF
+
+        IF (MOD(LENGTH,2) .EQ. 0) THEN
+           LENGTH = LENGTH + 1
+           WRITE(NOUT,90) LENGTH 
+90         FORMAT(' EFFECTIVE LENGTH OF NEIGHBORHOOD:',I5)
+        ENDIF
+        
+        IF (NSLICE .LE. 1) THEN
+	   IF (MODE .EQ. 'B') THEN
+              LAT = LENGTH * LENGTH - 1
+	   ELSE
+              LAT = 2 * LENGTH - 2 
+	   ENDIF
+        ELSE
+	   IF (MODE .EQ. 'B') THEN
+              LAT = LENGTH * LENGTH * LENGTH - 1
+	   ELSE
+              LAT = 3 * LENGTH - 3 
+	   ENDIF
+	ENDIF
+
+        WRITE(NOUT,91) LAT
+91      FORMAT(' NUMBER OF NEIGHBORS:',I5)
+
+	CALL RDPRI1S(LAT,NOT_USED,
+     &     'DILATE IF NUMBER OF OCCUPIED NEIGHBORS IS > THAN',IRTFLG)
+
+        IF (NSLICE .GT. 1) THEN
+	   ALLOCATE(VIN3(NSAM,NROW,NSLICE),STAT=IRTFLG)
+	   IF (IRTFLG .NE. 0) THEN
+               CALL ERRT(46,'DI, VIN3',IER)
+               RETURN
+           ENDIF
+
+C          LOAD INPUT VOLUME
+	   INDEX = 0
+           DO K = 1,NSLICE
+              DO J = 1,NROW
+                 INDEX = INDEX + 1
+                 CALL REDLIN(LUN1,VIN3(1,J,K),NSAM,INDEX)
+	      ENDDO
+	   ENDDO
+     
+           LH = LENGTH / 2 
+           CALL DILATION3(VIN3,NSAM,NROW,NSLICE,LH,LAT,MODE,NOFUSE,LUN2)
+
+	   DEALLOCATE(VIN3)
+        ELSE
+	   ALLOCATE(VIN2(NSAM,NROW),STAT=IRTFLG)
+	   IF (IRTFLG .NE. 0) THEN
+               CALL ERRT(46,'DI, VIN2',IER)
+               RETURN
+           ENDIF
+
+C          LOAD INPUT VOLUME
+	   INDEX = 0
+           DO J = 1,NROW
+              INDEX = INDEX + 1
+              CALL REDLIN(LUN1,VIN2(1,J),NSAM,INDEX)
+	   ENDDO
+     
+           LH = LENGTH / 2 
+           CALL DILATION2(VIN2,NSAM,NROW,NSLICE,LH,LAT,MODE,NOFUSE,LUN2)
+
+	   DEALLOCATE(VIN2)
+        ENDIF
+        END
+        
+
+C       -------------------- DILATION2-------------------------------------
+
+	SUBROUTINE DILATION2(X,NSAM,NROW,NSLICE,LH,LAT,MODE,NOFUSE,LUN2)
+
+C       2D DILATION
+
+	DIMENSION    X(NSAM,NROW),Y(NSAM)
+	CHARACTER(LEN=1) ::   MODE
+        LOGICAL ::            NOFUSE
+
+           DO J=1,NROW                      
+              IF (MODE .EQ. 'C')  THEN
+C                "CROSS"
+                 DO I=1,NSAM
+C                   COPY UNDILATED VOXEL VALUE
+                    Y(I) = X(I,J)
+
+                    IF (X(I,J) .LE. 0.0) THEN
+C                      CENTRAL VOXEL IS UNOCCUPIED (ZERO)
+                       LB     = 0
+                       VALGOT = 1.0
+                       DO M=-LH,LH
+                          IF (M. NE. 0)  THEN
+C                            COUNT NUMBER OF OCCUPIED NEIGHBORS
+                             CALL DILCHK(X(I,MOD(J+M+NROW-1,NROW)+1),
+     &                                   VALGOT,LB,NOFUSE)
+
+                             CALL DILCHK(X(MOD(I+M+NSAM-1,NSAM)+1,J),
+     &                                   VALGOT,LB,NOFUSE)
+                             IF (LB .LT. 0) EXIT
+                          ENDIF
+                       ENDDO
+
+                       IF (LB .GT. LAT) THEN
+C                         SET VOXEL TO OCCUPIED (DILATE) 
+                          Y(I) = VALGOT
+                      ENDIF
+                   ENDIF
+                 ENDDO
+              ELSE
+C                "BOX"
+                 DO I=1,NSAM
+C                   COPY UNDILATED VOXEL VALUE
+                    Y(I) = X(I,J)
+
+                    IF (X(I,J) .LE. 0.0)  THEN
+C                      CENTRAL VOXEL IS NOT OCCUPIED (ZERO)
+                       LB     = 0
+                       VALGOT = 1.0
+
+C                      COUNT NUMBER OF OCCUPIED NEIGHBORS
+                       DO MJ=-LH,LH
+                          MJM = MOD(J+MJ+NROW-1,NROW)+1
+                          DO MI=-LH,LH
+                             CALL DILCHK(X(MOD(I+MI+NSAM-1,NSAM)+1,MJM),
+     &                                  VALGOT,LB,NOFUSE)
+                             IF (LB .LT. 0) EXIT
+                          ENDDO
+                       ENDDO
+
+                       IF (LB .GT. LAT) THEN
+C                         SET VOXEL TO FILLED 
+                          Y(I) = VALGOT
+                       ENDIF
+                     ENDIF
+                 ENDDO
+	      ENDIF
+
+C             OUTPUT VOLUME
+              CALL WRTLIN(LUN2,Y,NSAM,J)
+           ENDDO
+      END	
+
+
+C       -------------------- DILCHK-------------------------------------
+
+	SUBROUTINE DILCHK(VAL,VALGOT,LB,NOFUSE)
+
+C       CHECKS FOR FUSION
+
+        LOGICAL :: NOFUSE
+        REAL    :: VALGOT
+
+        IF (VAL .GT. 0.0) THEN
+C          OCCUPIED NEIGHBOR PRESENT HERE
+ 
+           IF (NOFUSE) THEN
+C             DO NOT WANT TO FUSE CLUSTERS HAVING DIFFERENT VALUES
+
+              IF (LB .GT. 0 .AND. VAL .NE. VALGOT) THEN
+C                DILATION WOULD FUSE DIFFERENT CLUSTERS
+C                MAKE LB SO NEGATIVE THAT IT WILL NEVER EXCEED LAT
+                 LB = -100000
+                 RETURN
+              ENDIF
+              VALGOT = VAL
+           ENDIF
+
+C          INCREMENT NUMBER OF OCCUPIED NEIGHBORS
+           LB = LB + 1
+        ENDIF
+
+        RETURN
+        END
+
+C       -------------------- DILATION3-------------------------------------
+
+	SUBROUTINE DILATION3(X,NSAM,NROW,NSLICE,LH,LAT,MODE,NOFUSE,LUN2)
+
+C       3D DILATION
+
+	DIMENSION    X(NSAM,NROW,NSLICE),Y(NSAM)
+	CHARACTER(LEN=1) :: MODE
+        LOGICAL ::          NOFUSE
+
+        DO N=1,NSLICE                    
+           DO J=1,NROW                      
+              IF (MODE .EQ. 'C')  THEN
+C                "CROSS"
+                 DO I=1,NSAM
+C                   COPY UNDILATED VOXEL VALUE
+                    Y(I) = X(I,J,N)
+
+                    IF (X(I,J,N) .LE. 0.0)  THEN
+C                      CENTRAL VOXEL IS UNOCCUPIED (ZERO) MT
+                       LB     = 0
+                       VALGOT = 1.0
+
+                       DO M=-LH,LH
+                          IF (M. NE. 0)  THEN
+C                            COUNT NUMBER OF OCCUPIED NEIGHBORS 
+                             CALL DILCHK(X(I,MOD(J+M+NROW-1,NROW)+1,N),
+     &                                  VALGOT,LB,NOFUSE)
+
+                             CALL DILCHK(X(MOD(I+M+NSAM-1,NSAM)+1,J,N),
+     &                                  VALGOT,LB,NOFUSE)
+
+                             CALL DILCHK
+     &                               (X(I,J,MOD(N+M+NSLICE-1,NSLICE)+1),
+     &                               VALGOT,LB,NOFUSE)
+                          ENDIF
+                       ENDDO
+                       IF (LB .GT. LAT) THEN
+C                         SET VOXEL TO OCCUPIED (DILATE) 
+                          Y(I) = VALGOT
+                      ENDIF
+                   ENDIF
+                 ENDDO
+              ELSE
+C                "BAR"
+                 DO I=1,NSAM
+C                   COPY UNDILATED VOXEL VALUE
+                    Y(I) = X(I,J,N)
+
+                    IF (X(I,J,N) .LE. 0.0)  THEN
+C                      VOXEL IS NOT OCCUPIED (ZERO)
+                       LB     = 0
+                       VALGOT = 1.0
+
+C                      COUNT NUMBER OF OCCUPIED NEIGHBORS
+                       DO MN=-LH,LH
+                          MNM = MOD(N+MN+NSLICE-1,NSLICE)+1
+                          DO MJ=-LH,LH
+                             MJM = MOD(J+MJ+NROW-1,NROW)+1
+                             DO MI=-LH,LH
+                             CALL DILCHK(
+     &                            X(MOD(I+MI+NSAM-1,NSAM)+1,MJM,MNM),
+     &                            VALGOT,LB,NOFUSE)
+                            ENDDO
+                          ENDDO
+                       ENDDO
+
+                       IF (LB .GT. LAT) THEN
+C                         SET CENTRAL VOXEL TO FILLED 
+                          Y(I) = VALGOT
+                       ENDIF
+                     ENDIF
+                 ENDDO
+	      ENDIF
+
+C             OUTPUT VOLUME
+              CALL WRTLIN(LUN2,Y,NSAM,J+(N-1)*NROW)
+           ENDDO
+        ENDDO
+      END	
+@
+
+
+1.9
+log
+@GPL License fixed
+@
+text
+@a5 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d7 5
+a11 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d13 1
+a13 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d18 1
+a18 1
+C=* This program is distributed in the hope that it will be useful,    *
+d20 1
+a20 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a21 1
+C=*                                                                    *
+d23 1
+a23 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.8
+log
+@nloop,iloop_removed
+@
+text
+@d6 23
+a28 6
+C * SPIDER - MODULAR IMAGE PROCESSING SYSTEM.    AUTHOR: J.FRANK       *
+C * COPYRIGHT (C)1985, 1999. HEALTH RESEARCH INCORPORATED (HRI),       *
+C * ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+C * THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO HRI AND ARE NOT   *
+C * TO BE DISCLOSED TO OTHERS OR USED FOR PURPOSES OTHER THAN INTENDED *
+C * WITHOUT WRITTEN APPROVAL OF HRI.                                   *
+@
+
+
+1.7
+log
+@added 'DI NF'
+@
+text
+@d38 1
+a38 1
+10      CALL RDPRI1S(LENGTH,NLOOP,ILOOP,'LENGTH OF NEIGHBORHOOD',IRTFLG)
+d69 1
+a69 1
+	CALL RDPRI1S(LAT,NLOOP,ILOOP,
+@
+
+
+1.6
+log
+@can handle image
+@
+text
+@d3 1
+a3 1
+C DILATION                                                             *
+d15 4
+a18 1
+C                                                                      *
+d24 1
+a24 1
+	REAL, ALLOCATABLE, DIMENSION(:,: ) ::  VIN2
+d26 2
+a27 1
+	CHARACTER*1  MODE,NULL
+d31 3
+d38 1
+a38 1
+ 	CALL RDPRI1S(LENGTH,NLOOP,ILOOP,'LENGTH OF NEIGHBORHOOD',IRTFLG)
+d43 1
+a43 1
+           RETURN
+d89 1
+a89 1
+           CALL DILATION3(VIN3,NSAM,NROW,NSLICE,LH,LAT, MODE,LUN2)
+d107 1
+a107 1
+           CALL DILATION2(VIN2,NSAM,NROW,NSLICE,LH,LAT, MODE,LUN2)
+d116 1
+a116 1
+	SUBROUTINE DILATION2(X,NSAM,NROW,NSLICE,LH,LAT,MODE,LUN2)
+d118 2
+d121 2
+a122 1
+	CHARACTER*1  MODE
+d131 1
+a131 1
+                    IF (X(I,J) .LE. 0.0)  THEN
+d133 2
+a134 1
+                       LB = 0
+d137 7
+a143 6
+C                            COUNT NUMBER OF OCCUPIED NEIGHBORS 
+                             IF (X(I,MOD(J+M+NROW-1,NROW)+1) .NE. 0.0) 
+     &                          LB = LB + 1
+                             IF (X(MOD(I+M+NSAM-1,NSAM)+1,J) .NE. 0.0)
+     &                          LB = LB + 1
+                             IF (X(I,J).NE.0.0) LB = LB + 1
+d146 2
+a147 1
+                       IF (LB .GE. LAT) THEN
+d149 1
+a149 1
+                          Y(I) = 1.0
+d154 1
+a154 1
+C                "BAR"
+d160 4
+a163 2
+C                      VOXEL IS NOT OCCUPIED (ZERO)
+                       LB = 0
+d166 1
+a166 1
+                          MJM=MOD(J+MJ+NROW-1,NROW)+1
+d168 3
+a170 2
+                             IF (X(MOD(I+MI+NSAM-1,NSAM)+1,MJM)
+     &                          .NE.0.0) LB = LB+1
+d174 1
+a174 3
+C                      ADJUST FOR THE CENTRAL ELEMENT COUNTER
+	               LB = LB - 1	
+                       IF (LB .GE. LAT) THEN
+d176 1
+a176 1
+                          Y(I) = 1.0
+d187 32
+d221 3
+a223 1
+	SUBROUTINE DILATION3(X,NSAM,NROW,NSLICE,LH,LAT,MODE,LUN2)
+d226 2
+a227 1
+	CHARACTER*1  MODE
+d238 4
+a241 2
+C                      CENTRAL VOXEL IS UNOCCUPIED (ZERO)
+                       LB = 0
+d244 10
+a253 7
+C                            COUNT NUMBER OF NON MT NEIGHBORS 
+                             IF (X(I,MOD(J+M+NROW-1,NROW)+1,N) .NE. 0.0) 
+     &                          LB = LB + 1
+                             IF (X(MOD(I+M+NSAM-1,NSAM)+1,J,N) .NE. 0.0)
+     &                          LB = LB + 1
+                            IF(X(I,J,MOD(N+M+NSLICE-1,NSLICE)+1).NE.0.0)
+     &                          LB = LB + 1
+d256 1
+a256 1
+                       IF (LB .GE. LAT) THEN
+d258 1
+a258 1
+                          Y(I) = 1.0
+d270 3
+a272 1
+                       LB = 0
+d275 1
+a275 1
+                          MNM=MOD(N+MN+NSLICE-1,NSLICE)+1
+d277 1
+a277 1
+                             MJM=MOD(J+MJ+NROW-1,NROW)+1
+d279 4
+a282 3
+                                IF (X(MOD(I+MI+NSAM-1,NSAM)+1,MJM,MNM)
+     &                             .NE.0.0) LB = LB+1
+                             ENDDO
+d286 3
+a288 5
+C                      ADJUST FOR THE CENTRAL ELEMENT COUNTER
+	               LB = LB-1	
+                       IF (LB .GE. LAT) THEN
+C                         SET VOXEL TO FILLED 
+                          Y(I) = 1.0
+@
+
+
+1.5
+log
+@*** empty log message ***
+@
+text
+@d18 1
+a18 1
+	SUBROUTINE DILATION
+a19 30
+        INCLUDE 'CMBLOCK.INC'
+        INCLUDE 'CMLIMIT.INC'
+
+	CHARACTER (LEN=MAXNAM) :: FILNAM
+
+	DATA  LUN1,LUN2/21,22/
+
+        CALL OPFIL(.TRUE.,FILNAM,LUN1,'O',NSAM,NROW,NSLICE,
+     &                 IDUM,'INPUT',.FALSE.,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+	IF (NSLICE .EQ .1)  THEN
+	   CALL ERRT(2,'DI',IER)
+           GOTO 9999
+        ENDIF
+
+        CALL OPFIL(.TRUE.,FILNAM,LUN2,'U',NSAM,NROW,NSLICE,
+     &                 IDUM,'OUTPUT',.FALSE.,IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 9999
+
+	CALL  GROW(LUN1,LUN2,NSAM,NROW,NSLICE)
+
+9999    CLOSE(LUN1)
+	CLOSE(LUN2)
+
+	END
+
+C       -------------------- GROW -------------------------------------
+
+	SUBROUTINE GROW(LUN1,LUN2,NSAM,NROW,NSLICE)
+
+d21 2
+a22 1
+	REAL, ALLOCATABLE, DIMENSION(:,:,:) ::  VIN
+d44 13
+a56 5
+
+	IF (MODE .EQ. 'B') THEN
+           LAT = LENGTH * LENGTH * LENGTH - 1
+	ELSE
+           LAT = 3 * LENGTH - 1 
+d65 26
+a90 5
+	ALLOCATE(VIN(NSAM,NROW,NSLICE),STAT=IRTFLG)
+	IF (IRTFLG .NE. 0) THEN
+            CALL ERRT(46,'DI, VIN',IER)
+            RETURN
+        ENDIF
+d92 2
+a93 3
+C       LOAD INPUT VOLUME
+	INDEX = 0
+        DO K = 1,NSLICE
+d96 1
+a96 1
+              CALL REDLIN(LUN1,VIN(1,J,K),NSAM,INDEX)
+d98 3
+a100 1
+	ENDDO
+d102 6
+a107 2
+        LH = LENGTH / 2 
+        CALL GROW1(VIN,NSAM,NROW,NSLICE,LH,LAT, MODE,LUN2)
+d109 4
+a112 2
+	DEALLOCATE(VIN)
+        END
+d114 58
+d173 1
+a173 1
+C       -------------------- GROW1-------------------------------------
+d175 1
+a175 1
+	SUBROUTINE GROW1(X,NSAM,NROW,NSLICE,LH,LAT,MODE,LUN2)
+@
+
+
+1.4
+log
+@comment fixed
+@
+text
+@a15 1
+C                                                                      *
+d21 1
+d23 2
+a24 1
+	CHARACTER*80  FILNAM
+d29 1
+d37 1
+d46 1
+d56 11
+a66 2
+ 	CALL RDPRMI(LENGTH,IDUM,NLOOP,ILOOP,'LENGTH OF THE FILTER')
+	LENGTH = LENGTH/2+1
+d68 5
+a72 1
+	CALL RDPRMI(LAT,IDUM,NLOOP,ILOOP,'NUMBER OF NEIGHBORS')
+a73 1
+	CALL RDPRMC(MODE,NA,.TRUE.,'BOX OR CROSS (B/C)',NULL,IRT)
+d75 1
+a75 2
+	   K = LENGTH * LENGTH
+	   K = K * LENGTH
+d77 1
+a77 2
+	   K = 2*LENGTH-1
+	   K = K + LENGTH - 1
+d80 6
+d101 2
+a102 1
+        CALL GR3(VIN,NSAM,NROW,NSLICE,LENGTH,LAT, MODE,LUN2)
+d108 1
+d110 1
+a110 1
+	SUBROUTINE GR3(X,NSAM,NROW,NSLICE,L,LAT,MODE,LUNO)
+a114 3
+	LH  = L/2
+	K21 = K/2+1
+
+d120 5
+a124 2
+                    IF (X(I,J,N) .EQ. 0.0)  THEN
+C                      CENTRAL VOXEL IS EMPTY (ZERO)
+d138 1
+a138 1
+C                         SET VOXEL TO FILLED 
+d140 2
+a141 8
+                       ELSE
+C                         SET VOXEL TO MT 
+                         Y(I) = 0.0
+                       ENDIF
+                    ELSE
+C                      SET VOXEL TO FILLED
+		       Y(I) = 1.0
+                    ENDIF
+d146 5
+a150 2
+                    IF (X(I,J,N) .EQ. 0.0)  THEN
+C                      VOXEL IS EMPTY (ZERO)
+d152 1
+a152 1
+C                      COUNT NUMBER OF NON MT NEIGHBOR 
+d164 2
+a165 2
+C                      REMOVE THE CENTRAL ELEMENT
+	               IF (X(I,J,N) .EQ. 1.0)  LB = LB-1	
+a168 3
+                       ELSE
+C                         SET VOXEL TO MT 
+                          Y(I) = 0.0
+d170 1
+a170 4
+                    ELSE
+C                      KEEP VOXEL AS FILLED
+                       Y(I) = 1.0
+                    ENDIF
+d175 1
+a175 1
+              CALL WRTLIN(LUNO,Y,NSAM,J+(N-1)*NROW)
+@
+
+
+1.3
+log
+@*** empty log message ***
+@
+text
+@d119 1
+a119 1
+ C                         SET VOXEL TO MT 
+@
+
+
+1.2
+log
+@formatting
+@
+text
+@d3 1
+a3 1
+C DILATION                                               *
+d13 2
+d28 4
+d37 2
+a38 1
+	CLOSE(LUN1)
+d52 2
+a53 1
+	IF (NSLICE.LE.1) NSLICE=1
+a54 3
+	CALL RDPRMI(LENGTH,IDUM,NLOOP,ILOOP,'LENGTH OF THE FILTER')
+	LENGTH=LENGTH/2+1
+
+d59 2
+a60 2
+	   K = LENGTH*LENGTH
+	   IF (NSLICE.GT.1)  K=K*LENGTH
+d63 1
+a63 1
+	   IF (NSLICE.GT.1)  K=K+LENGTH-1
+d67 1
+a67 1
+	IF (IRTFLG.NE.0) THEN
+d72 5
+a76 4
+	INDEX=0
+        DO  K = 1,NSLICE
+           DO  J = 1,NROW
+              INDEX = INDEX+1
+d81 1
+a81 6
+	IF (NSLICE.EQ.1)  THEN
+	   CALL ERRT(2,'DI',IER)
+	ELSE
+	   CALL GR3(VIN,NSAM,NROW,NSLICE,LENGTH,LAT,
+     &		   MODE,LUN2)
+	ENDIF
+d88 1
+a88 1
+	SUBROUTINE  GR3(X,NSAM,NROW,NSLICE,L,LAT,MODE,LUNO)
+d99 1
+d102 5
+a106 3
+                       LB=0
+                       DO  M=-LH,LH
+                          IF (M.NE.0)  THEN
+d108 3
+a110 3
+     &                          LB=LB+1
+                             IF (X(MOD(I+M+NSAM-1,NSAM)+1,J,N).NE.0.0)
+     &                          LB=LB+1
+d112 1
+a112 1
+     &                          LB=LB+1
+d115 2
+a116 1
+                       IF (LB.GE.LAT) THEN
+d119 2
+a120 1
+                          Y(I) = 0.0
+d123 1
+d127 15
+a141 11
+           ELSE
+              DO I=1,NSAM
+                 IF (X(I,J,N) .EQ. 0.0)  THEN
+                    LB = 0
+                    DO MN=-LH,LH
+                       MNM=MOD(N+MN+NSLICE-1,NSLICE)+1
+                       DO MJ=-LH,LH
+                          MJM=MOD(J+MJ+NROW-1,NROW)+1
+                          DO MI=-LH,LH
+                             IF (X(MOD(I+MI+NSAM-1,NSAM)+1,MJM,MNM)
+     &                          .NE.0.0) LB=LB+1
+a143 1
+                    ENDDO
+d145 11
+a155 3
+C                   REMOVE THE CENTRAL ELEMENT
+	            IF (X(I,J,N) .EQ. 1.0)  LB=LB-1	
+                    IF (LB .GE. LAT) THEN
+a156 2
+                    ELSE
+                       Y(I) = 0.0
+d158 2
+a159 5
+                 ELSE
+                    Y(I) = 1.0
+                 ENDIF
+              ENDDO
+	   ENDIF
+d161 3
+a163 1
+           CALL  WRTLIN(LUNO,Y,NSAM,J+(N-1)*NROW)
+a164 2
+      ENDDO
+
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d1 16
+d18 1
+d20 1
+d23 1
+a23 1
+C
+d26 1
+d33 1
+d36 1
+d38 1
+a38 1
+C
+d42 5
+a46 4
+	NULL=CHAR(0)
+C
+	IF(NSLICE.LE.1) NSLICE=1
+C
+d49 1
+d51 5
+a55 5
+	NA=1
+	CALL RDPRMC(MODE,NA,.TRUE.,'Box or Cross (B/C)',NULL,IRT)
+	IF(MODE.EQ.'B') THEN
+	K=LENGTH*LENGTH
+	IF(NSLICE.GT.1)  K=K*LENGTH
+d57 2
+a58 2
+	K=2*LENGTH-1
+	IF(NSLICE.GT.1)  K=K+LENGTH-1
+d60 1
+d62 5
+a66 2
+	IF(IRTFLG.NE.0) CALL ERRT(46,'DI, VIN',IER)
+C
+d69 4
+a72 4
+         DO  J = 1,NROW
+         INDEX=INDEX+1
+          CALL REDLIN(LUN1,VIN(1,J,K),NSAM,INDEX)
+	 ENDDO
+d74 3
+a76 5
+C
+	IF(NSLICE.EQ.1)  THEN
+	CALL ERRT(2,'DI',IER)
+C	CALL  GR2(VIN,BUF(NPIX+1),NSAM,NROW,LENGTH,BUF(NPIX+1+NSAM),
+C    $		K,MODE,LUN2)
+d78 2
+a79 2
+	 CALL  GR3(VIN,NSAM,NROW,NSLICE,LENGTH,LAT,
+     $		MODE,LUN2)
+d81 1
+a81 1
+C
+d84 3
+a86 4
+C
+	SUBROUTINE  GR2
+	END
+C
+d88 2
+a89 1
+	DIMENSION   X(NSAM,NROW,NSLICE),Y(NSAM)
+d91 62
+a152 53
+	LH=L/2
+	K21=K/2+1
+	DO    N=1,NSLICE                    
+	DO    J=1,NROW                      
+	IF(MODE.EQ.'C')  THEN
+	DO    I=1,NSAM
+	IF(X(I,J,N).EQ.0.0)  THEN
+	 LB=0
+	 DO  M=-LH,LH
+	 IF(M.NE.0)  THEN
+	 IF(X(I,MOD(J+M+NROW-1,NROW)+1,N).NE.0.0)  LB=LB+1
+	 IF(X(MOD(I+M+NSAM-1,NSAM)+1,J,N).NE.0.0)  LB=LB+1
+	 IF(X(I,J,MOD(N+M+NSLICE-1,NSLICE)+1).NE.0.0)  LB=LB+1
+	 ENDIF
+	 ENDDO
+		IF(LB.GE.LAT) THEN
+		Y(I)=1.0
+		ELSE
+		Y(I)=0.0
+		ENDIF
+	ELSE
+		Y(I)=1.0
+	ENDIF
+	ENDDO
+	ELSE
+	DO    I=1,NSAM
+	IF(X(I,J,N).EQ.0.0)  THEN
+	LB=0
+		DO    MN=-LH,LH
+	MNM=MOD(N+MN+NSLICE-1,NSLICE)+1
+		DO    MJ=-LH,LH
+	MJM=MOD(J+MJ+NROW-1,NROW)+1
+		DO    MI=-LH,LH
+	IF(X(MOD(I+MI+NSAM-1,NSAM)+1,MJM,MNM).NE.0.0)  LB=LB+1
+		ENDDO
+		ENDDO
+		ENDDO
+C Remove the central element
+	IF(X(I,J,N).EQ.1.0)  LB=LB-1	
+		IF(LB.GE.LAT) THEN
+		Y(I)=1.0
+		ELSE
+		Y(I)=0.0
+		ENDIF
+	ELSE
+	Y(I)=1.0
+	ENDIF
+	ENDDO
+	ENDIF
+	CALL  WRTLIN(LUNO,Y,NSAM,J+(N-1)*NROW)
+	ENDDO
+	ENDDO
+	END	
+@

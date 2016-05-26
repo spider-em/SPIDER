@@ -1,0 +1,316 @@
+head	1.3;
+access;
+symbols
+	pre_fftwrings:1.3
+	pre_opfiles:1.3
+	src:1.3
+	best-code:1.3
+	x-named-regs:1.3
+	x:1.3
+	v13-00:1.3
+	pre_GPL:1.2
+	prec_CA:1.2
+	noindx:1.2
+	Bproc:1.2
+	oct21:1.2
+	last77:1.2;
+locks; strict;
+
+
+1.3
+date	2005.10.17.20.56.57;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	94.08.16.09.38.39;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	94.08.16.09.23.54;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@from vax
+@
+
+
+1.3
+log
+@GPL License fixed
+@
+text
+@
+C ++********************************************************************
+C
+C COPYMRC
+C
+C **********************************************************************
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+C=*                                                                    *
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+C=*                                                                    *
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* This program is distributed in the hope that it will be useful,    *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+C=* General Public License for more details.                           *
+C=*                                                                    *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+C=*                                                                    *
+C **********************************************************************
+C 
+C COPYMRC(LUN1,LUN2)
+C                                                                         *
+C PURPOSE: CONVERTS SPIDER IMAGES TO OR FROM MRC FORMAT
+C
+C NOTES: MODIFIED BY A. LEITH 11 JAN 90 TO USE FILERD TO INPUT MRC 
+C        FILENAMES.  THIS SHOULD ALLOW USE OF SPIDER DO LOOPS HERE
+C
+C        Contains modifications received from John Kenney 6 Sept 89
+C        Contains modifications received from Ken Taylor    Oct 93
+C
+C        0         2         3         4         5         6         7
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C***********************************************************************
+
+        SUBROUTINE COPYMRC(LUN1,LUN2)
+
+        INCLUDE 'COMMON1:CMBLOCK.INC'
+
+        COMMON BUF(1)
+
+        LOGICAL        EXIST, LUN_OPEN
+        INTEGER        LABELS(20),TITLES(20)
+        INTEGER        NXYZ(3),MXYZ(3)
+
+        CHARACTER *81  FILNAM
+        CHARACTER *80  TIT
+        CHARACTER *40  MAPFILE
+        CHARACTER *4   EXTEN
+        CHARACTER      ANS,NULL
+        EQUIVALENCE(TIT,TITLES)
+
+        DATA TIT(1:11)/'SPIDER FILE'/,TIT(12:80)/' '/
+
+        NULL  = CHAR(0)
+        LUN24 = 1
+
+2       CALL RDPRMC(ANS,NCHAR,.TRUE.,'(T)O OR (F)ROM SPIDER FORMAT',
+     &              NULL,IRTFLG)
+        IF (IRTFLG .EQ. -1) RETURN
+
+        IF (ANS .EQ. 'F' .OR. ANS .EQ. 'f') GOTO 1000
+
+C       COPY FROM MRC TO SPIDER FILE FORMAT ------------------TO SPIDER
+C       SET IRTFLG TO ALLOW FILE EXTENSION ON INPUT
+        IRTFLG = 9
+        CALL FILERD(MAPFILE,NCHAR,EXTEN,'MRC INPUT',IRTFLG)
+        IF (IRTFLG .EQ. -1) GOTO 2
+
+c       The following checks on the file and LUN added by JMK 23 Aug 89
+c       Check that the MRC file exists.
+
+        INQUIRE (FILE=MAPFILE, IOSTAT=IOSTAT, EXIST=EXIST)
+        IF (IOSTAT .NE. 0 .OR. .NOT. EXIST) THEN
+           WRITE(NOUT,*) '*** No MRC file named: ', MAPFILE
+           RETURN
+        ENDIF
+
+c       Is LUN24 available?
+        INQUIRE (UNIT=LUN24, IOSTAT=IOSTAT, OPENED=LUN_OPEN)
+
+C       IF NOT AVAILABLE ADD ONE AND TRY AGAIN
+        DO WHILE (IOSTAT .NE. 0 .OR. LUN_OPEN)
+           LUN24 = LUN24 + 1
+           INQUIRE (UNIT=LUN24, IOSTAT=IOSTAT, OPENED=LUN_OPEN)
+        ENDDO
+
+        CALL IMOPEN(LUN24,MAPFILE,'RO')
+        CALL IRDHDR(LUN24,NXYZ,MXYZ,MODE,FMIN,FMAX,AV)
+
+        CALL FILERD(FILNAM,NLET,NULL,'OUTPUT',IRTFLG)
+        IF (IRTFLG .EQ. -1 .OR. FILNAM(1:1) .EQ. '*') RETURN
+
+        NSAM   = NXYZ(1)
+        NROW   = NXYZ(2)
+        NSLICE = NXYZ(3)
+        IFORM  = 1
+        IF (NSLICE .GT. 1) IFORM=3
+        CALL RDPRMI(IROW1,IROW2,NLOOP,ILOOP,'FROM ROW, TO ROW')
+        IF (IROW1 .EQ. 0 .AND. IROW2 .EQ. 0)THEN
+           IROW1 = 1
+           IROW2 = NROW
+        ENDIF
+        NROWD = IROW2-IROW1+1
+        CALL OPENF(FILNAM,LUN1,NSAM,NROWD,'UNKNOWN',NF,NSLICE)
+
+C       READ LINE BY LINE IF FILE IS LARGE
+        IF (NXYZ(1)*NXYZ(2).GT.32000) GOTO 400
+
+        WRITE(NOUT,*) 'SECTION-WISE READING'
+        DO L=1,NSLICE
+           CALL IMPOSN(LUN24,L-1,0)
+           CALL IRDSEC(LUN24,BUF,*999)
+           DO I=IROW1,IROW2
+              I1=(I-1)*(NSAM)+1
+              JREC=I-IROW1+1+(L-1)*NROW
+              CALL WRTLIN(LUN1,BUF(I1),NSAM,JREC)
+           ENDDO
+        ENDDO
+        CALL IMCLOSE(LUN24)
+        GOTO 800
+
+400     WRITE(NOUT,*) 'READING BY LINES'
+        DO L=1,NSLICE
+           CALL IMPOSN(LUN24,L-1,(IROW1-1))
+           DO I=IROW1,IROW2
+              I1=(L-1)*NXYZ(2)+(I-IROW1)+1
+              CALL IRDLIN(LUN24,BUF,*999)
+              CALL WRTLIN(LUN1,BUF,NSAM,I1)
+           ENDDO
+        ENDDO
+
+C       TRANSFER PARAMETERS INTO SPIDER FILE, FILE TYPE UNCHANGED
+
+800     CALL SETPRM(LUN1,NSAM,NROWD,FMAX,FMIN,AV,'U')
+        CLOSE(LUN1)
+        RETURN
+
+999     WRITE(NOUT,*) '*** ERROR OPENING MRC FILE'
+        RETURN
+
+
+
+C       COPY FROM SPIDER TO MRC FILE FORMAT -------------------- TO MRC
+
+1000    CALL FILERD(FILNAM,NLET,NULL,'SPIDER INPUT',IRTFLG)
+        IF (IRTFLG .EQ. -1) RETURN
+
+        TIT(12:21) = FILNAM(1:10)
+        CALL OPENF(FILNAM,LUN1,NSAM,NROW,'OLD',NF,NSLICE)
+
+C       SET IRTFLG TO ALLOW FILE EXTENSION ON INPUT
+        IRTFLG = 9
+        CALL FILERD(MAPFILE,NCHAR,EXTEN,'MRC OUTPUT',IRTFLG)
+        IF (IRTFLG .EQ. -1) GOTO 1000
+
+        CALL IMOPEN(LUN24,MAPFILE,'NEW')
+C       IMAGE REAL*4 FORMAT
+        MODE    = 2
+        NXYZ(1) = NSAM
+        NXYZ(2) = NROW
+        NXYZ(3) = NSLICE
+        DO I=1,3
+           MXYZ(I)=NXYZ(I)
+        ENDDO
+
+        CALL ICRHDR(LUN24,NXYZ,MXYZ,MODE,LABELS,1)
+        CALL IWRHDR(LUN24,TITLES,-1,FMIN,FMAX,AV)
+
+        IF (NXYZ(1)*NXYZ(2) .GT. 10000) GOTO 1400
+
+C       POSITION TO NZ=0 NY=0
+        CALL IMPOSN(LUN24,0,0)
+        DO L=1,NSLICE
+           DO I=1,NROW
+              I1=(I-1)*(NSAM)+1
+              CALL REDLIN(LUN1,BUF(I1),NSAM,I)
+           ENDDO
+	   dmin = 1e7
+	   dmax = -1e7
+	   do ij=1,nsam*nrow
+	    if (buf(ij) .lt. dmin) dmin=buf(ij)
+	    if (buf(ij) .gt. dmax) dmax=buf(ij)
+	   end do
+	   WRITE(NOUT,*)'Section number,dmin,dmax:',l,dmin,dmax
+           CALL IWRSEC(LUN24,BUF)
+        ENDDO
+
+        CALL IMCLOSE(LUN24)
+        RETURN
+
+1400    IROW1=1
+        IROW2=NROW
+        DO L=1,NSLICE
+          CALL IMPOSN(LUN24,L-1,IROW1-1)
+          DO I=IROW1,IROW2
+            I1=(L-1)*NXYZ(2)+(I-IROW1)+1
+            CALL REDLIN(LUN1,BUF,NSAM,I1)
+            CALL IWRLIN(LUN24,BUF)
+          ENDDO
+        ENDDO
+
+        CLOSE(LUN1)
+        CALL IMCLOSE(LUN24)
+
+        RETURN
+        END
+
+
+
+@
+
+
+1.2
+log
+@cosmetic
+@
+text
+@d7 23
+a29 7
+C *  SPIDER - MODULAR IMAGE PROCESSING SYSTEM.  AUTHOR: J.FRANK            *
+C *  COPYRIGHT (C)1981,1993, WADSWORTH CENTER FOR LABORATORIES AND         *
+C *  RESEARCH, NEW YORK STATE DEPARTMENT OF HEALTH, ALBANY, NY 12201.      *
+C *    THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO THE CENTER FOR     *
+C *    LABORATORIES AND RESEARCH AND ARE NOT TO BE DISCLOSED TO OTHERS OR  *
+C *    USED FOR PURPOSES OTHER THAN INTENDED WITHOUT WRITTEN APPROVAL OF   *
+C *    THE CENTER FOR LABORATORIES AND RESEARCH                            *
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d2 1
+a2 1
+C ++************************************************************************
+d6 1
+a6 1
+C **************************************************************************
+d14 5
+a18 3
+C **************************************************************************
+C                                                                          *
+C CONVERTS SPIDER IMAGES TO OR FROM MRC FORMAT
+d20 2
+a21 2
+C       MODIFIED BY A. LEITH 11 JAN 90 TO USE FILERD TO INPUT MRC FILENAMES.
+C       THIS SHOULD ALLOW USE OF SPIDER DO LOOPS HERE
+d23 2
+a24 2
+C       Contains modifications received from John Kenney 6 Sept 89
+C       Contains modifications received from Ken Taylor    Oct 93
+d28 1
+a28 1
+C***************************************************************************
+a50 2
+
+C2      CALL RDPRMC(ANS,NCHAR,.TRUE.,'(T)O OR (F)ROM MRC FORMAT',NULL,IRTFLG)
+@

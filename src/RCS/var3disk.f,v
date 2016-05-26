@@ -1,0 +1,1655 @@
+head	1.6;
+access;
+symbols
+	pre_fftwrings:1.4
+	pre_opfiles:1.4
+	src:1.4
+	best-code:1.4
+	x-named-regs:1.3
+	x:1.3
+	v13-00:1.2
+	pre_GPL:1.1;
+locks; strict;
+comment	@c @;
+
+
+1.6
+date	2009.05.13.16.08.39;	author leith;	state dead;
+branches;
+next	1.5;
+
+1.5
+date	2008.05.19.12.02.55;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2006.01.06.14.40.52;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2005.12.07.21.41.46;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2005.10.17.16.57.05;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2005.04.21.18.42.41;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.6
+log
+@does not work
+@
+text
+@C++*********************************************************************
+C
+C  VAR3DISK.F                                        07/26/02
+C              REPLACED BESSEL FUNCTIONS
+C              BUILDM WRONG                        Dec  05 ARDEAN LEITH
+C              FMRS_PLAN                           MAY  08 ARDEAN LEITH
+C                                   
+C=**********************************************************************
+C=* From: SPIDER - MODULAR IMAGE PROCESSING SYSTEM                     *
+C=* Copyright (C)2002, P. A. Penczek                                   *
+C=*                                                                    *
+C=* University of Texas - Houston Medical School                       *
+C=*                                                                    *
+C=* Email:  pawel.a.penczek@@uth.tmc.edu                                *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* This program is distributed in the hope that it will be useful,    *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+C=* General Public License for more details.                           *
+C=*                                                                    *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+C=*                                                                    *
+C=**********************************************************************
+C
+C  DISK FILES USED TO STORE FOURIER TRANSFORMS OF PROJECTIONS
+C
+C  SELECTION WITHOUT REPLACEMENT (M OUT OF N)
+C   VAR3DIQSWOR
+C  SELECTION WITH REPLACEMENTS
+C   VAR3DIQSWR
+C  JACKNIFE METHOD (LEAVE ONE OUT)
+C   VAR3DIQJACK
+C
+C NOTE:    SLOPPILY WRITTEN.  CLONES ITSELF.
+C          NOBODY HAS EVER MANAGED TO GET THIS OPERATION TO WORK! al
+C
+C23456789 123456789 123456789 123456789 123456789 123456789 123456789 12
+C--*********************************************************************
+
+        SUBROUTINE VAR3DISK(MODE)
+
+        INCLUDE 'CMBLOCK.INC'
+        INCLUDE 'CMLIMIT.INC'
+        INCLUDE 'F90ALLOC.INC'
+
+        REAL, DIMENSION(:,:), ALLOCATABLE :: DM,SM
+C       DOC FILE POINTERS
+        REAL, DIMENSION(:,:), POINTER :: ANGBUF, ANGSYM
+
+        COMMON /F_SPEC/ FINPAT,NLET,FINPIC,FINSEC,NLEP
+        CHARACTER*80    FINPIC,FINPAT,FINSEC,FILNAM,ANGDOC
+	CHARACTER*1     MODE
+        DATA  INPIC/99/
+
+        NILMAX = NIMAX
+
+        CALL FILELIST(.TRUE.,INPIC,FINPAT,NLET,INUMBR,NILMAX,NANG,
+     &                 'ENTER TEMPLATE FOR 2-D IMAGES',IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+        MAXNUM = MAXVAL(INUMBR(1:NANG))
+        CLOSE(INPIC)
+
+C       N    - LINEAR DIMENSION OF PROJECTIONS AND RESTORED CUBE
+C       NANG - TOTAL NUMBER OF IMAGES
+        WRITE(NOUT,2001) NANG
+2001    FORMAT(' NUMBER OF IMAGES =',I5)
+
+        NILM = 0
+
+        CALL FILELIST(.TRUE.,INPIC,FINSEC,NLEP,NDUM,NILM,NDUM,
+     &                 'ENTER TEMPLATE FOR REFERENCE 2-D IMAGES',IRTFLG)
+
+
+C       RETRIEVE ARRAY WITH ANGLES DATA IN IT
+        MAXXT = 4
+        MAXYT = MAXNUM
+        CALL GETDOCDAT('ANGLES DOC',.TRUE.,ANGDOC,77,.FALSE.,MAXXT,
+     &                       MAXYT,ANGBUF,IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 9998
+
+C       RETRIEVE ARRAY WITH SYMMETRIES DATA IN IT
+        MAXXS=0
+        MAXSYM=0
+        CALL GETDOCDAT('SYMMETRIES DOC',.TRUE.,ANGDOC,77,.TRUE.,MAXXS,
+     &                   MAXSYM,ANGSYM,IRTFLG)
+        IF(IRTFLG.NE.0)  MAXSYM=1
+
+C       OPEN FIRST IMAGE FILE TO DETERMINE NSAM, NROW, NSL
+        CALL FILGET(FINPAT,FINPIC,NLET,INUMBR(1),INTFLG)
+
+        MAXIM = 0
+        CALL OPFILEC(0,.FALSE.,FINPIC,INPIC,'O',IFORM,NSAM,NROW,NSL,
+     &             MAXIM,' ',.FALSE.,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+        CLOSE(INPIC)
+
+        N2     = 2*NSAM
+        LSD    = N2+2-MOD(N2,2)
+        NMAT   = LSD*N2*N2
+
+        ALLOCATE(DM(9,NANG), STAT=IRTFLG)
+        CALL BUILDM(INUMBR,DM,NANG,ANGBUF(1,1),.FALSE.,SSDUM,.FALSE.,
+     &       IRTFLG)
+        DEALLOCATE(ANGBUF)
+        IF (IRTFLG .NE. 0) GOTO 9998
+
+        IF (MAXSYM.GT.1)  THEN
+           ALLOCATE(SM(9,MAXSYM), STAT=IRTFLG)
+           IF (IRTFLG.NE.0) THEN 
+              CALL ERRT(46,'VA 3, SM',IER)
+              DEALLOCATE (DM)
+           ENDIF
+           CALL  BUILDS(SM,MAXSYM,ANGSYM(1,1),IRTFLG)
+           DEALLOCATE(ANGSYM)
+        ELSE
+           ALLOCATE(SM(1,1), STAT=IRTFLG)
+           IF (IRTFLG .NE. 0) THEN 
+              CALL ERRT(46,'VA 3, SM-2nd',IER)
+              DEALLOCATE (DM)
+           ENDIF
+        ENDIF
+
+	IF (MODE.EQ.'O')  THEN
+         CALL VAR3DIQSWOR(NSAM,LSD,N2,N2/2,INUMBR,DM,NANG,SM,MAXSYM)
+	ELSEIF(MODE.EQ.'W')  THEN
+         CALL VAR3DIQSWR(NSAM,LSD,N2,N2/2,INUMBR,DM,NANG,SM,MAXSYM)
+	ELSEIF(MODE.EQ.'J')  THEN
+         CALL VAR3DIQJACK(NSAM,LSD,N2,N2/2,INUMBR,DM,NANG,SM,MAXSYM)
+	ENDIF
+
+9997	DEALLOCATE(DM)
+9998    DEALLOCATE(SM)
+        END
+
+
+
+C       ------------------ VAR3DIQSWOR ----------------------------------
+
+        SUBROUTINE  VAR3DIQSWOR(NS,LSD,N,N2,ILIST,DM,NANG,SM,MAXSYM)
+
+        INCLUDE 'CMBLOCK.INC'
+        DIMENSION         ILIST(NANG)
+        DIMENSION         DM(3,3,NANG),SM(3,3,MAXSYM),DMS(3,3)
+
+C  2D Fourier transforms of the input data
+        COMPLEX, DIMENSION(:,:,:), ALLOCATABLE :: X,S,XX,SS
+        COMPLEX, DIMENSION(:,:), ALLOCATABLE :: BI,BS
+        REAL, DIMENSION(:,:,:), ALLOCATABLE :: W,WW
+        REAL, DIMENSION(:,:), ALLOCATABLE :: PROJ
+C  Additional matrices
+        INTEGER, DIMENSION(:), ALLOCATABLE :: NORD
+
+        COMMON /F_SPEC/ FINPAT,NLET,FINPIC,FINSEC,NLEP
+        CHARACTER*80    FINPIC,FINPAT,FINSEC,FILNAM,SCR1,SCR2
+	CHARACTER*1  NULL
+        DOUBLE PRECISION  PI
+        PARAMETER         (LTAB=4999)
+        COMMON  /TABS/    LN2,FLTB,TABI(0:LTAB)
+C In this version the order of the Bessel function is mmm=1
+	COMMON  /BESSEL_PARAM/  ALPHA,AAAA,NNN
+C,mmm
+        DATA  IOPIC/98/,INPROJ/99/,ISCR1/97/,ISCR2/96/
+	PARAMETER (QUADPI = 3.141592653589793238462643383279502884197)
+	PARAMETER (TWOPI = 2*QUADPI)
+
+
+        MONO(K1,K2)=MIN0(K1,K2)+((MAX0(K1,K2)-1)*(MAX0(K1,K2)-2)/2)
+
+
+	CALL RDPRMI(MREM,NITER,NOT_USED,
+     &		'Select M and the number of volumes to be created')
+C
+C K=6
+        LN=5
+        LN2=LN/2
+C       Generalized Kaiser-Bessel window according to Lewitt
+C M=NS, N=N
+	R=NS/2
+	V=REAL(LN-1)/2.0/REAL(N)
+	ALPHA=6.5
+C	AAAA=0.0079
+	AAAA=0.9*V
+	NNN=3
+C	mmm=1
+C       GENERATE TABLE WITH INTERPOLANTS
+C	B0=(SQRT(ALPHA)**mmm)*BESSI(mmm,ALPHA)
+ 	B0=SQRT(ALPHA)*BESI1(ALPHA)
+        FLTB=REAL(LTAB)/REAL(LN2+1)
+C       Cannot be parallel as there are DATA satements in BESI1
+cc$omp  parallel do private(i,s,x),shared(mmm)
+        DO  I=0,LTAB
+	 ST=REAL(I)/FLTB/N
+	 IF(ST.LE.AAAA)  THEN
+	  XXX=SQRT(1.0-(ST/AAAA)**2)
+	  TABI(I)=
+C(SQRT(ALPHA*XXX)**mmm)*BESSI(mmm,ALPHA*XXX)/B0
+CTEMPO=
+     &		SQRT(ALPHA*XXX)*BESI1(ALPHA*XXX)/B0
+	 ELSE
+	  TABI(I)=0.0
+	 ENDIF
+        ENDDO
+
+        ALLOCATE (X(0:N2,N,N), S(0:N2,N,N), W(0:N2,N,N),NORD(NANG), 
+     &	  PROJ(NS,NS), BI(0:N2,N), BS(0:N2,N), STAT=IRTFLG)
+        IF (IRTFLG.NE.0) THEN 
+           CALL ERRT(46,'VA 3',IER)
+        ENDIF
+
+        CALL FMRS_PLAN(.TRUE.,BI,N,N,1, 0,+1,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+        CALL FMRS_PLAN(.TRUE.,BI,N,N,1, 0,-1,IRTFLG)  ! UNUSED??
+        IF (IRTFLG .NE. 0) RETURN
+
+C       First file series
+	LENR=(N2+1)*2*N
+        MAXIM = 0
+	IFORM=1
+	NSL=1
+        CALL OPFILEC(0,.TRUE.,SCR1,ISCR1,'U',IFORM,LENR,NANG,NSL,
+     &                   MAXIM,'FIRST SCRATCH FILE',.FALSE.,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+        INV = +1
+
+C       Read all the projection data
+        DO    K=1,NANG
+C          PRINT  *,' PROJECTION #',K
+
+C          OPEN DESIRED FILE
+           CALL FILGET(FINPAT,FINPIC,NLET,ILIST(K),IRTFLG)
+           IF (IRTFLG .NE. 0) RETURN
+
+           MAXIM = 0
+           CALL OPFILEC(0,.FALSE.,FINPIC,INPROJ,'O',IFORM,NSAM,NSAM,NSL,
+     &                   MAXIM,' ',.FALSE.,IRTFLG)
+           IF (IRTFLG .NE. 0) RETURN
+
+ 
+	   CALL READV(INPROJ,PROJ,NS,NS,NS,NS,1)
+           CLOSE(INPROJ)
+           CALL PADD2(PROJ,NS,BI,LSD,N)
+           CALL FMRS_2(BI,N,N,INV)
+           DO  J=1,N
+              DO  I=0,N2
+                 BI(I,J)=BI(I,J)*(-1)**(I+J+1)
+              ENDDO
+	  ENDDO
+	  CALL WRTLIN(ISCR1,BI,LENR,K)
+	ENDDO
+	CLOSE(ISCR1)
+
+C       Second file series
+        MAXIM = 0
+	IFORM=1
+	NSL=1
+        CALL OPFILEC(0,.TRUE.,SCR2,ISCR2,'U',IFORM,LENR,NANG,NSL,
+     &              MAXIM,'SECOND SCRATCH FILE',.FALSE.,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+        INV = +1
+C        Read all the projection data
+        DO    K=1,NANG
+C          PRINT  *,' PROJECTION #',K
+
+C          OPEN DESIRED FILE
+           CALL FILGET(FINSEC,FINPIC,NLEP,ILIST(K),IRTFLG)
+           IF (IRTFLG .NE. 0) RETURN
+
+           MAXIM = 0
+           CALL OPFILEC(0,.FALSE.,FINPIC,INPROJ,'O',IFORM,NSAM,NSAM,NSL,
+     &                   MAXIM,'DUMMY',.FALSE.,IRTFLG)
+           IF (IRTFLG .NE. 0) RETURN
+
+ 
+	   CALL READV(INPROJ,PROJ,NS,NS,NS,NS,1)
+           CLOSE(INPROJ)
+           CALL PADD2(PROJ,NS,BI,LSD,N)
+           CALL FMRS_2(BI,N,N,INV)
+           DO  J=1,N
+              DO  I=0,N2
+                 BI(I,J)=BI(I,J)*(-1)**(I+J+1)
+              ENDDO
+	  ENDDO
+	  CALL WRTLIN(ISCR2,BI,LENR,K)
+	ENDDO
+	CLOSE(ISCR2)
+        DEALLOCATE (PROJ)
+C  Open both scratch files
+        CALL OPFILEC(0,.FALSE.,SCR1,ISCR1,'O',IFORM,LENR,NANG,NSL,
+     &                   MAXIM,NULL,.FALSE.,IRTFLG)
+        CALL OPFILEC(0,.FALSE.,SCR2,ISCR2,'O',IFORM,LENR,NANG,NSL,
+     &              MAXIM,NULL,.FALSE.,IRTFLG)
+C
+
+	NULL=CHAR(0)
+	CALL  FILERD(FINPAT,NLET1,NULL,
+     &		'ENTER TEMPLATE FOR OUTPUT VOLUME 1',IRTFLG)
+	CALL  FILERD(FINPIC,NLET2,NULL,
+     &		'ENTER TEMPLATE FOR OUTPUT VOLUME 2',IRTFLG)
+	CALL RDPRMI(IT,NOT_USED,NOT_USED,'First output volume number')
+
+#ifdef SP_MP
+	LN1=LN+1
+#endif
+C **********************************************************************
+	IF(MREM.GT.NANG/2)  THEN
+C  In case the user want to select more than half projections
+C     run the deleting mode
+	MREM=NANG-MREM
+
+        ALLOCATE (XX(0:N2,N,N), SS(0:N2,N,N), WW(0:N2,N,N), STAT=IRTFLG)
+        IF (IRTFLG.NE.0) THEN 
+           CALL ERRT(46,'VA 3',IER)
+           RETURN
+        ENDIF
+
+C  First, build the full structure
+c$omp parallel sections
+c$omp section
+        X=CMPLX(0.0,0.0)
+c$omp section
+        S=CMPLX(0.0,0.0)
+c$omp section
+        W=0.0
+c$omp end parallel sections
+C
+        DO    K=1,NANG
+	CALL REDLIN(ISCR1,BI,LENR,K)
+	CALL REDLIN(ISCR2,BS,LENR,K)
+           DO  ISYM=1,MAXSYM
+            IF(MAXSYM.GT.1)  THEN
+C  symmetries, multiply matrices
+             DMS=MATMUL(SM(:,:,ISYM),DM(:,:,K))
+            ELSE
+             DMS=DM(:,:,K)
+            ENDIF
+#ifdef SP_MP
+	    DO  JT=1,LN1
+c$omp parallel do private(j),shared(N,N2,JT,X,W,BI,DMS)
+             DO J=-N2+JT,N2,LN1
+              CALL ONELINE2(J,N,N2,X,S,W,BI,BS,DMS)
+             ENDDO
+            ENDDO
+#else
+            DO J=-N2+1,N2
+              CALL ONELINE2(J,N,N2,X,S,W,BI,BS,DMS)
+            ENDDO
+#endif
+C   END OF SYMMETRIES LOOP
+           ENDDO
+C
+C          END OF PROJECTIONS LOOP
+        ENDDO
+
+C       DO NOT SYMMETRIZE PLANE 0, WILL BE NEEDED AS IS FOR PARTIAL VOLUMES
+CCCCCCCC	CALL  SYMPLANE0(X,W,N2,N)
+         
+C  Have volume X and weighting W in Fourier space.
+C  Sample without replacement
+	DO NK=1,NITER
+C  Create new copies of X and W.
+c$omp parallel sections
+c$omp section
+        XX=X
+c$omp section
+        SS=S
+c$omp section
+        WW=W
+c$omp section
+C Sample MREM without replacements
+	 DO MM=1,NANG
+	  NORD(MM)=MM
+	 ENDDO
+	 DO MM=1,NANG
+          CALL RANDOM_NUMBER(HARVEST=ERND)
+          IMTEMP = MIN0(NANG,MAX0(1,INT(ERND*NANG+0.5)))
+	  INORD=NORD(MM)
+	  NORD(MM)=NORD(IMTEMP)
+	  NORD(IMTEMP)=INORD
+	 ENDDO
+C  Sort the selected subset so the disk access is faster.
+	CALL ISORT(NORD,MREM)
+c$omp end parallel sections
+C  Go through selected projections, remove from 3D M on the list
+	DO  MM=1,MREM
+	LK2=NORD(MM)
+	CALL REDLIN(ISCR1,BI,LENR,LK2)
+	CALL REDLIN(ISCR2,BS,LENR,LK2)
+C Remove LK2
+           DO  ISYM=1,MAXSYM
+            IF(MAXSYM.GT.1)  THEN
+C  symmetries, multiply matrices
+             DMS=MATMUL(SM(:,:,ISYM),DM(:,:,LK2))
+            ELSE
+             DMS=DM(:,:,LK2)
+            ENDIF
+#ifdef SP_MP
+	    DO  JT=1,LN1
+c$omp parallel do private(j),shared(N,N2,JT,XX,WW,BI,DMS)
+             DO J=-N2+JT,N2,LN1
+              CALL ONELINEDEL2(J,N,N2,XX,SS,WW,BI,BS,DMS)
+             ENDDO
+            ENDDO
+#else
+            DO J=-N2+1,N2
+              CALL ONELINEDEL2(J,N,N2,XX,SS,WW,BI,BS,DMS)
+            ENDDO
+#endif
+C   END OF SYMMETRIES LOOP
+           ENDDO
+	ENDDO
+
+
+C       SYMMETRIZE PLANE 0
+	CALL  SYMPLANE02(XX,SS,WW,N2,N)
+C  Calculate real space volume
+        CALL NRMW2(XX,WW,N2,N)
+        CALL WINDKB2(XX,XX,NS,LSD,N)
+        CALL NRMW2(SS,WW,N2,N)
+        CALL WINDKB2(SS,SS,NS,LSD,N)
+C
+        CALL OUTVOL2(FINPAT,NLET1,XX,NS,NS,NS,NK+IT-1)
+        CALL OUTVOL2(FINPIC,NLET2,SS,NS,NS,NS,NK+IT-1)
+	ENDDO
+	DEALLOCATE (X, S, W, WW, XX, SS, BI, BS, NORD)
+C **********************************************************************
+	ELSE
+C  user wants to select less than half of the projections
+C    run the adding mode
+C  Sample without replacement
+	DO NK=1,NITER
+c$omp parallel sections
+c$omp section
+        X=CMPLX(0.0,0.0)
+c$omp section
+        S=CMPLX(0.0,0.0)
+c$omp section
+        W=0.0
+c$omp section
+C Sample MREM without replacements
+	 DO MM=1,NANG
+	  NORD(MM)=MM
+	 ENDDO
+	 DO MM=1,NANG
+          CALL RANDOM_NUMBER(HARVEST=ERND)
+          IMTEMP = MIN0(NANG,MAX0(1,INT(ERND*NANG+0.5)))
+	  INORD=NORD(MM)
+	  NORD(MM)=NORD(IMTEMP)
+	  NORD(IMTEMP)=INORD
+	 ENDDO
+C  Sort the selected subset so the disk access is faster.
+	CALL ISORT(NORD,MREM)
+c$omp end parallel sections
+C  Go through selected projections, add to 3D M on the list
+	DO  MM=1,MREM
+	LK2=NORD(MM)
+	CALL REDLIN(ISCR1,BI,LENR,LK2)
+	CALL REDLIN(ISCR2,BS,LENR,LK2)
+           DO  ISYM=1,MAXSYM
+            IF(MAXSYM.GT.1)  THEN
+C  symmetries, multiply matrices
+             DMS=MATMUL(SM(:,:,ISYM),DM(:,:,LK2))
+            ELSE
+             DMS=DM(:,:,LK2)
+            ENDIF
+#ifdef SP_MP
+	    DO  JT=1,LN1
+c$omp parallel do private(j),shared(N,N2,JT,X,W,BI,DMS)
+             DO J=-N2+JT,N2,LN1
+              CALL ONELINE2(J,N,N2,X,S,W,BI,S,DMS)
+             ENDDO
+            ENDDO
+#else
+            DO J=-N2+1,N2
+              CALL ONELINE2(J,N,N2,X,S,W,BI,S,DMS)
+            ENDDO
+#endif
+C   END OF SYMMETRIES LOOP
+           ENDDO
+C
+C          END OF PROJECTIONS LOOP
+        ENDDO
+
+C       SYMMETRIZE PLANE 0
+	CALL  SYMPLANE02(X,S,W,N2,N)
+C  Calculate real space volume
+        CALL NRMW2(X,W,N2,N)
+        CALL WINDKB2(X,X,NS,LSD,N)
+        CALL NRMW2(S,W,N2,N)
+        CALL WINDKB2(S,S,NS,LSD,N)
+C
+        CALL OUTVOL2(FINPAT,NLET1,X,NS,NS,NS,NK+IT-1)
+        CALL OUTVOL2(FINPIC,NLET2,S,NS,NS,NS,NK+IT-1)
+	ENDDO
+	DEALLOCATE (X, W, BI, NORD)
+	ENDIF
+
+C
+        END
+
+
+C       ------------------ VAR3DIQSWR ----------------------------------
+
+        SUBROUTINE  VAR3DIQSWR(NS,LSD,N,N2,ILIST,DM,NANG,SM,MAXSYM)
+
+        INCLUDE 'CMBLOCK.INC'
+        DIMENSION         ILIST(NANG)
+        DIMENSION         DM(3,3,NANG),SM(3,3,MAXSYM),DMS(3,3)
+
+C  2D Fourier transforms of the input data
+        COMPLEX, DIMENSION(:,:,:), ALLOCATABLE :: X,BI,XX
+        REAL, DIMENSION(:,:,:), ALLOCATABLE :: W,WW,PROJ
+C  Additional matrices
+        INTEGER, DIMENSION(:), ALLOCATABLE :: NORD
+        REAL, DIMENSION(:), ALLOCATABLE :: ERND
+
+        COMMON  /F_SPEC/  FINPAT,NLET,FINPIC
+        CHARACTER*80      FINPIC,FINPAT,FILNAM
+	CHARACTER*1  NULL
+        DOUBLE PRECISION  PI
+        PARAMETER         (LTAB=4999)
+        COMMON  /TABS/    LN2,FLTB,TABI(0:LTAB)
+C       In this version the order of the Bessel function is mmm=1
+	COMMON  /BESSEL_PARAM/  ALPHA,AAAA,NNN
+C,mmm
+        DATA  IOPIC/98/,INPROJ/99/
+	PARAMETER (QUADPI = 3.141592653589793238462643383279502884197)
+	PARAMETER (TWOPI = 2*QUADPI)
+
+
+        MONO(K1,K2)=MIN0(K1,K2)+((MAX0(K1,K2)-1)*(MAX0(K1,K2)-2)/2)
+
+
+	CALL RDPRMI(NITER,NOT_USED,NOT_USED,
+     &		'Number of volumes to be created')
+C
+C K=6
+        LN=5
+        LN2=LN/2
+C Generalized Kaiser-Bessel window according to Lewitt
+C M=NS, N=N
+	R=NS/2
+	V=REAL(LN-1)/2.0/REAL(N)
+	ALPHA=6.5
+C	AAAA=0.0079
+	AAAA=0.9*V
+	NNN=3
+C	mmm=1
+C       GENERATE TABLE WITH INTERPOLANTS
+C	B0=(SQRT(ALPHA)**mmm)*BESSI(mmm,ALPHA)
+ 	B0=SQRT(ALPHA)*BESI1(ALPHA)
+        FLTB=REAL(LTAB)/REAL(LN2+1)
+C  Cannot be parallel as there are DATA satements in BESI1
+cc$omp parallel do private(i,s,x),shared(mmm)
+        DO  I=0,LTAB
+	 S=REAL(I)/FLTB/N
+	 IF(S.LE.AAAA)  THEN
+	  XXX=SQRT(1.0-(S/AAAA)**2)
+	  TABI(I)=
+C(SQRT(ALPHA*XXX)**mmm)*BESSI(mmm,ALPHA*XXX)/B0
+CTEMPO=
+     &		SQRT(ALPHA*XXX)*BESI1(ALPHA*XXX)/B0
+	 ELSE
+	  TABI(I)=0.0
+	 ENDIF
+        ENDDO
+
+#ifdef SP_MP
+	LN1=LN+1
+#endif
+        ALLOCATE (X(0:N2,N,N), STAT=IRTFLG)
+        IF (IRTFLG.NE.0) THEN 
+           CALL ERRT(46,'VA 3, X',IER)
+        ENDIF
+
+       ALLOCATE (W(0:N2,N,N), STAT=IRTFLG)
+        IF (IRTFLG.NE.0) THEN 
+           CALL ERRT(46,'VA 3, W',IER)
+           RETURN
+        ENDIF
+
+C       DETERMINE NUMBER OF OMP THREADS
+        CALL GETTHREADS(NUMTH)
+
+        ALLOCATE (PROJ(NS,NS,NUMTH), STAT=IRTFLG)
+        IF (IRTFLG.NE.0) THEN 
+           CALL ERRT(46,'VA 3, PROJ',IER)
+           DEALLOCATE (W)
+           RETURN
+        ENDIF
+
+        ALLOCATE (BI(0:N2,N,NANG), STAT=IRTFLG)
+        IF (IRTFLG.NE.0) THEN 
+           CALL ERRT(46,'VA 3, BI',IER)
+           DEALLOCATE (W,PROJ)
+        ENDIF
+
+        CALL FMRS_PLAN(.TRUE.,BI,N,N,1, 0,+1,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+        CALL FMRS_PLAN(.TRUE.,BI,N,N,1, 0,-1,IRTFLG)  ! UNUSED??
+        IF (IRTFLG .NE. 0) RETURN
+
+C       Read all the projection data
+        DO    K=1,NANG
+C          PRINT  *,' PROJECTION #',K
+
+C          OPEN DESIRED FILE
+           CALL FILGET(FINPAT,FINPIC,NLET,ILIST(K),IRTFLG)
+           IF (IRTFLG .NE. 0) RETURN
+
+           MAXIM = 0
+           CALL OPFILEC(0,.FALSE.,FINPIC,INPROJ,'O',IFORM,NSAM,NSAM,NSL,
+     &                   MAXIM,'DUMMY',.FALSE.,IRTFLG)
+           IF (IRTFLG .NE. 0) RETURN
+
+ 
+	   CALL READV(INPROJ,BI(0,1,K),NS,NS,NS,NS,1)
+           CLOSE(INPROJ)
+	ENDDO
+
+C       Prepare all the projection data
+	NS2=NS*NS
+        INV = +1
+ 	DO  IMI=1,NANG,NUMTH
+c$omp     parallel do private(K,J,I),SHARED(INV)
+	  DO  K=IMI,MIN(NANG,IMI+NUMTH-1)
+	   CALL  COP(BI(0,1,K),PROJ(1,1,K-IMI+1),NS2)
+           CALL PADD2(PROJ(1,1,K-IMI+1),NS,BI(0,1,K),LSD,N)
+           CALL FMRS_2(BI(0,1,K),N,N,INV)
+           DO  J=1,N
+              DO  I=0,N2
+                 BI(I,J,K)=BI(I,J,K)*(-1)**(I+J+1)
+              ENDDO
+           ENDDO
+	  ENDDO
+	ENDDO
+        DEALLOCATE (PROJ)
+
+	NULL=CHAR(0)
+	CALL  FILERD(FINPAT,NLET,NULL,
+     &		'ENTER TEMPLATE FOR OUTPUT VOLUME',IRTFLG)
+	CALL RDPRMI(IT,NOT_USED,NOT_USED,'First output volume number')
+
+C  First, build the full structure
+c$omp parallel sections
+c$omp section
+        X=CMPLX(0.0,0.0)
+c$omp section
+        W=0.0
+c$omp end parallel sections
+C
+        DO    K=1,NANG
+           DO  ISYM=1,MAXSYM
+            IF(MAXSYM.GT.1)  THEN
+C  symmetries, multiply matrices
+             DMS=MATMUL(SM(:,:,ISYM),DM(:,:,K))
+            ELSE
+             DMS=DM(:,:,K)
+            ENDIF
+#ifdef SP_MP
+	    DO  JT=1,LN1
+c$omp parallel do private(j),shared(N,N2,JT,X,W,BI,DMS)
+             DO J=-N2+JT,N2,LN1
+              CALL ONELINE(J,N,N2,X,W,BI(0,1,K),DMS)
+             ENDDO
+            ENDDO
+#else
+            DO J=-N2+1,N2
+              CALL ONELINE(J,N,N2,X,W,BI(0,1,K),DMS)
+            ENDDO
+#endif
+C   END OF SYMMETRIES LOOP
+           ENDDO
+C
+C          END OF PROJECTIONS LOOP
+        ENDDO
+
+C       DO NOT SYMMETRIZE PLANE 0, WILL BE NEEDED AS IS FOR PARTIAL VOLUMES
+CCCCCCCC	CALL  SYMPLANE0(X,W,N2,N)
+         
+C  Have volume X and weighting W in Fourier space.
+C  Sample with replacement
+        ALLOCATE (ERND(NANG),NORD(NANG), STAT=IRTFLG)
+        IF (IRTFLG.NE.0) THEN 
+           CALL ERRT(46,'BP 3F, NANG',IER)
+           RETURN
+        ENDIF
+
+        ALLOCATE (XX(0:N2,N,N), STAT=IRTFLG)
+        IF (IRTFLG.NE.0) THEN 
+           CALL ERRT(46,'VA 3, XX',IER)
+           RETURN
+        ENDIF
+	
+        ALLOCATE (WW(0:N2,N,N), STAT=IRTFLG)
+        IF (IRTFLG.NE.0) THEN 
+           CALL ERRT(46,'VA 3, WW',IER)
+           RETURN
+        ENDIF
+
+C Endless loop
+	DO NK=1,NITER
+c$omp parallel sections
+c$omp section
+         CALL RANDOM_NUMBER(HARVEST=ERND)
+         NORD = MIN0(NANG,MAX0(1,INT(ERND*NANG+0.5)))
+C  Sort the selection of images
+	CALL ISORT(NORD,NANG)
+c$omp section
+C  Create new copies of X and W.
+        XX=X
+c$omp section
+        WW=W
+c$omp end parallel sections
+	
+C  Go through selected projections, remove from 3D missing,
+C                                   add multiple...
+	LK1=0
+	LK2=0
+100	LK1=LK1+1
+101	LK2=LK2+1
+	IF(NORD(LK1).EQ.LK2)  THEN
+	MULT=1
+102	 IF(LK1.EQ.NANG)  THEN
+	  IF(MULT.GT.1) THEN
+C  Add multiple LK2
+           DO  ISYM=1,MAXSYM
+            IF(MAXSYM.GT.1)  THEN
+C  symmetries, multiply matrices
+             DMS=MATMUL(SM(:,:,ISYM),DM(:,:,LK2))
+            ELSE
+             DMS=DM(:,:,LK2)
+            ENDIF
+#ifdef SP_MP
+	    MULTI=MULT-1
+	    DO  JT=1,LN1
+c$omp parallel do private(j),shared(N,N2,JT,XX,WW,BI,DMS)
+             DO J=-N2+JT,N2,LN1
+              CALL ONELINEM(J,N,N2,XX,WW,BI(0,1,LK2),DMS,MULTI)
+             ENDDO
+            ENDDO
+#else
+            DO J=-N2+1,N2
+              CALL ONELINEM(J,N,N2,XX,WW,BI(0,1,LK2),DMS,MULT-1)
+            ENDDO
+#endif
+C   END OF SYMMETRIES LOOP
+           ENDDO
+C
+
+	  ENDIF
+C  End
+	   GOTO  103
+	 ELSE
+	  IF(NORD(LK1).EQ.NORD(LK1+1))  THEN
+	  LK1=LK1+1
+	  MULT=MULT+1
+	  GOTO  102
+	  ELSE
+	   IF(MULT.GT.1) THEN
+C  Add multiple LK2
+           DO  ISYM=1,MAXSYM
+            IF(MAXSYM.GT.1)  THEN
+C  symmetries, multiply matrices
+             DMS=MATMUL(SM(:,:,ISYM),DM(:,:,LK2))
+            ELSE
+             DMS=DM(:,:,LK2)
+            ENDIF
+#ifdef SP_MP
+	    MULTI=MULT-1
+	    DO  JT=1,LN1
+c$omp parallel do private(j),shared(N,N2,JT,XX,WW,BI,DMS)
+             DO J=-N2+JT,N2,LN1
+              CALL ONELINEM(J,N,N2,XX,WW,BI(0,1,LK2),DMS,MULTI)
+             ENDDO
+            ENDDO
+#else
+            DO J=-N2+1,N2
+              CALL ONELINEM(J,N,N2,XX,WW,BI(0,1,LK2),DMS,MULT-1)
+            ENDDO
+#endif
+C   END OF SYMMETRIES LOOP
+           ENDDO
+C
+	   
+	   ENDIF
+C  Continue
+	   GOTO 100
+	  ENDIF
+	 ENDIF
+	ELSE
+C Remove LK2
+           DO  ISYM=1,MAXSYM
+            IF(MAXSYM.GT.1)  THEN
+C  symmetries, multiply matrices
+             DMS=MATMUL(SM(:,:,ISYM),DM(:,:,LK2))
+            ELSE
+             DMS=DM(:,:,LK2)
+            ENDIF
+#ifdef SP_MP
+	    MULTI=MULT-1
+	    DO  JT=1,LN1
+c$omp parallel do private(j),shared(N,N2,JT,XX,WW,BI,DMS)
+             DO J=-N2+JT,N2,LN1
+CC  no such param  CALL ONELINEDEL(J,N,N2,XX,WW,BI(0,1,LK2),DMS,MULTI)
+              CALL ONELINEDEL(J,N,N2,XX,WW,BI(0,1,LK2),DMS)
+             ENDDO
+            ENDDO
+#else
+            DO J=-N2+1,N2
+CC  no such param  CALL ONELINEDEL(J,N,N2,XX,WW,BI(0,1,LK2),DMS,MULT-1)
+              CALL ONELINEDEL(J,N,N2,XX,WW,BI(0,1,LK2),DMS)
+            ENDDO
+#endif
+C   END OF SYMMETRIES LOOP
+           ENDDO
+C
+	GOTO  101
+	ENDIF
+103	CONTINUE
+C       SYMMETRIZE PLANE 0
+	CALL  SYMPLANE0(XX,WW,N2,N)
+C  Calculate real space volume
+        CALL NRMW2(XX,WW,N2,N)
+        CALL WINDKB2(XX,XX,NS,LSD,N)
+
+        CALL OUTVOL2(XX,NS,NS,NS,NK+IT-1)
+
+	ENDDO
+	DEALLOCATE (X, W, XX, WW, BI, NORD, ERND)
+
+C
+        END
+
+
+
+C       ------------------ VAR3DIQJACK ----------------------------------
+
+        SUBROUTINE  VAR3DIQJACK(NS,LSD,N,N2,ILIST,DM,NANG,SM,MAXSYM)
+
+        INCLUDE 'CMBLOCK.INC'
+        DIMENSION         ILIST(NANG)
+        DIMENSION         DM(3,3,NANG),SM(3,3,MAXSYM),DMS(3,3)
+
+C  2D Fourier transforms of the input data
+        COMPLEX, DIMENSION(:,:,:), ALLOCATABLE :: X,BI,XX
+        REAL, DIMENSION(:,:,:), ALLOCATABLE :: W,WW,PROJ
+C  Additional matrices
+        INTEGER, DIMENSION(:), ALLOCATABLE :: NORD
+
+        COMMON  /F_SPEC/  FINPAT,NLET,FINPIC
+        CHARACTER*80      FINPIC,FINPAT,FILNAM
+	CHARACTER*1  NULL
+        DOUBLE PRECISION  PI
+        PARAMETER         (LTAB=4999)
+        COMMON  /TABS/    LN2,FLTB,TABI(0:LTAB)
+C In this version the order of the Bessel function is mmm=1
+	COMMON  /BESSEL_PARAM/  ALPHA,AAAA,NNN
+C,mmm
+        DATA  IOPIC/98/,INPROJ/99/
+	PARAMETER (QUADPI = 3.141592653589793238462643383279502884197)
+	PARAMETER (TWOPI = 2*QUADPI)
+
+
+        MONO(K1,K2)=MIN0(K1,K2)+((MAX0(K1,K2)-1)*(MAX0(K1,K2)-2)/2)
+C
+C K=6
+        LN=5
+        LN2=LN/2
+C Generalized Kaiser-Bessel window according to Lewitt
+C M=NS, N=N
+	R=NS/2
+	V=REAL(LN-1)/2.0/REAL(N)
+	ALPHA=6.5
+C	AAAA=0.0079
+	AAAA=0.9*V
+	NNN=3
+C	mmm=1
+C       GENERATE TABLE WITH INTERPOLANTS
+C	B0=(SQRT(ALPHA)**mmm)*BESSI(mmm,ALPHA)
+ 	B0=SQRT(ALPHA)*BESI1(ALPHA)
+        FLTB=REAL(LTAB)/REAL(LN2+1)
+C  Cannot be parallel as there are DATA satements in BESI1
+cc$omp parallel do private(i,s,x),shared(mmm)
+        DO  I=0,LTAB
+	 S=REAL(I)/FLTB/N
+	 IF(S.LE.AAAA)  THEN
+	  XXX=SQRT(1.0-(S/AAAA)**2)
+	  TABI(I)=
+C(SQRT(ALPHA*XXX)**mmm)*BESSI(mmm,ALPHA*XXX)/B0
+CTEMPO=
+     &		SQRT(ALPHA*XXX)*BESI1(ALPHA*XXX)/B0
+	 ELSE
+	  TABI(I)=0.0
+	 ENDIF
+        ENDDO
+
+        ALLOCATE (X(0:N2,N,N), STAT=IRTFLG)
+        IF (IRTFLG.NE.0) THEN 
+           CALL ERRT(46,'VA 3, X',IER)
+        ENDIF
+
+       ALLOCATE (W(0:N2,N,N), STAT=IRTFLG)
+        IF (IRTFLG.NE.0) THEN 
+           CALL ERRT(46,'VA 3, W',IER)
+           RETURN
+        ENDIF
+
+C       DETERMINE NUMBER OF OMP THREADS
+        CALL GETTHREADS(NUMTH)
+
+        ALLOCATE (PROJ(NS,NS,NUMTH), STAT=IRTFLG)
+        IF (IRTFLG.NE.0) THEN 
+           CALL ERRT(46,'VA 3, PROJ',IER)
+           DEALLOCATE (W)
+           RETURN
+        ENDIF
+	
+        ALLOCATE (NORD(NANG), STAT=IRTFLG)
+        IF (IRTFLG.NE.0) THEN 
+           CALL ERRT(46,'VA 3, NORD',IER)
+           RETURN
+        ENDIF
+
+
+        ALLOCATE (BI(0:N2,N,NANG), STAT=IRTFLG)
+        IF (IRTFLG.NE.0) THEN 
+           CALL ERRT(46,'VA 3, BI',IER)
+           DEALLOCATE (W)
+           DEALLOCATE (PROJ)
+        ENDIF
+
+        CALL FMRS_PLAN(.TRUE.,BI,N,N,1, 0,+1,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+        CALL FMRS_PLAN(.TRUE.,BI,N,N,1, 0,-1,IRTFLG)  ! UNUSED??
+        IF (IRTFLG .NE. 0) RETURN
+
+C       Read all the projection data
+        DO    K=1,NANG
+C          PRINT  *,' PROJECTION #',K
+
+C          OPEN DESIRED FILE
+           CALL FILGET(FINPAT,FINPIC,NLET,ILIST(K),IRTFLG)
+           IF (IRTFLG .NE. 0) RETURN
+
+           MAXIM = 0
+           CALL OPFILEC(0,.FALSE.,FINPIC,INPROJ,'O',IFORM,NSAM,NSAM,NSL,
+     &                   MAXIM,'DUMMY',.FALSE.,IRTFLG)
+           IF (IRTFLG .NE. 0) RETURN
+
+ 
+	   CALL READV(INPROJ,BI(0,1,K),NS,NS,NS,NS,1)
+           CLOSE(INPROJ)
+	ENDDO
+
+C       Prepare all the projection data
+	NS2=NS*NS
+        INV = +1
+ 	DO  IMI=1,NANG,NUMTH
+c$omp     parallel do private(K,J,I),SHARED(INV)
+	  DO  K=IMI,MIN(NANG,IMI+NUMTH-1)
+	   CALL  COP(BI(0,1,K),PROJ(1,1,K-IMI+1),NS2)
+           CALL PADD2(PROJ(1,1,K-IMI+1),NS,BI(0,1,K),LSD,N)
+           CALL FMRS_2(BI(0,1,K),N,N,INV)
+           DO  J=1,N
+              DO  I=0,N2
+                 BI(I,J,K)=BI(I,J,K)*(-1)**(I+J+1)
+              ENDDO
+           ENDDO
+	  ENDDO
+	ENDDO
+        DEALLOCATE (PROJ)
+
+	NULL=CHAR(0)
+	CALL  FILERD(FINPAT,NLET,NULL,
+     &		'ENTER TEMPLATE FOR OUTPUT VOLUME',IRTFLG)
+
+#ifdef SP_MP
+	LN1=LN+1
+#endif
+C **********************************************************************
+        ALLOCATE (XX(0:N2,N,N), STAT=IRTFLG)
+        IF (IRTFLG.NE.0) THEN 
+           CALL ERRT(46,'VA 3, XX',IER)
+           RETURN
+        ENDIF
+	
+        ALLOCATE (WW(0:N2,N,N), STAT=IRTFLG)
+        IF (IRTFLG.NE.0) THEN 
+           CALL ERRT(46,'VA 3, WW',IER)
+           RETURN
+        ENDIF
+
+C  First, build the full structure
+c$omp parallel sections
+c$omp section
+        X=CMPLX(0.0,0.0)
+c$omp section
+        W=0.0
+c$omp end parallel sections
+C
+        DO    K=1,NANG
+           DO  ISYM=1,MAXSYM
+            IF(MAXSYM.GT.1)  THEN
+C  symmetries, multiply matrices
+             DMS=MATMUL(SM(:,:,ISYM),DM(:,:,K))
+            ELSE
+             DMS=DM(:,:,K)
+            ENDIF
+#ifdef SP_MP
+	    DO  JT=1,LN1
+c$omp parallel do private(j),shared(N,N2,JT,X,W,BI,DMS)
+             DO J=-N2+JT,N2,LN1
+              CALL ONELINE(J,N,N2,X,W,BI(0,1,K),DMS)
+             ENDDO
+            ENDDO
+#else
+            DO J=-N2+1,N2
+              CALL ONELINE(J,N,N2,X,W,BI(0,1,K),DMS)
+            ENDDO
+#endif
+C   END OF SYMMETRIES LOOP
+           ENDDO
+C
+C          END OF PROJECTIONS LOOP
+        ENDDO
+
+C       DO NOT SYMMETRIZE PLANE 0, WILL BE NEEDED AS IS FOR PARTIAL VOLUMES
+CCCCCCCC	CALL  SYMPLANE0(X,W,N2,N)
+         
+C  Have volume X and weighting W in Fourier space.
+C  Sample without replacement
+	DO NK=1,NANG
+C  Create new copies of X and W.
+c$omp parallel sections
+c$omp section
+        XX=X
+c$omp section
+        WW=W
+c$omp end parallel sections
+C Sample MREM without replacements
+C  REMOVE ONE PROJECTION
+C Remove NK
+           DO  ISYM=1,MAXSYM
+            IF(MAXSYM.GT.1)  THEN
+C  symmetries, multiply matrices
+             DMS=MATMUL(SM(:,:,ISYM),DM(:,:,NK))
+            ELSE
+             DMS=DM(:,:,NK)
+            ENDIF
+#ifdef SP_MP
+	    DO  JT=1,LN1
+c$omp parallel do private(j),shared(N,N2,JT,XX,WW,BI,DMS)
+             DO J=-N2+JT,N2,LN1
+              CALL ONELINEDEL(J,N,N2,XX,WW,BI(0,1,NK),DMS)
+             ENDDO
+            ENDDO
+#else
+            DO J=-N2+1,N2
+              CALL ONELINEDEL(J,N,N2,XX,WW,BI(0,1,NK),DMS)
+            ENDDO
+#endif
+C   END OF SYMMETRIES LOOP
+           ENDDO
+
+
+C       SYMMETRIZE PLANE 0
+	CALL  SYMPLANE0(XX,WW,N2,N)
+C  Calculate real space volume
+        CALL NRMW2(XX,WW,N2,N)
+        CALL WINDKB2(XX,XX,NS,LSD,N)
+C
+        CALL OUTVOL2(XX,NS,NS,NS,NK)
+	ENDDO
+	DEALLOCATE (X, W, WW, XX, BI, NORD)
+C
+        END
+	
+
+         SUBROUTINE  OUTVOL2(ANGDOC,NILI,X,NSAM,NROW,NSLICE,IT)
+
+         INCLUDE 'CMBLOCK.INC'
+
+        COMMON /F_SPEC/ FINPAT,NLET,FINPIC,FINSEC,NLEP
+        CHARACTER*80    FINPIC,FINPAT,FINSEC,FILNAM,ANGDOC
+         DIMENSION     X(NSAM,NROW,NSLICE)
+         DATA INPIC/69/
+
+         CALL  FILGET(ANGDOC,FILNAM,NILI,IT,IRTFLG)
+         IF(IRTFLG .NE. 0) RETURN
+
+         MAXIM  = 0
+         IFORM  = 3
+         CALL OPFILEC(0,.FALSE.,FILNAM,INPIC,'U',IFORM,NSAM,NROW,NSLICE,
+     &               MAXIM,' ',.FALSE.,IRTFLG)
+         IF (IRTFLG .NE. 0) RETURN
+
+         CALL WRITEV(INPIC,X,NSAM,NROW,NSAM,NROW,NSLICE)
+ 
+         CLOSE(INPIC)
+         END
+C ++********************************************************************
+C
+C  ONELINE2.F                                        05/03/02
+C                                         
+C **********************************************************************
+C *  WIW3D.f
+C=**********************************************************************
+C=* From: SPIDER - MODULAR IMAGE PROCESSING SYSTEM                     *
+C=* Copyright (C)2002, P. A. Penczek                                   *
+C=*                                                                    *
+C=* University of Texas - Houston Medical School                       *
+C=*                                                                    *
+C=* Email:  pawel.a.penczek@@uth.tmc.edu                                *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* This program is distributed in the hope that it will be useful,    *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+C=* General Public License for more details.                           *
+C=*                                                                    *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+C=*                                                                    *
+C=**********************************************************************
+C **********************************************************************
+C                                                                      *
+C  ONELINE2(J,N,N2,X,S,W,BI,BS,DM)                                           *
+C                                                                      *
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C***********************************************************************
+
+        SUBROUTINE  ONELINE2(J,N,N2,X,S,W,BI,BS,DM)
+
+        DIMENSION      W(0:N2,N,N)
+        COMPLEX BI(0:N2,N),BS(0:N2,N),X(0:N2,N,N),S(0:N2,N,N),BTQ,BSQ
+        DIMENSION      DM(6)
+
+        PARAMETER      (LTAB=4999)
+        COMMON  /TABS/ LN2,FLTB,TABI(0:LTAB)
+
+        IF (J .GE. 0)  THEN
+           JP = J+1
+        ELSE
+           JP = N+J+1
+        ENDIF
+
+        DO  I=0,N2
+           IF (((I*I+J*J) .LT.  (N*N/4)) .AND..NOT. 
+     &          (I.EQ. 0  .AND. J.LT.0)) THEN
+              XNEW = I * DM(1) + J * DM(4)
+              YNEW = I * DM(2) + J * DM(5)
+              ZNEW = I * DM(3) + J * DM(6)
+
+              IF (XNEW .LT. 0.0)  THEN
+                 XNEW = -XNEW
+                 YNEW = -YNEW
+                 ZNEW = -ZNEW
+                 BTQ  = CONJG(BI(I,JP))
+                 BSQ  = CONJG(BS(I,JP))
+              ELSE
+                 BTQ  = BI(I,JP)
+                 BSQ  = BS(I,JP)
+              ENDIF
+
+              IXN = IFIX(XNEW+0.5+N) - N
+              IYN = IFIX(YNEW+0.5+N) - N
+              IZN = IFIX(ZNEW+0.5+N) - N
+
+              IF (IXN .LE. (N2-LN2-1)  .AND.
+     &            IYN .GE. (-N2+2+LN2) .AND. IYN .LE. (N2-LN2-1) .AND.
+     &            IZN .GE. (-N2+2+LN2) .AND. IZN .LE. (N2-LN2-1)) THEN
+
+                 IF (IXN .GE. 0) THEN
+C                   MAKE SURE THAT LOWER LIMIT FOR X DOES NOT GO BELOW 0
+                    LB = -MIN0(IXN,LN2)
+                    DO LZ=-LN2,LN2
+                       IZP = IZN + LZ
+                       IF(IZP .GE. 0) THEN
+                          IZA = IZP + 1
+                       ELSE
+                          IZA = N + IZP + 1
+                       ENDIF
+ 
+                       TZ  = TABI(NINT(ABS(ZNEW-IZP) * FLTB))
+
+                       IF (TZ .NE. 0.0)  THEN
+                          DO  LY=-LN2,LN2
+                             IYP = IYN + LY
+                             IF (IYP .GE .0) THEN
+                                IYA = IYP + 1
+                             ELSE
+                                IYA = N + IYP + 1
+                             ENDIF
+ 
+                             TY  = TABI(NINT(ABS(YNEW-IYP) * FLTB)) * TZ
+                             IF (TY .NE. 0.0)  THEN
+                                DO  IXP=LB+IXN,LN2+IXN
+
+C                                  GET THE WEIGHT
+                                   WG=TABI(NINT(ABS(XNEW-IXP)*FLTB))*TY
+                                   IF (WG .NE. 0.0) THEN
+
+                                      X(IXP,IYA,IZA) =
+     &                                    X(IXP,IYA,IZA) + BTQ * WG
+                                      S(IXP,IYA,IZA) =
+     &                                    S(IXP,IYA,IZA) + BSQ * WG
+                                      W(IXP,IYA,IZA) = 
+     &                                    W(IXP,IYA,IZA) + WG
+                                   ENDIF
+                                ENDDO
+                             ENDIF
+                          ENDDO
+                       ENDIF
+                   ENDDO
+                ENDIF
+
+C               ADD REFLECTED POINTS
+                IF (IXN .LT. LN2) THEN
+                   DO  LZ=-LN2,LN2
+                      IZP = IZN + LZ
+                      IZT =  - IZP + 1
+                      IF (IZP .GT. 0)  IZT = N + IZT
+
+                      TZ = TABI(NINT(ABS(ZNEW-IZP) * FLTB))
+
+                      IF (TZ .NE. 0.0)  THEN
+                         DO  LY=-LN2,LN2
+                            IYP = IYN + LY
+                            IYT = -IYP + 1
+                            IF (IYP .GT. 0) IYT = IYT + N
+
+                            TY = TABI(NINT(ABS(YNEW-IYP) * FLTB)) * TZ
+                            IF (TY .NE. 0.0)  THEN
+                               DO  IXP=IXN-LN2,-1
+
+C                                 GET THE WEIGHT
+                                  WG = TABI(NINT(ABS(XNEW-IXP)*FLTB))*TY
+
+                                  IF (WG .NE. 0.0)  THEN
+                                     X(-IXP,IYT,IZT) = 
+     &                                   X(-IXP,IYT,IZT) + CONJG(BTQ)*WG
+                                     S(-IXP,IYT,IZT) = 
+     &                                   S(-IXP,IYT,IZT) + CONJG(BSQ)*WG
+                                     W(-IXP,IYT,IZT) =
+     &                                   W(-IXP,IYT,IZT) + WG
+                                  ENDIF
+                               ENDDO
+                            ENDIF
+                         ENDDO
+                      ENDIF
+                   ENDDO
+                ENDIF
+              ENDIF
+           ENDIF
+C          END J-I LOOP
+        ENDDO
+
+        END
+C       --------------------- ONELINEDEL2 ---------------------------------
+
+        SUBROUTINE  ONELINEDEL2(J,N,N2,X,S,W,BI,BS,DM)
+
+        DIMENSION      W(0:N2,N,N)
+        COMPLEX        BI(0:N2,N),X(0:N2,N,N),BTQ
+        COMPLEX        BS(0:N2,N),S(0:N2,N,N),BSQ
+        DIMENSION      DM(6)
+        PARAMETER      (LTAB=4999)
+        COMMON  /TABS/ LN2,FLTB,TABI(0:LTAB)
+
+        IF (J .GE. 0)  THEN
+           JP=J+1
+        ELSE
+           JP=N+J+1
+        ENDIF
+
+        DO  I=0,N2
+           IF ((I*I+J*J.LT.N*N/4).AND..NOT.(I.EQ.0.AND.J.LT.0))  THEN
+              XNEW=I*DM(1)+J*DM(4)
+              YNEW=I*DM(2)+J*DM(5)
+              ZNEW=I*DM(3)+J*DM(6)
+              IF (XNEW.LT.0.0)  THEN
+                 XNEW=-XNEW
+                 YNEW=-YNEW
+                 ZNEW=-ZNEW
+                 BTQ=CONJG(BI(I,JP))
+                 BSQ=CONJG(BS(I,JP))
+              ELSE
+                 BTQ=BI(I,JP)
+                 BSQ=BS(I,JP)
+              ENDIF
+              IXN=IFIX(XNEW+0.5+N)-N
+              IYN=IFIX(YNEW+0.5+N)-N
+              IZN=IFIX(ZNEW+0.5+N)-N
+              IF (IXN.LE.N2-LN2-1 .AND.
+     &        IYN.GE.-N2+2+LN2.AND.IYN.LE.N2-LN2-1 .AND.
+     &        IZN.GE.-N2+2+LN2.AND.IZN.LE.N2-LN2-1) THEN
+                 IF (IXN.GE.0) THEN
+C                   MAKE SURE THAT LOWER LIMIT FOR X DOES NOT GO BELOW 0
+                    LB=-MIN0(IXN,LN2)
+                    DO LZ=-LN2,LN2
+                       IZP=IZN+LZ
+                       IF(IZP.GE.0) THEN
+                          IZA=IZP+1
+                       ELSE
+                          IZA=N+IZP+1
+                       ENDIF
+                       TZ = TABI(NINT(ABS(ZNEW-IZP)*FLTB))
+           	       IF(TZ.NE.0.0)  THEN
+                       DO  LY=-LN2,LN2
+                          IYP=IYN+LY
+                          IF (IYP.GE.0) THEN
+                             IYA=IYP+1
+                          ELSE
+                             IYA=N+IYP+1
+                          ENDIF
+                          TY = TABI(NINT(ABS(YNEW-IYP)*FLTB))*TZ
+           		  IF(TY.NE.0.0)  THEN
+                          DO  IXP=LB+IXN,LN2+IXN
+C                            GET THE WEIGHT
+C                            WG=FINF(XNEW,YNEW,ZNEW,IXT,IYT,IZT)
+                             WG=TABI(NINT(ABS(XNEW-IXP)*FLTB))*TY
+			     IF(WG.NE.0.0)  THEN
+                              X(IXP,IYA,IZA)=X(IXP,IYA,IZA)-BTQ*WG
+                              S(IXP,IYA,IZA)=S(IXP,IYA,IZA)-BSQ*WG
+                              W(IXP,IYA,IZA)=W(IXP,IYA,IZA)-WG
+			     ENDIF
+                          ENDDO
+			  ENDIF
+                       ENDDO
+		       ENDIF
+                   ENDDO
+                ENDIF
+
+C               ADD REFLECTED POINTS
+                IF (IXN .LT. LN2) THEN
+                   DO  LZ=-LN2,LN2
+                      IZP=IZN+LZ
+                      IF (IZP.GT.0)  THEN
+                         IZT=N-IZP+1
+                      ELSE
+                         IZT=-IZP+1
+                      ENDIF
+                      TZ=TABI(NINT(ABS(ZNEW-IZP)*FLTB))
+C
+           	      IF(TZ.NE.0.0)  THEN
+                      DO  LY=-LN2,LN2
+                         IYP=IYN+LY
+                         IF (IYP.GT.0) THEN
+                            IYT=N-IYP+1
+                         ELSE
+                            IYT=-IYP+1
+                         ENDIF
+                         TY=TABI(NINT(ABS(YNEW-IYP)*FLTB))*TZ
+			 IF(TY.NE.0.0)  THEN
+                         DO  IXP=-LN2+IXN,-1
+C                           GET THE WEIGHT
+C                           WG=FINF(XNEW,YNEW,ZNEW,IXT,IYT,IZT)
+                            WG=TABI(NINT(ABS(XNEW-IXP)*FLTB))*TY
+			    IF(WG.NE.0.0)  THEN
+                          X(-IXP,IYT,IZT)=X(-IXP,IYT,IZT)-CONJG(BTQ)*WG
+                          S(-IXP,IYT,IZT)=S(-IXP,IYT,IZT)-CONJG(BSQ)*WG
+                            W(-IXP,IYT,IZT)=W(-IXP,IYT,IZT)-WG
+			    ENDIF
+                         ENDDO
+			 ENDIF
+                      ENDDO
+		      ENDIF
+                   ENDDO
+                ENDIF
+              ENDIF
+           ENDIF
+C          END J-I LOOP
+        ENDDO
+
+        END
+
+C       ----------------SYMPLANE02 ---------------------------------------
+ 
+        SUBROUTINE  SYMPLANE02(X,S,W,N2,N)
+
+        DIMENSION  W(0:N2,N,N)
+        COMPLEX  X(0:N2,N,N),S(0:N2,N,N)
+
+C       SYMMETRIZE PLANE 0
+        DO  IZA=2,N2
+           DO  IYA=2,N2
+              X(0,IYA,IZA)=X(0,IYA,IZA)+CONJG(X(0,N-IYA+2,N-IZA+2))
+              W(0,IYA,IZA)=W(0,IYA,IZA)+W(0,N-IYA+2,N-IZA+2)
+              X(0,N-IYA+2,N-IZA+2)=CONJG(X(0,IYA,IZA))
+              W(0,N-IYA+2,N-IZA+2)=W(0,IYA,IZA)
+              X(0,N-IYA+2,IZA)=X(0,N-IYA+2,IZA)+CONJG(X(0,IYA,N-IZA+2))
+              W(0,N-IYA+2,IZA)=W(0,N-IYA+2,IZA)+W(0,IYA,N-IZA+2)
+              X(0,IYA,N-IZA+2)=CONJG(X(0,N-IYA+2,IZA))
+              W(0,IYA,N-IZA+2)=W(0,N-IYA+2,IZA)
+              S(0,IYA,IZA)=S(0,IYA,IZA)+CONJG(S(0,N-IYA+2,N-IZA+2))
+              S(0,N-IYA+2,N-IZA+2)=CONJG(S(0,IYA,IZA))
+              S(0,N-IYA+2,IZA)=S(0,N-IYA+2,IZA)+CONJG(S(0,IYA,N-IZA+2))
+              S(0,IYA,N-IZA+2)=CONJG(S(0,N-IYA+2,IZA))
+           ENDDO
+        ENDDO
+
+        DO  IYA=2,N2
+           X(0,IYA,1)=X(0,IYA,1)+CONJG(X(0,N-IYA+2,1))
+           W(0,IYA,1)=W(0,IYA,1)+W(0,N-IYA+2,1)
+           X(0,N-IYA+2,1)=CONJG(X(0,IYA,1))
+           W(0,N-IYA+2,1)=W(0,IYA,1)
+           S(0,IYA,1)=S(0,IYA,1)+CONJG(S(0,N-IYA+2,1))
+           S(0,N-IYA+2,1)=CONJG(S(0,IYA,1))
+        ENDDO
+
+        DO  IZA=2,N2
+           X(0,1,IZA)=X(0,1,IZA)+CONJG(X(0,1,N-IZA+2))
+           W(0,1,IZA)=W(0,1,IZA)+W(0,1,N-IZA+2)
+           X(0,1,N-IZA+2)=CONJG(X(0,1,IZA))
+           W(0,1,N-IZA+2)=W(0,1,IZA)
+           S(0,1,IZA)=S(0,1,IZA)+CONJG(S(0,1,N-IZA+2))
+           S(0,1,N-IZA+2)=CONJG(S(0,1,IZA))
+        ENDDO
+
+        END
+@
+
+
+1.5
+log
+@FFTW3 plan changes
+@
+text
+@@
+
+
+1.4
+log
+@ONELINEDEL extra param
+@
+text
+@d4 3
+a6 1
+C                   BUILDM WRONG                  Dec 2005 ArDean Leith
+a7 2
+C **********************************************************************
+C *  VAR3D
+d32 4
+a35 3
+C **********************************************************************
+C  Disk files used to store Fourier transforms of projections
+C  Selection without replacement (M out of N)
+d37 1
+a37 1
+C  Selection with replacements
+d39 1
+a39 1
+C  Jacknife method (leave one out)
+d42 2
+a43 1
+C IMAGE_PROCESSING_ROUTINE
+a44 1
+C        1         2         3         4         5         6         7
+d47 1
+a47 1
+C Replaced bessel functions
+a49 1
+
+d184 1
+a184 1
+C Generalized Kaiser-Bessel window according to Lewitt
+d197 2
+a198 2
+C  Cannot be parallel as there are DATA satements in BESI1
+cc$omp parallel do private(i,s,x),shared(mmm)
+d217 7
+a223 1
+C  First file series
+d232 2
+a233 1
+C  Read all the projection data
+d259 2
+a260 1
+C  Second file series
+d268 1
+a268 1
+C  Read all the projection data
+d530 1
+a530 1
+C In this version the order of the Bessel function is mmm=1
+d604 7
+a610 1
+C  Read all the projection data
+d627 2
+a628 1
+C  Prepare all the projection data
+d632 1
+a632 1
+c$omp parallel do private(K,J,I),SHARED(INV)
+d939 7
+a945 1
+C  Read all the projection data
+d962 2
+a963 1
+C  Prepare all the projection data
+d967 1
+a967 1
+c$omp parallel do private(K,J,I),SHARED(INV)
+@
+
+
+1.3
+log
+@buildm parameters wrong
+@
+text
+@d797 2
+a798 1
+              CALL ONELINEDEL(J,N,N2,XX,WW,BI(0,1,LK2),DMS,MULTI)
+d803 2
+a804 1
+              CALL ONELINEDEL(J,N,N2,XX,WW,BI(0,1,LK2),DMS,MULT-1)
+@
+
+
+1.2
+log
+@Pawels GPL License used
+@
+text
+@d4 2
+a5 1
+C                                         
+d110 2
+a111 1
+        CALL  BUILDM(INUMBR,DM,NANG,ANGBUF(1,1),IRTFLG)
+d115 1
+a115 1
+        IF(MAXSYM.GT.1)  THEN
+d125 1
+a125 1
+           IF (IRTFLG.NE.0) THEN 
+d131 1
+a131 1
+	IF(MODE.EQ.'O')  THEN
+@
+
+
+1.1
+log
+@pawel
+@
+text
+@d1 1
+a1 1
+C++************************************************************************
+d5 1
+a5 2
+C **************************************************************************
+C *  SPIDER - MODULAR IMAGE PROCESSING SYSTEM.
+d7 25
+a31 6
+C *  COPYRIGHT (C)2002, P.A.Penczek
+C *  University of Texas - Houston Medical School
+C *  pawel.a.penczek@@uth.tmc.edu
+C *    THE CONTENTS OF THIS DOCUMENT CANNOT BE CHANGED WITHOUT WRITTEN
+C *    PERMISSION OF THE AUTHOR                          *
+C **************************************************************************
+d302 1
+a302 1
+C**************************************************************************
+d423 1
+a423 1
+C***************************************************************************
+d962 1
+a962 1
+C**************************************************************************
+d1087 1
+a1087 2
+C **************************************************************************
+C *  SPIDER - MODULAR IMAGE PROCESSING SYSTEM.
+d1089 25
+a1113 6
+C *  COPYRIGHT (C)2002, P.A.Penczek
+C *  University of Texas - Houston Medical School
+C *  pawel.a.penczek@@uth.tmc.edu
+C *    THE CONTENTS OF THIS DOCUMENT CANNOT BE CHANGED WITHOUT WRITTEN
+C *    PERMISSION OF THE AUTHOR                          *
+C **************************************************************************
+@
+

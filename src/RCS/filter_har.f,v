@@ -1,0 +1,590 @@
+head	1.11;
+access;
+symbols
+	pre_getangas:1.11
+	GPL2010:1.11
+	pre_GPL2010:1.10
+	pre_var_equation:1.10
+	pre_fftwrings:1.10
+	pre_opfiles:1.10
+	src:1.10
+	best-code:1.10
+	x-named-regs:1.10
+	x:1.10
+	v13-00:1.10
+	pre_GPL:1.9
+	prec_CA:1.9
+	noindx:1.9;
+locks; strict;
+comment	@c @;
+
+
+1.11
+date	2010.06.24.13.25.38;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2005.10.17.21.06.45;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2002.04.02.20.36.58;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2002.03.11.14.09.03;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2001.06.19.19.13.04;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2001.05.17.13.51.55;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2001.05.17.13.29.48;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2001.05.16.17.48.32;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2001.05.16.17.28.27;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2001.05.16.17.26.45;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2001.05.16.14.51.09;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.11
+log
+@GPL_2010
+@
+text
+@C ++********************************************************************
+C                                                                      *
+C FILTER_HAR.F            CREATED MAY 01 ARDEAN LEITH                  * 
+C                                                                      *
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C  FILTER_HAR(LUN1,LUN2,NSAM,NROW,NSLICE,)
+C
+C  PARAMETERS: LUN1,LUN2   IO UNITS                             (INPUT)
+C              NSAM        X DIMENSIONS                         (INPUT)
+C              NROW        Y DIMENSIONS                         (INPUT)
+C              NSLICE      Z DIMENSIONS                         (INPUT)
+C              FMINT       INPUT IMAGE MINIMUM                  (INPUT)
+C              FMAXT       INPUT IMAGE MAXIMUM                  (INPUT)
+
+C  PURPOSE: ALTER CONTRAST IN AN IMAGE OR VOLUME USING HARALICK TEXTURE
+C           CONVOLUTION METHODS
+C                                                                      *
+C **********************************************************************
+
+	SUBROUTINE FILTER_HAR(LUN1,LUN2,NSAM,NROW,NSLICE,FMINT,FMAXT)
+
+	INCLUDE 'CMBLOCK.INC'
+        INCLUDE 'CMLIMIT.INC'
+
+	INTEGER, ALLOCATABLE, DIMENSION(:,:)  :: ICOOC
+
+C       AUTOMATIC ARRAY
+        REAL, DIMENSION(NSAM)                 :: VIN,VOUT
+ 	INTEGER, DIMENSION(NSAM,NROW)         :: IVIN
+
+        IF (NSLICE .GT. 1) THEN
+           WRITE(NOUT,*) 'THIS FILTER IS NOT IMPLEMENTED IN 3D!' 
+           WRITE(NOUT,*) 'VOLUME WILL BE PROCESSED SLICE-BY-SLICE' 
+        ENDIF
+
+C       SET DEFAULT NEIGHBORS
+        LX    = 7
+        LY    = 7
+10      CALL RDPRIS(LX,LY,NOT_USED,'NEIGHBORHOOD X & Y',IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 9999
+
+        IF (LX .LT. 3 .OR. MOD(LX,2) .EQ. 0 .OR. 
+     &      LY .LT. 3 .OR. MOD(LY,2) .EQ. 0) THEN
+           CALL ERRT(101,'DIMENSIONS MUST BE ODD  AND > 2',IDUM) 
+           GOTO 10
+        ENDIF
+        LXD2  = LX / 2
+        LYD2  = LY / 2
+        NEIGH = LX * LY
+
+11      CALL RDPRI1S(INTEN,NOT_USED,'INTENSITY LEVELS',IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 10
+
+        IF (INTEN .LT. 3) THEN
+           CALL ERRT(101,'NUMBER OF INTENSITY LEVELS MUST BE > 2',IDUM) 
+           GOTO 11
+        ENDIF
+
+12      IDY = NROW + 1
+        CALL RDPRIS(IDX,IDY,NOT_USED,'OFFSET IN X & Y',IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 11
+        IF (IDY .GT. NROW) IDY = IDX
+
+        IF (IDX .EQ. 0  .AND. IDY .EQ. 0) THEN
+           CALL ERRT(101,'AT LEAST ONE OFFSET MUST NON ZERO',IDUM) 
+           GOTO 12
+        ENDIF
+
+13      CALL RDPRI1S(IMODE,NOT_USED,'MODE NUMBER (1...6)',IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 12
+
+        IF (IMODE .LE. 0  .OR. IMODE .GT. 6) THEN
+           CALL ERRT(101,'MODE MUST BE 1...6',IDUM) 
+           GOTO 13
+        ENDIF
+
+C       ALLOCATE SPACE FOR CO-OCURANCE MATRIX & IMAGE
+ 	ALLOCATE(ICOOC(INTEN,INTEN),STAT=IRTFLG)
+	IF (IRTFLG .NE. 0) THEN
+           CALL ERRT(46,'CE, ICOOC',IER)
+           GOTO 9999
+        ENDIF
+
+C       FIND SCALING FACTOR TO CONVERT INTENSITY TO: 1....INTEN
+        CALL SCALE32TO8(FMINT,FMAXT,1,INTEN,SCAL,OFFSET,IRTFLG)
+	IF (IRTFLG .NE. 0) THEN
+           CALL ERRT(101,'BLANK IMAGE',IER)
+           GOTO 9999
+        ENDIF
+
+        WRITE(NOUT,90) NEIGH
+90      FORMAT(' NUMBER OF NEIGHBORS: ',I3)
+        FNEIGH  = 1.0 / NEIGH
+        FNEIGH2 = 1.0 / (NEIGH**2)
+
+C       PROCESS SLICE BY SLICE (ADDED LOOP)
+        DO ISLICE = 1,NSLICE
+        IRECGO = (ISLICE-1) * NROW
+
+C       LOAD INPUT SLICE
+        DO K = 1,NROW
+           CALL REDLIN(LUN1,VIN,NSAM,IRECGO+K)
+           DO I = 1,NSAM
+              IVIN(I,K) = VIN(I) * SCAL + OFFSET
+           ENDDO
+        ENDDO
+
+        DO IY=1,NROW
+           DO IX = 1,NSAM
+C             CREATE CO-OCCURANCY MATRIX
+	      CALL FILTER_HAR2(NSAM,NROW,IVIN,LXD2,LYD2,NEIGH,INTEN,
+     &                        IX,IY,IDX,IDY,ICOOC)
+
+C             APPLY CO-OCCURANCY MATRIX STATISTICS
+              IF (IMODE .EQ. 1) THEN
+C                HOMOGENEITY USING SECOND MOMENT
+C                CASTLEMAN REFERS TO THIS AS "ENERGY"
+                 F1 = 0.0
+                 DO I = 1,INTEN
+                    DO J = 1,INTEN
+                       F1 = F1 + (ICOOC(I,J))**2
+                    ENDDO
+                 ENDDO
+                 VOUT(IX) = F1 * FNEIGH2
+ 
+              ELSEIF (IMODE .EQ.2) THEN
+C                CONTRAST USING DIFFERENCE MOMENT
+                 F2 = 0.0
+                 DO N = 1,INTEN-1
+                    F2T = 0.0
+                    DO I = 1,INTEN-N
+                       J   = I + N
+                       F2T = F2T + ICOOC(I,J) + ICOOC(J,I)
+                    ENDDO
+                    F2 = F2 + F2T * N**2
+                 ENDDO
+                 VOUT(IX) = F2 * FNEIGH
+ 
+              ELSEIF (IMODE .EQ.3) THEN
+C                WEIGHTED AVERAGE ABSOLUTE DISTANCE FROM DIAGONAL
+C                SAID TO MEASURE "LACK OF SMOOTHNESS" IN GOSE,
+C                JOHNSONBAUGH & JOST, "PATTERN RECOGNITION AND IMAGE
+C                ANALYSIS"
+C                CASTLEMAN REFERS TO THIS AS "INERTIA"
+
+                 D1 = 0.0
+                 D2 = 0.0 
+                 DO I = 1,INTEN
+                    DO J = 1,INTEN
+                       D1 = D1 + ABS(I-J) * ICOOC(I,J)
+                       D2 = D2 + ICOOC(I,J)
+                    ENDDO
+                 ENDDO
+                 VOUT(IX) =  D1/D2
+
+              ELSEIF (IMODE .EQ.4) THEN
+C                CASTLEMAN REFERS TO THIS AS "ENTROPY"
+
+                 E1 = 0.0
+                 DO I = 1,INTEN
+                    DO J = 1,INTEN
+                       IF (ICOOC(I,J) .NE. 0) THEN
+                          E1 = E1 + LOG(FLOAT(ICOOC(I,J))) * ICOOC(I,J)
+                       ENDIF
+                    ENDDO
+                 ENDDO
+                 VOUT(IX) =  E1
+
+              ELSEIF (IMODE .EQ.5) THEN
+C                INTENSITY OF MAXIMUM COCCURANCE PROBABILITY
+
+                 MAX1 = 0
+                 DO I = 1,INTEN
+                    DO J = 1,INTEN
+                       IF (ICOOC(I,J) .GT. MAX1) THEN
+                          MAX1 = ICOOC(I,J)
+                          MAXJ = J
+                       ENDIF
+                    ENDDO
+                 ENDDO
+                 VOUT(IX) =  MAXJ
+
+              ELSEIF (IMODE .EQ.6) THEN
+C                RUSS REFERS TO THIS AS "LINEAR DEPENDENCE OF BRIGHTNESS"
+C                BUT I HAVE NEGLECTED CONSTANT TERMS FROM SUMMATION
+                 F3 = 0.0
+                 DO I = 1,INTEN
+                    DO J = 1,INTEN
+                       F3 = F3 + I * J * ICOOC(I,J)
+                    ENDDO
+                 ENDDO
+                 VOUT(IX) =  F3
+              ENDIF
+           ENDDO
+C          END LOOP:  DO IX=1,NSAM
+
+C          OUTPUT IMAGE
+           CALL WRTLIN(LUN2,VOUT,NSAM,IRECGO+IY)
+
+        ENDDO
+        ENDDO
+
+9999    IF (ALLOCATED(ICOOC)) DEALLOCATE(ICOOC)
+
+        END
+
+
+
+C       ------------------------- FILTER_HAR2----------------------------
+
+	SUBROUTINE FILTER_HAR2(NSAM,NROW,IVIN,LXD2,LYD2,NEIGH,INTEN,
+     &                        IX,IY,IDX,IDY,ICOOC)
+
+C       SURE, THIS IS SLOW, BUT IT IS NOT IMPORTANT!
+
+	INTEGER, DIMENSION(NSAM,NROW) ::   IVIN
+	INTEGER, DIMENSION(INTEN,INTEN) :: ICOOC
+
+C       COMPUTE CO-OCCURANCE MATRIX FOR INPUT IMAGE (IVIN) HAVING
+C       A SET NUMBER OF INTENSITES (INTEN).  CO-OCCURANCE IS FOR
+C       PIXELS WITH OFFSET (IDX,IDY)  WITH NEIGHBORHOOD 
+C       (-LXD2...LXD2,-LYD2...LYD2) AROUND A CENTRAL PIXEL (IX,IY)
+
+C       ZERO THE WHOLE CO-OCCURANCE MATRIX 
+        ICOOC = 0
+
+        DO MY=-LYD2,LYD2
+           IYT  = MOD(IY+MY+NROW-1,NROW)+1
+           IYTD = MOD(IY+IDY+MY+NROW-1,NROW)+1
+           DO MX=-LXD2,LXD2
+              IXT  = MOD(IX+MX+NSAM-1,NSAM)+1
+              IXTD = MOD(IX+IDX+MX+NSAM-1,NSAM)+1
+
+              IV1  = IVIN(IXT,IYT)
+              IV1D = IVIN(IXTD,IYTD)
+              ICOOC(IV1,IV1D) = ICOOC(IV1,IV1D) + 1
+           ENDDO
+        ENDDO
+          
+        END
+
+
+C       ------------------------- SCALE32TO8 ---------------------------
+
+      SUBROUTINE SCALE32TO8(FMIN,FMAX,NMINT,NMAXT,SCAL,OFFSET,IRTFLG)
+
+C     USAGE:  IVAL = FVAL * SCAL + OFFSET
+
+      EPS = EPSILON(EPS)
+
+      IF (ABS(FMAX - FMIN) < EPS) THEN
+         IRTFLG = 1
+         RETURN
+      ENDIF
+
+C     CONVERSION FACTOR FROM FLOATING POINT TO INTEGER RANGE 
+      SCAL   = FLOAT(NMAXT - NMINT) / (FMAX - FMIN)
+      OFFSET = -FMIN * SCAL + NMINT + 0.5
+
+      IRTFLG = 0
+      END
+@
+
+
+1.10
+log
+@GPL License fixed
+@
+text
+@a5 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d7 5
+a11 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d13 1
+a13 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d18 1
+a18 1
+C=* This program is distributed in the hope that it will be useful,    *
+d20 1
+a20 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a21 1
+C=*                                                                    *
+d23 1
+a23 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.9
+log
+@errt # wrong
+@
+text
+@d6 23
+a28 6
+C * SPIDER - MODULAR IMAGE PROCESSING SYSTEM.    AUTHOR: J.FRANK       *
+C * COPYRIGHT (C)1985, 2002. HEALTH RESEARCH INCORPORATED (HRI),       *
+C * ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+C * THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO HRI AND ARE NOT   *
+C * TO BE DISCLOSED TO OTHERS OR USED FOR PURPOSES OTHER THAN INTENDED *
+C * WITHOUT WRITTEN APPROVAL OF HRI.                                   *
+@
+
+
+1.8
+log
+@nloop,iloop_removed
+@
+text
+@d3 1
+a3 1
+C FILTER_HAR              CREATED MAY 01 ARDEAN LEITH                  * 
+d7 1
+a7 1
+C * COPYRIGHT (C)1985, 2001. HEALTH RESEARCH INCORPORATED (HRI),       *
+d14 1
+a14 1
+C  FILTER_HAR(LUN1,LUN2,NSAM,NROW,NSLICE,MODE)
+a21 2
+C              MODE        TYPE SPECIFIER                       (INPUT)
+C                          H : HARALICK  - RECTANGULAR NEIGHBORHOOD
+d28 1
+a28 2
+	SUBROUTINE FILTER_HAR(LUN1,LUN2,NSAM,NROW,NSLICE,MODE,
+     &                        FMINT,FMAXT)
+a33 1
+        CHARACTER(LEN=2)                      :: MODE
+d95 1
+a95 1
+           CALL ERRT(100,'BLANK IMAGE',IER)
+@
+
+
+1.7
+log
+@*** empty log message ***
+@
+text
+@d51 1
+a51 1
+10      CALL RDPRIS(LX,LY,NLOOP,ILOOP,'NEIGHBORHOOD X & Y',IRTFLG)
+d63 1
+a63 1
+11      CALL RDPRI1S(INTEN,NLOOP,ILOOP,'INTENSITY LEVELS',IRTFLG)
+d72 1
+a72 1
+        CALL RDPRIS(IDX,IDY,NLOOP,ILOOP,'OFFSET IN X & Y',IRTFLG)
+d81 1
+a81 1
+13      CALL RDPRI1S(IMODE,NLOOP,ILOOP,'MODE NUMBER (1...6)',IRTFLG)
+@
+
+
+1.6
+log
+@*** empty log message ***
+@
+text
+@d44 2
+a45 2
+           CALL ERRT(101,'VOLUMES NOT SUPPORTED, ONLY 2D',IDUM) 
+           RETURN
+d103 10
+a112 1
+C       LOAD INPUT VOLUME
+d114 1
+a114 1
+           CALL REDLIN(LUN1,VIN,NSAM,K)
+a119 5
+        WRITE(NOUT,90) NEIGH
+90      FORMAT(' NUMBER OF NEIGHBORS: ',I3)
+
+        FNEIGH  = 1.0 / NEIGH
+        FNEIGH2 = 1.0 / (NEIGH**2)
+d210 1
+a210 1
+           CALL WRTLIN(LUN2,VOUT,NSAM,IY)
+d213 2
+a214 1
+  
+@
+
+
+1.5
+log
+@*** empty log message ***
+@
+text
+@d71 2
+a72 1
+12      CALL RDPRIS(IDX,IDY,NLOOP,ILOOP,'OFFSET IN X & Y',IRTFLG)
+d74 1
+d177 1
+a177 1
+              ELSEIF (IMODE .EQ.4) THEN
+d191 1
+a191 1
+              ELSEIF (IMODE .EQ.4) THEN
+@
+
+
+1.4
+log
+@mode 4 added
+@
+text
+@d79 1
+a79 1
+13      CALL RDPRI1S(IMODE,NLOOP,ILOOP,'MODE NUMBER (1...4)',IRTFLG)
+d82 2
+a83 2
+        IF (IMODE .LE. 0  .OR. IMODE .GT. 4) THEN
+           CALL ERRT(101,'MODE MUST BE 1...4',IDUM) 
+d174 25
+@
+
+
+1.3
+log
+@*** empty log message ***
+@
+text
+@d79 1
+a79 1
+13      CALL RDPRI1S(IMODE,NLOOP,ILOOP,'MODE NUMBER (1,2 OR 3)',IRTFLG)
+d82 2
+a83 2
+        IF (IMODE .LE. 0  .OR. IMODE .GT. 3) THEN
+           CALL ERRT(101,'MODE MUST BE 1...3',IDUM) 
+d123 1
+d150 1
+d161 13
+@
+
+
+1.2
+log
+@mode 3 added
+@
+text
+@d95 5
+a99 1
+        CALL SCALE32TO8(FMINT,FMAXT,1,INTEN,SCAL,OFFSET)
+d142 2
+a143 1
+                 VOUT(IX) = F2 * FNEIGH 
+d210 1
+a210 1
+      SUBROUTINE SCALE32TO8(FMIN,FMAX,NMINT,NMAXT,SCAL,OFFSET)
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d49 2
+a50 2
+        LX    = 3
+        LY    = 3
+d79 2
+a80 2
+13      CALL RDPRI1S(IMODE,NLOOP,ILOOP,'MODE NUMBER (1 OR 2)',IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 11
+d82 2
+a83 2
+        IF (IMODE .LE. 0  .OR. IMODE .GT. 2) THEN
+           CALL ERRT(101,'MODE MUST BE 1...2',IDUM) 
+d108 1
+a108 1
+        FNEIGH = 1.0 / NEIGH
+d139 15
+@

@@ -1,0 +1,416 @@
+head	1.8;
+access;
+symbols
+	pre_getangas:1.8
+	GPL2010:1.8
+	pre_GPL2010:1.7
+	pre_var_equation:1.7
+	pre_fftwrings:1.7
+	pre_opfiles:1.7
+	src:1.7
+	best-code:1.7
+	x-named-regs:1.7
+	x:1.7
+	v13-00:1.7
+	pre_GPL:1.5
+	prec_CA:1.5
+	noindx:1.5
+	Bproc:1.5
+	oct21:1.4
+	last77:1.3;
+locks; strict;
+comment	@c @;
+
+
+1.8
+date	2010.06.24.13.26.38;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2005.10.17.20.24.01;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2005.10.17.18.16.09;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	99.12.07.19.26.25;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	99.09.15.15.39.19;	author pawel;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	97.10.14.21.19.19;	author pawel;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	95.10.10.15.12.05;	author pawel;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	94.05.13.12.51.56;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@copied from USER2:[PSIDER.CMSREF] on 11 May 1994
+@
+
+
+1.8
+log
+@GPL_2010
+@
+text
+@
+C ++********************************************************************
+C                                                                      *
+C                                                                      *
+C                                                                      *
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C                                                                      *
+C                                                                      *
+C                                                                      *
+C  PURPOSE:                                                            *
+C                                                                      *
+C  PARAMETERS:                                                         *
+C                                                                      *
+C        0         2         3         4         5         6         7 *
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C***********************************************************************
+
+	SUBROUTINE  RCNV3_P(LUN1,LUN2,B,Q,NSAM,NROW,NSLICE,PSF,NSPRD)
+
+	DIMENSION  PSF(NSPRD,NSPRD,NSPRD),Q(NSAM,NROW,NSPRD),B(NSAM)
+#ifdef SP_MP
+#else
+	DOUBLE PRECISION  Z
+#endif
+	KM(K)=MOD(K-1,NSPRD)+1
+C
+	NQ=NSPRD/2
+	NB=NQ+1
+	NSE=NSAM-NQ
+	NRE=NROW-NQ
+	NLE=NSLICE-NQ
+C
+	DO    K=1,NSPRD-1
+	 CALL  RDSL_P(LUN1,Q(1,1,K),NSAM,NROW,K)
+	ENDDO
+	DO    K=1,NQ
+	 CALL  WRSL_P(LUN2,Q(1,1,K),NSAM,NROW,K)
+	ENDDO
+C
+	DO   K=NB,NLE
+	 CALL  RDSL_P(LUN1,Q(1,1,KM(K+NQ)),NSAM,NROW,K+NQ)
+	 KKTT=KM(K)
+	 K1=K-NQ
+	 K2=K+NQ 
+	 K3=K1-1
+	  DO    J=1,NQ
+	   CALL  WRTLIN(LUN2,Q(1,J,KKTT),NSAM,(K-1)*NROW+J)
+	  ENDDO
+	DO    J=NB,NRE
+	J1=J-NQ
+	J2=J+NQ
+	J3=J1-1
+	DO    I=1,NQ
+	 B(I)=Q(I,J,KKTT)
+	ENDDO
+#ifdef SP_MP
+c$omp parallel do private(I)
+	 DO    I=NB,NSE
+	  B(I)=RCNV3_PS(PSF,Q,NSAM,NROW,NSPRD,NQ,I,J1,J2,J3,K1,K2,K3)
+	 ENDDO
+#else
+	 DO    I=NB,NSE
+	  Z=0.0
+	  I1=I-NQ
+	  I2=I+NQ
+C
+	   DO    KT=K1,K2
+	    KTT=KM(KT)
+	    K4=KT-K3
+	     DO    JT=J1,J2
+	      J4=JT-J3
+	       DO    IT=I1,I2
+	        Z=Z+Q(IT,JT,KTT)*DBLE(PSF(IT-I1+1,J4,K4))
+	       ENDDO
+	     ENDDO
+	   ENDDO
+C
+	  B(I)=Z
+	 ENDDO
+#endif
+C
+	  DO    I=NSE+1,NSAM
+	   B(I)=Q(I,J,KKTT)
+	  ENDDO
+	 CALL  WRTLIN(LUN2,B,NSAM,(K-1)*NROW+J)
+	 ENDDO
+C
+	 DO    J=NRE+1,NROW
+	  CALL  WRTLIN(LUN2,Q(1,J,KKTT),NSAM,(K-1)*NROW+J)
+	 ENDDO
+	ENDDO
+C
+	DO    K=NLE+1,NSLICE
+	 CALL  WRSL_P(LUN2,Q(1,1,KM(K)),NSAM,NROW,K)
+	ENDDO
+	END
+C
+#ifdef SP_MP
+	FUNCTION  RCNV3_PS(PSF,Q,NSAM,NROW,NSPRD,NQ,I,J1,J2,J3,K1,K2,K3)
+	DIMENSION  PSF(NSPRD,NSPRD,NSPRD),Q(NSAM,NROW,NSPRD)
+	DOUBLE PRECISION  Z
+	KM(K)=MOD(K-1,NSPRD)+1
+	  Z=0.0
+	  I1=I-NQ
+	  I2=I+NQ
+C
+	   DO    KT=K1,K2
+	    KTT=KM(KT)
+	    K4=KT-K3
+	     DO    JT=J1,J2
+	      J4=JT-J3
+	       DO    IT=I1,I2
+	        Z=Z+Q(IT,JT,KTT)*DBLE(PSF(IT-I1+1,J4,K4))
+	       ENDDO
+	     ENDDO
+	   ENDDO
+	 RCNV3_PS=Z
+	END
+#endif
+@
+
+
+1.7
+log
+@GPL License fixed
+@
+text
+@a6 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d8 5
+a12 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d14 1
+a14 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d19 1
+a19 1
+C=* This program is distributed in the hope that it will be useful,    *
+d21 1
+a21 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a22 1
+C=*                                                                    *
+d24 1
+a24 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.6
+log
+@HRI GPL License used
+@
+text
+@a6 1
+C * SPIDER - MODULAR IMAGE PROCESSING SYSTEM.    AUTHOR: J.FRANK       *
+d10 1
+a10 1
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *  
+a29 6
+
+C * COPYRIGHT (C)1985, 1999. HEALTH RESEARCH INCORPORATED (HRI),       *
+C * ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+C * THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO HRI AND ARE NOT   *
+C * TO BE DISCLOSED TO OTHERS OR USED FOR PURPOSES OTHER THAN INTENDED *
+C * WITHOUT WRITTEN APPROVAL OF HRI.                                   *
+@
+
+
+1.5
+log
+@header
+@
+text
+@d8 24
+@
+
+
+1.4
+log
+@||
+@
+text
+@d1 24
+d26 1
+@
+
+
+1.3
+log
+@*** empty log message ***
+@
+text
+@d3 2
+d6 1
+a7 1
+CNO_SAVE
+d16 1
+a16 1
+	CALL  RDSL_P(LUN1,Q(1,1,K),NSAM,NROW,K)
+d19 1
+a19 1
+	CALL  WRSL_P(LUN2,Q(1,1,K),NSAM,NROW,K)
+d23 8
+a30 8
+	CALL  RDSL_P(LUN1,Q(1,1,KM(K+NQ)),NSAM,NROW,K+NQ)
+	KKTT=KM(K)
+	K1=K-NQ
+	K2=K+NQ 
+	K3=K1-1
+	DO    J=1,NQ
+	CALL  WRTLIN(LUN2,Q(1,J,KKTT),NSAM,(K-1)*NROW+J)
+	ENDDO
+d36 1
+a36 14
+	B(I)=Q(I,J,KKTT)
+	ENDDO
+	DO    I=NB,NSE
+	Z=0.0
+	I1=I-NQ
+	I2=I+NQ
+C
+	DO    KT=K1,K2
+	KTT=KM(KT)
+	K4=KT-K3
+	DO    JT=J1,J2
+	J4=JT-J3
+	DO    IT=I1,I2
+	Z=Z+Q(IT,JT,KTT)*DBLE(PSF(IT-I1+1,J4,K4))
+d38 35
+a73 1
+	ENDDO
+d75 2
+a76 1
+	B(I)=Z
+d78 1
+a78 5
+	DO    I=NSE+1,NSAM
+	B(I)=Q(I,J,KKTT)
+	ENDDO
+	CALL  WRTLIN(LUN2,B,NSAM,(K-1)*NROW+J)
+	ENDDO
+d80 20
+a99 8
+	DO    J=NRE+1,NROW
+	CALL  WRTLIN(LUN2,Q(1,J,KKTT),NSAM,(K-1)*NROW+J)
+	ENDDO
+	ENDDO
+C
+	DO    K=NLE+1,NSLICE
+	CALL  WRSL_P(LUN2,Q(1,1,KM(K)),NSAM,NROW,K)
+	ENDDO
+d101 1
+@
+
+
+1.2
+log
+@nosave
+@
+text
+@d13 6
+a18 4
+	DO  1  K=1,NSPRD-1
+1	CALL  RDSL_P(LUN1,Q(1,1,K),NSAM,NROW,K)
+	DO  2  K=1,NQ
+2	CALL  WRSL_P(LUN2,Q(1,1,K),NSAM,NROW,K)
+d20 1
+a20 1
+	DO  3 K=NB,NLE
+d26 4
+a29 3
+	DO  4  J=1,NQ
+4	CALL  WRTLIN(LUN2,Q(1,J,KKTT),NSAM,(K-1)*NROW+J)
+	DO  5  J=NB,NRE
+d33 4
+a36 3
+	DO  6  I=1,NQ
+6	B(I)=Q(I,J,KKTT)
+	DO  7  I=NB,NSE
+d41 1
+a41 1
+	DO  8  KT=K1,K2
+d44 1
+a44 1
+	DO  8  JT=J1,J2
+d46 5
+a50 2
+	DO  8  IT=I1,I2
+8	Z=Z+Q(IT,JT,KTT)*DBLE(PSF(IT-I1+1,J4,K4))
+d52 7
+a58 4
+7	B(I)=Z
+	DO  9  I=NSE+1,NSAM
+9	B(I)=Q(I,J,KKTT)
+5	CALL  WRTLIN(LUN2,B,NSAM,(K-1)*NROW+J)
+d60 4
+a63 3
+	DO  10  J=NRE+1,NROW
+10	CALL  WRTLIN(LUN2,Q(1,J,KKTT),NSAM,(K-1)*NROW+J)
+3	CONTINUE
+d65 3
+a67 2
+	DO  11  K=NLE+1,NSLICE
+11	CALL  WRSL_P(LUN2,Q(1,1,KM(K)),NSAM,NROW,K)
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d5 1
+@

@@ -1,0 +1,367 @@
+head	1.5;
+access;
+symbols
+	pre_getangas:1.3
+	pre_GPL2010:1.3
+	pre_var_equation:1.3
+	pre_fftwrings:1.3
+	pre_opfiles:1.3
+	src:1.3
+	best-code:1.3
+	x-named-regs:1.3
+	x:1.3
+	v13-00:1.3
+	pre_GPL:1.2
+	prec_CA:1.2
+	noindx:1.1;
+locks; strict;
+comment	@c @;
+
+
+1.5
+date	2014.07.29.16.17.37;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2014.07.29.16.16.14;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2005.10.17.16.54.59;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2003.02.19.15.56.17;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2002.05.03.19.43.58;	author pawel;	state Exp;
+branches;
+next	;
+
+
+desc
+@VA F, utility
+@
+
+
+1.5
+log
+@cosmetic
+@
+text
+@C **********************************************************************
+C VARF1.F
+C              OPFILEC                            FEB  03 ARDEAN LEITH
+C              MAXNAM                             JUL  14 ARDEAN LEITH
+C
+C=**********************************************************************
+C=* From: SPIDER - MODULAR IMAGE PROCESSING SYSTEM                     *
+C=* Copyright (C)2002, P. A. Penczek                                   *
+C=*                                                                    *
+C=* University of Texas - Houston Medical School                       *
+C=*                                                                    *
+C=* Email:  pawel.a.penczek@@uth.tmc.edu                                *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* This program is distributed in the hope that it will be useful,    *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+C=* General Public License for more details.                           *
+C=*                                                                    *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+C=*                                                                    *
+C=**********************************************************************
+C                                      
+C VARF1(INC,Y1,WI,ILIST,NANG,NNNN,NSAM,NROW,RMSK)
+C       
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C **********************************************************************
+
+        SUBROUTINE VARF1(INC,Y1,WI,ILIST,NANG,NNNN,NSAM,NROW,RMSK)
+     
+        INCLUDE 'CMBLOCK.INC'
+        INCLUDE 'CMLIMIT.INC'
+
+        PARAMETER (NDLI=4)
+
+        !CHARACTER*80           FINPAT1,FINPIC1,FINPAT2,FINPIC2
+        CHARACTER(LEN=MAXNAM) ::FINPAT1,FINPIC1,FINPAT2,FINPIC2
+        COMMON  /F_SPEC/  FINPAT1,FINPIC1,NLET1,FINPAT2,FINPIC2,NLET2
+
+C       Mask may not be same as nlet1 in varf that calls this ?? al
+
+        REAL, ALLOCATABLE, DIMENSION(:,:) :: B1,B2
+        DIMENSION DLIST(NDLI),ILIST(NANG),RMSK(NSAM,NROW)
+
+C       LR AND FR ARE AUTOMATIC ARRAYS
+
+        DOUBLE PRECISION FR(INC),LR(INC)
+ 
+        DATA  LUNI/97/
+
+        ALLOCATE (B1(NNNN,NROW), B2(NNNN,NROW), STAT=IRTFLG)
+        IF (IRTFLG .NE. 0) THEN 
+           CALL ERRT(46,'VA F; B1 & B2',2*NNNN*NROW)
+           RETURN
+        ENDIF
+
+C       INITIALIZE THE SUMS
+        FR=0.0D0
+        LR=0
+
+        DO  K=1,NANG
+C          READ ONE PROJECTION
+           CALL  FILGET(FINPAT1,FINPIC1,NLET1,ILIST(K),INTFLAG)
+           CALL OPFILEC(0,.FALSE.,FINPIC1,LUNI,'O',ITYPE,LSAM,LROW,NSL,
+     &             MAXIM,'DUMMY',.FALSE.,IRTFLG1)
+           IF (IRTFLG1 .NE. 0) GOTO 2001
+
+           CALL READV(LUNI,B1,NNNN,NROW,NSAM,NROW,1)
+           CLOSE(LUNI)
+
+           CALL  FILGET(FINPAT2,FINPIC2,NLET2,ILIST(K),INTFLAG)
+           CALL OPFILEC(0,.FALSE.,FINPIC2,LUNI,'O',ITYPE,LSAM,LROW,NSL,
+     &             MAXIM,'DUMMY',.FALSE.,IRTFLG2)
+           IF (IRTFLG2 .NE. 0)  GOTO 2001
+
+           CALL READV(LUNI,B2,NNNN,NROW,NSAM,NROW,1)
+           CLOSE(LUNI)
+
+cc$omp   parallel sections
+cc$omp   section
+                CALL  SUBACOR(B1,NNNN,NROW)
+cc$omp   section
+                CALL  SUBACOR(B2,NNNN,NROW)
+cc$omp   end parallel sections
+
+
+c$omp parallel do private(i,j)
+              DO    J=1,NROW
+                 DO    I=1,NSAM
+                    B1(I,J)=B1(I,J)*RMSK(I,J)
+                    B2(I,J)=B2(I,J)*RMSK(I,J)
+                 ENDDO
+              ENDDO
+
+              INV=+1
+              CALL  FMRS_2(B1,NSAM,NROW,INV)
+              IF(INV.NE.1)  THEN
+                 CALL  ERRT(38,'VA F',NE)
+                 RETURN
+              ENDIF
+
+              CALL  FMRS_2(B2,NSAM,NROW,INV)
+              IF(INV.NE.1)  THEN
+                 CALL  ERRT(38,'VA F',NE)
+                 RETURN
+              ENDIF
+
+
+         DO J=1,NROW
+           JJ=J-1
+           IF(JJ.GT.NROW/2)  JJ=JJ-NROW
+           DO II=1,NSAM,2
+            I=II/2+1
+            IF(.NOT.(I.EQ.1.AND.JJ.LE.0)) THEN
+              PII=0.5*SQRT((FLOAT(JJ)/FLOAT(NROW/2))**2+
+     &        (FLOAT(I-1)/FLOAT(NSAM/2))**2)
+              IF(PII.LE.0.5)  THEN
+                 L=MIN0(MAX0(NINT(PII*Y1/WI)+1,1),INC)
+                 LR(L)=LR(L)+1
+                 FR(L)=FR(L)+
+     &            (B1(I,J)-B2(I,J))**2+(B1(I+1,J)-B2(I+1,J))**2
+              ENDIF
+            ENDIF
+           ENDDO
+         ENDDO
+        ENDDO
+
+C SAVE RESULTS
+        PII=1./REAL(NSAM)/REAL(NROW)/REAL(NSAM)/REAL(NROW)
+        DO   L=1,INC
+           IF(LR(L).GT.0)  THEN
+              DLIST(1)=L
+              DLIST(2)=FLOAT(L-1)/FLOAT(INC-1)*0.5
+              DLIST(3)=FR(L)*PII/LR(L)
+              DLIST(4)=LR(L)
+              CALL  SAVD(LUNI,DLIST,NDLI,IRTFLG)
+           ENDIF
+        ENDDO
+        CALL  SAVDC
+        CLOSE(LUNI)
+C----------------------------------------------
+2001    DEALLOCATE (B1)
+        DEALLOCATE (B2)
+        END 
+
+
+
+        SUBROUTINE SUBACOR(PROJ,LSD,N)
+
+        DIMENSION  PROJ(LSD,N)
+        DOUBLE     PRECISION QS
+
+        KLP=0
+        R=(N/2)**2
+        QS=0.0D0
+
+C       ESTIMATE AVERAGE OUTSIDE THE CIRCLE
+        NC =N/2+1
+c$omp parallel do private(i,j,t,xx),reduction(+:qs,klp)
+        DO   J=1,N
+           T=J-NC
+           XX=T*T
+           DO   I=1,N
+              T=I-NC
+              IF (XX+T*T.GT.R)    THEN
+                 QS=QS+DBLE(PROJ(I,J))
+                 KLP=KLP+1
+              ENDIF
+           ENDDO
+        ENDDO
+        QS = QS/REAL(KLP)
+c$omp parallel do private(i,j)
+        DO  J=1,N
+           DO  I=1,N
+              PROJ(I,J)=PROJ(I,J)-QS
+           ENDDO
+        ENDDO
+
+        END
+@
+
+
+1.4
+log
+@LEN=MAXNAM
+@
+text
+@d2 4
+a5 1
+C *  VARF1.F
+a30 3
+C              OPFILEC                  FEB  03 ARDEAN LEITH
+C **********************************************************************
+C
+d36 1
+a36 1
+        SUBROUTINE  VARF1(INC,Y1,WI,ILIST,NANG,NNNN,NSAM,NROW,RMSK)
+@
+
+
+1.3
+log
+@Pawels GPL License used
+@
+text
+@d39 2
+d43 2
+a44 1
+        CHARACTER*80  FINPAT1,FINPIC1,FINPAT2,FINPIC2
+d47 2
+d59 2
+a60 2
+        IF (IRTFLG.NE.0) THEN 
+           CALL ERRT(46,'VA F, B1 & B2',IER)
+@
+
+
+1.2
+log
+@opfilec
+@
+text
+@d1 1
+a1 2
+C **************************************************************************
+C *  SPIDER - MODULAR IMAGE PROCESSING SYSTEM.
+d3 24
+a26 5
+C *  COPYRIGHT (C)2002, P.A.Penczek
+C *  University of Texas - Houston Medical School
+C *  pawel.a.penczek@@uth.tmc.edu
+C *    THE CONTENTS OF THIS DOCUMENT CANNOT BE CHANGED WITHOUT WRITTEN
+C *    PERMISSION OF THE AUTHOR 
+d29 1
+a29 1
+C **************************************************************************
+d34 1
+a34 1
+C **************************************************************************
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d8 3
+a10 1
+C *    PERMISSION OF THE AUTHOR                          *
+a14 4
+C
+C IMAGE_PROCESSING_ROUTINE
+C
+C        1         2         3         4         5         6         7
+d23 1
+d25 1
+a31 1
+        CHARACTER*80  FINPAT1,FINPIC1,FINPAT2,FINPIC2
+d35 1
+a35 7
+
+        ALLOCATE (B1(NNNN,NROW), STAT=IRTFLG)
+        IF (IRTFLG.NE.0) THEN 
+           CALL ERRT(46,'VA F, B1',IER)
+           RETURN
+        ENDIF
+        ALLOCATE (B2(NNNN,NROW), STAT=IRTFLG)
+d37 1
+a37 1
+           CALL ERRT(46,'VA F, B2',IER)
+d41 1
+a41 2
+
+C INITIALIZE THE SUMS
+d46 1
+a46 1
+C READ ONE PROJECTION
+d48 1
+a48 1
+           CALL OPFIL(.FALSE.,FINPIC1,LUNI,'O',LSAM,LROW,NSL,
+d50 2
+a51 4
+           IF (IRTFLG1 .NE. 0) THEN
+                CALL  ERRT(18,'VA F')
+                GOTO 2001
+           ENDIF
+d54 1
+a54 1
+C
+d56 1
+a56 1
+           CALL OPFIL(.FALSE.,FINPIC2,LUNI,'O',LSAM,LROW,NSL,
+d58 2
+a59 4
+           IF (IRTFLG2 .NE. 0) THEN
+                CALL  ERRT(18,'VA F')
+                GOTO 2001
+           ENDIF
+d62 1
+a62 1
+C
+d129 2
+@

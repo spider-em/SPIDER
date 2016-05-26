@@ -1,0 +1,384 @@
+head	1.4;
+access;
+symbols
+	pre_getangas:1.4
+	GPL2010:1.3
+	pre_GPL2010:1.2
+	pre_var_equation:1.2;
+locks; strict;
+comment	@c @;
+
+
+1.4
+date	2011.01.27.16.48.17;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2010.06.24.13.26.11;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2008.08.06.17.15.09;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2008.08.05.13.18.23;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.4
+log
+@cosmetic
+@
+text
+@C++*********************************************************************
+C
+C MOTIF_INIT        NEW                               JUL 08 ARDEAN LEITH
+C
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C                  
+C  MOTIF_INIT(ANS,LUNVOL,LUNVOLFFT,LUNVOLSQFFT, LUNMSK,LUNMSKFFT, 
+C             NSAM,NROW,NSLICE, NSAMM,NROWM,NSLICEM)
+
+C  PURPOSE: CREATE FFT SEARCH VOLUME, FFT OF SQUARED SEARCH VOLUME
+C           AND FFT OF ROTATED PADDED MASK, AS REQUESTED. 
+C           THESE FILES ARE NEEDED FOR: 'LO LSD' AND 'LO'
+
+C PARAMETERS:
+C       ANS                          OP TYPE FLAG              (INPUT)
+C       LUNVOL...                    I/O UNITS                 (INPUT)
+C       NSAM,NROW,NSLICE             VOLUME SIZE               (INPUT)
+C       NSAMM,NROWM,NSLICEM          MASK SIZE                (INPUT)
+C
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C--*********************************************************************
+
+        SUBROUTINE MOTIF_INIT(ANS,LUNVOL,LUNVOLFFT,LUNVOLSQFFT,
+     &                        LUNMSK,LUNMSKFFT, 
+     &                        NSAM,NROW,NSLICE, NSAMM,NROWM,NSLICEM)
+
+#ifdef SP_LIBFFTW3
+        USE TYPE_KINDS
+        INTEGER(KIND=I_8)         :: IPLAN = 0  !STRUCTURE POINTER 
+#endif
+
+        INCLUDE 'CMLIMIT.INC'
+        INCLUDE 'CMBLOCK.INC'
+
+	INTEGER, INTENT(IN)       :: LUNVOL,LUNVOLFFT,LUNVOLSQFFT
+	INTEGER, INTENT(IN)       :: LUNMSK,LUNMSKFFT
+	INTEGER, INTENT(IN)       :: NSAM,NROW,NSLICE 
+	INTEGER, INTENT(IN)       :: NSAMM,NROWM,NSLICEM 
+	CHARACTER, INTENT(IN)     :: ANS 
+ 
+        LOGICAL                   :: SPIDER_SIGN  = .TRUE.
+        LOGICAL                   :: SPIDER_SCALE = .TRUE.
+
+C       ALLOCATABLE ARRAYS
+	REAL, ALLOCATABLE         :: BUFVOL(:,:,:)
+
+
+C       EXTRA COLUMN SPACE FOR FOURIER TRANSFORM
+        LSE = NSAM + 2 - MOD(NSAM,2)
+
+        MWANT = LSE*NROW*NSLICE 
+ 	ALLOCATE (BUFVOL(LSE,NROW,NSLICE), STAT=IRTFLG)
+        IF (IRTFLG .NE. 0) THEN
+           CALL ERRT(46,'MOTIF_INIT; BUFVOL...',MWANT)
+           GOTO 9999
+        ENDIF
+
+        IF (ANS .EQ. 'M' .OR. ANS .EQ. 'B') THEN
+
+C          PAD ROTATED MASK INTO SAME SIZE AS FFT OF LARGE VOLUME ------
+           CALL REDNPADVOL(LUNMSK, 0.0, NSAMM,NROWM,NSLICEM,
+     &                                  LSE,NROW,NSLICE,
+     &                                  BUFVOL, IRTFLG)
+	   IF (IRTFLG .NE. 0)  GOTO 9999
+           
+C          FIND NO. OF NON-ZERO PIXELS INSIDE MASK
+           PIX_IN_MASK = SUM(BUFVOL(1:NSAMM, 1:NROWM, 1:NSLICEM))
+           X51 = 1.0 / PIX_IN_MASK        ! FOR SPEED
+
+           IF (VERBOSE) THEN
+              WRITE(NOUT,*) ' Non-zero mask pixels:', PIX_IN_MASK
+              !write(6,*)    ' Non-zero mask pixels:',PIX_IN_MASK
+           ENDIF
+
+           CALL REG_GET_USED(NSEL_USED)
+           IF (NSEL_USED .GT. 0) THEN
+C             OUTPUT X51 TO SPIDER'S REGISTERS
+              CALL REG_SET_NSEL(1,1, X51, 0.0, 0.0, 0.0, 0.0,IRTFLG)
+           ENDIF
+
+C          FFT ON THIS PADDED ROTATED MASK 
+           INV = +1
+           CALL FMRS(BUFVOL, NSAM,NROW,NSLICE, IPLAN,
+     &            SPIDER_SIGN,SPIDER_SCALE, INV,IRTFLG)
+           IF (IRTFLG .NE. 0) THEN
+              CALL ERRT(101,'MOTIF_INIT; FFT ERROR ON PADDED MASK',NE)
+              GOTO 9999
+           ENDIF
+
+C          OUTPUT FFT OF THIS PADDED ROTATED MASK VOLUME      
+           CALL WRTVOL(LUNMSKFFT,LSE,NROW,1,NSLICE,BUFVOL,IRTFLG)
+           IF (IRTFLG .NE. 0) GOTO 9999
+        ENDIF
+
+        IF (ANS .NE. 'M') THEN
+C           WISH TO DO FFT'S ON SEARCH VOLUME -------------------------
+
+C          PAD SEARCH VOLUME INTO FFT VOLUME ---------------------- 
+           CALL READV(LUNVOL,BUFVOL, LSE,NROW, NSAM,NROW,NSLICE)
+
+           !fmin = minval(bufvol(1:nsam, 1:nrow, 1:nslice))
+           !fmax = maxval(bufvol(1:nsam, 1:nrow, 1:nslice))
+           !write(6,*) ' Search volume:              ',fmin,'...',fmax
+
+C          FFT ON SEARCH VOLUME
+           INV = +1
+           CALL FMRS(BUFVOL, NSAM,NROW,NSLICE, IPLAN,
+     &            SPIDER_SIGN,SPIDER_SCALE, INV,IRTFLG)
+           IF (IRTFLG .NE. 0) THEN
+              CALL ERRT(101,'MOTIF_INIT; FFT ERROR ON VOLUME',NE)
+              GOTO 9999
+           ENDIF
+
+C          OUTPUT FFT OF SEARCH VOLUME      
+           CALL WRTVOL(LUNVOLFFT,LSE,NROW,1,NSLICE,BUFVOL,IRTFLG)
+           IF (IRTFLG .NE. 0) GOTO 9999
+
+C          PAD LARGE VOLUME INTO FFT VOLUME ----------------------
+
+C          IT SAVES SPACE TO RE-READ?
+           CALL READV(LUNVOL,BUFVOL, LSE,NROW, NSAM,NROW,NSLICE)
+
+           !fmin = minval(bufvol(1:nsam, 1:nrow, 1:nslice))
+           !fmax = maxval(bufvol(1:nsam, 1:nrow, 1:nslice))
+           !write(6,*) ' Search volume:               ',fmin,'...',fmax
+
+c$omp      parallel do private(i,j,k)
+           DO K = 1,NSLICE
+              DO J = 1,NROW
+                 DO I = 1,NSAM
+                    BUFVOL(I,J,K) = BUFVOL(I,J,K) ** 2  
+                 ENDDO
+              ENDDO
+           ENDDO
+c$omp      end parallel do
+
+           !fmin = minval(bufvol(1:nsam, 1:nrow, 1:nslice))
+           !fmax = maxval(bufvol(1:nsam, 1:nrow, 1:nslice))
+           !write(6,*) ' Squared search vol:         ',fmin,'...',fmax
+
+C          FFT ON SQUARED SEARCH VOLUME -------------------------
+           INV = +1
+           CALL FMRS(BUFVOL, NSAM,NROW,NSLICE, IPLAN,
+     &            SPIDER_SIGN,SPIDER_SCALE, INV,IRTFLG)
+           IF (IRTFLG .NE. 0) THEN
+              CALL ERRT(101,'MOTIF_INIT FFT ERROR ON SQUARED VOLUME',NE)
+              GOTO 9999
+           ENDIF
+
+C          OUTPUT FFT OF SQUARED SEARCH VOLUME      
+           CALL WRTVOL(LUNVOLSQFFT,LSE,NROW,1,NSLICE,BUFVOL,IRTFLG)
+           IF (IRTFLG .NE. 0) GOTO 9999
+        ENDIF
+
+9999    IF (ALLOCATED(BUFVOL)) DEALLOCATE(BUFVOL)
+
+        END
+
+@
+
+
+1.3
+log
+@GPL_2010
+@
+text
+@d49 1
+a49 1
+        INTEGER(KIND=I_8)               :: IPLAN = 0  !STRUCTURE POINTER 
+d55 5
+a59 5
+	INTEGER, INTENT(IN)             :: LUNVOL,LUNVOLFFT,LUNVOLSQFFT
+	INTEGER, INTENT(IN)             :: LUNMSK,LUNMSKFFT
+	INTEGER, INTENT(IN)             :: NSAM,NROW,NSLICE 
+	INTEGER, INTENT(IN)             :: NSAMM,NROWM,NSLICEM 
+	CHARACTER, INTENT(IN)           :: ANS 
+d61 2
+a62 2
+        LOGICAL                         :: SPIDER_SIGN  = .TRUE.
+        LOGICAL                         :: SPIDER_SCALE = .TRUE.
+d65 1
+a65 1
+	REAL, ALLOCATABLE, DIMENSION(:,:,:) :: BUFVOL
+d74 1
+a74 1
+           CALL ERRT(46,'BUFVOL...',MWANT)
+d82 2
+a83 2
+     &                           LSE,NROW,NSLICE,
+     &                           BUFVOL, IRTFLG)
+d85 1
+a85 1
+
+d90 4
+a93 2
+           WRITE(NOUT,*) ' Non-zero pixels inside mask:', PIX_IN_MASK
+         write(6,*)    ' Non-zero mask pixels:        ',PIX_IN_MASK
+d106 1
+a106 1
+              CALL ERRT(101,'MOTIF_LSD FFT ERROR ON PADDED MASK',NE)
+d121 3
+a123 3
+c          fmin = minval(bufvol(1:nsam, 1:nrow, 1:nslice))
+c          fmax = maxval(bufvol(1:nsam, 1:nrow, 1:nslice))
+c          write(6,*) ' Search volume:              ',fmin,'...',fmax
+d130 1
+a130 1
+              CALL ERRT(101,'MOTIF_INIT FFT ERROR ON VOLUME',NE)
+d143 3
+a145 3
+c          fmin = minval(bufvol(1:nsam, 1:nrow, 1:nslice))
+c          fmax = maxval(bufvol(1:nsam, 1:nrow, 1:nslice))
+c          write(6,*) ' Search volume:               ',fmin,'...',fmax
+d157 3
+a159 3
+c          fmin = minval(bufvol(1:nsam, 1:nrow, 1:nslice))
+c          fmax = maxval(bufvol(1:nsam, 1:nrow, 1:nslice))
+c          write(6,*) ' Squared search vol:         ',fmin,'...',fmax
+@
+
+
+1.2
+log
+@removed rednpadvol.f
+@
+text
+@a5 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2008  Health Research Inc.                      *
+d7 5
+a11 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d13 1
+a13 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d18 1
+a18 1
+C=* This program is distributed in the hope that it will be useful,    *
+d20 1
+a20 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a21 1
+C=*                                                                    *
+d23 1
+a23 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.1
+log
+@motif location
+@
+text
+@a180 61
+
+
+C++*********************************************************************
+C
+C  REDNPADVOL.F                          WRITTEN JUL 2008 ARDEAN LEITH
+C
+C **********************************************************************
+C
+C REDNPADVOLLUNVOL,PADVAL,NSAMIN,NROWIN,NSLICEIN,
+C                         NSAMOUT,NROWOUT,NSLICEOUT, BUFVOL, IRTFLG)
+C
+C PURPOSE: LOAD AND PAD A VOLUME 
+C
+C PARAMETERS:
+C       LUNVOL                       I/O UNITS                 (INPUT)
+C       PADVAL                       PADDING VALUE             (INPUT)
+C       NSAMIN,NROWIN,NSLICEIN       INPUT VOLUME DIM.         (INPUT)
+C       NSAMOUT,NROWOUT,NSLICEOUT    VOLUME SIZE               (INPUT)
+C       BUFVOL                       VOLUME                    (OUTPUT)
+C       IRTFLG                       ERROR FLAG                (OUTPUT)
+C
+C **********************************************************************
+
+       SUBROUTINE REDNPADVOL(LUNVOL,PADVAL, 
+     &                       NSAMIN,NROWIN,NSLICEIN,
+     &                       NSAMOUT,NROWOUT,NSLICEOUT,
+     &                       BUFVOL, IRTFLG)
+
+        IMPLICIT NONE
+
+	INTEGER, INTENT(IN)                 :: LUNVOL 
+	INTEGER, INTENT(IN)                 :: NSAMIN,NROWIN,NSLICEIN 
+	INTEGER, INTENT(IN)                 :: NSAMOUT,NROWOUT,NSLICEOUT
+ 	REAL, DIMENSION(NSAMOUT,NROWOUT,NSLICEOUT),INTENT(OUT):: BUFVOL
+	REAL, INTENT(IN)                    :: PADVAL
+	INTEGER, INTENT(OUT)                :: IRTFLG
+
+	INTEGER                             :: IREC,ISLICE,IROW
+
+        IREC = 1
+
+        DO ISLICE = 1,NSLICEIN
+           DO IROW = 1,NROWIN
+              CALL REDLIN(LUNVOL,BUFVOL(1,IROW,ISLICE),NSAMIN,IREC)
+
+C             FILL REMAINING PADDING COLS 
+              BUFVOL(NSAMIN+1:NSAMOUT, IROW, ISLICE) = PADVAL
+
+              IREC = IREC + 1
+           ENDDO
+
+C          FILL REMAINING PADDING ROWS 
+           BUFVOL(1:NSAMOUT, NROWIN+1:NROWOUT, ISLICE) = PADVAL
+        ENDDO
+
+C       FILL REMAINING PADDING SLICES 
+        BUFVOL(1:NSAMOUT, 1:NROWOUT, NSLICEIN+1:NSLICEOUT) = PADVAL
+
+        IRTFLG = 0
+
+        END
+@
+

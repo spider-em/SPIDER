@@ -1,0 +1,670 @@
+head	1.15;
+access;
+symbols
+	pre_getangas:1.15
+	GPL2010:1.15
+	pre_GPL2010:1.14
+	pre_var_equation:1.14
+	pre_fftwrings:1.13
+	pre_opfiles:1.13
+	src:1.13
+	best-code:1.13
+	named-reg:1.13
+	x-named-regs:1.12
+	x:1.12
+	v13-00:1.12
+	pre_GPL:1.10
+	prec_CA:1.9;
+locks; strict;
+comment	@c @;
+
+
+1.15
+date	2010.06.24.13.26.52;	author leith;	state Exp;
+branches;
+next	1.14;
+
+1.14
+date	2009.05.29.12.50.17;	author leith;	state Exp;
+branches;
+next	1.13;
+
+1.13
+date	2005.12.12.15.30.14;	author leith;	state Exp;
+branches;
+next	1.12;
+
+1.12
+date	2005.10.17.20.20.24;	author leith;	state Exp;
+branches;
+next	1.11;
+
+1.11
+date	2005.10.17.18.13.05;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2004.06.28.15.48.56;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2003.07.29.16.41.02;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2003.07.25.15.30.17;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2003.07.16.14.32.04;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2003.07.14.17.25.42;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2003.07.09.17.33.19;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2003.07.09.16.31.33;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2003.07.09.15.42.42;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2003.07.09.15.30.46;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2003.07.09.15.01.52;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.15
+log
+@GPL_2010
+@
+text
+@
+C++*********************************************************************
+C
+C SDOCIC.F     USED LUNDOC                          JUN  99 ARDEAN LEITH
+C               REMOVED ALLOCIT                     MAY  00 ARDEAN LEITH
+C               LUNDOCREDALL PARAMETERS CHANGED     DEC  00 ARDEAN LEITH
+C               ADDED 'SD IC' CAPABILITY            JUN  03 ARDEAN LEITH
+C               IPQ(ILOC) = NLIST                   JUN  04 ARDEAN LEITH
+C               IPQ(ILOC) OVERFLOW TRAP             MAY  09 ARDEAN LEITH
+C               NEXTKEY SET                         MAY  09 ARDEAN LEITH
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C   SDOCIC(SDNEW,SDCOPY)
+C
+C   PURPOSE:  ROUTINE DUPLICATES FUNCTION OF 'SD'
+C             BUT USES IN-CORE STORAGE, WHICH MAKES SUBSEQUENT READ 
+C             ACCESSES VERY QUICK.  IT SOLICITS DOC FILE NAME.  THE
+C             REGISTERS ARE SPECIFED ON THE COMMAND LINE
+C   
+C   PARAMETERS: SDNEW     FLAG TO CREATE NEW FILE               (SENT)
+C               SDCOPY    FLAG TO COPY TO DISK FILE             (SENT)
+C
+C   USAGE:    'SD IC NEW'      -- FIRST ACCESS: ALLOCCATE DOC. ARRAY 
+C             'SD IC 11,[reg]' -- WRITE DIRECTLY INTO DOC. ARRAY
+C             'SD IC COPY'     -- COPY ARRAY TO DISK BASED DOC. FILE
+C
+C--*********************************************************************
+
+	SUBROUTINE SDOCIC(SDNEW,SDCOPY)
+
+        USE DOCIC_INFO
+
+        INCLUDE 'CMBLOCK.INC' 
+C       'CMLIMIT.INC' IS AVAILABLE FROM: DOCIC_INFO
+
+        REAL, DIMENSION(:), POINTER :: IPQ
+        CHARACTER(LEN=MAXNAM)       :: DOCNAM
+        LOGICAL                     :: COMOUT,SDNEW,SDCOPY
+        LOGICAL                     :: NEWFILE
+        CHARACTER(LEN=1)            :: NULL
+
+        NULL = CHAR(0)
+
+        DATA LUNDOCT/70/
+
+        CALL FILERD(DOCNAM,NLET,NULL,'FILE OR ARRAY NAME~',IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+C       SEE IF THIS FILE IS ALREADY OPEN IN-CORE
+        CALL ISDOCINCORE(DOCNAM(1:NLET),NIC,NEWNIC,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+        IF (SDNEW) THEN
+C          CREATE NEW EMPTY IN-CORE DOC. FILE ----------------------
+
+           IF (NIC .GT. 0) THEN
+C             THIS INCORE FILE ALREADY EXISTS
+              WRITE(NOUT,90) DOCNAM(1:NLET)
+90            FORMAT(' *** ',A,' : ALREADY IN-CORE',/)
+              RETURN
+    
+           ELSEIF (NEWNIC .EQ. 0) THEN
+C             NO SPACE AVAILABLE IN DOC NAME LIST
+              WRITE(NOUT,91) 
+91            FORMAT(' *** NO SPACE AVAILABLE IN DOC. NAME LIST, ',
+     &               ' CLOSE ANOTHER INCORE FILE FIRST')
+              CALL ERRT(100,'SDOCIC',IDUM)
+              RETURN
+           ENDIF
+
+           CALL RDPRIS(MAXREG,MAXY,NOT_USED,
+     &                 'NUMBER OF REGISTERS & KEYS ALLOWED',IRTFLG)
+           IF (IRTFLG .NE. 0) RETURN
+
+C          ALLOCATE AN RUNTIME SRRAY FOR DOC. FILE CONTENTS
+           MEMWANT = (MAXREG + 1) * MAXY
+           ALLOCATE(IPQ(MEMWANT),STAT=IRTFLG)
+           IF (IRTFLG .NE. 0) THEN
+               CALL ERRT(102,'INCORE DOC. ALLOCATION FAILED',MEMWANT)
+               RETURN
+           ENDIF
+
+C          ZERO THE WHOLE ARRAY
+           IPQ = 0
+
+C          KEEP ARRAY POINTER IN LUNDOC
+           LOCDOC(NEWNIC)%IPT => IPQ
+           OLDNAM(NEWNIC)     = DOCNAM(1:NLET)
+           NLETOLDNAM(NEWNIC) = NLET
+           NUMKEYS(NEWNIC)    = MAXY
+           NUMCOLS(NEWNIC)    = MAXREG + 1
+           NEXTKEY(NEWNIC)    = 1
+           NICLAST            = NEWNIC
+ 	   RETURN
+ 
+        ELSEIF (SDCOPY) THEN
+C          COPY INCORE DOC FILE TO PHYSICAL OR IN-CORE --------------
+
+C          OPEN OUTPUT DOC FILE
+           CALL OPENDOC(DOCNAM,.TRUE.,NLET,LUNDOCT,LUNDOC,.TRUE.,
+     &             'OUTPUT DOCUMENT',.FALSE.,.FALSE.,.TRUE.,
+     &             NEWFILE,IRTFLG)
+           IF (IRTFLG .NE. 0)RETURN
+           IF (LUNDOC .LT. 0) THEN
+              CALL ERRT(101,'CAN NOT COPY TO INCORE ARRAY',NE)
+              RETURN
+           ENDIF
+
+C          INCORE POINTER TO THIS DOC. FILE CONTENTS 
+           IPQ => LOCDOC(NIC)%IPT
+
+C          GET ARRAY SIZE SAVED WHEN FILLED
+           MAXX   = NUMCOLS(NIC)  
+           NUMREG = MAXX - 1
+           MAXY   = NUMKEYS(NIC)
+           ILOC   = 1
+           DO  IKEY=1,MAXY
+              IF (IPQ(ILOC) .GT. 0) THEN
+C               KEY IS IN USE
+                CALL LUNDOCWRTDAT(LUNDOC,IKEY,IPQ(ILOC+1),NUMREG,IRTFLG)
+              ENDIF
+              ILOC = ILOC + MAXX
+           ENDDO
+           CLOSE(LUNDOCT)
+           RETURN     ! ---------------------------------------------
+        ENDIF
+
+C       PARSE REGISTER LINE, CHECK FOR ',' OR 'X'
+
+        IX = 6
+        CALL REG_DOC_PARSE(FCHAR(IX:),COMOUT,IKEY,NLIST,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+C       REGISTER LIST OK, CHECK INCORE ARRAY SIZE WHEN CREATED
+        MAXX   = NUMCOLS(NIC)  
+        MAXY   = NUMKEYS(NIC)
+        IF (IKEY .GT. MAXY) THEN
+           CALL ERRT(102,'OVERFLOW, MAX. KEY ALLOWED',MAXY)
+           RETURN
+        ELSE IF (NLIST .GT. (MAXX - 1)) THEN
+           CALL ERRT(102,'MAX. NUMBER OF REGISTERS',MAXREG)
+           RETURN
+        ELSEIF (COMOUT) THEN
+           CALL ERRT(100,'IN-CORE COMMENT KEYS NOT ALLOWED',NE)
+           RETURN
+        ENDIF
+
+C       RETRIEVE THE INCORE POINTER  
+        IPQ => LOCDOC(NIC)%IPT
+
+C       WANT TO SAVE REGISTERS IN INCORE ARRAY 
+        ILOC      = (IKEY-1) * MAXX + 1
+        IPQ(ILOC) = NLIST
+
+C       RETRIEVE DATA FROM REGISTER(S) LISTED IN NSEL INTO: IPQ(ILOC+1)
+        CALL REG_GET_NSELA(NLIST,IPQ(ILOC + 1),IRTFLG)
+
+        IF (.NOT. SILENT) WRITE(NOUT,*) ' '
+
+	RETURN
+	END
+
+
+@
+
+
+1.14
+log
+@NEXTKEY
+@
+text
+@a11 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2009  Health Research Inc.                      *
+d13 5
+a17 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d19 1
+a19 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d24 1
+a24 1
+C=* This program is distributed in the hope that it will be useful,    *
+d26 1
+a26 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a27 1
+C=*                                                                    *
+d29 1
+a29 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.13
+log
+@native named registers
+@
+text
+@d4 1
+a4 1
+C SDOCIC.F     USED LUNDOC                         JUNE 99 ARDEAN LEITH
+d9 2
+d13 1
+a13 1
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d37 1
+a37 1
+C   SDOCIC(DOCNAM,SDIT,SDNEW,SDCOPY)
+d45 1
+a45 1
+C                SDCOPY    FLAG TO COPY TO DISK FILE             (SENT)
+d47 3
+a49 3
+C   USAGE:    'SD IC NEW'    -- FIRST ACCESS: ALLOCCATE DOC. FILE 
+C             'SD IC,11,X11' -- WRITE DIRECTLY INTO CORE DOC. FILE
+C             'SD IC COPY'   -- COPY INCORE TO DISK BASED DOC. FILE
+d58 1
+d78 1
+a78 1
+C          CREATE NEW EMPTY IN-CORE DOC. FILE 
+d116 1
+d121 1
+a121 1
+C          COPY INCORE DOC FILE TO PHYSICAL OR IN-CORE DOC FILE
+d123 1
+a123 1
+C          OPEN THE OUTPUT DOC FILE
+d149 1
+a149 1
+           RETURN
+d158 1
+a158 1
+C       REGISTER LIST OK, GET ARRAY SIZE SAVED WHEN CREATED
+d161 4
+a164 2
+
+        IF (NLIST .GT. (MAXX - 1)) THEN
+a181 2
+        IRTFLG = 0
+
+@
+
+
+1.12
+log
+@GPL License fixed
+@
+text
+@a62 4
+C       MAXIMUM NUMBER OF REGISTERS SAVED
+        INTEGER,PARAMETER           :: MAXLIST=100
+        COMMON   ILIST(MAXLIST)
+
+d151 1
+a151 2
+        CALL LUNDOCPARSE(FCHAR(IX:),COMOUT,IKEY,ILIST,MAXLIST,
+     &                   NLIST,IRTFLG)
+d172 3
+a174 3
+        DO  K=1,NLIST
+           CALL REG_GET(ILIST(K),IPQ(ILOC + K),.TRUE.,IRTFLG)
+        ENDDO
+@
+
+
+1.11
+log
+@HRI GPL License used
+@
+text
+@a9 1
+C * SPIDER - MODULAR IMAGE PROCESSING SYSTEM.    AUTHOR: J.FRANK       *
+d13 1
+a13 1
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *  
+a32 6
+
+C * COPYRIGHT (C)1985, 2003. HEALTH RESEARCH INCORPORATED (HRI),       *
+C * ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+C * THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO HRI AND ARE NOT   *
+C * TO BE DISCLOSED TO OTHERS OR USED FOR PURPOSES OTHER THAN INTENDED *
+C * WITHOUT WRITTEN APPROVAL OF HRI.                                   *
+a33 1
+C ***********************************************************************
+a49 1
+C--**************************************************************************
+@
+
+
+1.10
+log
+@lundocredalli bug
+@
+text
+@d11 24
+d40 1
+d57 1
+@
+
+
+1.9
+log
+@sd ic copy wrong
+@
+text
+@d7 2
+a8 1
+C               ADDED 'SD IC' CAPABILITY            JUNE 03 ARDEAN LEITH
+d159 1
+a159 1
+        IPQ(ILOC) = IKEY
+@
+
+
+1.8
+log
+@MT --> newnic
+@
+text
+@d124 4
+a127 1
+              CALL LUNDOCWRTDAT(LUNDOC,IKEY,IPQ(ILOC),NUMREG,IRTFLG)
+@
+
+
+1.7
+log
+@buggy
+@
+text
+@d69 1
+a69 1
+           ELSEIF (MT .EQ. 0) THEN
+@
+
+
+1.6
+log
+@sd ic related changes
+@
+text
+@d24 1
+a24 2
+C   PARAMETERS:  DOCNAM    FILE NAME WITH EXTENSION              (SENT)
+C                SDNEW     FLAG TO CREATE NEW FILE               (SENT)
+d33 1
+a33 1
+	SUBROUTINE SDOCIC(DOCNAM,SDNEW,SDCOPY)
+d40 4
+a43 2
+        CHARACTER(LEN=*)            :: DOCNAM
+        LOGICAL          ::            COMOUT,SDNEW,SDCOPY
+d46 2
+a47 2
+        PARAMETER      (MAXLIST=100)
+        COMMON         ILIST(MAXLIST)
+d49 2
+d53 3
+d57 2
+a58 1
+        CALL ISDOCINCORE(DOCNAM,IGOT,NIC,IRTFLG)
+d63 1
+a63 1
+           IF (IGOT .GT. 0) THEN
+d65 1
+a65 1
+              WRITE(NOUT,90) DOCNAM
+d94 6
+a99 5
+           LOCDOC(NIC)%IPT => IPQ
+           OLDNAM(NIC)  = DOCNAM
+           NUMKEYS(NIC) = MAXY
+           NUMCOLS(NIC) = MAXREG + 1
+           NICLAST      = NIC
+a104 5
+C          OPEN THE IN-CORE DOC FILE
+           CALL OPENDOC(DOCNAM,.FALSE.,NLET,NDOC,.FALSE.,' ',
+     &               .FALSE.,.FALSE.,.FALSE.,NEWFILE,IRTFLGT)
+           IF (IRTFLGT .NE. 0) RETURN
+
+d107 2
+a108 1
+     &             'OUTPUT DOCUMENT',.TRUE.,.FALSE.,.TRUE.,LDUM,IRTFLG)
+d110 4
+d127 1
+a127 1
+           CLOSE(LUNDOC)
+d133 1
+a133 6
+        IX = INDEX(FCHAR,',')
+        IF (IX .LE. 0) THEN
+           CALL ERRT(101,'NO REGISTERS FOUND ON COMMAND LINE',NE)
+           RETURN
+        ENDIF
+
+d138 5
+a142 2
+C       REGISTER LIST OK 
+        IF (NLIST .GT. MAXREG) THEN
+a144 1
+
+a149 2
+C       WANT TO SAVE REGISTERS IN INCORE IMAGE 
+
+d153 2
+a154 1
+        ILOC = (IKEY-1) * MAXX + 1
+a162 1
+        CLOSE(LUNDOCT)
+@
+
+
+1.5
+log
+@comment
+@
+text
+@d48 2
+d65 1
+a65 1
+91            FORMAT(' *** NO SPACE AVAILABLE, ',
+d71 2
+a72 2
+           CALL RDPRIS(MAXX,MAXY,NOT_USED,
+     &                 'NUMBER OF REGISTERS AND KEYS ALLOWED',IRTFLG)
+d76 1
+a76 1
+           MEMWANT = MAXX * MAXY
+d90 1
+a90 1
+           NUMREGS(NIC) = MAXX + 1
+d97 1
+a97 1
+C          OPEN THE DOC FILE USING EXTENSION FROM DOCNAM
+d102 5
+d111 4
+a114 3
+           MAXX = NUMREGS(NIC)
+           MAXY = NUMKEYS(NIC)
+           ILOC = 1
+d116 1
+a116 1
+              CALL LUNDOCWRTDAT(LUNDOC,IKEY,IPQ(ILOC),MAXX,IRTFLG)
+d136 2
+a137 3
+        IF (NLIST .GT. MAXX) THEN
+           MAXLISTT = MAXX
+           CALL ERRT(102,'MAX. NUMBER OF REGISTERS',MAXX)
+d159 2
+@
+
+
+1.4
+log
+@usincoredoc parameters changed
+@
+text
+@d93 1
+a93 1
+C          COPY INCORE DOC FILE TO ANOTHER DOC FILE
+@
+
+
+1.3
+log
+@removed isdocincore.f
+@
+text
+@a1 1
+
+a47 3
+C       NEEDED FOR FUTURE CALLS
+        SAVE            NICLAST
+
+d49 1
+a49 1
+        CALL ISDOCINCORE(DOCNAM,NICLAST,IGOT,NIC,IRTFLG)
+@
+
+
+1.2
+log
+@*** empty log message ***
+@
+text
+@a159 38
+C++************************** ISDOCINCORE *****************************
+
+        SUBROUTINE ISDOCINCORE(DOCNAM,NICLAST,NIC,MT,IRTFLG)
+
+        USE DOCIC_INFO
+
+        INCLUDE 'CMBLOCK.INC' 
+
+        CHARACTER(LEN=*) ::  DOCNAM
+
+C       COMPARE WITH OLD NAMES
+	NIC     = 0
+        MT     = 0
+        IRTFLG = 0
+
+C       NAME IS MOST-LIKELY STILL THE SAME SO CHECK OLD ONE FIRST
+        IF (NICLAST .GT. 0 .AND. NICLAST .LE. MAXICDOCS .AND.
+     &      DOCNAM .EQ. OLDNAM(ICLAST)) THEN
+C          DOCNAM IS ALREADY IN-CORE
+           NIC  = NICLAST
+           RETURN   
+        ENDIF
+
+C       WANT TO USE LOWEST NIC FIRST NOW al
+	DO ICORE = MAXICDOCS,1,-1
+           IF (DOCNAM .EQ. OLDNAM(ICORE)) THEN
+C             DOCNAM IS ALREADY IN-CORE
+              NIC = ICORE
+              RETURN     
+           ENDIF
+
+C          REMEMBER WHICH LOCATIONS ARE EMPTY IN CASE DOCNAM NOT IN-CORE
+           IF (OLDNAM(ICORE) .EQ. '*' .OR. 
+     &         OLDNAM(ICORE)(1:1) .EQ. CHAR(0)) MT = ICORE
+        ENDDO
+
+	RETURN
+	END
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@a48 1
+
+d192 2
+a193 1
+           IF (OLDNAM(ICORE)  .EQ. '*') MT = ICORE
+@

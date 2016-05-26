@@ -1,0 +1,459 @@
+head	1.6;
+access;
+symbols
+	pre_getangas:1.5
+	GPL2010:1.5
+	pre_GPL2010:1.4
+	pre_var_equation:1.4
+	pre_fftwrings:1.4
+	pre_opfiles:1.4
+	src:1.4
+	best-code:1.4
+	x-named-regs:1.4
+	x:1.4
+	v13-00:1.4
+	pre_GPL:1.2
+	prec_CA:1.2
+	noindx:1.2;
+locks; strict;
+comment	@c @;
+
+
+1.6
+date	2012.11.30.19.32.36;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2010.06.24.13.27.00;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2005.10.17.20.02.24;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2005.10.17.17.57.58;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2002.03.11.14.07.53;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2001.06.01.17.33.34;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.6
+log
+@rewrite
+@
+text
+@
+C++*********************************************************************
+C
+C SPEAKM.F    NEW                               MAY 2001 ARDEAN LEITH
+C             REWRITE                           NOV 2012 ARDEAN LEITH
+C
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2012  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C  PURPOSE:  SEARCHES FOR THE  LOCATION OF MAXIMUM IN THE (REAL) IMAGE
+C            AND PRINTS OUT POSITION AND VALUE OF THIS PEAK.
+C
+C  SPEAKM(LUN,NX,NY,NZ,FMAXT)
+C
+C  PARAMETERS: LUN      I/O UNIT NUMBER
+C              NX,NY    DIMENSIONS OF IMAGE
+C              NZ       DIMENSIONS OF IMAGE
+C              FMAXT    MAX. VALUE OF IMAGE
+C
+C        REGISTER POSITIONS 
+C          1 = X-PEAK LOCATION
+C          2 = Y-PEAK LOCATION
+C          3 = X-PEAK LOCATION RELATIVE TO ORIGIN
+C          4 = X-PEAK LOCATION RELATIVE TO ORIGIN
+C          5 = VALUE OF MAXIMUM
+C          6 = NUMBER OF MAXIMUM LOCATIONS
+C          7 = RADIUS OF BOUNDING BOX OF MAXIMA
+C
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C--*********************************************************************
+
+         SUBROUTINE SPEAKM(LUN,NX,NY,NZ,FMAXT)
+
+         INCLUDE 'CMBLOCK.INC'
+         INCLUDE 'CMLIMIT.INC'
+
+         COMMON /IOBUF/ BUF(NBUFSIZ)
+
+         INTEGER :: LUN,NX,NY,NZ
+         REAL    :: FMAXT
+         REAL    :: RSQ(9)
+
+         CALL SET_MPI(ICOMM,MYPID,MPIERR) ! SETS ICOMM AND MYPID
+
+         IF (NZ > 1) THEN
+            CALL ERRT(101,'NOT IMPLEMENTED FOR VOLUMES',NE)
+            RETURN           
+         ENDIF
+
+C        ORIGIN COORDINATES
+         NXCTR = NX/2+1
+         NYCTR = NY/2+1
+         NZCTR = NZ/2+1
+   
+         CALL RDPRI3S(NXCTR,NYCTR,NZCTR,NOT_USED,
+     &        'ENTER ORIGIN COORDINATES OR <CR> FOR CENTER',IRTFLG)
+         IF (IRTFLG .NE. 0) RETURN
+
+         FX    = 0.0
+         FY    = 0.0
+         FZ    = 0.0
+         NMAX  = 0
+
+C        INITIALIZE BOUNDING BOX CORNERS
+         IXMIN = NX
+         IXMAX = 1
+         IYMIN = NY
+         IYMAX = 1
+         IZMIN = NZ
+         IZMAX = 1
+
+         DO IZ = 1,NZ
+            DO IY = 1,NY
+
+               CALL REDLIN(LUN,BUF,NX,(NZ-1)*NY +IY)
+
+               DO IX = 1,NX
+                  IF (BUF(IX) >= FMAXT) THEN
+                     NMAX  = NMAX + 1
+                     FX    = FX + IX
+                     FY    = FY + IY
+                     FZ    = FZ + IZ
+
+C                    FIND BOUNDING BOX FOR DISTANCES
+                     IXMIN = MIN(IXMIN,IX)
+                     IYMIN = MIN(IYMIN,IY)
+                     IZMIN = MIN(IZMIN,IZ)
+                     IXMAX = MIN(IXMAX,IX)
+                     IYMAX = MIN(IYMAX,IY)
+                     IZMAX = MIN(IZMAX,IZ)
+                  ENDIF
+               ENDDO
+            ENDDO
+         ENDDO
+
+         IF (VERBOSE .AND. MYPID <= 0) WRITE(NOUT,*) ' '
+         IF (NMAX == 0)  THEN
+            WRITE(NOUT,*) ' NO PEAK FOUND'
+            IF (NDAT .NE. NOUT) WRITE(NDAT,*) ' NO PEAK FOUND'
+            CALL REG_SET_NSEL(1, 5,0.0, 0.0, 0.0, 0.0, 0.0,IRTFLG)
+            CALL REG_SET_NSEL(6, 2,0.0, 0.0, 0.0, 0.0, 0.0,IRTFLG)
+            RETURN
+         ENDIF
+
+         FX  = FX / NMAX
+         FY  = FY / NMAX
+         FZ  = FZ / NMAX
+
+         IF (NZ == 1) THEN
+            IF (NMAX == 1) THEN
+C              SINGLE MAXIMUM PEAK
+
+C              9/25/81 PARABOLIC FIT TO 3X3 NEIGHBORHOOD OF PEAK POINT
+C              PROGRAM SENT BY M.VAN HEEL, MODIFIED FOR SPIDER. JF
+            
+               KL = FX
+               DO I=1,3
+                  IY = FY + I - 2
+                  IF (IY < 1)  IY = IY + NY
+                  IF (IY > NY) IY = IY - NY
+                  CALL REDLIN(LUN,BUF,NX,IY)
+
+                  I1 = (I-1) * 3
+
+                  DO K=1,3
+                     IX = KL+K-2
+                     IF (IX < 1)  IX = IX + NX
+                     IF (IX > NX) IX = IX - NX
+
+                     RSQ(I1+K) = BUF(IX)
+                  ENDDO
+               ENDDO
+
+C              PARABL RETURNS PEAKV
+
+               CALL PARABL(RSQ,XSH,YSH,PEAKV)
+               FX  = XSH + FX
+               FY  = YSH + FY
+               RAD = 0.0
+
+C              HACK FOR ALMOST BINARY PEAK ERROR OR NON-ADJACENT MAXS
+               IF (PEAKV < MAXVAL(RSQ))  PEAKV = MAXVAL(RSQ)
+
+            ELSE
+C              MULTIPLE MAXIMUM PEAKS
+
+C              FIND MAX DISTANCE TO CORNER OF BOUNDING BOX
+               XMAX  = MAX((IXMAX-FX),(FX-IXMIN))
+               YMAX  = MAX((IYMAX-FY),(FY-IYMIN))
+               RAD   = SQRT((XMAX**2 + YMAX**2))
+
+               PEAKV = FMAXT
+            ENDIF
+
+C           ADJUST FOR ORIGIN
+            FXC = FX - NXCTR
+            FYC = FY - NYCTR
+
+            WRITE(NOUT,90)
+            IF (NDAT .NE. NOUT) WRITE(NDAT,90)
+
+90          FORMAT('    NMAX      X        Y         XO       YO',
+     &             '       HEIGHT      RADIUS')
+
+            WRITE(NOUT,91) NMAX, FX,FY, FXC,FYC, PEAKV,RAD
+91          FORMAT(I7,2(F8.2,1X),2X,2(F8.2,1X),G16.5,3X,F5.2)
+
+            IF (NDAT .NE. NOUT) WRITE(NDAT,91)
+     &                    NMAX, FX,FY, FXC,FYC, PEAKV,RAD
+
+            IF (VERBOSE .AND. MYPID <= 0) WRITE(NOUT,*) ' '
+
+
+            CALL REG_SET_NSEL(1,5,FX,FY,FXC,FYC,PEAKV,IRTFLG)
+            CALL REG_SET_NSEL(6,2,FLOAT(NMAX),RAD,0.0,0.0,0.0,IRTFLG)
+ 
+         ELSE
+C           VOLUME, NOT IMPLEMENTED YET
+         ENDIF
+
+         RETURN
+         END
+
+@
+
+
+1.5
+log
+@GPL_2010
+@
+text
+@d4 2
+a5 1
+C SPEAKM.F                              NEW MAY 2001 ARDEAN LEITH
+d11 1
+a11 1
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+d32 1
+a32 1
+C  SPEAKM(LUN,NSAM,NROW,NSLICE,FMAXT)
+d34 4
+a37 4
+C  PARAMETERS: LUN          LOGICAL UNIT NUMBER OF IMAGE
+C              NSAM,NROW    DIMENSIONS OF IMAGE
+C              NSLICE       DIMENSIONS OF IMAGE
+C              FMAXT        MAX. VALUE OF IMAGE
+d40 7
+a46 7
+C          1= X-PEAK LOCATION
+C          2= Y-PEAK LOCATION
+C          3= X-PEAK LOCATION RELATIVE TO ORIGIN
+C          4= X-PEAK LOCATION RELATIVE TO ORIGIN
+C          5= VALUE OF MAXIMUM
+C          6= NUMBER OF MAXIMUM LOCATIONS
+C          7= RADIUS OF BOUNDING BOX OF MAXIMA
+d51 1
+a51 1
+         SUBROUTINE SPEAKM(LUN,NSAM,NROW,NSLICE,FMAXT)
+d58 3
+a60 1
+         DIMENSION      RSQ(9)
+d62 3
+a64 1
+         IF (NSLICE .GT. 1) THEN
+d70 3
+a72 3
+         NXCTR    = NSAM/2+1
+         NYCTR    = NROW/2+1
+         NZCTR    = NSLICE/2+1
+d84 1
+a84 1
+         IXMIN = NSAM
+d86 1
+a86 1
+         IYMIN = NROW
+d88 1
+a88 1
+         IZMIN = NSLICE
+d91 7
+a97 5
+         DO ISLICE = 1,NSLICE
+            DO IROW = 1,NROW
+               CALL REDLIN(LUN,BUF,NSAM,(NSLICE-1)*NROW +IROW)
+               DO ISAM = 1,NSAM
+                  IF (BUF(ISAM) .GE. FMAXT) THEN
+d99 3
+a101 3
+                     FX    = FX + ISAM
+                     FY    = FY + IROW
+                     FZ    = FZ + ISLICE
+d104 6
+a109 6
+                     IXMIN = MIN(IXMIN,ISAM)
+                     IYMIN = MIN(IYMIN,IROW)
+                     IZMIN = MIN(IZMIN,ISLICE)
+                     IXMAX = MIN(IXMAX,ISAM)
+                     IYMAX = MIN(IYMAX,IROW)
+                     IZMAX = MIN(IZMAX,ISLICE)
+d115 2
+a116 1
+         IF (NMAX .EQ. 0)  THEN
+d128 6
+a133 4
+         IF (NSLICE .EQ. 1) THEN
+            IF (NMAX .EQ. 1) THEN
+C              9/25/81 PARABOLIC FIT TO THE 3X3 NEIGHBORHOOD OF THE PEAK POINT
+C              PROGRAM SENT BY M.VAN HEEL, MODIFIED FOR SPIDER USE. JF
+d137 7
+a143 5
+                  IROW = FY+I-2
+                  IF (IROW.LT.1) IROW=IROW+NROW
+                  IF (IROW.GT.NROW) IROW = IROW-NROW
+                  CALL REDLIN(LUN,BUF,NSAM,IROW)
+                  I1 = (I-1)*3
+d145 3
+a147 3
+                     ISAM = KL+K-2
+                     IF (ISAM.LT.1) ISAM=ISAM+NSAM
+                     IF (ISAM.GT.NSAM) ISAM=ISAM-NSAM
+d149 1
+a149 1
+                     RSQ(I1+K) = BUF(ISAM)
+d154 1
+d156 2
+a157 2
+               FX  = XSH  + FX
+               FY  = YSH  + FY
+d159 4
+d164 2
+a179 2
+90          FORMAT(4X,'NMAX',5X,'ISAM',6X,'IROW',9X,
+     &                'X',9X,'Y',11X,'PEAK',6X,'RADIUS')
+d181 6
+a186 1
+            WRITE(NOUT,91) NMAX,FX,FY,FXC,FYC,PEAKV,RAD
+d188 4
+a191 2
+     &                    NMAX,FX,FY,FXC,FYC,PEAKV,RAD
+91          FORMAT(I7,3X,4(F8.2,2X),G16.7,3X,F5.2)
+@
+
+
+1.4
+log
+@GPL License fixed
+@
+text
+@a6 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d8 5
+a12 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d14 1
+a14 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d19 1
+a19 1
+C=* This program is distributed in the hope that it will be useful,    *
+d21 1
+a21 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a22 1
+C=*                                                                    *
+d24 1
+a24 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.3
+log
+@HRI GPL License used
+@
+text
+@a2 1
+C++************************************************************************
+a6 1
+C * SPIDER - MODULAR IMAGE PROCESSING SYSTEM.    AUTHOR: J.FRANK       *
+d10 1
+a10 1
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *  
+a29 6
+
+C * COPYRIGHT (C)1985, 2001. HEALTH RESEARCH INCORPORATED (HRI),       *
+C * ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+C * THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO HRI AND ARE NOT   *
+C * TO BE DISCLOSED TO OTHERS OR USED FOR PURPOSES OTHER THAN INTENDED *
+C * WITHOUT WRITTEN APPROVAL OF HRI.                                   *
+a52 1
+C--************************************************************************
+@
+
+
+1.2
+log
+@nloop,iloop_removed
+@
+text
+@d2 1
+d9 24
+d60 1
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d56 1
+a56 1
+         CALL RDPRI3S(NXCTR,NYCTR,NZCTR,NLOOP,ILOOP,
+@

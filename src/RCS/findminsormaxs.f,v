@@ -1,0 +1,530 @@
+head	1.3;
+access;
+symbols;
+locks; strict;
+comment	@c @;
+
+
+1.3
+date	2014.12.17.15.47.29;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2014.12.16.14.52.45;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2014.12.03.18.50.38;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.3
+log
+@now reports all mins/maxs up to nval
+@
+text
+@C **********************************************************************
+C
+C  FINDMINSORMAXS     NEW                         NOV 14 ARDEAN LEITH
+C
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2014  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C FINDMINSORMAXS
+C
+C PURPOSE:  FIND RIDGES / VALLEYS ACROSS AN IMAGE. PUT RESULTS IN DOC
+C           FILE.
+C
+C **********************************************************************
+
+        SUBROUTINE FINDMINSORMAXS(LUNIN,LUNDOC)
+
+        IMPLICIT NONE
+
+        INCLUDE 'CMBLOCK.INC'
+        INCLUDE 'CMLIMIT.INC' 
+ 
+        INTEGER               :: LUNIN,LUNDOC 
+
+C       MAXNAM, INUMBR & NIMAX IS FROM: CMLIMIT.INC
+C       MAXNAM, INUMBR & NIMAX IS FROM: CMLIMIT.INC
+ 
+        CHARACTER(LEN=MAXNAM) :: FILNAM,DOCNAM
+        CHARACTER(LEN=92)     :: COMMENT
+        CHARACTER(LEN=3)      :: OPTC
+
+        REAL, ALLOCATABLE     :: BUF(:,:)
+        REAL, ALLOCATABLE     :: CURVE(:)
+        REAL, ALLOCATABLE     :: DLIST(:)
+        REAL, ALLOCATABLE     :: SIZVAL(:)
+        INTEGER, ALLOCATABLE  :: LOCVAL(:)
+
+        INTEGER               :: MAXIM,ITYPE,NX,NY,NZ,IRTFLG,NLET
+        INTEGER               :: IROW
+        INTEGER               :: NMIN,NMAX,NEIB,NILMAX
+
+        LOGICAL               :: WANTMINS
+        LOGICAL               :: ADDEXT,GETNAME,ISOLD
+        LOGICAL               :: APPEND,MESSAGE,NEWFILE
+        INTEGER               :: LUNDOCO,NLETD,KEY,J
+        INTEGER               :: NCHAR,NVALS,NOT_USED,NVAL,NGOT,I
+ 
+        CHARACTER(LEN=1)      :: NULL = CHAR(0)
+
+C       OPEN INPUT FILE
+        MAXIM = 0
+        CALL OPFILEC(0,.TRUE.,FILNAM,LUNIN,'O',ITYPE,NX,NY,
+     &              NZ,MAXIM,'INPUT',.FALSE.,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+        IF (NZ > 1)  THEN
+           CALL ERRT(101,'DOES NOT WORK ON VOLUMES',IRTFLG)
+           RETURN
+        ENDIF
+
+        ALLOCATE (BUF(NX,NY),
+     &            CURVE(NX), 
+     &            STAT=IRTFLG)
+        IF (IRTFLG .NE. 0) THEN 
+           CALL ERRT(46,'FINDMINSORMAXS; BUF, CURVE',NX*NY + NX)
+           GOTO 9999
+        ENDIF
+
+C       LOAD INPUT IMAGE
+        CALL REDVOL(LUNIN,NX,NY, 1,1, BUF,IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 9999
+           
+        CALL RDPRMC(OPTC,NCHAR,.TRUE.,'VALLEYS OR RIDGES? (VAL/RID)',
+     &              NULL,IRTFLG)
+        WANTMINS = (INDEX(OPTC(:NCHAR),'R') == 0)
+
+        NVALS  = 1        
+        IF (WANTMINS) THEN
+           CALL RDPRI1S(NVALS,NOT_USED,'VALLEYS WANTED',IRTFLG)
+           IF (IRTFLG .NE. 0) GOTO 9999
+
+           IF (NVALS <= 0 ) THEN
+              CALL ERRT(102,'INVALID NUMBER OF VALLEYS',NVALS)
+              GOTO 9999
+           ENDIF
+        ELSE
+           CALL RDPRI1S(NVALS,NOT_USED,'RIDGES WANTED',IRTFLG)
+           IF (IRTFLG .NE. 0) GOTO 9999
+
+           IF (NVALS <= 0 ) THEN
+              CALL ERRT(102,'INVALID NUMBER OF RIDGES',NVALS)
+              GOTO 9999
+           ENDIF
+        ENDIF
+
+        ALLOCATE (SIZVAL(NVALS),
+     &            LOCVAL(NVALS), 
+     &            DLIST(NVALS*2),   STAT=IRTFLG)
+        IF (IRTFLG .NE. 0) THEN 
+           CALL ERRT(46,'FINDMINSORMAXS; SIZVAL...',NVALS*4)
+           GOTO 9999
+        ENDIF
+
+        CALL RDPRI1S(NEIB,NOT_USED,
+     &              'SEARCH NEIGHBORHOOD DISTANCE',IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 9999
+
+        ADDEXT  = .TRUE.
+        GETNAME = .TRUE.
+        ISOLD   = .FALSE.
+        APPEND  = .FALSE.
+        MESSAGE = .TRUE. 
+        IRTFLG  = -8         ! NO IC USE
+
+        CALL OPENDOC(DOCNAM,ADDEXT,NLETD,LUNDOC,LUNDOCO,GETNAME,
+     &         'OUTPUT DOC',ISOLD,APPEND,MESSAGE,NEWFILE,IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 9999
+
+        COMMENT = 
+     &     'KEY=ROW, LOC1,        VALUE1,        LOC2,        VALUE2,'//
+     &      '        LOC3,        VALUE3 ...'
+C           123456789 123456789 123456789 123456789 123456789 123456789
+
+        CALL LUNDOCPUTCOM(LUNDOCO,COMMENT(1:92),IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 9999
+
+C       FIND RIDGES & VALLEY LOCATIONS ALONG ALL RAYS ------------- 
+
+        KEY = 0
+       
+        DO IROW=1,NY     ! LOOP OVER ALL ROWS 
+
+           CURVE = BUF(1:NX,IROW)
+
+           IF (WANTMINS) THEN
+              CALL FINDMINS(CURVE,NX, LOCVAL,SIZVAL,
+     &                      NVALS, NGOT, NEIB,IRTFLG)
+           ELSE
+              CALL FINDMAXS(CURVE,NX, LOCVAL,SIZVAL,
+     &                      NVALS, NGOT, NEIB,IRTFLG)
+           ENDIF
+
+           KEY = IROW 
+           J   = 0
+          
+           DO I = 1,NVALS     ! LOOP OVER ALL VALLEYS/RIDGES WANTED 
+ 
+              DLIST(J+1) = LOCVAL(I)
+              DLIST(J+2) = SIZVAL(I)
+              J          = J + 2
+           ENDDO
+
+           CALL LUNDOCWRTDAT(LUNDOCO,KEY,DLIST,J,IRTFLG)
+         ENDDO
+
+9999    IF (ALLOCATED(BUF))     DEALLOCATE (BUF)
+        IF (ALLOCATED(CURVE))   DEALLOCATE (CURVE)
+        IF (ALLOCATED(SIZVAL))  DEALLOCATE (SIZVAL)
+        IF (ALLOCATED(LOCVAL))  DEALLOCATE (LOCVAL)
+
+
+        CLOSE(LUNIN)
+        CLOSE(LUNDOC) 
+ 
+        END
+
+C       --------------------- FINDMINS ------------------------
+
+C       FIND VALLEYS & RIDGES LOCATIONS ALONG SPECIFIED CURVE
+
+        SUBROUTINE FINDMINS(CURVE,N, LOCVALLEY, VALVALLEY,
+     &                      NUMMIN, MINGOT,  NEIB, IRTFLG)
+
+        IMPLICIT NONE
+        INTEGER             :: N
+        REAL                :: CURVE(N)
+
+        INTEGER             :: NUMMIN,MINGOT
+        INTEGER             :: LOCVALLEY(NUMMIN)
+        REAL                :: VALVALLEY(NUMMIN)
+        INTEGER             :: NEIB
+        INTEGER             :: IRTFLG
+
+        REAL                :: VAL,VTMP
+        LOGICAL             :: LOCMIN,WANTMIN,WANTMAX
+        INTEGER             :: I,J
+
+        IRTFLG  = 0
+        VAL     = CURVE(1)    ! VALUE AT ORIGIN
+
+
+        LOCVALLEY = 0
+        VALVALLEY = 0.0
+        MINGOT    = 0
+
+        WANTMIN   = .TRUE.
+        WANTMAX   = .TRUE.
+
+        DO I = 2,N          ! LOOP ALONG THE CURVE
+           VTMP = CURVE(I)
+
+           !if (i<10) write(6,*) 'i,vt,v:', i,vtmp, val,wantmin,wantmax
+
+           IF (VTMP < VAL) THEN
+C             GOING DOWN NOW
+              IF (WANTMAX) THEN
+C                FOUND A MAX (MAY BE AT INITIAL POINT)
+
+                 WANTMAX        = .FALSE.
+                 WANTMIN        = .TRUE.
+              ENDIF
+           !if (i<10) write(6,*) 'down,vt,v:',vtmp,val,wantmin,wantmax
+           ELSE
+C             GOING UP NOW
+              IF (WANTMIN) THEN
+C                FOUND A MIN (MAY BE AT INITIAL POINT)
+
+                 LOCMIN = .TRUE.
+                 IF (NEIB > 0) THEN
+C                   
+C                   CHECK IF A LOCAL MIN OVER CURRENT NEIGHBORHOOD
+                    DO J=I,I-NEIB,-1
+                       IF (J > 0  .AND. CURVE(J) < VAL) LOCMIN = .FALSE.
+                    ENDDO
+
+                    DO J=I,I+NEIB
+                       IF (J <= N .AND. CURVE(J) < VAL) LOCMIN = .FALSE.
+                    ENDDO
+                 ENDIF
+ 
+                 IF (LOCMIN) THEN
+                    MINGOT            = MINGOT + 1
+                    LOCVALLEY(MINGOT) = I - 1  ! FOUND A VALLEY
+                    VALVALLEY(MINGOT) = VAL    ! VALUE AT VALLEY
+                 ENDIF
+
+                 WANTMIN      = .FALSE.
+                 WANTMAX      = .TRUE.
+              ENDIF
+         !if(i<10)write(6,*)'up  ,vt,v:',vtmp,val,wantmin,wantmax,locmin
+           ENDIF
+
+           VAL = VTMP
+  
+           IF (MINGOT >= NUMMIN) EXIT
+          
+        ENDDO
+
+        END
+
+C       --------------------- FINDMAXS ------------------------
+
+C       FIND RIDGES LOCATIONS ALONG SPECIFIED CURVE
+
+        SUBROUTINE FINDMAXS(CURVE,N, LOCRIDGE, VALRIDGE,
+     &                      NUMMAX,MAXGOT, NEIB, IRTFLG)
+
+        IMPLICIT NONE
+
+        REAL                :: CURVE(N)
+        INTEGER             :: N
+        INTEGER             :: LOCRIDGE(NUMMAX)
+        REAL                :: VALRIDGE(NUMMAX)
+        INTEGER             :: NUMMAX,MAXGOT
+        INTEGER             :: NEIB
+        INTEGER             :: IRTFLG
+
+        REAL                :: VAL,VTMP
+        LOGICAL             :: WANTMIN,WANTMAX,LOCMAX
+        INTEGER             :: I,J
+
+        IRTFLG  = 0
+        VAL     = CURVE(1)    ! VALUE AT ORIGIN
+
+        LOCRIDGE = 0
+        VALRIDGE = 0.0
+        MAXGOT   = 0
+
+        WANTMIN  = .TRUE.
+        WANTMAX  = .TRUE.
+
+         DO I = 2,N          ! LOOP ALONG THE CURVE
+           VTMP = CURVE(I)
+
+           IF (VTMP < VAL) THEN
+C             GOING DOWN
+              IF (WANTMAX) THEN
+C                FOUND A MAX (MAY BE AT INITIAL POINT)
+
+                 LOCMAX = .TRUE.
+                 IF (NEIB > 0) THEN
+C                   
+C                   CHECK IF A LOCAL MAX OVER CURRENT NEIGHBORHOOD
+                    DO J=I,I-NEIB,-1
+                       IF (J > 0  .AND. CURVE(J) > VAL) LOCMAX = .FALSE.
+                    ENDDO
+
+                    DO J=I,I+NEIB
+                       IF (J <= N .AND. CURVE(J) > VAL) LOCMAX = .FALSE.
+                    ENDDO
+                 ENDIF
+ 
+                 IF (LOCMAX) THEN
+                    MAXGOT           = MAXGOT + 1
+                    LOCRIDGE(MAXGOT) = I - 1  ! FOUND A RIDGE
+                    VALRIDGE(MAXGOT) = VAL    ! VALUE AT RIDGE
+                 ENDIF
+
+                 WANTMAX        = .FALSE.
+                 WANTMIN        = .TRUE.
+              ENDIF
+           ELSE
+C             GOING UP
+              IF (WANTMIN) THEN
+C                FOUND A MIN (MAY BE AT INITIAL POINT)
+
+                 WANTMIN      = .FALSE.
+                 WANTMAX      = .TRUE.
+              ENDIF
+           ENDIF
+
+           VAL = VTMP  
+
+           IF (MAXGOT >= NUMMAX) EXIT
+                 
+        ENDDO
+
+        END
+
+
+
+
+
+
+
+
+
+@
+
+
+1.2
+log
+@output formatting, column bug
+@
+text
+@d44 1
+d47 1
+a47 1
+        CHARACTER(LEN=60)     :: COMMENT
+d52 1
+a55 1
+        REAL                  :: DLIST(4)
+d58 1
+a58 1
+        INTEGER               :: NMIN,NMAX,NEIB,NILMAX,IDUM,NTOP
+d62 2
+a63 2
+        LOGICAL               :: APPEND,MESSAGE,NEWFILE,WANTIT
+        INTEGER               :: LUNDOCO,NLETD,KEY,LOCMIN,J
+d91 1
+a91 1
+        CALL RDPRMC(OPTC,NCHAR,.TRUE.,'VALLEY OR RIDGE? (VAL/RID)',
+d95 1
+a95 2
+        NVALS  = NIMAX        
+        NILMAX = NIMAX                    ! FROM CMLIMIT
+d97 1
+a97 2
+           CALL RDPRAI(INUMBR,NILMAX,NVALS,IDUM,IDUM,
+     &              'VALLEY(S) WANTED','F',IRTFLG)
+d105 1
+a105 2
+           CALL RDPRAI(INUMBR,NILMAX,NVALS,IDUM,IDUM,
+     &              'RIDGE(S) WANTED','F',IRTFLG)
+d114 3
+a116 1
+        ALLOCATE (SIZVAL(NVALS),LOCVAL(NVALS), STAT=IRTFLG)
+d118 1
+a118 1
+           CALL ERRT(46,'FINDMINSORMAXS; VALVALLEY...',2*NVALS)
+d138 2
+a139 1
+     &     'KEY,     ROW,           #,           LOC,         VALUE'
+d142 1
+a142 1
+        CALL LUNDOCPUTCOM(LUNDOCO,COMMENT(1:56),IRTFLG)
+a146 1
+        NTOP = MAXVAL(INUMBR(1:NVALS))
+d155 1
+a155 1
+     &                      NTOP, NGOT, NEIB,IRTFLG)
+d158 1
+a158 1
+     &                      NTOP, NGOT, NEIB,IRTFLG)
+d161 4
+a164 11
+           !write(6,*) ' ngot:',ngot,ntop,inumbr(1:2)
+           !write(6,*) ' mins:',ngot,locval(1:2)
+
+           IF (NGOT > 0) THEN
+C             SAVE PARAMETERS
+
+               DO I = 1,NGOT
+                  WANTIT = .FALSE.
+                  DO J= 1,NTOP
+                     IF (I == INUMBR(J)) WANTIT = .TRUE.
+                  ENDDO
+d166 4
+a169 2
+                  IF (WANTIT) THEN
+                     KEY      = KEY + 1
+d171 2
+a172 10
+                     DLIST(1) = IROW 
+                     DLIST(2) = I
+                     DLIST(3) = LOCVAL(I)
+                     DLIST(4) = SIZVAL(I)
+
+                     CALL LUNDOCWRTDAT(LUNDOCO,KEY,DLIST,4,IRTFLG)
+                 ENDIF
+               ENDDO
+           ENDIF
+        ENDDO
+a208 1
+        MINGOT  = 0
+d210 6
+a215 2
+        WANTMIN = .TRUE.
+        WANTMAX = .TRUE.
+d220 1
+a220 1
+           !if (i<10) write(6,*) 'vt,v:', vtmp, val,wantmin,wantmax
+d264 2
+a265 2
+                 
+       ENDDO
+d293 3
+a295 1
+        MAXGOT  = 0
+d297 2
+a298 2
+        WANTMIN = .TRUE.
+        WANTMAX = .TRUE.
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d54 1
+a54 1
+        REAL                  :: DLIST(8)
+d98 7
+a104 1
+     &              'VALLEY WANTED','F',IRTFLG)
+d107 2
+a108 3
+     &              'RIDGE WANTED','F',IRTFLG)
+        ENDIF
+        IF (IRTFLG .NE. 0) GOTO 9999
+d110 4
+a113 3
+        IF (NVALS <= 0 ) THEN
+           CALL ERRT(102,'INVALID NUMBER OF VALUES REQUESTED',NVALS)
+           GOTO 9999
+a136 1
+C                  123456789 123456789 123456789 123456789 123456789 123456789
+d138 1
+a138 1
+     &     '  KEY,    ROW,          #,          LOC,          VALUE'
+d161 3
+d169 1
+a169 1
+                  DO J= 1,NGOT
+d172 1
+a172 1
+
+@

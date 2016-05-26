@@ -1,0 +1,1200 @@
+head	1.12;
+access;
+symbols
+	pre_getangas:1.7
+	GPL2010:1.7
+	pre_GPL2010:1.6
+	pre_var_equation:1.4
+	pre_fftwrings:1.3;
+locks; strict;
+comment	@c @;
+
+
+1.12
+date	2014.09.18.12.25.31;	author leith;	state Exp;
+branches;
+next	1.11;
+
+1.11
+date	2012.05.08.15.55.05;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2011.09.09.15.51.12;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2011.09.08.14.50.17;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2011.08.29.16.15.52;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2010.06.24.13.25.03;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2010.03.23.14.44.37;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2010.02.26.14.11.57;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2009.04.28.13.15.35;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2008.03.19.13.04.33;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2008.03.14.18.10.40;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2008.03.13.18.10.59;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.12
+log
+@comments,  ==
+@
+text
+@
+C++*********************************************************************
+C
+C APCC.F         NEW FROM APSHIFT FOR SPEEDUP       FEB 08 ARDEAN LEITH
+C                CCRS INOUT                         APR 09 ARDEAN LEITH
+C                MAX RANGE     BUG                  AUG 11 ARDEAN LEITH
+C                PEAKV SCALING BUG                  AUG 11 ARDEAN LEITH
+C                NX                                 APR 12 ARDEAN LEITH
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2014  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C  APCC(LSC,NX,NY,NZ, BUFI,BUFR, DO_FFT_I,DO_FFT_R,
+C       SKIP_PEAK,NORMIT,SPIDER_SIGN,
+C       ISHRANGEX,ISHRANGEY,ISHRANGEZ,
+C       XSHNEW,YSHNEW,ZSHNEW,PEAKV,IRTFLG)                                   
+C
+C  PURPOSE: CROSS-CORRELATE WITH REFERENCE IMAGE, OPTIONALLY FIND 
+C           CC PEAK LOCATION.
+C
+C  PARAMETERS: LSC           PADDED INPUT X DIMENSION          SENT
+C              NX...         INPUT IMAGE DIMENSIONS            SENT
+C              BUFI          SAMPLE IMAGE --> PEAK IMAGE       SENT/RET.  
+C              BUFR          REFERENCE IMAGE                   SENT/RET.
+C                            ALTERED IF FFT IS DONE
+C              DO_FFT_I      FFT THE BUFI CONTENTS             SENT
+C              DO_FFT_R      FFT THE BUFR CONTENTS             SENT
+C              SKIP_PEAK     SKIP PEAK LOCATION FLAG           SENT
+C              NORMIT        NORM LOCATION 0 FLAG              SENT
+C              SPIDER_SIGN   USE SPIDERS FFT SIGN CONVENTION   SENT
+C              ISHRANGEX..   POSSIBLE IMAGE SHIFT              SENT
+C              XSHNEW..      SUB PIXEL IMAGE SHIFT             RET.
+C              PEAKV         PEAK HEIGHT                       RET.
+C                            (ONLY RETURNED FOR 2D & 3D!!)
+C              IRTFLG        ERROR FLAG                        RET.  
+C
+C  NOTE:   BUFI and BUFR SHOULD CONTAIN IMAGES INSIDE A ROW 
+C          LENGTH: NX+2-MOD(NX,2)).   FOR BEST ACCURACY IMAGES
+C          SHOULD BE PADDED TO 2X ORIGINAL SIZE, THEN ROW LENGTH WILL
+C          BE: 2*NX+2 (WHERE NX IS ORIGINAL IMAGE ROW LENGTH)
+C
+C--*********************************************************************
+
+        SUBROUTINE APCC_NEW(LSC, NX,NY,NZ, BUFI,BUFR,
+     &                  DO_FFT_I,DO_FFT_R,
+     &                  SKIP_PEAK,NORMIT,SPIDER_SIGN,
+     &                  ISHRANGEX,ISHRANGEY,ISHRANGEZ,
+     &                  XSHNEW,YSHNEW,ZSHNEW,PEAKV,IRTFLG)
+
+        IMPLICIT NONE
+
+        INCLUDE 'CMBLOCK.INC'
+
+        INTEGER, INTENT(IN)     :: LSC,NX,NY,NZ
+        REAL                    :: BUFI(LSC,NY,NZ)
+        REAL                    :: BUFR(LSC,NY,NZ)
+
+        LOGICAL, INTENT(IN)     :: DO_FFT_I, DO_FFT_R
+        LOGICAL, INTENT(IN)     :: SKIP_PEAK,NORMIT,SPIDER_SIGN
+        INTEGER, INTENT(IN)     :: ISHRANGEX,ISHRANGEY,ISHRANGEZ
+        REAL,    INTENT(OUT)    :: XSHNEW,YSHNEW,ZSHNEW,PEAKV
+        INTEGER, INTENT(OUT)    :: IRTFLG
+
+        INTEGER                 :: INV,IGOX,IENDX,IGOY,IENDY
+        INTEGER                 :: IGOZ,IENDZ,IX,IY,IZ
+        INTEGER                 :: IXSH,IYSH,IZSH,NE,NT2,I,J
+        REAL                    :: QMAX,RX,RY,RZ
+
+        INTEGER * 8             :: IPLAN = 0     !STRUCTURE POINTER 
+        INTEGER                 :: ILOCS(3)
+        LOGICAL                 :: SPIDER_SCALE = .FALSE.
+
+	REAL                    :: Z(-1:1,-1:1)
+        REAL                    :: FNPIX_INV 
+        REAL                    :: PEAKPAR
+
+        IRTFLG       = 0
+
+C       CROSS CORRELATION --------------------------------------- CC
+
+        IF (DO_FFT_I) THEN
+           INV = +1
+           CALL FMRS(BUFI, NX,NY,NZ, IPLAN,
+     &               SPIDER_SIGN,SPIDER_SCALE, INV,IRTFLG)
+           IF (IRTFLG .NE. 0) THEN
+              CALL ERRT(101,'APCC FFT ERROR ON BUFI',NE)
+              RETURN
+           ENDIF
+        ENDIF
+
+        IF (DO_FFT_R) THEN
+           INV = +1
+           CALL FMRS(BUFR, NX,NY,NZ, IPLAN,
+     &               SPIDER_SIGN, SPIDER_SCALE, INV,IRTFLG)
+           IF (IRTFLG .NE. 0) THEN
+              CALL ERRT(101,'APCC FFT ERROR ON BUFR',NE)
+              RETURN
+           ENDIF
+        ENDIF
+
+        !call chkminloc('apcc exp',bufi,lsc*NY)
+        !call chkmaxloc('apcc exp',bufi,lsc*NY)
+        !call chkminloc('apcc ref',bufr,lsc*NY)
+        !call chkmaxloc('apcc ref',bufr,lsc*NY)
+
+        IF (NORMIT) THEN          ! WARNING: BUFI IS RETURNED!!
+           BUFI(1,1,1) = 0.0
+           BUFI(2,1,1) = 0.0
+        ENDIF
+
+        CALL CCRS(BUFI,BUFR, LSC,NX,NY,NZ, 
+     &            SPIDER_SIGN,SPIDER_SCALE, IRTFLG)
+        IF (IRTFLG .NE. 0) THEN
+           CALL ERRT(101,'CCRS CROSS CORRELATION ERROR',NE)
+           RETURN
+        ENDIF
+
+        IF (SKIP_PEAK) RETURN    ! DO NOT WANT TO FIND PEAK LOCATION
+
+        !call chkfile('jnkpk',66,1,nx,ny,nz, bufi,irtflg)
+
+C       PEAK SEARCH ON THE WINDOWED CC IMAGE -------------------- PEAK
+
+C       WINDOW SIZE & WINDOW CORNER
+        IGOX   = NX/2   -   ISHRANGEX +1 
+        IENDX  = IGOX + 2 * ISHRANGEX
+        
+        IGOY   = NY/2   -   ISHRANGEY +1  
+        IENDY  = IGOY + 2 * ISHRANGEY 
+        
+        IGOZ   = NZ/2 -     ISHRANGEZ +1  
+        IENDZ  = IGOZ + 2 * ISHRANGEZ 
+
+C       PEAK SEARCH WITHIN SEARCH RANGE WINDOW
+        ILOCS = MAXLOC(BUFI(IGOX:IENDX, IGOY:IENDY, IGOZ:IENDZ))
+
+        IX     = IGOX + ILOCS(1) - 1
+        IY     = IGOY + ILOCS(2) - 1
+        IZ     = IGOZ + ILOCS(3) - 1
+
+        PEAKV  = BUFI(IX,IY,IZ)
+
+C       FFT FASTER IF SCALING SKIPPED THERE, SO MUST REVALUE OUTPUT
+        FNPIX_INV = 1.0 / FLOAT(NX * NY * NZ) 
+        PEAKV     = PEAKV * FNPIX_INV 
+
+        IXSH   = -(ILOCS(1) - ISHRANGEX - 1)  
+        IYSH   = -(ILOCS(2) - ISHRANGEY - 1)  
+        IZSH   = -(ILOCS(3) - ISHRANGEZ - 1)  
+
+        XSHNEW = IXSH    ! SET HERE IN CASE OF BOUNDARY RETURN
+        YSHNEW = IYSH
+        ZSHNEW = IZSH
+
+        !write(6,*) ' Ishrange:    ',ishrangex,ishrangey,ishrangez
+        !write(6,*) ' Igox,y,z:    ',igox, igoy, igoz
+        !write(6,*) ' Iendx,y,z:   ',iendx,iendy,iendz
+        !write(6,*) ' Locs:        ',ilocs
+        !write(6,*) ' Ix,iy,iz:    ',ix,iy,iz, peakv
+        !write(6,*) ' Int. shifts: ',ixsh,iysh,izsh
+
+        IF (ISHRANGEZ > 0) THEN   !-------------------------- VOLUME
+C          DO NOT INTERPOLATE IF THE MAX IS ON THE EDGE
+
+           IF (IX <= 1 .OR. IX >= NX .OR.
+     &         IY <= 1 .OR. IY >= NY .OR.
+     &         IZ <= 1 .OR. IZ >= NZ) RETURN
+
+           IF (ABS(IXSH) >= ISHRANGEX .OR. 
+     &         ABS(IYSH) >= ISHRANGEY .OR.
+     &         ABS(IZSH) >= ISHRANGEZ) RETURN
+
+C          BINARY INTERPOLATION TO FIND SUB-PIXEL PEAK
+           QMAX = BUFI(IX,IY,IZ)     ! CENTRAL ELEMENT
+
+C          X, Y & Z SUB-PIXEL SHIFT
+           RX = 0
+           IF (ISHRANGEX > 0) THEN 
+             CALL PKSR3_SUB(QMAX,BUFI(IX-1,IY,IZ),BUFI(IX+1,IY,IZ),1,RX)
+           ENDIF
+           RY = 0
+           IF (ISHRANGEY > 0) THEN 
+             CALL PKSR3_SUB(QMAX,BUFI(IX,IY-1,IZ),BUFI(IX,IY+1,IZ),1,RY)
+           ENDIF
+           CALL PKSR3_SUB  (QMAX,BUFI(IX,IY,IZ-1),BUFI(IX,IY,IZ+1),1,RZ)
+          
+           XSHNEW  = IXSH - RX 
+           YSHNEW  = IYSH - RY
+           ZSHNEW  = IZSH - RZ
+
+        ELSEIF (ISHRANGEX > 0 .AND. ISHRANGEY > 0) THEN !--- IMAGE
+
+C          DO NOT INTERPOLATE IF THE MAX IS ON THE EDGE
+           IF (IX <= 1 .OR. IX >= NX .OR.
+     &         IY <= 1 .OR. IY >= NY) RETURN
+
+           IF (ABS(IXSH) >= ISHRANGEX .OR. 
+     &         ABS(IYSH) >= ISHRANGEY) RETURN
+
+           NT2 = 1
+           IF (NZ > 1) NT2 = 2
+           DO J=-1,1
+              DO I=-1,1
+                 Z(I,J) = BUFI(IX+I, IY+J, NT2)  ! 2 for NZ is 2x
+              ENDDO
+           ENDDO
+
+C          2D PARABOLIC FIT TO 3X3 NEIGHBORHOOD OF PEAK
+           CALL PARABL(Z, RX,RY, PEAKPAR)
+
+           XSHNEW = IXSH - RX
+           YSHNEW = IYSH - RY
+           ZSHNEW = 0.0
+
+           !write(6,*) ' '
+           !write(6,*) ' 2d buf,peak: ',bufi(ix,iy,iz),peakv
+           !write(6,*) ' Shifts:      ',ixsh,iysh, xshnew,yshnew
+           !write(6,*) ' Shifts:      ',ixsh,iysh, rx,ry
+           !write(6,"('  z:',1p3g12.4)") z 
+
+        ELSEIF (ISHRANGEX > 0) THEN ! -------------------------- ROW
+
+           IF (IX <= 1 .OR. IX >= NX) RETURN
+
+           IF (ABS(IXSH) >= ISHRANGEX) RETURN
+
+C          BINARY INTERPOLATION TO FIND SUB-PIXEL PEAK
+           QMAX = BUFI(IX,IY,IZ)         ! CENTRAL ELEMENT
+           CALL PKSR3_SUB(QMAX,BUFI(IX-1,IY,IZ),BUFI(IX+1,IY,IZ),1,RX)
+
+           XSHNEW = IXSH - RX 
+           YSHNEW = 0.0
+           ZSHNEW = 0.0
+
+        ELSEIF (ISHRANGEY > 0) THEN ! ----------------------- COLUMN
+
+           IF (IY <= 1 .OR. IY >= NY) RETURN
+
+           IF (ABS(IYSH) >= ISHRANGEY)    RETURN
+
+C          BINARY INTERPOLATION TO FIND SUB-PIXEL PEAK
+           QMAX = BUFI(IX,IY,IZ)         ! CENTRAL ELEMENT
+           CALL PKSR3_SUB(QMAX,BUFI(IX,IY-1,IZ),BUFI(IX,IY+1,IZ),1,RY)
+
+           XSHNEW = 0.0 
+           YSHNEW = IYSH - RY
+           ZSHNEW = 0.0
+
+        ENDIF
+        
+C       NORMALIZATION DONE IN CALLER IF DESIRED
+
+        IRTFLG = 0
+
+        END
+
+
+
+
+
+        SUBROUTINE APCC(LSC, NX,NY,NZ, BUFI,BUFR,
+     &                  SKIP_PEAK,NORMIT,SPIDER_SIGN,
+     &                  ISHRANGEX,ISHRANGEY,ISHRANGEZ,
+     &                  XSHNEW,YSHNEW,ZSHNEW,PEAKV,IRTFLG)
+
+        USE TYPE_KINDS
+        IMPLICIT NONE
+        INTEGER(KIND=I_8)       :: IPLAN = 0     !STRUCTURE POINTER 
+
+        INCLUDE 'CMBLOCK.INC'
+
+        INTEGER, INTENT(IN)     :: LSC,NX,NY,NZ
+        REAL                    :: BUFI(LSC,NY,NZ)
+        REAL                    :: BUFR(LSC,NY,NZ)
+
+        LOGICAL, INTENT(IN)     :: SKIP_PEAK,NORMIT,SPIDER_SIGN
+        INTEGER, INTENT(IN)     :: ISHRANGEX,ISHRANGEY,ISHRANGEZ
+        REAL,    INTENT(OUT)    :: XSHNEW,YSHNEW,ZSHNEW,PEAKV
+        INTEGER, INTENT(OUT)    :: IRTFLG
+
+        INTEGER                 :: INV,IGOX,IENDX,IGOY,IENDY
+        INTEGER                 :: IGOZ,IENDZ,IX,IY,IZ
+        INTEGER                 :: IXSH,IYSH,IZSH,NE,NT2,I,J
+        REAL                    :: QMAX,RX,RY,RZ
+
+        INTEGER                 :: ILOCS(3)
+        LOGICAL                 :: SPIDER_SCALE = .FALSE.
+
+	REAL                    :: Z(-1:1,-1:1)
+        REAL                    :: FNPIX_INV,PEAKPAR 
+
+        IRTFLG       = 0
+
+C       CROSS CORRELATION --------------------------------------- CC
+
+        INV = +1
+        CALL FMRS(BUFI, NX,NY,NZ, IPLAN,
+     &            SPIDER_SIGN,SPIDER_SCALE, INV,IRTFLG)
+       IF (IRTFLG .NE. 0) THEN
+           CALL ERRT(101,'APCC FFT ERROR ON BUFI',NE)
+           RETURN
+        ENDIF
+
+        INV = +1
+        CALL FMRS(BUFR, NX,NY,NZ, IPLAN,
+     &            SPIDER_SIGN, SPIDER_SCALE, INV,IRTFLG)
+        IF (IRTFLG .NE. 0) THEN
+           CALL ERRT(101,'APCC FFT ERROR ON BUFR',NE)
+           RETURN
+        ENDIF
+
+        IF (NORMIT) THEN          ! WARNING: BUFI IS RETURNED!!
+           BUFI(1,1,1) = 0.0
+           BUFI(2,1,1) = 0.0
+        ENDIF
+
+        CALL CCRS(BUFI,BUFR, LSC,NX,NY,NZ, 
+     &            SPIDER_SIGN,SPIDER_SCALE, IRTFLG)
+        IF (IRTFLG .NE. 0) THEN
+           CALL ERRT(101,'CCRS CROSS CORRELATION ERROR',NE)
+           RETURN
+        ENDIF
+
+        IF (SKIP_PEAK) RETURN    ! DO NOT WANT TO FIND PEAK LOCATION
+
+
+C       PEAK SEARCH ON THE WINDOWED CC IMAGE -------------------- PEAK
+
+C       WINDOW SIZE & WINDOW CORNER
+        IGOX   = NX/2   -   ISHRANGEX +1 
+        IENDX  = IGOX + 2 * ISHRANGEX
+        
+        IGOY   = NY/2   -   ISHRANGEY +1  
+        IENDY  = IGOY + 2 * ISHRANGEY 
+        
+        IGOZ   = NZ/2 -     ISHRANGEZ +1  
+        IENDZ  = IGOZ + 2 * ISHRANGEZ 
+
+C       PEAK SEARCH WITHIN SEARCH RANGE WINDOW
+        ILOCS = MAXLOC(BUFI(IGOX:IENDX, IGOY:IENDY, IGOZ:IENDZ))
+
+        IX     = IGOX + ILOCS(1) - 1
+        IY     = IGOY + ILOCS(2) - 1
+        IZ     = IGOZ + ILOCS(3) - 1
+
+        PEAKV  = BUFI(IX,IY,IZ)
+
+C       FFT FASTER IF SCALING SKIPPED THERE, SO MUST REVALUE OUTPUT
+        FNPIX_INV = 1.0 / FLOAT(NX * NY * NZ) 
+        PEAKV     = PEAKV * FNPIX_INV 
+
+        IXSH   = -(ILOCS(1) - ISHRANGEX - 1)  
+        IYSH   = -(ILOCS(2) - ISHRANGEY - 1)  
+        IZSH   = -(ILOCS(3) - ISHRANGEZ - 1)  
+
+        XSHNEW = IXSH    ! SET HERE IN CASE OF BOUNDARY RETURN
+        YSHNEW = IYSH
+        ZSHNEW = IZSH
+
+        !write(6,*) ' Ishrangex         :',ishrangex
+        !write(6,*) ' Ix,iy         :',ix,iy,iz,peakv!!,BUFI(IX,IY,IZ)
+        !write(6,*) ' Integer shifts:',ixsh,iysh
+        !write(6,*) ' ilocs:             ',ilocs
+
+        IF (ISHRANGEZ > 0) THEN   !-------------------------- VOLUME
+C          DO NOT INTERPOLATE IF THE MAX IS ON THE EDGE
+
+           IF (IX < 1 .OR. IX > NX .OR.
+     &         IY < 1 .OR. IY > NY .OR.
+     &         IZ < 1 .OR. IZ > NZ) RETURN
+
+           IF (ABS(IXSH) > ISHRANGEX .OR. 
+     &         ABS(IYSH) > ISHRANGEY .OR.
+     &         ABS(IZSH) > ISHRANGEZ) RETURN
+
+C          BINARY INTERPOLATION TO FIND SUB-PIXEL PEAK
+           QMAX = BUFI(IX,IY,IZ)     ! CENTRAL ELEMENT
+
+C          X, Y & Z SUB-PIXEL SHIFT
+           RX = 0
+           IF (ISHRANGEX > 0) THEN 
+             CALL PKSR3_SUB(QMAX,BUFI(IX-1,IY,IZ),BUFI(IX+1,IY,IZ),1,RX)
+           ENDIF
+           RY = 0
+           IF (ISHRANGEY > 0) THEN 
+             CALL PKSR3_SUB(QMAX,BUFI(IX,IY-1,IZ),BUFI(IX,IY+1,IZ),1,RY)
+           ENDIF
+           CALL PKSR3_SUB  (QMAX,BUFI(IX,IY,IZ-1),BUFI(IX,IY,IZ+1),1,RZ)
+          
+           XSHNEW  = IXSH - RX 
+           YSHNEW  = IYSH - RY
+           ZSHNEW  = IZSH - RZ
+
+        ELSEIF (ISHRANGEX > 0 .AND. ISHRANGEY > 0)THEN !--- IMAGE
+
+C          DO NOT INTERPOLATE IF THE MAX IS ON THE EDGE
+           IF (IX < 1 .OR. IX > NX .OR.
+     &         IY < 1 .OR. IY > NY) RETURN
+
+           IF (ABS(IXSH) > ISHRANGEX .OR. 
+     &         ABS(IYSH) > ISHRANGEY) RETURN
+
+           NT2 = 1
+           IF (NZ > 1) NT2 = 2
+           DO J=-1,1
+              DO I=-1,1
+                 Z(I,J) = BUFI(IX+I, IY+J, NT2)  ! 2 for NZ is 2x
+              ENDDO
+           ENDDO
+
+C          2D PARABOLIC FIT TO 3X3 NEIGHBORHOOD OF PEAK
+           CALL PARABL(Z, RX,RY, PEAKPAR)
+
+           XSHNEW = IXSH - RX
+           YSHNEW = IYSH - RY
+           ZSHNEW = 0.0
+
+           !write(6,*) ' '
+           !write(6,*) ' 2d buf,peak: ',bufi(ix,iy,iz),peakv
+           !write(6,*) ' Shifts:      ',ixsh,iysh, xshnew,yshnew
+           !write(6,*) ' Shifts:      ',ixsh,iysh, rx,ry
+           !write(6,"('  z:',1p3g12.4)") z 
+   
+
+        ELSEIF (ISHRANGEX > 0) THEN ! -------------------------- ROW
+
+           IF (IX < 1 .OR. IX > NX) RETURN
+
+           IF (ABS(IXSH) > ISHRANGEX) RETURN
+
+C          BINARY INTERPOLATION TO FIND SUB-PIXEL PEAK
+           QMAX = BUFI(IX,IY,IZ)         ! CENTRAL ELEMENT
+           CALL PKSR3_SUB(QMAX,BUFI(IX-1,IY,IZ),BUFI(IX+1,IY,IZ),1,RX)
+
+           XSHNEW = IXSH - RX 
+           YSHNEW = 0.0
+           ZSHNEW = 0.0
+
+        ELSEIF (ISHRANGEY > 0) THEN ! ----------------------- COLUMN
+
+           IF (IY < 1 .OR. IY > NY) RETURN
+
+           IF (ABS(IYSH) > ISHRANGEY)    RETURN
+
+C          BINARY INTERPOLATION TO FIND SUB-PIXEL PEAK
+           QMAX = BUFI(IX,IY,IZ)         ! CENTRAL ELEMENT
+           CALL PKSR3_SUB(QMAX,BUFI(IX,IY-1,IZ),BUFI(IX,IY+1,IZ),1,RY)
+
+           XSHNEW = 0.0 
+           YSHNEW = IYSH - RY
+           ZSHNEW = 0.0
+
+        ENDIF
+        
+C       NORMALIZATION DONE IN CALLER IF DESIRED
+
+        IRTFLG = 0
+
+        END
+
+
+
+
+C ------------------------- UNUSED BELOW HERE -------------------------
+
+#ifdef NEVER
+#ifdef DEBUG
+           write(6,*)'  '
+           write(6,*)'IGOX,IENDX,IGOY,IENDY ',IGOX,IENDX,IGOY,IENDY
+           write(6,*)'  '
+           write(6,*)'ILOCS:        ',ilocs
+           write(6,*)'IX,IY,IZ:     ',ix,iy
+           write(6,*)'IXSH,IYSH:    ',ixsh,iysh 
+           write(6,*)'XSHNEW,YSHNEW:',xshnew,yshnew
+           write(6,*)'PEAKV:        ',peakv
+#endif
+#ifdef DEBUG
+           write(6,*)'  '
+           write(6,*)'XSHNEW,YSHNEW:',xshnew,yshnew
+#endif
+
+           write(6,*)'  '
+           write(6,*)'IGOX,IENDX,IGOY,IENDY,IGOZ,IENDZ '
+           write(6,*) IGOX,IENDX,IGOY,IENDY,IGOZ,IENDZ
+
+           write(6,*)'  '
+           write(6,*)'ILOCS:          ',ilocs
+           write(6,*)'IX,IY,IZ:       ',ix,iy,iz
+           write(6,*)'IXSH,IYSH,IZSH: ',ixsh,iysh,izsh 
+
+           write(6,*)'  '
+           write(6,*)'RX,RY,RZ:',rx,ry,rz
+           write(6,*)'XSHNEW,YSHNEW,ZSHNEW:',xshnew,yshnew,zshnew
+
+           write(6,*)'  '
+           write(6,*)'peakv: ',peakv
+
+           nnn = NX*NY*NZ
+           lnn = lsc*NY*NZ
+           write(6,*)'NX*NY*NZ:',nnn
+           write(6,*)'lsc*NY*NZ:',lnn
+           pdnnn = peakv / float(nnn)
+           pdlnn = peakv / float(lnn)
+           write(6,*)'pdnnn,pdlnn:',pdnnn,pdlnn
+#endif
+
+#ifdef NEVER
+        call opfilec(0,.false.,'jnk002',98,'O',itype,
+     &               NX,NY,NZ,maxim,' ',.true.,irtflg)
+        call redvol(98,NX,NY, 1,NZ, bufs,irtflg)
+        close(98)
+        write(6,*) ' bufs filled with jnk002 '
+
+        maxim = 0
+        itype = -21
+        if (mod(NX,2).eq.0) itype = -22
+        call opfilec(0,.false.,'jnkapsccffti',98,'U',itype,
+     &               lsc,NY,NZ,maxim,' ',.true.,irtflg)
+        call wrtvol(98,lsc,NY, 1,NZ, bufi,irtflg)
+        close(98)
+
+        itype = -21
+        if (mod(NX,2).eq.0) itype = -22
+        call opfilec(0,.false.,'jnkapsccfftr',98,'U',itype,
+     &                lsc,NY,NZ,maxim,' ',.true.,irtflg)
+        call wrtvol(98,lsc,NY,1,NZ, bufr,irtflg)
+        close(98)
+
+        maxim = 0
+        itype = 3
+        call opfilec(0,.false.,'jnknewpkpad',98,'U',itype,
+     &                NX,NY,NZ,maxim,' ',.false.,irtflg)
+
+c       this only writes first lsc values from each row
+        call writev(98,bufi,lsc,NY, NX,NY,NZ)
+        close(98)
+#endif
+
+
+@
+
+
+1.11
+log
+@nx, ny used.
+@
+text
+@d13 1
+a13 1
+C=* Copyright 1985-2012  Health Research Inc.,                         *
+d31 1
+a31 1
+C  APCC(LSC,NX,NY,NZ, BUFI,BUFR,  
+d44 1
+d119 1
+a119 1
+        !!call chkminloc('apcc exp',bufi,lsc*NY)
+d138 1
+d143 1
+a143 1
+        IGOX   = NX/2   - ISHRANGEX +1 
+d146 1
+a146 1
+        IGOY   = NY/2   - ISHRANGEY +1  
+d149 1
+a149 1
+        IGOZ   = NZ/2 - ISHRANGEZ +1  
+d173 6
+a178 4
+        !write(6,*) ' Ishrangex         :',ishrangex
+        !write(6,*) ' Ix,iy         :',ix,iy,iz,peakv!!,BUFI(IX,IY,IZ)
+        !write(6,*) ' Integer shifts:',ixsh,iysh
+        !write(6,*) ' ilocs:             ',ilocs
+d209 1
+a209 1
+        ELSEIF (ISHRANGEX > 0 .AND. ISHRANGEY > 0)THEN !--- IMAGE
+d348 1
+a348 1
+        IGOX   = NX/2   - ISHRANGEX +1 
+d351 1
+a351 1
+        IGOY   = NY/2   - ISHRANGEY +1  
+d354 1
+a354 1
+        IGOZ   = NZ/2 - ISHRANGEZ +1  
+d383 1
+a383 1
+        IF (ISHRANGEZ .GT. 0) THEN   !-------------------------- VOLUME
+d399 1
+a399 1
+           IF (ISHRANGEX .GT. 0) THEN 
+d403 1
+a403 1
+           IF (ISHRANGEY .GT. 0) THEN 
+@
+
+
+1.10
+log
+@removed parabolic peak return!
+@
+text
+@d8 1
+d13 1
+a13 1
+C=* Copyright 1985-2011  Health Research Inc.,                         *
+d31 1
+a31 1
+C  APCC(LSC,NSAM,NROW,NSLICE, BUFI,BUFR,  
+d40 1
+a40 1
+C              NSAM...       INPUT IMAGE DIMENSIONS            SENT
+d55 1
+a55 1
+C          LENGTH: NSAM+2-MOD(NSAM,2)).   FOR BEST ACCURACY IMAGES
+d57 1
+a57 1
+C          BE: 2*NSAM+2 (WHERE NSAM IS ORIGINAL IMAGE ROW LENGTH)
+d61 1
+a61 1
+        SUBROUTINE APCC_NEW(LSC, NSAM,NROW,NSLICE, BUFI,BUFR,
+d71 3
+a73 3
+        INTEGER, INTENT(IN)     :: LSC,NSAM,NROW,NSLICE
+        REAL                    :: BUFI(LSC,NROW,NSLICE)
+        REAL                    :: BUFR(LSC,NROW,NSLICE)
+d75 1
+a75 1
+        LOGICAL, INTENT(IN)     :: DO_FFT_I,DO_FFT_R
+d100 1
+a100 1
+           CALL FMRS(BUFI, NSAM,NROW,NSLICE, IPLAN,
+d110 1
+a110 1
+           CALL FMRS(BUFR, NSAM,NROW,NSLICE, IPLAN,
+d118 4
+a121 4
+        !!call chkminloc('apcc exp',bufi,lsc*nrow)
+        !call chkmaxloc('apcc exp',bufi,lsc*nrow)
+        !call chkminloc('apcc ref',bufr,lsc*nrow)
+        !call chkmaxloc('apcc ref',bufr,lsc*nrow)
+d128 1
+a128 1
+        CALL CCRS(BUFI,BUFR, LSC,NSAM,NROW,NSLICE, 
+d141 1
+a141 1
+        IGOX   = NSAM/2   - ISHRANGEX +1 
+d144 1
+a144 1
+        IGOY   = NROW/2   - ISHRANGEY +1  
+d147 1
+a147 1
+        IGOZ   = NSLICE/2 - ISHRANGEZ +1  
+d160 1
+a160 1
+        FNPIX_INV = 1.0 / FLOAT(NSAM * NROW * NSLICE) 
+d176 1
+a176 1
+        IF (ISHRANGEZ .GT. 0) THEN   !-------------------------- VOLUME
+d179 7
+a185 7
+           IF (IX .LE. 1 .OR. IX .GE. NSAM .OR.
+     &         IY .LE. 1 .OR. IY .GE. NROW .OR.
+     &         IZ .LE. 1 .OR. IZ .GE. NSLICE) RETURN
+
+           IF (ABS(IXSH) .GE. ISHRANGEX .OR. 
+     &         ABS(IYSH) .GE. ISHRANGEY .OR.
+     &         ABS(IZSH) .GE. ISHRANGEZ) RETURN
+d192 1
+a192 1
+           IF (ISHRANGEX .GT. 0) THEN 
+d196 1
+a196 1
+           IF (ISHRANGEY .GT. 0) THEN 
+d205 1
+a205 1
+        ELSEIF (ISHRANGEX .GT. 0 .AND. ISHRANGEY .GT. 0)THEN !--- IMAGE
+d208 2
+a209 2
+           IF (IX .LE. 1 .OR. IX .GE. NSAM .OR.
+     &         IY .LE. 1 .OR. IY .GE. NROW) RETURN
+d211 2
+a212 2
+           IF (ABS(IXSH) .GE. ISHRANGEX .OR. 
+     &         ABS(IYSH) .GE. ISHRANGEY) RETURN
+d215 1
+a215 1
+           IF (NSLICE .GT. 1) NT2 = 2
+d218 1
+a218 1
+                 Z(I,J) = BUFI(IX+I, IY+J, NT2)  ! 2 for nslice is 2x
+d235 1
+a235 1
+        ELSEIF (ISHRANGEX .GT. 0) THEN ! -------------------------- ROW
+d237 1
+a237 1
+           IF (IX .LE. 1 .OR. IX .GE. NSAM) RETURN
+d239 1
+a239 1
+           IF (ABS(IXSH) .GE. ISHRANGEX) RETURN
+d249 1
+a249 1
+        ELSEIF (ISHRANGEY .GT. 0) THEN ! ----------------------- COLUMN
+d251 1
+a251 1
+           IF (IY .LE. 1 .OR. IY .GE. NROW) RETURN
+d253 1
+a253 1
+           IF (ABS(IYSH) .GE. ISHRANGEY)    RETURN
+d275 1
+a275 1
+        SUBROUTINE APCC(LSC, NSAM,NROW,NSLICE, BUFI,BUFR,
+d286 3
+a288 3
+        INTEGER, INTENT(IN)     :: LSC,NSAM,NROW,NSLICE
+        REAL                    :: BUFI(LSC,NROW,NSLICE)
+        REAL                    :: BUFR(LSC,NROW,NSLICE)
+d311 1
+a311 1
+        CALL FMRS(BUFI, NSAM,NROW,NSLICE, IPLAN,
+d319 1
+a319 1
+        CALL FMRS(BUFR, NSAM,NROW,NSLICE, IPLAN,
+d331 1
+a331 1
+        CALL CCRS(BUFI,BUFR, LSC,NSAM,NROW,NSLICE, 
+d344 1
+a344 1
+        IGOX   = NSAM/2   - ISHRANGEX +1 
+d347 1
+a347 1
+        IGOY   = NROW/2   - ISHRANGEY +1  
+d350 1
+a350 1
+        IGOZ   = NSLICE/2 - ISHRANGEZ +1  
+d363 1
+a363 1
+        FNPIX_INV = 1.0 / FLOAT(NSAM * NROW * NSLICE) 
+d382 7
+a388 7
+           IF (IX .LE. 1 .OR. IX .GE. NSAM .OR.
+     &         IY .LE. 1 .OR. IY .GE. NROW .OR.
+     &         IZ .LE. 1 .OR. IZ .GE. NSLICE) RETURN
+
+           IF (ABS(IXSH) .GE. ISHRANGEX .OR. 
+     &         ABS(IYSH) .GE. ISHRANGEY .OR.
+     &         ABS(IZSH) .GE. ISHRANGEZ) RETURN
+d408 1
+a408 1
+        ELSEIF (ISHRANGEX .GT. 0 .AND. ISHRANGEY .GT. 0)THEN !--- IMAGE
+d411 2
+a412 2
+           IF (IX .LE. 1 .OR. IX .GE. NSAM .OR.
+     &         IY .LE. 1 .OR. IY .GE. NROW) RETURN
+d414 2
+a415 2
+           IF (ABS(IXSH) .GE. ISHRANGEX .OR. 
+     &         ABS(IYSH) .GE. ISHRANGEY) RETURN
+d418 1
+a418 1
+           IF (NSLICE .GT. 1) NT2 = 2
+d421 1
+a421 1
+                 Z(I,J) = BUFI(IX+I, IY+J, NT2)  ! 2 for nslice is 2x
+d439 1
+a439 1
+        ELSEIF (ISHRANGEX .GT. 0) THEN ! -------------------------- ROW
+d441 1
+a441 1
+           IF (IX .LE. 1 .OR. IX .GE. NSAM) RETURN
+d443 1
+a443 1
+           IF (ABS(IXSH) .GE. ISHRANGEX) RETURN
+d453 1
+a453 1
+        ELSEIF (ISHRANGEY .GT. 0) THEN ! ----------------------- COLUMN
+d455 1
+a455 1
+           IF (IY .LE. 1 .OR. IY .GE. NROW) RETURN
+d457 1
+a457 1
+           IF (ABS(IYSH) .GE. ISHRANGEY)    RETURN
+d512 4
+a515 4
+           nnn = nsam*nrow*nslice
+           lnn = lsc*nrow*nslice
+           write(6,*)'nsam*nrow*nslice:',nnn
+           write(6,*)'lsc*nrow*nslice:',lnn
+d523 2
+a524 2
+     &               nsam,nrow,nslice,maxim,' ',.true.,irtflg)
+        call redvol(98,nsam,nrow, 1,nslice, bufs,irtflg)
+d530 1
+a530 1
+        if (mod(nsam,2).eq.0) itype = -22
+d532 2
+a533 2
+     &               lsc,nrow,nslice,maxim,' ',.true.,irtflg)
+        call wrtvol(98,lsc,nrow, 1,nslice, bufi,irtflg)
+d537 1
+a537 1
+        if (mod(nsam,2).eq.0) itype = -22
+d539 2
+a540 2
+     &                lsc,nrow,nslice,maxim,' ',.true.,irtflg)
+        call wrtvol(98,lsc,nrow,1,nslice, bufr,irtflg)
+d546 1
+a546 1
+     &                nsam,nrow,nslice,maxim,' ',.false.,irtflg)
+d549 1
+a549 1
+        call writev(98,bufi,lsc,nrow, nsam,nrow,nslice)
+@
+
+
+1.9
+log
+@added apcc_new.f
+@
+text
+@d91 1
+d222 1
+a222 1
+           CALL PARABL(Z, RX,RY, PEAKV)
+a232 3
+   
+           PEAKV = PEAKV * FNPIX_INV 
+
+d303 1
+a303 1
+        REAL                    :: FNPIX_INV 
+d425 1
+a425 1
+           CALL PARABL(Z, RX,RY, PEAKV)
+a436 2
+           PEAKV = PEAKV * FNPIX_INV 
+
+@
+
+
+1.8
+log
+@C                MAX RANGE     BUG                  AUG 11 ARDEAN LEITH
+C                PEAKV SCALING BUG                  AUG 11 ARDEAN LEITH
+@
+text
+@d38 2
+a39 2
+C  PARAMETERS: NSAM...       PADDED INPUT IMAGE DIMENSIONS     SENT
+C              NSAM...       PADDED INPUT IMAGE DIMENSIONS     SENT
+d41 3
+a43 1
+C              BUFR          REFERENCE IMAGE -- ALTERED!!      SENT/RET.
+d60 216
+d477 2
+@
+
+
+1.7
+log
+@GPL_2010
+@
+text
+@d6 2
+d12 1
+a12 1
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+d38 12
+a49 11
+C  PARAMETERS: NSAM...       PADDED INPUT IMAGE DIMENSIONS       SENT
+C              NSAM...       PADDED INPUT IMAGE DIMENSIONS       SENT
+C              BUFI          SAMPLE IMAGE --> PEAK IMAGE        SENT/RET.  
+C              BUFR          REFERENCE IMAGE -- ALTERED         SENT/RET.
+C              SKIP_PEAK     SKIP PEAK LOCATION FLAG             SENT
+C              NORMIT        NORM LOCATION 0 FLAG                SENT
+C              SPIDER_SIGN   USE SPIDERS FFT SIGN CONVENTION     SENT
+C              ISHRANGEX..   POSSIBLE IMAGE SHIFT                SENT
+C              XSHNEW..      SUB PIXEL IMAGE SHIFT               RET.
+C              PEAKV         PEAK HEIGHT                         RET.
+C              IRTFLG        ERROR FLAG                          RET.  
+a62 1
+
+d64 2
+a65 1
+        INTEGER(KIND=I_8)    :: IPLAN = 0     !STRUCTURE POINTER 
+d69 1
+a72 1
+        INTEGER, INTENT(IN)     :: NSAM,NROW,NSLICE
+d78 7
+a84 2
+        INTEGER, DIMENSION(3)   :: ILOCS
+        LOGICAL                 :: SPIDER_SCALE
+d86 2
+a87 1
+	REAL, DIMENSION(-1:1,-1:1) :: Z
+a89 1
+        SPIDER_SCALE = .FALSE.
+d144 1
+d146 2
+a147 1
+        PEAKV = PEAKV / FLOAT(NSAM * NROW * NSLICE)
+d157 2
+a158 1
+        !write(6,*) ' Ix,iy         :',ix,iy,peakv,BUFI(IX,IY,IZ)
+d169 4
+d185 1
+a185 1
+           CALL PKSR3_SUB(QMAX,BUFI(IX,IY,IZ-1),BUFI(IX,IY,IZ+1),1,RZ)
+d192 1
+d197 3
+a207 5
+           !write(6,*) ' 2d Ix,iy         :',ix,iy,peakv,BUFI(IX,IY,IZ)
+           !write(6,*) ' Integer shifts:',ixsh,iysh
+           !write(6,*) ' z: ------'
+           !write(6,'3g12.4') z    
+
+d215 9
+d228 2
+d242 2
+d257 1
+a257 1
+        RETURN
+@
+
+
+1.6
+log
+@IX .GE. 2*NSAM, BUFI(IX+I, IY+J, NT2) bugs
+@
+text
+@a6 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2009  Health Research Inc.                      *
+d8 5
+a12 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d14 1
+a14 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d19 1
+a19 1
+C=* This program is distributed in the hope that it will be useful,    *
+d21 1
+a21 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a22 1
+C=*                                                                    *
+d24 1
+a24 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.5
+log
+@dimensional restriction on search
+@
+text
+@d158 3
+a160 3
+           IF (IX .LE. 1 .OR. IX .GE. 2*NSAM .OR.
+     &         IY .LE. 1 .OR. IY .GE. 2*NROW .OR.
+     &         IZ .LE. 1 .OR. IZ .GE. 2*NSLICE) RETURN
+d175 1
+a175 1
+           
+d182 2
+a183 2
+           IF (IX .LE. 1 .OR. IX .GE. 2*NSAM .OR.
+     &         IY .LE. 1 .OR. IY .GE. 2*NROW) RETURN
+d185 2
+d189 1
+a189 1
+                 Z(I,J) = BUFI(IX+I, IY+J, 2)  ! 2 for nslice is 2x
+d207 1
+a207 1
+           IF (IX .LE. 1 .OR. IX .GE. 2*NSAM) RETURN
+d219 1
+a219 1
+           IF (IY .LE. 1 .OR. IY .GE. 2*NROW) RETURN
+@
+
+
+1.4
+log
+@*** empty log message ***
+@
+text
+@d82 2
+d151 10
+a160 4
+        IF (NSLICE .GT. 1) THEN   !-------------------------- VOLUME
+           IF (IX .LE. 1 .OR. IX .GE. NSAM .OR.
+     &         IY .LE. 1 .OR. IY .GE. NROW .OR.
+     &         IZ .LE. 1 .OR. IZ .GE. NSLICE) RETURN
+a162 1
+
+d166 8
+a173 2
+           CALL PKSR3_SUB(QMAX,BUFI(IX-1,IY,IZ),BUFI(IX+1,IY,IZ),1,RX)
+           CALL PKSR3_SUB(QMAX,BUFI(IX,IY-1,IZ),BUFI(IX,IY+1,IZ),1,RY)
+d180 15
+a194 7
+        ELSEIF (NROW .GT. 1) THEN  !-------------------------  IMAGE
+           IF (IX .LE. 1 .OR. IX .GE. NSAM .OR.
+     &         IY .LE. 1 .OR. IY .GE. NROW) RETURN
+
+C          PARABOLIC FIT TO THE 3X3 NEIGHBORHOOD OF PEAK
+           CALL PARABL(BUFI(IX-1:IX+1, 
+     &                      IY-1:IY+1, 1), XSHNEW,YSHNEW, PEAKV)
+d196 5
+a200 2
+           XSHNEW = IXSH - XSHNEW
+           YSHNEW = IYSH - YSHNEW
+d203 3
+a205 2
+        ELSE                  ! ----------------------------- ROW
+           IF (IX .LE. 1 .OR. IX .GE. NSAM) RETURN
+d208 1
+a208 1
+           QMAX = BUFI(IX,IY,IZ)  ! CENTRAL ELEMENT
+d214 13
+@
+
+
+1.3
+log
+@iplan
+@
+text
+@d5 1
+a5 1
+C                
+d8 1
+a8 1
+C=* Copyright (C) 1985-2008  Health Research Inc.                      *
+d64 1
+a64 1
+#ifdef SP_LIBFFTW3
+a66 1
+#endif
+d108 1
+a108 1
+        CALL CCRS(BUFI,BUFR,BUFI, LSC,NSAM,NROW,NSLICE, 
+@
+
+
+1.2
+log
+@bug in image shift
+@
+text
+@d64 5
+d89 1
+a89 1
+        CALL FMRS(BUFI, NSAM,NROW,NSLICE, 0.0D0,
+d97 1
+a97 1
+        CALL FMRS(BUFR, NSAM,NROW,NSLICE, 0.0D0,
+@
+
+
+1.1
+log
+@*** empty log message ***
+@
+text
+@d32 2
+a33 1
+C  APCC(LSC,NSAM,NROW,NSLICE, BUFI,BUFR,  SKIP_PEAK,NORMIT,
+d46 1
+d99 3
+a101 3
+        IF (NORMIT) THEN          ! WARNING THIS IS RETURNED!!
+           BUFI(1,1,1) = (0.0)
+           BUFI(2,1,1) = (0.0)
+d135 1
+a135 1
+        PEAKV = PEAKV / FLOAT (NSAM * NROW * NSLICE)
+d141 1
+a141 1
+        XSHNEW = IXSH 
+a169 4
+           IF (.NOT. SPIDER_SCALE) THEN
+C             FFT FASTER IF SKIPPED THERE, SO MUST REVALUE OUTPUT
+              !!!PEAKV = PEAKV / FLOAT (NSAM * NROW * NSLICE)
+           ENDIF
+d171 2
+a172 3
+
+           XSHNEW = -(IXSH + XSHNEW)
+           YSHNEW = -(IYSH + YSHNEW)
+d197 14
+@
+

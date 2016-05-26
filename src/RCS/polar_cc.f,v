@@ -1,0 +1,661 @@
+head	1.9;
+access;
+symbols
+	pre_getangas:1.8
+	GPL2010:1.8
+	pre_GPL2010:1.7
+	pre_var_equation:1.7
+	pre_fftwrings:1.7
+	pre_opfiles:1.6
+	src:1.6
+	best-code:1.6
+	x-named-regs:1.6
+	x:1.6
+	v13-00:1.6
+	pre_GPL:1.4
+	prec_CA:1.4
+	noindx:1.3;
+locks; strict;
+comment	@c @;
+
+
+1.9
+date	2013.01.07.17.40.28;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2010.06.24.13.26.29;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2008.03.19.18.07.30;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2005.10.18.18.55.06;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2005.10.18.14.40.14;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2003.02.20.20.13.03;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2000.10.08.20.44.17;	author pawel;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2000.10.08.20.41.04;	author pawel;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2000.10.08.20.20.22;	author pawel;	state Exp;
+branches;
+next	;
+
+
+desc
+@CC P
+@
+
+
+1.9
+log
+@COSMETIC & ERROR TRAP REWRITE
+@
+text
+@
+C++*********************************************************************
+C
+C POLAR_CC.F
+C             OPFILEC                              FEB 03 ARDEAN LEITH
+C             DE-OMP ||   LOOP FOR FFTW3 USE       MAR 08 ARDEAN LEITH
+C             COSMETIC & ERROR TRAP REWRITE        DEC 12 ARDEAN LEITH
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2012  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+
+        SUBROUTINE POLAR_CC
+
+        INCLUDE 'CMBLOCK.INC'
+        INCLUDE 'CMLIMIT.INC' 
+ 
+        CHARACTER(LEN=MAXNAM) :: FILNAM
+
+        REAL, ALLOCATABLE     :: X(:,:), REF(:,:)
+        CHARACTER(LEN=1)      :: MODE,ASK
+        DOUBLE PRECISION      :: T7(-3:3)
+
+        CHARACTER(LEN=1)      :: NULL = CHAR(0)
+
+        INTEGER, PARAMETER    :: INPIC  = 20
+        INTEGER, PARAMETER    :: INREF  = 21
+        INTEGER, PARAMETER    :: LUNO   = 22
+
+C       ASK FOR DATA FILES
+        MAXIM = 0
+        CALL OPFILEC(0,.TRUE.,FILNAM,INPIC,'O',ITYPE,NX,NY,
+     &             NZ,MAXIM,'INPUT',.FALSE.,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+        MAXIM = 0
+        CALL OPFILEC(0,.TRUE.,FILNAM,INREF,'O',ITYPE,NXP,NYP,
+     &              NZ,MAXIM,'REFERENCE',.FALSE.,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+        IF (NX .NE. NXP .OR. NY .NE .NYP)  THEN
+           CALL ERRT(101,'IMAGES MUST HAVE SAME DIMENSIONS',IER)
+           RETURN
+
+        ELSEIF (NZ > 1)  THEN
+           CALL ERRT(101,'DOES NOT WORK ON VOLUMES',IER)
+           RETURN
+        ENDIF
+
+C       ASK FOR OUTPUT FILE
+        MAXIM  = 0
+	ITYPE  = 1
+	NYP    = 1
+	NZP    = 1
+        CALL OPFILEC(INPIC,.TRUE.,FILNAM,LUNO,'N',ITYPE,NX,NYP,
+     &             NZP,MAXIM,'OUTPUT',.FALSE.,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+        CALL  RDPRMC(ASK,NA,.TRUE.,
+     &              'FULL OR HALF CIRCLE (F/H)',NULL,IRTFLG)
+        IF (ASK == 'H')  THEN
+           MODE = 'H'
+        ELSE
+           MODE = 'F'
+        ENDIF
+
+        NXLD = NX+2-MOD(NX,2)
+
+        ALLOCATE (X  (NXLD,NY),
+     &            REF(NXLD,NY), 
+     &            STAT=IRTFLG)
+        IF (IRTFLG .NE. 0) THEN 
+           CALL ERRT(46,'POLAR_CC, X,REF',2*NXLD*NY)
+           GOTO 9999
+        ENDIF
+
+        DO J=1,NY
+           CALL REDLIN(INPIC,X(1,J),NX,J)
+        ENDDO
+
+        DO J=1,NY
+           CALL REDLIN(INREF,REF(1,J),NX,J)
+        ENDDO
+
+C       parallel do private(j),shared(invt) REMOVED FOR FFTW3 al
+
+C       FORWARD FFT, LINE BY LINE
+        DO J=1,NY
+           INV = +1
+           CALL FMRS_1(X(1,J),  NX,INV)
+
+           INV = +1
+           CALL FMRS_1(REF(1,J),NX,INV)
+        ENDDO
+
+C       CROSS CORRELATION IN FOURIER SPACE
+        CALL MF1D(X,REF,NXLD/2,NY)
+
+C       REVERSE FFT ON FIRST LINE
+        INV = -1
+        CALL FMRS_1(X(1,1),NX,INV)
+
+C       FIND MAXIMUM & LOCATION IN FIRST LINE
+        QM = -1.0E20
+        DO I=1,NX
+           IF (X(I,1) >= QM)  THEN
+              QM   = X(I,1)
+              JTOT = I
+           ENDIF
+        ENDDO
+
+        !write(6,*) 'jtot:',jtot, x(jtot,1)
+
+C       SUB-PIXEL MAX.
+        DO K=-3,3
+           J    = MOD(JTOT+K+NX-1,NX)+1
+           T7(K)= X(J,1)
+        ENDDO
+
+C       FIT PARABOLA
+        CALL PRB1D(T7,7,POS)
+
+        RANG = REAL(JTOT) + POS
+        IF (MODE == 'F')  THEN
+           RANG = (RANG-1.0) / NX * 360.0
+        ELSE
+           RANG = (RANG-1.0) / NX * 180.0
+        ENDIF 
+  
+        WRITE(NOUT,90)  RANG,QM
+90      FORMAT('    Angle: ',F10.4,'    Peak: ',G12.5)
+
+        CALL REG_SET_NSEL(1,2,RANG,QM,0.0,0.0,0.0,IRTFLG)
+
+C       SHIFT 1D CCF TO HAVE THE ORIGIN AT INT(NX/2)+1
+	DO I=1,NX
+	  REF(MOD(I+INT(NX/2)-1,NX)+1, 1) = X(I,1)
+	ENDDO
+
+	CALL WRTLIN(LUNO,REF,NX,1)
+
+9999    IF (ALLOCATED(X))   DEALLOCATE (X)
+        IF (ALLOCATED(REF)) DEALLOCATE (REF)
+
+        CLOSE(INPIC)
+        CLOSE(INREF)
+	CLOSE(LUNO)
+
+        END
+
+
+C       -------------------- MF1D -------------------------------------
+
+C       CROSS CORRELATION IN FOURIER SPACE
+
+        SUBROUTINE MF1D(X,REF,L,NY)
+
+        COMPLEX  :: X(L,NY), REF(L,NY)
+
+        X(:,1) = X(:,1) * CONJG(REF(:,1))
+
+        IF (NY == 1)  RETURN
+
+        DO J=2,NY
+           X(:,1) = X(:,1) + X(:,J) * CONJG(REF(:,J))
+        ENDDO
+
+        END
+@
+
+
+1.8
+log
+@GPL_2010
+@
+text
+@d5 3
+a7 3
+C              OPFILEC                               FEB 03 ARDEAN LEITH
+C              DE-OMP PARRALEL LOOP FOR FFTW3 USE    MAR 08 ARDEAN LEITH
+C
+d12 1
+a12 1
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+d35 1
+a35 2
+        CHARACTER(LEN=MAXNAM)   ::   FINPIC,FINPAT
+        COMMON  /F_SPEC/  FINPAT,NLET,FINPIC
+d37 3
+a39 3
+        REAL, ALLOCATABLE, DIMENSION(:,:) :: X,REF
+        CHARACTER(LEN=1) ::   MODE,ASK,NULL
+        DOUBLE PRECISION  T7(-3:3)
+d41 1
+a41 1
+        DATA  INPIC/77/,INREF/76/,LUNO/75/
+d43 3
+a45 1
+        NULL = CHAR(0)
+d49 2
+a50 2
+        CALL OPFILEC(0,.TRUE.,FINPIC,INPIC,'O',ITYPE,NSAM,NROW,
+     &             NSLICE,MAXIM,'INPUT',.FALSE.,IRTFLG)
+d54 2
+a55 2
+        CALL OPFILEC(0,.TRUE.,FINPIC,INREF,'O',ITYPE,NSAMP,NROWP,
+     &              NSLICE,MAXIM,'REFERENCE',.FALSE.,IRTFLG)
+d58 6
+a63 2
+        IF (NSAM.NE.NSAMP .OR. NROW.NE.NROWP)  THEN
+           CALL ERRT(1,'POLAR_CC',IER)
+d68 6
+a73 6
+        MAXIM = 0
+	ITYPE=1
+	NROWP=1
+	NSLICEP=1
+        CALL OPFILEC(INPIC,.TRUE.,FINPIC,LUNO,'N',ITYPE,NSAM,NROWP,
+     &             NSLICEP,MAXIM,'OUTUT',.FALSE.,IRTFLG)
+d76 4
+a79 4
+        NA=1
+        CALL  RDPRMC(ASK,NA,.TRUE.,'(F)ULL OR (H)ALF CIRCLE',NULL,IRT)
+        IF (ASK.EQ.'H')  THEN
+           MODE='H'
+d81 1
+a81 1
+           MODE='F'
+d84 8
+a91 8
+        PI   = 4*DATAN(1.0D0)
+        LSAM = NSAM+2-MOD(NSAM,2)
+        ALLOCATE (X(LSAM,NROW),REF(LSAM,NROW), STAT=IRTFLG)
+        IF (IRTFLG.NE.0) THEN 
+           CALL ERRT(46,'POLAR_CC, X,REF',IER)
+           CLOSE(INPIC)
+           CLOSE(INREF)
+           RETURN
+d94 2
+a95 2
+        DO J=1,NROW
+           CALL REDLIN(INPIC,X(1,J),NSAM,J)
+d97 3
+a99 3
+        CLOSE(INPIC)
+        DO J=1,NROW
+           CALL REDLIN(INREF,REF(1,J),NSAM,J)
+a100 1
+        CLOSE(INREF)
+a101 1
+        INV = +1
+a102 9
+        DO  J=1,NROW
+           INVT = INV
+           CALL FMRS_1(X(1,J),NSAM,INVT)
+           CALL FMRS_1(REF(1,J),NSAM,INVT)
+        ENDDO
+        IF (INV .EQ. 0) THEN
+           CALL ERRT(101,'*** ERROR IN POLAR_CC, INV = 0',NDUM)
+           RETURN
+        ENDIF
+d104 20
+a123 6
+        CALL  MF1D(X,REF,LSAM/2,NROW)
+        INV=-1
+        CALL FMRS_1(X(1,1),NSAM,INV)
+        QM=-1.0E20
+        DO    I=1,NSAM
+           IF (X(I,1) .GE. QM)  THEN
+d128 15
+a142 8
+        DO    K=-3,3
+           J     = MOD(JTOT+K+NSAM-1,NSAM)+1
+           T7(K) = X(J,1)
+        ENDDO
+        CALL  PRB1D(T7,7,POS)
+        RANG=REAL(JTOT)+POS
+        IF (MODE.EQ.'F')  THEN
+           RANG=(RANG-1.0)/NSAM*360.0
+d144 5
+a148 4
+           RANG=(RANG-1.0)/NSAM*180.0
+        ENDIF   
+        WRITE(NOUT,2700)  RANG,QM
+2700    FORMAT('    Angle = ',F10.4,'    Peak = ',G12.5)
+d151 4
+a154 3
+C       Shift 1D CCF to have the origin at INT(NSAM/2)+1
+	DO I=1,NSAM
+	  REF(MOD(I+INT(NSAM/2)-1,NSAM)+1,1)=X(I,1)
+d156 8
+a163 1
+	CALL  WRTLIN(LUNO,REF,NSAM,1)
+a165 2
+        DEALLOCATE (X,REF)
+
+d171 1
+a171 1
+        SUBROUTINE  MF1D(X,REF,L,NROW)
+d173 1
+a173 1
+        COMPLEX  X(L,NROW),REF(L,NROW)
+d175 1
+a175 2
+        X(:,1) = X(:,1)*CONJG(REF(:,1))
+        IF (NROW .EQ. 1)  RETURN
+d177 5
+a181 1
+        DO J=2,NROW
+d184 1
+@
+
+
+1.7
+log
+@DE-OMP PARRALEL LOOP FOR FFTW3
+@
+text
+@a8 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d10 5
+a14 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d16 1
+a16 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d21 1
+a21 1
+C=* This program is distributed in the hope that it will be useful,    *
+d23 1
+a23 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a24 1
+C=*                                                                    *
+d26 1
+a26 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.6
+log
+@GPL
+@
+text
+@d2 6
+a32 1
+C                  OPFILEC                         FEB 03 ARDEAN LEITH
+d48 1
+a48 1
+        NULL=CHAR(0)
+d103 1
+a103 1
+c$omp parallel do private(j),shared(invt) 
+d139 1
+a139 1
+C  Shift 1D CCF to have the origin at INT(NSAM/2)+1
+d151 2
+d157 2
+a158 2
+        X(:,1)=X(:,1)*CONJG(REF(:,1))
+        IF(NROW.EQ.1)  RETURN
+d161 1
+a161 1
+           X(:,1)=X(:,1)+X(:,J)*CONJG(REF(:,J))
+@
+
+
+1.5
+log
+@GPL License added
+@
+text
+@d1 156
+@
+
+
+1.4
+log
+@opfilec
+@
+text
+@a0 130
+C                  OPFILEC                         FEB 03 ARDEAN LEITH
+
+        SUBROUTINE POLAR_CC
+
+        INCLUDE 'CMBLOCK.INC'
+        INCLUDE 'CMLIMIT.INC' 
+ 
+        CHARACTER(LEN=MAXNAM)   ::   FINPIC,FINPAT
+        COMMON  /F_SPEC/  FINPAT,NLET,FINPIC
+
+        REAL, ALLOCATABLE, DIMENSION(:,:) :: X,REF
+        CHARACTER(LEN=1) ::   MODE,ASK,NULL
+        DOUBLE PRECISION  T7(-3:3)
+
+        DATA  INPIC/77/,INREF/76/,LUNO/75/
+
+        NULL=CHAR(0)
+
+C       ASK FOR DATA FILES
+        MAXIM = 0
+        CALL OPFILEC(0,.TRUE.,FINPIC,INPIC,'O',ITYPE,NSAM,NROW,
+     &             NSLICE,MAXIM,'INPUT',.FALSE.,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+        MAXIM = 0
+        CALL OPFILEC(0,.TRUE.,FINPIC,INREF,'O',ITYPE,NSAMP,NROWP,
+     &              NSLICE,MAXIM,'REFERENCE',.FALSE.,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+        IF (NSAM.NE.NSAMP .OR. NROW.NE.NROWP)  THEN
+           CALL ERRT(1,'POLAR_CC',IER)
+           RETURN
+        ENDIF
+
+C       ASK FOR OUTPUT FILE
+        MAXIM = 0
+	ITYPE=1
+	NROWP=1
+	NSLICEP=1
+        CALL OPFILEC(INPIC,.TRUE.,FINPIC,LUNO,'N',ITYPE,NSAM,NROWP,
+     &             NSLICEP,MAXIM,'OUTUT',.FALSE.,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+        NA=1
+        CALL  RDPRMC(ASK,NA,.TRUE.,'(F)ULL OR (H)ALF CIRCLE',NULL,IRT)
+        IF (ASK.EQ.'H')  THEN
+           MODE='H'
+        ELSE
+           MODE='F'
+        ENDIF
+
+        PI   = 4*DATAN(1.0D0)
+        LSAM = NSAM+2-MOD(NSAM,2)
+        ALLOCATE (X(LSAM,NROW),REF(LSAM,NROW), STAT=IRTFLG)
+        IF (IRTFLG.NE.0) THEN 
+           CALL ERRT(46,'POLAR_CC, X,REF',IER)
+           CLOSE(INPIC)
+           CLOSE(INREF)
+           RETURN
+        ENDIF
+
+        DO J=1,NROW
+           CALL REDLIN(INPIC,X(1,J),NSAM,J)
+        ENDDO
+        CLOSE(INPIC)
+        DO J=1,NROW
+           CALL REDLIN(INREF,REF(1,J),NSAM,J)
+        ENDDO
+        CLOSE(INREF)
+
+        INV = +1
+c$omp parallel do private(j),shared(invt) 
+        DO  J=1,NROW
+           INVT = INV
+           CALL FMRS_1(X(1,J),NSAM,INVT)
+           CALL FMRS_1(REF(1,J),NSAM,INVT)
+        ENDDO
+        IF (INV .EQ. 0) THEN
+           CALL ERRT(101,'*** ERROR IN POLAR_CC, INV = 0',NDUM)
+           RETURN
+        ENDIF
+
+        CALL  MF1D(X,REF,LSAM/2,NROW)
+        INV=-1
+        CALL FMRS_1(X(1,1),NSAM,INV)
+        QM=-1.0E20
+        DO    I=1,NSAM
+           IF (X(I,1) .GE. QM)  THEN
+              QM   = X(I,1)
+              JTOT = I
+           ENDIF
+        ENDDO
+        DO    K=-3,3
+           J     = MOD(JTOT+K+NSAM-1,NSAM)+1
+           T7(K) = X(J,1)
+        ENDDO
+        CALL  PRB1D(T7,7,POS)
+        RANG=REAL(JTOT)+POS
+        IF (MODE.EQ.'F')  THEN
+           RANG=(RANG-1.0)/NSAM*360.0
+        ELSE
+           RANG=(RANG-1.0)/NSAM*180.0
+        ENDIF   
+        WRITE(NOUT,2700)  RANG,QM
+2700    FORMAT('    Angle = ',F10.4,'    Peak = ',G12.5)
+
+        CALL REG_SET_NSEL(1,2,RANG,QM,0.0,0.0,0.0,IRTFLG)
+C  Shift 1D CCF to have the origin at INT(NSAM/2)+1
+	DO I=1,NSAM
+	  REF(MOD(I+INT(NSAM/2)-1,NSAM)+1,1)=X(I,1)
+	ENDDO
+	CALL  WRTLIN(LUNO,REF,NSAM,1)
+	CLOSE(LUNO)
+
+        DEALLOCATE (X,REF)
+
+        END
+
+
+        SUBROUTINE  MF1D(X,REF,L,NROW)
+
+        COMPLEX  X(L,NROW),REF(L,NROW)
+
+        X(:,1)=X(:,1)*CONJG(REF(:,1))
+        IF(NROW.EQ.1)  RETURN
+
+        DO J=2,NROW
+           X(:,1)=X(:,1)+X(:,J)*CONJG(REF(:,J))
+        ENDDO
+        END
+@
+
+
+1.3
+log
+@*** empty log message ***
+@
+text
+@d1 2
+d6 3
+a8 1
+
+a9 1
+        CHARACTER(LEN=80) ::   FINPIC,FINPAT
+d21 1
+a21 1
+        CALL OPFILE(.TRUE.,FINPIC,INPIC,'O',ITYPE,NSAM,NROW,
+d26 1
+a26 1
+        CALL OPFILE(.TRUE.,FINPIC,INREF,'O',ITYPE,NSAMP,NROWP,
+d34 1
+d40 1
+a40 1
+        CALL OPFILE(.TRUE.,FINPIC,LUNO,'N',ITYPE,NSAM,NROWP,
+@
+
+
+1.2
+log
+@*** empty log message ***
+@
+text
+@d36 1
+a36 1
+        CALL OPFILE(.TRUE.,FINPIC,INPIC,'N',ITYPE,NSAM,NROWP,
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d33 1
+d36 1
+a36 1
+        CALL OPFILE(.TRUE.,FINPIC,INPIC,'U',ITYPE,NSAM,NROWP,
+@

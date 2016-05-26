@@ -1,0 +1,1678 @@
+head	1.19;
+access;
+symbols;
+locks; strict;
+comment	@c @;
+
+
+1.19
+date	2012.03.07.20.03.46;	author leith;	state Exp;
+branches;
+next	1.18;
+
+1.18
+date	2011.12.23.17.46.46;	author leith;	state Exp;
+branches;
+next	1.17;
+
+1.17
+date	2011.12.19.15.20.14;	author leith;	state Exp;
+branches;
+next	1.16;
+
+1.16
+date	2011.12.09.13.25.08;	author leith;	state Exp;
+branches;
+next	1.15;
+
+1.15
+date	2011.10.31.19.43.51;	author leith;	state Exp;
+branches;
+next	1.14;
+
+1.14
+date	2011.07.29.15.28.16;	author leith;	state Exp;
+branches;
+next	1.13;
+
+1.13
+date	2011.07.26.17.12.24;	author leith;	state Exp;
+branches;
+next	1.12;
+
+1.12
+date	2011.07.25.15.38.12;	author leith;	state Exp;
+branches;
+next	1.11;
+
+1.11
+date	2011.06.10.16.41.20;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2011.06.10.16.36.19;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2011.06.02.15.30.10;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2011.05.24.17.49.29;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2011.05.24.17.29.19;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2011.05.24.15.13.34;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2011.05.24.14.44.34;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2011.05.24.12.53.48;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2011.05.23.19.27.44;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2011.05.23.19.16.51;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2011.05.23.18.50.54;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.19
+log
+@shift bug fixed by GPK
+@
+text
+@C ++********************************************************************
+C                                                                      *
+C  INTERP_FBS     NEW                     JUL 2011  GREGORY KISHCHENKO *                                                                           *
+C                 OMP,FBS2_PREP           OCT 2011  ArDean Leith       *
+C                 FBS2                    DEC 2011  GREGORY KISHCHENKO *
+C                                                                      *
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C                                                                      *
+C   INTERP_FBS(BUF1, BUF2, NXLD,NX,  NY, NX2, NY2, IRTFLG)             *
+C                                                                      *
+C   PURPOSE: RESAMPLING OF 2D IMAGES BY FOURIER-BASED BICUBIC SPLINE   *
+C            INTERPOLATION BETWEEN PIXELS.                             *
+C            ALGORITHM IS FAIRLY FAST AND PRESERVES FINE DETAILS       *
+C            OF  IMAGES                                                *
+C                                                                      *
+C            SUBROUTINES FBS2_PREP and FUNCTION FBS2 are used          *
+C                                                                      *
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C***********************************************************************
+
+       SUBROUTINE INTERP_FBS(BUF1, BUF2, 
+     &                       NXLD,NX,  NY,
+     &                            NX2, NY2, IRTFLG)
+
+       IMPLICIT NONE
+
+       INCLUDE 'CMBLOCK.INC'
+
+       REAL              :: BUF1(NXLD,NY)
+       REAL              :: BUF2(NX2,NY2)
+       INTEGER           :: NXLD, NX, NY
+       INTEGER           :: NX2, NY2
+       INTEGER           :: IRTFLG
+
+       INTEGER           :: I,J,K1,K2,MWANT
+       INTEGER           :: M1,M2
+       INTEGER           :: INV
+       REAL              :: X,Y
+       REAL              :: SCALEX, SCALEY
+
+       REAL, ALLOCATABLE :: F0(:,:)
+       REAL, ALLOCATABLE :: X1(:,:)
+       REAL, ALLOCATABLE :: Y1(:,:)
+       REAL, ALLOCATABLE :: XY2(:,:)
+
+       REAL              :: fbs2
+
+       WRITE(NOUT,*) ' Fourier based spline 2D interpolation'
+
+       ALLOCATE (F0 (NXLD,NY),
+     &           X1 (NXLD,NY),
+     &           Y1 (NXLD,NY),
+     &           XY2(NXLD,NY),
+     &           STAT=IRTFLG)
+
+       IF (IRTFLG .NE. 0) THEN 
+          MWANT = 4* NXLD*NY 
+          CALL ERRT(46,'INTERP_FBS, F0...',MWANT)
+          RETURN
+       ENDIF
+
+       SCALEX = FLOAT(NX) / FLOAT(NX2)
+       SCALEY = FLOAT(NY) / FLOAT(NY2)
+
+       !WRITE(6,*) 'NX, NXLD, NX2= ',NX, NXLD, NX2
+       !WRITE(6,*) 'NY, NY2=       ',NY, NY2
+       !WRITE(6,*) 'SCALE X & Y=   ',SCALEX, SCALEY
+
+       F0  = BUF1  ! ARRAY ASSIGNMENT
+
+       CALL FBS2_PREP(F0, X1,Y1, XY2, NXLD, NX,NY, IRTFLG)
+       IF (IRTFLG .NE. 0) GOTO 9999
+
+C      Timing 1400x1400 To: 500x500 
+C     'IP   ' OMP GAVE TIME:  <1 ON 8 PROCS VS  <1 ON 1
+C     'IP SF' OMP GAVE TIME:   3 ON 8 PROCS VS   4 ON 1
+
+c$omp  parallel do private(k2,y,m2, k1,x,m1)
+       DO K2 = 0,NY2-1
+          Y  = K2 * SCALEY + 1
+          M2 = K2 + 1
+
+          DO K1 = 0,NX2-1
+             X  = K1 * SCALEX + 1
+             M1 = K1 + 1
+
+             BUF2(M1,M2) = FBS2(X,Y, NXLD,NX,NY, BUF1,NXLD,
+     &                          X1,Y1,XY2, .TRUE.)
+          ENDDO
+       ENDDO
+
+       IRTFLG = 0
+
+9999   IF (ALLOCATED(F0))  DEALLOCATE(F0)
+       IF (ALLOCATED(X1))  DEALLOCATE(X1)
+       IF (ALLOCATED(Y1))  DEALLOCATE(Y1)
+       IF (ALLOCATED(XY2)) DEALLOCATE(XY2)
+
+       END
+@
+
+
+1.18
+log
+@typos
+@
+text
+@d29 1
+a29 1
+C   INTERP_FBS(BUF1, BUF2, NXLD,NX,  NY, NX2, NY2, IRTFLG)                                                         *
+d31 1
+a31 1
+C   PURPOSE: RESAMPLING OF 2D IMAGES BY FOUIER-BASED BICUBIC SPLINE    *
+d36 1
+a36 46
+C   If the values of a function F(X) and its first derivatives F'(X)   *
+C   are known at X=0 and X=1, the function can be interpolated on the  *
+C   interval [0,1] as a third degree polynomial (cubic                 *
+C   interpolation formula):                                            *
+C                                                                      *
+C      F(X)=A0 + A1*X + A2*X**2 + A3*X**3                              *
+C                                                                      *
+C       where A0, A1, A2, and A3 are given by                          *
+C       A0 = F(0)                                                      *
+C       A1 = F'(0)                                                     *
+C       A2 = 3*(F(1)-F(0) - 2*F'(0) - F'(1)                            *
+C       A3 = 2*(F(0)-F(1)) + F'(0) + F'(1)                             *
+C                                                                      *
+C     In order to interpolate a two dimensional grid [0,1] × [0,1], we *
+C   sequentially used 1D cubic interpolation formula. First,  we       *
+C   interpolated the intensities and normal to boundaries first        *
+C   derivatives at two horizontal boundary lines [0,0]-[1,0] and       *
+C   [0,1]-[1,1].                                                       *
+C     For intensities' interpolation the intensities and tangential    *
+C   first derivatives in grid nodes were used.                         *
+C     For normal derivatives' interpolation the normal derivatives and *
+C   cross-derivatives in grid nodes were used.                         *
+C     Thereafter we carried out the vertical cubic interpolation on    *
+C   line between 2 horizontal line with a given value of X to obtain   *
+C   the intensity on vertical coordinate Y inside the square cell.     *
+C   This last procedure was done using previously interpolated values  *
+C   of intensities and their first normal derivatives across cell      *
+C   boundaries.                                                        *
+C       The first derivatives dF/dX, dF/dY and a cross-derivative      *
+C   d2F/dXdY  in grid nodes were obtained by calculating 2D            *
+C   Fourier transform of image, and then calculating the inverse       *
+C   Fourier transform of {ik*F(k,l)}, il*F(k,l)}, and {ikl*F(k,l)}.    *
+C      This well-known formula is computationally efficient and very   *
+C   convenient for calculating the derivatives of a  function defined  *
+C   as a discrete data set, and allows to calculate the derivative in  *
+C   any local point without the finite difference approximation        *
+C   involving the data from neighboring points.                        *                        *
+C                                                                      *
+C      The result of this interpolation is similar to those of         *
+C   standard bicubic spline interpolation (the densities and their     *
+C   both derivatives are continuous at boundaries), but has fewer      *
+C   interpolation artifacts, preserving the fine details and sharp     *
+C   boundaries from blurring, because our algorithm involves the       *
+C   densities and three partial derivatives just from 4 pixels         *
+C   surrounding the area for interpolation instead 16 pixels as in     *
+C   standard algorithm with the finite difference approximation.       *
+d49 2
+a50 2
+       REAL              :: BUF1(0:NXLD-1,0:NY-1)
+       REAL              :: BUF2(0:NX2-1, 0:NY2-1)
+d56 1
+a59 1
+       REAL              :: FBS2
+d66 1
+a66 2
+       WRITE(NOUT,*) ' Fourier based spline interpolation'
+       !WRITE(6,*) ' Fourier based spline interpolation'
+d68 1
+a68 6
+       SCALEX = FLOAT(NX) / FLOAT(NX2)
+       SCALEY = FLOAT(NY) / FLOAT(NY2)
+
+       !WRITE(6,*) 'NX, NXLD, NX2= ',NX, NXLD, NX2
+       !WRITE(6,*) 'NY, NY2=       ',NY, NY2
+       !WRITE(6,*) 'SCALE X & Y=   ',SCALEX, SCALEY
+d70 4
+a73 4
+       ALLOCATE (F0 (0:NXLD-1, 0:NY-1),
+     &           X1 (0:NXLD-1, 0:NY-1),
+     &           Y1 (0:NXLD-1, 0:NY-1),
+     &           XY2(0:NXLD-1, 0:NY-1),
+d82 7
+d98 11
+a108 9
+c$omp  parallel do private(k1,x,k2,y)
+       DO K1 = 0,NX2-1
+          X = K1 * SCALEX
+
+          DO K2 = 0,NY2-1
+
+              Y = K2 * SCALEY
+              BUF2(K1,K2) = FBS2(X,Y, NXLD,NX,NY, BUF1,NXLD,
+     &                           X1,Y1,XY2, .TRUE.)
+@
+
+
+1.17
+log
+@used fbs2
+@
+text
+@d12 1
+a12 1
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NROW 12204.    *
+d18 1
+a18 1
+C=* License, or (at your option) aNROW later version.                  *
+d21 1
+a21 1
+C=* but WITHOUT ANROW WARRANTY; without even the implied warranty of   *
+@
+
+
+1.16
+log
+@FBS2_PREP
+@
+text
+@d4 2
+a5 2
+C                 OMP,FBS2_PREP            OCT 2011  ArDean Leith       *
+C                 FBS2                    DEC 2011  ARDEAN LEITH       *
+d91 1
+a100 1
+       INTEGER           :: I2,J2,I3,J3
+d102 4
+a105 5
+       REAL              :: DX, DY
+       REAL              :: A0, A1, A2, A3
+       REAL              :: ADX, BDX, DADX, DBDX
+       REAL              :: SCALEX, SCALEY,SCALEX2, SCALEY2
+ 
+d114 2
+a115 2
+       SCALEX = FLOAT(NX2) / FLOAT(NX)
+       SCALEY = FLOAT(NY2) / FLOAT(NY)
+d126 1
+d128 5
+a132 5
+           MWANT = 4* NXLD*NY 
+           CALL ERRT(46,'INTERP_FBS, F0...',MWANT)
+           RETURN
+       ENDIF 
+ 
+a137 4
+C      ------------------------------------------------
+       SCALEX2 = 1 / SCALEX
+       SCALEY2 = 1 / SCALEY
+
+d142 1
+a142 2
+c$omp  parallel do private(k1,i,dx,k2,j,dy,i2,j2,i3,j3,a0,a1,a2,a3,
+c$omp&                     adx,bdx,dadx,dbdx)
+d144 1
+a144 3
+
+          I  = INT(K1*SCALEX2)
+          DX = K1*SCALEX2 - I
+d148 3
+a150 59
+             J  = INT(K2 * SCALEY2)
+             DY = K2 * SCALEY2 - J
+             I2 = MODULO(I,NX)
+             J2 = MODULO(J,NY)
+             I3 = MODULO(I+1,NX)
+             J3 = MODULO(J+1,NY)
+
+C            --Sequential algorithm for 16-term bicubic spline--
+C            Density Interpolation
+C            at  horizontal line [I,J]-[I+1,J]
+C            F(I+dX,Y=J)=A0 + A1*dX + A2*dX**2 + A3*dX**3
+
+             A0  = BUF1(I2,J2)
+             A1  = X1(I2,J2)
+             A2  = 3*(BUF1(I3,J2)-A0)-2*A1-X1(I3,J2)
+             A3  = 2*(A0-BUF1(I3,J2))+A1+X1(I3,J2)
+             ADX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+C            Density Interpolation
+C            at horizontal line [I,J+1]-[I+1,J+1]
+C            F(I+dX,Y=J+1) = A0 + A1*dX + A2*dX**2 + A3*dX**3
+
+             A0 = BUF1(I2,J3)
+             A1 = X1(I2,J3)
+             A2 = 3*(BUF1(I3,J3)-A0) - 2*A1 - X1(I3,J3)
+             A3 = 2*(A0-BUF1(I3,J3)) +   A1 + X1(I3,J3)
+             BDX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+C            Normal Derivative Interpolation
+C            at  horizontal line [I,J]-[I+1,J]
+C            F(I+dX,Y=J)=A0 + A1*dX + A2*dX**2 + A3*dX**3
+
+             A0  = Y1(I2,J2)
+             A1  = XY2(I2,J2)
+             A2  = 3*(Y1(I3,J2)-A0) -2*A1 - XY2(I3,J2)
+             A3  = 2*(A0-Y1(I3,J2)) +  A1 + XY2(I3,J2)
+             DADX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+C            Normal Derivative Interpolation
+C            at horizontal line [I,J+1]-[I+1,J+1]
+C            F(I+dX,Y=J+1) = A0 + A1*dX + A2*dX**2 + A3*dX**3
+
+             A0 = Y1(I2,J3)
+             A1 = XY2(I2,J3)
+             A2 = 3*(Y1(I3,J3)-A0) - 2*A1 - XY2(I3,J3)
+             A3 = 2*(A0-Y1(I3,J3)) +   A1 + XY2(I3,J3)
+             DBDX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+C            Density Interpolation
+C            at vertical line [I+dX,J]-[I+dX,J+1]
+C            F(I+dX,Y=J+DY) = A0 + A1*dY + A2*dY**2 + A3*dY**3
+
+             A0 = ADX
+             A1 = DADX
+             A2 = 3*(BDX - ADX) - 2*DADX - DBDX
+             A3 = 2*(ADX - BDX) +   DADX + DBDX
+
+             BUF2(K1,K2) = A0+A1*DY+A2*DY**2+A3*DY**3
+
+a161 1
+
+@
+
+
+1.15
+log
+@omp added, fbs_prep used
+@
+text
+@d4 2
+a5 1
+C                 OMP,FBS_PREP            OCT 2011 ArDean Leith        *
+d135 1
+a135 1
+       CALL FBS_PREP(F0, X1,Y1, XY2, NXLD, NX,NY, IRTFLG)
+@
+
+
+1.14
+log
+@comments
+./
+@
+text
+@d3 2
+a4 1
+C  INTERP_FBS       NEW                  JULY 2011  GREGORY KISHCHENKO *                                                                           *
+d28 1
+a28 1
+C   INTERP_FBS                                                         *
+d32 2
+a33 2
+C               ALGORITHM IS FAIRLY FAST AND PRESERVES FINE DETAILS    *
+C               OF  IMAGES                                             *
+d102 1
+a102 1
+       REAL              :: A0, A1, A2, A3, B1,A4
+a105 3
+       REAL              :: WX(0:NXLD-1)
+       REAL              :: WY(0:NY-1)
+
+a110 2
+       REAL, PARAMETER   :: PI = 3.14159265358979323846
+
+d132 1
+a132 42
+       F0  = BUF1
+       INV = 1
+       CALL FMRS(F0, NX,NY,1, 0.0D0, .TRUE., .TRUE., INV, IRTFLG)
+
+       A4 = 2*PI/NXLD
+
+       DO K1=0,NXLD/2-1
+          WX(K1) = K1 * A4
+       ENDDO
+       WX(NXLD/2) = 0
+
+       A4 = 2*PI/NY
+
+       DO J=0,NY/2-1
+          WY(J) = J * A4
+       ENDDO
+       WY(NY/2) = 0
+
+       DO J=NY/2+1,NY-1
+          WY(J) = (J-NY) * A4
+       ENDDO
+
+       DO K1=0,NXLD/2-1
+          A4 = WX(K1)
+          DO J=0,NY-1
+               X1(2*K1,J)   =  F0(2*K1+1,J) * A4
+               X1(2*K1+1,J) = -F0(2*K1,J)   * A4
+          ENDDO
+       ENDDO
+
+       DO J=0,NY-1
+          A4 = WY(J)
+          DO K1=0,NXLD/2-1
+               Y1(2*K1,J)   =  F0(2*K1+1,J) * A4
+               Y1(2*K1+1,J) = -F0(2*K1,J)   * A4
+               XY2(2*K1,J)   =  X1(2*K1+1,J) * A4
+               XY2(2*K1+1,J) = -X1(2*K1,J)   * A4
+          ENDDO
+       ENDDO
+
+       INV = -1
+       CALL FMRS(X1, NX,NY,1, 0.0D0, .TRUE., .TRUE., INV, IRTFLG)
+d134 2
+a135 5
+       INV = -1
+       CALL FMRS(Y1, NX,NY,1, 0.0D0, .TRUE., .TRUE., INV, IRTFLG)
+
+       INV = -1
+       CALL FMRS(XY2, NX,NY,1, 0.0D0, .TRUE., .TRUE., INV, IRTFLG)
+d141 6
+a148 2
+C         I  = INT(K1/SCALEX)
+C         DX = K1 / SCALEX - I
+a153 2
+C            J  = INT(K2/SCALEY)
+C            DY = K2 / SCALEY - J
+a160 17
+C            BICUBIC POLYNOMIAL INTERPOLATION:
+C            F(dX)=A0 + A1*dX + A2*dX**2 + A3*dX**3
+C            where dX is (X-i)
+C
+C            if F(ARG), and its derivarive F'(ARG) are known,
+C            A0, A1, A2, and A3 is given by
+C            A0 = F(i)
+C            A1 = F'(i)
+C            A2 = 3*(F(i+1)-F(i) - 2*F'(i) - F'(i+1)
+C            A3 = 2*(F(i)-F(i+1)) + F'(i) + F'(i+1)
+C      
+C            BUF1(I,J) - input array
+C            BUF2(I,J) - output array
+C            X1(I,J) - d/dX derivative
+C            Y1(I,J) - d/dY derivative
+C            XY2(I,J) - d2/dXdY derivative
+C
+a161 1
+C            
+a207 1
+C            B1 = DBDX
+@
+
+
+1.13
+log
+@*** empty log message ***
+@
+text
+@d47 15
+a61 13
+C      In order to interpolate a two dimensional grid [0,1] x [0,1],   *
+C   we sequentially used 1D cubic interpolation formula. First,        *
+C   we interpolated the intensities at two horizontal boundary         *
+C   lines [0,0]-[1,0] and [0,1]-[1,1] using intensities and normal     *
+C   to boundaries first derivatives in grid nodes. Thus we obtained    *
+C   the intensities at two boundary lines of square cell.              *
+C      Thereafter we carried out cubic interpolation in vertical line  *
+C    between 2 horizontal line with a given value of X to obtain       *
+C    the intensities inside the square cell.                           *
+C       The last procedure was done using previously interpolated      *
+C    values of intensities and their first normal derivatives across   *
+C    cell boundaries (which was also approximated by cubic             *
+C    interpolation at boundaries).                                     *
+d66 5
+a70 5
+C      This well-known formula is very convenient for calculating      *
+C   the derivatives of a  function defined as a discrete data set,     *
+C   and allows to calculate the derivative in any local point          *
+C   without the finite difference approximation involving the          *
+C   data from neighboring points.                                      *
+d224 1
+a224 1
+C            --Sequential algorithm for 16-term bicubic polynomial--
+@
+
+
+1.12
+log
+@spline xy2
+@
+text
+@d86 3
+d95 1
+a95 1
+       INTEGER           :: I,J,K1,K2
+d99 1
+a99 1
+       REAL              :: A0, A1, A2, A3, B1
+d101 1
+a101 1
+       REAL              :: SCALEX, SCALEY
+d113 3
+d126 1
+a126 1
+     &           YY2(0:NXLD-1, 0:NY-1),
+d184 2
+a185 2
+       SCALEX2 = 1/SCALEX
+       SCALEY2 = 1/SCALEY
+@
+
+
+1.11
+log
+@interp_fbp.f
+@
+text
+@a0 1
+
+d3 1
+a3 1
+C  INTERP_FBP       NEW                   MAY 2011  GREGORY KISHCHENKO *                                                                           *
+d27 1
+a27 1
+C   INTERP_FBP()                                                       *
+d29 1
+a29 1
+C   PURPOSE: RESAMPLING OF 2D IMAGES BY FOUIER BASED POLYNOMIAL        *
+d34 1
+a34 1
+C   If the values of a function F(X) and its first derivatives F'(0)   *
+d36 1
+a36 1
+C   interval [0,1] using a third degree polynomial (cubic              *
+d47 22
+a68 22
+C      In order to interpolate a two dimensional grid, we used this    *
+C   cubic interpolation formula. We interpolated the area              *
+C   [0,1] x [0,1] by first interpolating 2 vertical lines [0,0]-[0,1]  *
+C   and [1,0]-[1,1], and 2 horizontal lines [0,0]-[1,0] and            *
+C   [0,1]-[1,1], and thus obtained the values of function at 4         *
+C   boundaries' lines of square cell. After that we repeated the       *
+C   same procedure to obtain the values inside the square cell. This   *
+C   was done using the obtained values of function and first           *
+C   derivatives  at boundaries in perpendicular to boundaries          *
+C   directions which were approximated by linear interpolation. The    *
+C   final result depends of direction (vertical or horizontal) in      *
+C   which last interpolation was done. Therefore, we carried out       *
+C   interpolation in both direction, and then averaged the obtained    *
+C   values.                                                            *
+C                                                                      *
+C      The first derivatives dF/dX and dF/dY were obtained by          *
+C   by calculating Fourier transform {F}, and then calculating the     *
+C   inverse Fourier transform of {ik*F(k)}. This well-known formula is *
+C   very convenient for calculating the derivatives of a  function     *
+C   defined as a discrete data set, and allows to calculate the        *
+C   derivative in any local point without involving the data from      *
+C   neighboring points (and therefore spatial averaging).              *
+d71 2
+a72 2
+C   standard bicubic interpolation (the densities and their            *
+C   derivatives are continuous at boundaries), but has fewer           *
+d75 3
+a77 3
+C   densities and their derivatives just from 4 pixels surrounding     *
+C   the  point of interest instead 16 pixels as in in standard         *
+C   algorithm.                                                         *
+d82 1
+a82 1
+       SUBROUTINE INTERP_FBP(BUF1, BUF2, 
+d96 2
+a97 2
+       REAL              :: A0, A1, A2, A3, B1, C1
+       REAL              :: ADX,BDX, ADY, BDY
+d106 1
+d117 4
+a120 3
+       ALLOCATE (F0(0:NXLD-1, 0:NY-1),
+     &           X1(0:NXLD-1, 0:NY-1),
+     &           Y1(0:NXLD-1, 0:NY-1),
+d123 2
+a124 2
+           MWANT = 3* NXLD*NY 
+           CALL ERRT(46,'INTERP_FSB, F0...',MWANT)
+a134 1
+C          WX(K1) = 2*PI*K1/NXLD
+a141 1
+C          WY(J) = 2*PI*J/NY
+a146 1
+C         WY(J) = 2*PI*(J-NY)/NY
+a149 9
+C       DO K1=0,NXLD/2-1
+C          DO J=0,NY-1
+C               X1(2*K1,J)   =  F0(2*K1+1,J) * WX(K1)
+C               X1(2*K1+1,J) = -F0(2*K1,J)   * WX(K1)
+C               Y1(2*K1,J)   =  F0(2*K1+1,J) * WY(J)
+C               Y1(2*K1+1,J) = -F0(2*K1,J)   * WY(J)
+C          ENDDO
+C       ENDDO
+
+a159 1
+
+d163 2
+a167 1
+
+d174 3
+d214 23
+d238 2
+a239 1
+C            Interpolation at  horizontal line [I,J]-[I+1,J]
+d242 15
+a256 14
+              A0  = BUF1(I2,J2)
+              A1  = X1(I2,J2)
+              A2  = 3*(BUF1(I3,J2)-A0)-2*A1-X1(I3,J2)
+              A3  = 2*(A0-BUF1(I3,J2))+A1+X1(I3,J2)
+              ADX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+C             Interpolation at horizontal line [I,J+1]-[I+1,J+1]
+C             F(I+dX,Y=J+1) = A0 + A1*dX + A2*dX**2 + A3*dX**3
+
+              A0 = BUF1(I2,J3)
+              A1 = X1(I2,J3)
+              A2 = 3*(BUF1(I3,J3)-A0) - 2*A1 - X1(I3,J3)
+              A3 = 2*(A0-BUF1(I3,J3)) +   A1 + X1(I3,J3)
+              BDX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+d258 2
+a259 1
+C            (1) Interpolation at vertical line [I+dX,J]-[I+dX,J+1]
+d263 4
+a266 37
+             A1 = Y1(I2,J2)*(1-DX) + Y1(I3,J2)*DX
+             B1 = Y1(I2,J3)*(1-DX) + Y1(I3,J3)*DX
+             A2 = 3*(BDX - ADX) - 2*A1 - B1
+             A3 = 2*(ADX - BDX) +   A1 + B1
+
+             C1 = A0+A1*DY+A2*DY**2+A3*DY**3
+
+C            Interpolation at vertical line [I,J]-[I,J+1]
+C            F(I,J+DY) = A0 + A1*dY + A2*dY**2 + A3*dY**3
+
+C            Interpolation at vertical line [I,J]-[I,J+1]
+C            F(I,J+DY) =A0 + A1*dY + A2*dY**2 + A3*dY**3
+
+             A0  = BUF1(I2,J2)
+             A1  = Y1(I2,J2)
+             A2  = 3*(BUF1(I2,J3)-A0) - 2*A1 - Y1(I2,J3)
+             A3  = 2*(A0-BUF1(I2,J3)) +   A1 + Y1(I2,J3)
+             ADY = A0 + A1*DY + A2*DY**2 + A3*DY**3
+
+C            Interpolation at vertical line [I+1,J]-[I+1,J+1]
+C            F(I+1,J+DY) = A0 + A1*dY + A2*dY**2 + A3*dY**3
+
+             A0  = BUF1(I3,J2)
+             A1  = Y1(I3,J2)
+             A2  = 3*(BUF1(I3,J3)-A0) - 2*A1 - Y1(I3,J3)
+             A3  = 2*(A0-BUF1(I3,J3)) +   A1 + Y1(I3,J3)
+             BDY = A0+A1*DY+A2*DY**2+A3*DY**3
+
+C            (2) Interpolation at horizontal line [I,J+dY]-[I+1,J+dY]
+C            and averaging of interpolated values in both direction
+C            F(I+dX,Y=J+DY) = A0 + A1*dX + A2*dX**2 + A3*dX**3
+
+             A0 = ADY + C1
+             A1 = X1(I2,J2)*(1-DY) + X1(I2,J3)*DY
+             B1 = X1(I3,J2)*(1-DY) + X1(I3,J3)*DY
+             A2 = 3*(BDY - ADY) - 2*A1 - B1
+             A3 = 2*(ADY - BDY) +   A1 + B1
+d268 1
+a268 1
+             BUF2(K1,K2) = 0.5*(A0+A1*DX+A2*DX**2+A3*DX**3)
+d278 1
+@
+
+
+1.10
+log
+@interp bug fixed
+@
+text
+@d4 1
+a4 1
+C  INTERP_FBS       NEW                   MAY 2011  GREGORY KISHCHENKO *                                                                           *
+d28 1
+a28 1
+C   INTERP_FBS()                                                       *
+d83 1
+a83 1
+       SUBROUTINE INTERP_FBS(BUF1, BUF2, 
+@
+
+
+1.9
+log
+@debug output removed
+@
+text
+@d30 1
+a30 1
+C   PURPOSE: RESAMPLING OF 2D IMAGES BY FOUIER BASED SPLINE
+d32 2
+a33 2
+C             Algorithm is fairly fast and preserves fine details of   *
+C             images                                                   *
+d97 1
+a97 1
+       REAL              :: A0, A1, A2, A3, B1
+a227 2
+C             A2  = 3*(BUF1(I3,J2)-BUF1(I2,J2))-2*X1(I2,J2)-X1(I3,J2)
+C             A3  = 2*(BUF1(I2,J2)-BUF1(I3,J2))+X1(I2,J2)+X1(I3,J2)
+d237 2
+a238 4
+C             A2 = 3*(BUF1(I3,J3)-BUF1(I2,J3))-2*X1(I2,J3)-X1(I3,J3)
+C             A3 = 2*(BUF1(I2,J3)-BUF1(I3,J3))+X1(I2,J3)+X1(I3,J3)
+              A2 = 3*(BUF1(I3,J3)-A0)-2*A1-X1(I3,J3)
+              A3 = 2*(A0-BUF1(I3,J3))+A1+X1(I3,J3)
+d245 2
+a246 2
+             A1 = Y1(I2,J2)*DX + Y1(I3,J2)*(1-DX)
+             B1 = Y1(I2,J3)*DX + Y1(I3,J3)*(1-DX)
+d248 1
+a248 1
+             A3 = 2*(ADX - BDX) + A1 + B1
+d250 1
+a250 2
+C            BUF2(K1,K2)=A0+A1*DY+A2*DY**2+A3*DY**3
+             A4 = A0+A1*DY+A2*DY**2+A3*DY**3
+d260 2
+a261 4
+C            A2  = 3*(BUF1(I2,J3)-BUF1(I2,J2))-2*Y1(I2,J2)-Y1(I2,J3)
+C            A3  = 2*(BUF1(I2,J2)-BUF1(I2,J3))+Y1(I2,J2)+Y1(I2,J3)
+             A2  = 3*(BUF1(I2,J3)-A0)-2*A1-Y1(I2,J3)
+             A3  = 2*(A0-BUF1(I2,J3))+A1+Y1(I2,J3)
+d269 2
+a270 4
+C            A2  = 3*(BUF1(I3,J3)-BUF1(I3,J2))-2*Y1(I3,J2)-Y1(I3,J3)
+C            A3  = 2*(BUF1(I3,J2)-BUF1(I3,J3))+Y1(I3,J2)+Y1(I3,J3)
+             A2  = 3*(BUF1(I3,J3)-A0)-2*A1-Y1(I3,J3)
+             A3  = 2*(A0-BUF1(I3,J3))+A1+Y1(I3,J3)
+d277 3
+a279 4
+C            A0 = ADY + BUF2(K1,K2)
+             A0 = ADY + A4
+             A1 = X1(I2,J2)*DY + X1(I2,J3)*(1-DY)
+             B1 = X1(I3,J2)*DY + X1(I3,J3)*(1-DY)
+d281 1
+a281 1
+             A3 = 2*(ADY - BDY) + A1 + B1
+@
+
+
+1.8
+log
+@*** empty log message ***
+@
+text
+@d113 3
+a115 3
+       WRITE(6,*) 'NX, NXLD, NX2= ',NX, NXLD, NX2
+       WRITE(6,*) 'NY, NY2=       ',NY, NY2
+       WRITE(6,*) 'SCALE X & Y=   ',SCALEX, SCALEY
+@
+
+
+1.7
+log
+@installed
+@
+text
+@d4 1
+a4 1
+C  INTERP_FBS       NEW                    MAY 2011  GREGORY KISCHENKO *                                                                           *
+@
+
+
+1.6
+log
+@*** empty log message ***
+@
+text
+@d83 20
+a102 21
+       SUBROUTINE  INTERP_FBS(BUF1, BUF2, 
+     &                        NXLD,NX,  NY,
+     &                        NX2, NY2, 
+     &                        SCALEX, SCALEY,IRTFLG)
+
+       REAL    :: BUF1(0:NXLD-1,0:NY-1)
+       REAL    :: BUF2(0:NX2-1,0:NY2-1)
+       INTEGER :: NXLD, NX, NY
+       INTEGER :: NX2, NY2,
+       REAL    :: SCALEX, SCALEY
+       INTEGER :: IRTFLG
+
+       INTEGER :: I,J,K1,K2
+       INTEGER :: I2,J2,I3,J3
+       INTEGER :: INV
+       REAL    :: DX,DY
+       REAL    :: A0, A1, A2, A3, B1
+       REAL    :: ADX,BDX, ADY, BDY
+
+       REAL    :: WX(0:NXLD-1)
+       REAL    :: WY(0:NY-1)
+d110 11
+a120 8
+       !WRITE(6,*) 'NX, NXLD, NX2 =',NX, NXLD, NX2
+       !WRITE(6,*) 'NY, NY2 =',NY, NY2
+       !WRITE(6,*) 'SCALEX, SCALEY =',SCALEX, SCALEY
+
+       ALLOCATE F0(0:NXLD-1, 0:NY-1),
+     &          X1(0:NXLD-1, 0:NY-1),
+     &          Y1(0:NXLD-1, 0:NY-1),
+     &          STAT=IRTFLG)
+d131 2
+d134 2
+a135 1
+          WX(K1) = 2 * PI * K1 / NXLD
+d137 1
+d139 1
+a139 1
+       WX(NXLD/2) = 0
+d142 2
+a143 1
+          WY(J) = 2 * PI * J / NY
+a144 1
+
+d148 2
+a149 1
+          WY(J) = 2 * PI * (J-NY) / NY
+d152 9
+d162 1
+d164 7
+a170 2
+             X1(2*K1,J)   =  F0(2*K1+1,J) * WX(K1)
+             X1(2*K1+1,J) = -F0(2*K1,J)   * WX(K1)
+d172 3
+a174 2
+             Y1(2*K1,J)   =  F0(2*K1+1,J) * WY(J)
+             Y1(2*K1+1,J) = -F0(2*K1,J)   * WY(J)
+d178 1
+d186 2
+d191 4
+a194 2
+          I  = INT(K1/SCALEX)
+          DX = K1 / SCALEX - I
+d198 4
+a201 2
+             J  = INT(K2/SCALEY)
+             DY = K2 / SCALEY - J
+d226 18
+a243 15
+             A0 = BUF1(I2,J2)
+             A1 = X1(I2,J2)
+             A2 = 3*(BUF1(I3,J2)-BUF1(I2,J2))-2*X1(I2,J2)-X1(I3,J2)
+             A3 = 2*(BUF1(I2,J2)-BUF1(I3,J2))+X1(I2,J2)+X1(I3,J2)
+             ADX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+C            Interpolation at horizontal line [I,J+1]-[I+1,J+1]
+C            F(I+dX,Y=J+1) = A0 + A1*dX + A2*dX**2 + A3*dX**3
+
+             A0 = BUF1(I2,J3)
+             A1 = X1(I2,J3)
+             A2 = 3*(BUF1(I3,J3)-BUF1(I2,J3))-2*X1(I2,J3)-X1(I3,J3)
+             A3 = 2*(BUF1(I2,J3)-BUF1(I3,J3))+X1(I2,J3)+X1(I3,J3)
+
+             BDX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+d246 1
+a246 1
+C            F(I+dX,Y=J+DY)=A0 + A1*dY + A2*dY**2 + A3*dY**3
+d254 2
+a255 1
+             BUF2(K1,K2)=A0+A1*DY+A2*DY**2+A3*DY**3
+d260 3
+d265 4
+a268 2
+             A2  = 3*(BUF1(I2,J3)-BUF1(I2,J2))-2*Y1(I2,J2)-Y1(I2,J3)
+             A3  = 2*(BUF1(I2,J2)-BUF1(I2,J3))+Y1(I2,J2)+Y1(I2,J3)
+d274 6
+a279 5
+             A0 = BUF1(I3,J2)
+             A1 = Y1(I3,J2)
+             A2 = 3*(BUF1(I3,J3)-BUF1(I3,J2))-2*Y1(I3,J2)-Y1(I3,J3)
+             A3 = 2*(BUF1(I3,J2)-BUF1(I3,J3))+Y1(I3,J2)+Y1(I3,J3)
+
+d286 2
+a287 1
+             A0 = ADY + BUF2(K1,K2)
+d299 4
+a302 3
+9999   IF (ALLOCATED(F0))    DEALLOCATE(F0)
+       IF (ALLOCATED(X1))    DEALLOCATE(X1)
+       IF (ALLOCATED(Y1))    DEALLOCATE(Y1)
+@
+
+
+1.5
+log
+@*** empty log message ***
+@
+text
+@d83 4
+a86 127
+        SUBROUTINE INTERP_FBS()
+
+        IMPLICIT NONE
+
+        INCLUDE 'CMBLOCK.INC' 
+        INCLUDE 'CMLIMIT.INC'
+        
+
+        CHARACTER (LEN=MAXNAM) :: FILNAM
+        CHARACTER (LEN=1)      :: NULL = CHAR(0)
+
+        REAL, ALLOCATABLE      :: BUF(:,:),BUF1(:,:),BUF2(:,:)  
+ 
+       INTEGER, PARAMETER     :: LUN1 = 50
+       INTEGER, PARAMETER     :: LUN2 = 51
+
+       INTEGER                :: IFORM1,NSAM1,NROW1,NSLICE1,MAXIM1
+       INTEGER                :: IFORM2,NSAM2,NROW2,NSLICE2,MAXIM2
+       INTEGER                :: IRTFLG,NLETO,IT,NXLD,MWANT
+
+        REAL                   :: SCALEX,SCALEY,SCALET
+
+C       OPEN OLD FILE
+        MAXIM1   = 0       
+        CALL OPFILEC(0,.TRUE.,FILNAM,LUN1,'O',IFORM,
+     &               NSAM1,NROW1,NSLICE1,
+     &               MAXIM1,'INPUT',.FALSE.,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+C       GET OUTPUT FILE  NAME
+        CALL FILERD(FILNAM,NLETO,NULL,'OUTPUT',IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 9999
+
+        NSAM2   = 0
+        NROW2   = 0
+        NSLICE2 = 0
+
+        IF (NSLICE1 > 1) THEN
+           CALL RDPRI3S(NSAM2,NROW2,NSLICE2,NOT_USED,
+     &                'ENTER DIMENSIONS, NSAM, NROW, & NSLICE',IRTFLG)
+           IF (IRTFLG .NE. 0) GOTO 9000
+
+C          THE USER IS ALLOWED TO ENTER ONLY
+C          ONE DIMENSION, THE OTHER DIMS ARE COMPUTED TO KEEP THE SAME 
+C          SIZE RELATION AS INPUT.
+           IF (NROW2 .LE. 0) THEN
+              NROW2 = (FLOAT(NSAM2)   / FLOAT(NSAM1)) * FLOAT(NROW1)
+           ENDIF
+           IF (NSLICE2 .LE. 0) THEN
+              NSLICE2 = (FLOAT(NSAM2) / FLOAT(NSAM1)) * FLOAT(NSLICE1)
+           ENDIF
+        ELSE
+           NSLICE2 = 1
+           CALL RDPRIS(NSAM2,NROW2,NOT_USED,
+     &                'ENTER DIMENSIONS, NSAM & NROW',IRTFLG)
+           IF (IRTFLG .NE. 0) GOTO 9000
+
+C          THE USER IS ALLOWED TO ENTER ONLY
+C          ONE DIMENSION, THE OTHER DIMS ARE COMPUTED TO KEEP THE SAME 
+C          SIZE RELATION AS INPUT.
+           IF (NROW2 .EQ. 0) THEN
+              NROW2 = (FLOAT(NSAM2) / FLOAT(NSAM1)) * FLOAT(NROW1)
+           ENDIF
+
+        ENDIF
+
+        SCALEX  = FLOAT(NSAM1)  / FLOAT(NSAM2)
+        SCALEY  = FLOAT(NROW1)  / FLOAT(NROW2)
+
+        NSAM2   = NSAM1 * SCALEX
+        NROW2   = NROW1 * SCALEY
+        NSLICE2 = 1
+
+C       OPEN THE OUTPUT FILE
+        MAXIM2 = 0
+        CALL OPFILEC(LUN1,.FALSE.,FILNAM,LUN2,'U',IFORM,
+     &             NSAM2,NROW2,NSLICE2, 
+     &             MAXIM2,'OUTPUT',.TRUE.,IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 9999
+
+         NXLD   = NSAM1 + 2 - MOD(NSAM1,2)
+
+         ALLOCATE (BUF( NXLD, NROW1), 
+     &             BUF1(NXLD, NROW1),  
+     &             BUF2(NSAM2,NROW2), STAT=IRTFLG)
+         IF (IRTFLG.NE.0) THEN 
+
+              MWANT = 2*NXLD*NROW1 + NSAM2*NROW2
+              CALL ERRT(46,'FOUR1A_FP, BUF...',MWANT)
+              GOTO 9999
+         ENDIF 
+
+C        READ INPUT IMAGE
+         CALL READV(LUN1,BUF1,NXLD,NROW1,NSAM1,NROW1,NSLICE2)
+
+         CALL RESCALE(BUF1, BUF,  BUF2,
+     &                NXLD, NSAM1,NROW1,
+     &                NSAM2,NROW2,
+     &                SCALEX, SCALEY, IRTFLG)
+         IF (IRTFLG .NE. 0) GOTO 9999
+
+C        WRITE OUTPUT IMAGE
+         CALL WRITEV(LUN2,BUF2,NSAM2,NROW2,NSAM2,NROW2,NSLICE2)
+
+C        IMAGE FILE HEADER FOR PIXSIZ HAS CHANGED
+         SCALET = SCALEX
+         IF (SCALEY .NE. SCALEX) SCALET = 0.0   ! X NOT SAME AS Y
+
+C        UPDATE THE INCORE HEADER VALUE & FILE HEADER FOR PIXSIZ
+         CALL SETPRMS(LUN2, SCALET,IRTFLG)
+
+9999     IF (ALLOCATED(BUF))  DEALLOCATE (BUF)
+         IF (ALLOCATED(BUF1)) DEALLOCATE (BUF1)
+         IF (ALLOCATED(BUF2)) DEALLOCATE (BUF2)
+
+         CLOSE (LUN2)
+         CLOSE (LUN1)
+
+         END
+
+
+C      ******************************* RESCALE *******************
+
+       SUBROUTINE  RESCALE(BUF1, BUF2, 
+     &                     NXLD,NX,  NY,
+     &                     NX2, NY2, 
+     &                     SCALEX, SCALEY,IRTFLG)
+a88 1
+       REAL    :: BUF (0:NXLD-1,0:NY-1)
+d90 2
+a92 1
+       INTEGER :: NXLD, NX, NY, NX2, NY2, NXLD
+d98 1
+a98 1
+       REAL    :: PI,DX,DY
+d105 3
+a107 3
+       REAL    :: F0(0:NXLD-1,0:NY-1)
+       REAL    :: X1(0:NXLD-1,0:NY-1)
+       REAL    :: Y1(0:NXLD-1,0:NY-1)
+d109 1
+a109 1
+       REAL, PARAMETER :: PI = 3.14159265358979323846
+d115 10
+d256 5
+@
+
+
+1.4
+log
+@my cosmetic and calls
+@
+text
+@d1 1
+d149 3
+a162 4
+        SCALEX = FLOAT(NSAM1)  / FLOAT(NSAM2)
+        SCALEY = FLOAT(NROW1)  / FLOAT(NROW2)
+
+C        2D CASE
+d206 1
+a206 1
+       SUBROUTINE  RESCALE(BUF1,BUF, BUF2, 
+@
+
+
+1.3
+log
+@cosmetic formatting
+@
+text
+@d1 4
+a6 2
+C=*  BICUBIC RESCALING BY INTERPOLATION  (SCALEY and SCALEX)           *
+C=*                                                                    *
+a25 3
+C   PURPOSE:                                                           *
+C   RESAMPLING OF 2D IMAGES BY                                         *
+C   2D FOURIER-DASED BICUBIC INTERPOLATION BETWEEN PIXELS.             *
+d27 6
+a32 2
+C   Algorithm is fairly fast and preserving the fine details of        *
+C   images                                                             *
+a80 2
+C
+C       --------------------- FOUR1A_FPGK -----------------------
+d82 1
+a82 1
+        SUBROUTINE FOUR1A_FPGK
+d95 2
+a96 2
+	INTEGER, PARAMETER     :: LUN1 = 50
+	INTEGER, PARAMETER     :: LUN2 = 51
+d98 3
+a100 3
+	INTEGER                :: IFORM1,NSAM1,NROW1,NSLICE1,MAXIM1
+	INTEGER                :: IFORM2,NSAM2,NROW2,NSLICE2,MAXIM2
+	INTEGER                :: IRTFLG,NLETO,IT,NXLD,MWANT
+d111 1
+a111 1
+C	GET OUTPUT FILE  NAME
+d124 3
+a126 3
+C	   THE USER IS ALLOWED TO ENTER ONLY
+C	   ONE DIMENSION, THE OTHER DIMS ARE COMPUTED TO KEEP THE SAME 
+C	   SIZE RELATION AS INPUT.
+d139 3
+a141 3
+C	   THE USER IS ALLOWED TO ENTER ONLY
+C	   ONE DIMENSION, THE OTHER DIMS ARE COMPUTED TO KEEP THE SAME 
+C	   SIZE RELATION AS INPUT.
+a147 12
+
+
+        IT      = 1
+C        NSAM2   = NSAM1 * IT
+C        NROW2   = NROW1 * IT
+
+C         !!!!!!!!!!!!!!!!!!!
+C         SCALEX = 3.5
+C         SCALEY = 1.75
+         SCALEX = 8
+         SCALEY = 1
+
+d152 1
+a152 1
+C	OPEN THE OUTPUT FILE
+d154 1
+a154 1
+	CALL OPFILEC(LUN1,.FALSE.,FILNAM,LUN2,'U',IFORM,
+d157 1
+a157 1
+	IF (IRTFLG .NE. 0) GOTO 9999
+d159 2
+a160 2
+        SCALEX = FLOAT(NSAM1)   / FLOAT(NSAM2)
+        SCALEY = FLOAT(NROW1)   / FLOAT(NROW2)
+d179 3
+a181 4
+     &               NXLD, NSAM1,NROW1,
+     &               NSAM2,NROW2, IRTFLG,
+     &               SCALEX, SCALEY)
+
+a193 1
+
+d207 10
+a216 3
+     &               NXLD,NX,  NY,
+     &               NX2, NY2, IRTFLG,
+     &               SCALEX, SCALEY)
+a219 1
+       INTEGER :: NX, NY, NX2, NY2, NXLD
+a220 1
+       REAL    :: SCALEX, SCALEY
+a223 3
+       REAL    :: BUF1(0:NXLD-1,0:NY-1)
+       REAL    :: BUF (0:NXLD-1,0:NY-1)
+       REAL    :: BUF2(0:NX2-1,0:NY2-1)
+d227 1
+d232 2
+a237 2
+       PI = 3.141593
+
+d243 1
+a243 1
+          WX(K1) = 2*PI*K1/NXLD
+d247 1
+d249 1
+a249 1
+          WY(J) = 2*PI*J/NY
+d253 1
+d255 1
+a255 1
+          WY(J) = 2*PI*(J-NY)/NY
+d260 5
+a264 4
+             X1(2*K1,J)   = F0(2*K1+1,J)*WX(K1)
+             X1(2*K1+1,J) = -F0(2*K1,J)*WX(K1)
+             Y1(2*K1,J)   = F0(2*K1+1,J)*WY(J)
+             Y1(2*K1+1,J) = -F0(2*K1,J)*WY(J)
+d273 1
+d277 1
+d279 1
+a279 1
+          DX = K1/SCALEX - I
+d316 1
+a316 1
+C            F(I+dX,Y=J+1)=A0 + A1*dX + A2*dX**2 + A3*dX**3
+d337 1
+a337 1
+C            F(I,J+DY)=A0 + A1*dY + A2*dY**2 + A3*dY**3
+d339 4
+a342 4
+             A0 = BUF1(I2,J2)
+             A1 = Y1(I2,J2)
+             A2 = 3*(BUF1(I2,J3)-BUF1(I2,J2))-2*Y1(I2,J2)-Y1(I2,J3)
+             A3 = 2*(BUF1(I2,J2)-BUF1(I2,J3))+Y1(I2,J2)+Y1(I2,J3)
+d346 1
+a346 1
+C            F(I+1,J+DY)=A0 + A1*dY + A2*dY**2 + A3*dY**3
+d357 1
+a357 1
+C            F(I+dX,Y=J+DY)=A0 + A1*dX + A2*dX**2 + A3*dX**3
+d365 1
+a365 1
+             BUF2(K1,K2)=0.5*(A0+A1*DX+A2*DX**2+A3*DX**3)
+@
+
+
+1.2
+log
+@*** empty log message ***
+@
+text
+@d114 35
+d170 3
+a188 1
+
+a199 2
+         SCALEX = FLOAT(NSAM1)   / FLOAT(NSAM2)
+         SCALEY = FLOAT(NROW1)   / FLOAT(NROW2)
+d207 3
+a209 3
+9999    IF (ALLOCATED(BUF))  DEALLOCATE (BUF)
+        IF (ALLOCATED(BUF1)) DEALLOCATE (BUF1)
+        IF (ALLOCATED(BUF2)) DEALLOCATE (BUF2)
+d211 2
+a212 2
+        CLOSE (LUN2)
+        CLOSE (LUN1)
+d214 1
+a214 1
+        END
+d227 5
+a231 6
+       INTEGER    ITX
+       INTEGER    INV
+         REAL    :: SCALEX, SCALEY
+         REAL    :: PI,DX,DY
+         REAL    :: A0, A1, A2, A3, B1
+         REAL    :: ADX,BDX, ADY, BDY
+d235 3
+a237 2
+         REAL    :: WX(0:NXLD-1)
+         REAL    :: WY(0:NY-1)
+d242 3
+a244 3
+         WRITE(6,*) 'NX, NXLD, NX2 =',NX, NXLD, NX2
+         WRITE(6,*) 'NY, NY2 =',NY, NY2
+         WRITE(6,*) 'SCALEX, SCALEY =',SCALEX, SCALEY
+d248 1
+a248 1
+       F0 = BUF1
+d255 2
+a256 1
+          WX(NXLD/2) = 0
+d260 2
+a261 1
+          WY(NY/2) = 0
+d265 9
+a273 8
+           DO K1=0,NXLD/2-1
+             DO J=0,NY-1
+               X1(2*K1,J)   = F0(2*K1+1,J)*WX(K1)
+               X1(2*K1+1,J) = -F0(2*K1,J)*WX(K1)
+               Y1(2*K1,J)   = F0(2*K1+1,J)*WY(J)
+               Y1(2*K1+1,J) = -F0(2*K1,J)*WY(J)
+             ENDDO
+           ENDDO
+d283 15
+a297 13
+             I=INT(K1/SCALEX)
+             DX = K1/SCALEX - I
+       DO K2 = 0,NY2-1
+             J=INT(K2/SCALEY)
+             DY = K2/SCALEY - J
+             I2=MODULO(I,NX)
+             J2=MODULO(J,NY)
+             I3=MODULO(I+1,NX)
+             J3=MODULO(J+1,NY)
+
+C      BICUBIC POLYNOMIAL INTERPOLATION:
+C      F(dX)=A0 + A1*dX + A2*dX**2 + A3*dX**3
+C      where dX is (X-i)
+d299 6
+a304 6
+C      if F(ARG), and its derivarive F'(ARG) are known,
+C      A0, A1, A2, and A3 is given by
+C       A0 = F(i)
+C       A1 = F'(i)
+C       A2 = 3*(F(i+1)-F(i) - 2*F'(i) - F'(i+1)
+C       A3 = 2*(F(i)-F(i+1)) + F'(i) + F'(i+1)
+d306 13
+a318 55
+C       BUF1(I,J) - input array
+C       BUF2(I,J) - output array
+C       X1(I,J) - d/dX derivative
+C       Y1(I,J) - d/dY derivative
+
+C      Interpolation at  horizontal line [I,J]-[I+1,J]
+C      F(I+dX,Y=J)=A0 + A1*dX + A2*dX**2 + A3*dX**3
+       A0 = BUF1(I2,J2)
+       A1 = X1(I2,J2)
+       A2 = 3*(BUF1(I3,J2)-BUF1(I2,J2))-2*X1(I2,J2)-X1(I3,J2)
+       A3 = 2*(BUF1(I2,J2)-BUF1(I3,J2))+X1(I2,J2)+X1(I3,J2)
+       ADX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+C      Interpolation at horizontal line [I,J+1]-[I+1,J+1]
+C      F(I+dX,Y=J+1)=A0 + A1*dX + A2*dX**2 + A3*dX**3
+       A0 = BUF1(I2,J3)
+       A1 = X1(I2,J3)
+       A2 = 3*(BUF1(I3,J3)-BUF1(I2,J3))-2*X1(I2,J3)-X1(I3,J3)
+       A3 = 2*(BUF1(I2,J3)-BUF1(I3,J3))+X1(I2,J3)+X1(I3,J3)
+       BDX = A0 + A1*DX + A2*DX**2 + A3*DX**3
+
+C      (1) Interpolation at vertical line [I+dX,J]-[I+dX,J+1]
+C      F(I+dX,Y=J+DY)=A0 + A1*dY + A2*dY**2 + A3*dY**3
+       A0 = ADX
+       A1 = Y1(I2,J2)*DX + Y1(I3,J2)*(1-DX)
+       B1 = Y1(I2,J3)*DX + Y1(I3,J3)*(1-DX)
+       A2 = 3*(BDX - ADX) - 2*A1 - B1
+       A3 = 2*(ADX - BDX) + A1 + B1
+       BUF2(K1,K2)=A0+A1*DY+A2*DY**2+A3*DY**3
+
+C      Interpolation at vertical line [I,J]-[I,J+1]
+C      F(I,J+DY)=A0 + A1*dY + A2*dY**2 + A3*dY**3
+       A0 = BUF1(I2,J2)
+       A1 = Y1(I2,J2)
+       A2 = 3*(BUF1(I2,J3)-BUF1(I2,J2))-2*Y1(I2,J2)-Y1(I2,J3)
+       A3 = 2*(BUF1(I2,J2)-BUF1(I2,J3))+Y1(I2,J2)+Y1(I2,J3)
+       ADY = A0 + A1*DY + A2*DY**2 + A3*DY**3
+
+C      Interpolation at vertical line [I+1,J]-[I+1,J+1]
+C      F(I+1,J+DY)=A0 + A1*dY + A2*dY**2 + A3*dY**3
+       A0 = BUF1(I3,J2)
+       A1 = Y1(I3,J2)
+       A2 = 3*(BUF1(I3,J3)-BUF1(I3,J2))-2*Y1(I3,J2)-Y1(I3,J3)
+       A3 = 2*(BUF1(I3,J2)-BUF1(I3,J3))+Y1(I3,J2)+Y1(I3,J3)
+       BDY = A0+A1*DY+A2*DY**2+A3*DY**3
+
+C      (2) Interpolation at horizontal line [I,J+dY]-[I+1,J+dY]
+C      and averaging of interpolated values in both direction
+C      F(I+dX,Y=J+DY)=A0 + A1*dX + A2*dX**2 + A3*dX**3
+       A0 = ADY + BUF2(K1,K2)
+       A1 = X1(I2,J2)*DY + X1(I2,J3)*(1-DY)
+       B1 = X1(I3,J2)*DY + X1(I3,J3)*(1-DY)
+       A2 = 3*(BDY - ADY) - 2*A1 - B1
+       A3 = 2*(ADY - BDY) + A1 + B1
+       BUF2(K1,K2)=0.5*(A0+A1*DX+A2*DX**2+A3*DX**3)
+d320 54
+a373 2
+	   ENDDO
+        ENDDO
+a374 1
+       RETURN
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@a0 4
+C ++********************************************************************
+C                                                                      *
+C FOUR1A_FPGK                                                          *
+C                                                                      *
+d3 2
+d24 13
+a36 2
+C   PURPOSE: 2D FOURIER-MIMICKING POLYNOMIAL BICUBIC INTERPOLATION     *
+C                       BETWEEN PIXELS                                 *
+d38 5
+a42 3
+C   THE FIRST DERIVATIVES ARE CALCULATED USING FOURIER TRANSFORMS      *
+C   KIND OF SPLINES - THE DENSITIES AND THEIR DERIVATIVES ARE          *
+C   CONTINIOUS AT BOUNDARIES                                           *
+d44 31
+a74 2
+C    ALGORITHM ACHIEVES A HIGH PRECISION                               *
+C    IT'S FAST AND EDGE PRESERVING                                     *
+d114 9
+d124 2
+a125 5
+
+        IT      = 8
+
+        NSAM2   = NSAM1 * IT
+        NROW2   = NROW1 * IT
+d151 2
+a152 1
+         CALL FINTGK(BUF1, BUF,  BUF2,
+d154 3
+a156 1
+     &               NSAM2,NROW2, IT, IRTFLG)
+d182 1
+d184 4
+a187 6
+
+C      ******************************* FINTGK *******************
+
+       SUBROUTINE  FINTGK(BUF1,BUF, BUF2, 
+     &                    NXLD,NX,  NY,
+     &                    NX2, NY2, ITX, IRTFLG)
+d190 2
+a191 6
+          INTEGER :: I2,J2
+          INTEGER :: I3,J3
+       INTEGER :: NX,NY
+       INTEGER :: SHXI,SHYI
+       INTEGER :: NX2,NY2
+       INTEGER :: NXLD
+d193 10
+a202 15
+C      here ITX = 1
+         INTEGER    INV
+       REAL    :: PI,DX,DY
+       REAL    :: ZZZ
+       REAL    :: A0, A1, A2,A3
+       REAL    :: B1
+       REAL    :: ADX,BDX, ADY, BDY
+        REAL    :: BUF1(0:NXLD-1,0:NY-1)
+        REAL    :: BUF (0:NXLD-1,0:NY-1)
+        REAL    :: BUF2(0:NX2-1,0:NY2-1)
+       REAL    :: WX(0:NXLD-1)
+       REAL    :: WY(0:NY-1)
+          REAL    :: THETA
+          REAL    :: IR2,JR2
+
+a203 2
+       REAL    :: FX1(0:NXLD-1,0:NY-1)
+       REAL    :: FY1(0:NXLD-1,0:NY-1)
+a206 1
+       PI = 3.14159274
+d209 1
+d211 1
+a211 1
+       BUF = BUF1
+d213 1
+d215 1
+a215 2
+       CALL FMRS(BUF, NX,NY,1, 0.0D0, .TRUE., .TRUE., INV, IRTFLG)
+       F0 = BUF
+d230 4
+a233 4
+               FX1(2*K1,J)   = F0(2*K1+1,J)*WX(K1)
+               FX1(2*K1+1,J) = -F0(2*K1,J)*WX(K1)
+               FY1(2*K1,J)   = F0(2*K1+1,J)*WY(J)
+               FY1(2*K1+1,J) = -F0(2*K1,J)*WY(J)
+a236 1
+            BUF = FX1
+d238 2
+a239 3
+       CALL FMRS(BUF, NX,NY,1, 0.0D0, .TRUE., .TRUE., INV, IRTFLG)
+            X1 = BUF
+            BUF = FY1
+d241 1
+a241 2
+       CALL FMRS(BUF, NX,NY,1, 0.0D0, .TRUE., .TRUE., INV, IRTFLG)
+            Y1 = BUF
+a242 12
+       DO K1 = 0,ITX-1
+           DO K2 = 0,ITX-1
+              DX = REAL(K1)/REAL(ITX)
+              DY = REAL(K2)/REAL(ITX)
+
+              DO I=0, NX-1
+                 DO J=0, NY-1
+
+                I2=MODULO(I,NX)
+                J2=MODULO(J,NY)
+                I3=MODULO(I+1,NX)
+                J3=MODULO(J+1,NY)
+d244 29
+d275 3
+a277 8
+       A2 = 3*(BUF1(I3,J2)-BUF1(I2,J2))
+       A2 = A2 - 2*X1(I2,J2) - X1(I3,J2)
+       A3 = 2*(BUF1(I2,J2)-BUF1(I3,J2))
+       A3 = A3 + X1(I2,J2) + X1(I3,J2)
+       ZZZ = A0+A1*DX
+       ZZZ = ZZZ+A2*DX**2
+       ZZZ = ZZZ+A3*DX**3
+       ADX = ZZZ
+d279 2
+d283 3
+a285 8
+       A2 = 3*(BUF1(I3,J3)-BUF1(I2,J3))
+       A2 = A2 - 2*X1(I2,J3) - X1(I3,J3)
+       A3 = 2*(BUF1(I2,J3)-BUF1(I3,J3))
+       A3 = A3 + X1(I2,J3) + X1(I3,J3)
+       ZZZ = A0+A1*DX
+       ZZZ = ZZZ+A2*DX**2
+       ZZZ = ZZZ+A3*DX**3
+       BDX = ZZZ
+d287 2
+d292 3
+a294 8
+       A2 = 3*(BDX - ADX)
+       A2 = A2 - 2*A1 - B1
+       A3 = 2*(ADX - BDX)
+       A3 = A3 + A1 + B1
+       ZZZ = A0+A1*DY
+       ZZZ = ZZZ+A2*DY**2
+       ZZZ = ZZZ+A3*DY**3
+             BUF2(ITX*I+K1,ITX*J+K2) = ZZZ
+d296 2
+d300 3
+a302 8
+       A2 = 3*(BUF1(I2,J3)-BUF1(I2,J2))
+       A2 = A2 - 2*Y1(I2,J2) - Y1(I2,J3)
+       A3 = 2*(BUF1(I2,J2)-BUF1(I2,J3))
+       A3 = A3 + Y1(I2,J2) + Y1(I2,J3)
+       ZZZ = A0+A1*DY
+       ZZZ = ZZZ+A2*DY**2
+       ZZZ = ZZZ+A3*DY**3
+       ADY = ZZZ
+d304 2
+d308 8
+a315 10
+       A2 = 3*(BUF1(I3,J3)-BUF1(I3,J2))
+       A2 = A2 - 2*Y1(I3,J2) - Y1(I3,J3)
+       A3 = 2*(BUF1(I3,J2)-BUF1(I3,J3))
+       A3 = A3 + Y1(I3,J2) + Y1(I3,J3)
+       ZZZ = A0+A1*DY
+       ZZZ = ZZZ+A2*DY**2
+       ZZZ = ZZZ+A3*DY**3
+       BDY = ZZZ
+
+       A0 = ADY
+d318 4
+a321 10
+       A2 = 3*(BDY - ADY)
+       A2 = A2 - 2*A1 - B1
+       A3 = 2*(ADY - BDY)
+       A3 = A3 + A1 + B1
+       ZZZ = A0+A1*DX
+       ZZZ = ZZZ+A2*DX**2
+       ZZZ = ZZZ+A3*DX**3
+       BUF2(ITX*I+K1,ITX*J+K2)=0.5*(BUF2(ITX*I+K1,ITX*J+K2)+ZZZ)
+                       ENDDO
+             ENDDO
+d327 1
+@

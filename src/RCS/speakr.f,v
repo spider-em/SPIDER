@@ -1,0 +1,752 @@
+head	1.8;
+access;
+symbols
+	pre_getangas:1.6
+	GPL2010:1.6
+	pre_GPL2010:1.5
+	pre_var_equation:1.5
+	pre_fftwrings:1.5
+	pre_opfiles:1.4
+	src:1.4
+	best-code:1.4
+	x-named-regs:1.3
+	x:1.3
+	v13-00:1.3
+	pre_GPL:1.1
+	prec_CA:1.1;
+locks; strict;
+comment	@c @;
+
+
+1.8
+date	2014.01.12.19.04.43;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2012.12.04.15.53.53;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2010.06.24.13.27.00;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2007.02.22.17.26.58;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2005.12.16.01.52.20;	author cyang;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2005.10.17.20.02.18;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2005.10.17.17.57.53;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2003.03.21.20.27.14;	author bimal;	state Exp;
+branches;
+next	;
+
+
+desc
+@created
+@
+
+
+1.8
+log
+@enter
+@
+text
+@
+C++*********************************************************************
+C
+C SPEAKR.F           ADAPTED FROM SPEAK.F       MAR 2003 BIMAL RATH
+C                    VERBOSE                    FEB 2007 ARDEAN LEITH                                    
+C                    LUNDOCWRTDAT REWRITE       DEC 2012 ARDEAN LEITH
+C
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2012  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C  PURPOSE: SEARCHES FOR THE ML HIGHEST PEAKS IN IMAGE
+C           SEPARATES BY A NEIGHBOURHOOD DISTANCE
+C           AND PRINTS OUT POSITIONS AND VALUES OF THESE PEAKS.
+C
+C  SPEAKR(FILNAM,LUN,NX,NY,MAXDIM,OPT,NDOCOUT)
+c
+C  PARAMETERS:    
+C         FILNAM       FILE NAME
+C         LUN          LOGICAL UNIT NUMBER OF IMAGE
+C         NX,NY    DIMENSIONS OF IMAGE
+C         MAXDIM       MAXIMUM BUFFER SPACE AVAILABLE
+C        OPT           OUTPUT OPTION
+C        OPT=' '       DEFAULT:NO DOCUMENT OUTPUT
+C        OPT='X'      (I.E.,REGISTER LIST FOLLOWING):NO DOCUMENT OUTPUT
+C                      BUT OUTPUT OF POSITION & VALUE OF PEAK IN REGISTERS)
+C        OPT='D'       DOCUMENT OUTPUT:NUMBER,POSITION, AND VALUE
+C                      OF PEAK ARE WRITTEN INTO A DOCUMENT FILE
+C        NDOCOUT          LOGICAL UNIT NUMBER FOR DOCUMENT FILE
+C
+C        REGISTER POSITIONS 1= INTEGER X-SHIFT
+C          2= INTEGER Y-SHIFT
+C          3= ABSOLUTE PEAK HEIGHT
+C
+C          5= FLOATING PT. X-SHIFT
+C          6= FLOATING PT. Y-SHIFT
+C          7= VALUE OF EXTREMUM OF PARABOLOID
+C
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C--*********************************************************************
+
+         SUBROUTINE SPEAKR(FILNAM,LUN,NX,NY,MAXDIM,OPT,NDOCOUT,ML,NOR)
+
+         INCLUDE 'CMBLOCK.INC'
+         INCLUDE 'CMLIMIT.INC'
+
+         COMMON  BUF(1)
+
+         CHARACTER (LEN=*)      :: FILNAM
+         INTEGER                :: LUN,NX,NY,MAXDIM
+         CHARACTER              :: OPT
+         INTEGER                :: NDOCOUT,ML,NOR
+
+         REAL                   :: DLIST(5),RSQ(9)
+         REAL,    DIMENSION(ML) :: ALIST,RLIST
+         INTEGER, DIMENSION(ML) :: ILIST,KLIST,KXLIST,IXLIST
+         CHARACTER (LEN=60)     :: COMMEN
+         CHARACTER (LEN=MAXNAM) :: DOCOUT
+         LOGICAL                :: ASKNAM,ADDEXT,ISOLD
+         LOGICAL                :: WRTCOM,APPEND,NEWFILE
+
+         CALL SET_MPI(ICOMM,MYPID,MPIERR) ! SETS ICOMM AND MYPID
+
+         IF (MAXDIM < 3 * NX) THEN
+            CALL ERRT(102,'INSUFFICIENT BUFFER SPACE',MAXDIM)
+            RETURN
+         ENDIF
+
+         DO K = 1,ML
+            ILIST(K) = 0
+            KLIST(K) = 0
+            RLIST(K) = 0.0
+            ALIST(K) = -HUGE(THRESH)
+         ENDDO
+
+         NTAB     = 1
+         NXCTR    = NX/2+1
+         NYCTR    = NY/2+1
+
+         IF  (NOR .NE. 0) THEN
+            CALL RDPRIS(NXCTR,NYCTR,NOT_USED,
+     &            'ORIGIN COORDINATES',IRTFLG)
+            IF (IRTFLG .NE. 0) RETURN
+
+            IF (NTAB <= 0 .OR. NTAB > ML) THEN
+               CALL ERRT(102,'NOT CONTAINED IN TABLE',NTAB)
+               RETURN
+            ENDIF
+         ENDIF
+         
+         CALL RDPRM(FNEIGH,NOT_USED,'NEIGHBOURHOOD DISTANCE ')
+
+         FN2    = FNEIGH*FNEIGH
+         
+30       THRESH = -HUGE(THRESH)
+         NMAX   = 0
+         NX1  = NX-1
+         NY1  = NY -1
+         I1     = 0
+         I2     = 1
+         I3     = 2
+         CALL REDLIN(LUN,BUF,NX,1)
+         CALL REDLIN(LUN,BUF(1+NX),NX,2)
+
+         DO  I = 3,NY
+            I1  = MOD(I1,3)+1
+            I2  = MOD(I2,3)+1
+            I3  = MOD(I3,3)+1
+            I1A = (I1-1)*NX
+            I2A = (I2-1)*NX
+            I3A = (I3-1)*NX
+
+            CALL REDLIN(LUN,BUF(1+I3A),NX,I)
+
+            DO  K = 2,NX1
+               A = BUF(K+I2A)
+
+C              IGNORE PIXEL IF LOWER THAN LOWEST PIXEL ON PEAK LIST 
+               IF (A <= THRESH)       CYCLE
+
+C              IGNORE PIXEL IF LESS OR EQUAL TO ANY OF 8 NEIGHBORS
+               IF (A <= BUF(K-1+I2A)) CYCLE
+               IF (A <= BUF(K-1+I1A)) CYCLE
+               IF (A <= BUF(K+I1A))   CYCLE
+               IF (A <= BUF(K+1+I1A)) CYCLE
+               IF (A <= BUF(K+1+I2A)) CYCLE
+               IF (A <= BUF(K+1+I3A)) CYCLE
+               IF (A <= BUF(K+I3A))   CYCLE
+               IF (A <= BUF(K-1+I3A)) CYCLE
+
+               NMAX = NMAX + 1
+
+               DO L = 1,ML
+                  IF (A  <=  ALIST(L)) CYCLE
+                     IF (L .NE. ML) THEN
+                     L1 = L + 1
+
+                     DO J = L1,ML
+                        JO        = ML-J+L1
+                        JN        = ML-J+L1-1
+                        ALIST(JO) = ALIST(JN)
+                        ILIST(JO) = ILIST(JN)
+                       KLIST(JO)  = KLIST(JN)
+                     ENDDO 
+                  ENDIF
+
+                  ALIST(L) = A
+                  ILIST(L) = I-1
+                  KLIST(L) = K
+                  IF (NMAX > ML) THRESH = ALIST(ML)
+                  EXIT
+               ENDDO
+            ENDDO
+	 ENDDO
+
+         IF (NMAX == 0)  THEN
+            IF (MYPID <= 0) WRITE(NDAT,*) ' NO PEAK FOUND'
+            IF (NDAT .NE. NOUT .AND. MYPID <= 0) 
+     &         WRITE(NOUT,*) ' NO PEAK FOUND'
+            CALL REG_SET_NSEL(1, 5,0.0, 0.0, 0.0, 0.0, 0.0,IRTFLG)
+            CALL REG_SET_NSEL(6, 2,0.0, 0.0, 0.0, 0.0, 0.0,IRTFLG)
+            RETURN
+         ENDIF
+
+
+
+        IF (OPT == 'D') THEN
+           ADDEXT  = .TRUE.
+           ASKNAM  = .TRUE.
+           ISOLD   = .FALSE.
+           APPEND  = .FALSE.
+           WRTCOM  = .TRUE.
+           CALL OPENDOC(DOCOUT,ADDEXT,NLET,
+     &                  NDOCOUT,NICDOCOUT,ASKNAM,'OUTPUT DOCUMENT',
+     &                  ISOLD,APPEND,WRTCOM,NEWFILE,IRTFLG)
+           IF (IRTFLG .NE. 0) RETURN
+C                123456789 123456789 123456789 123456789 123456789 123
+           COMMEN = 
+     &      '            XO            YO        HEIGHT         RATIO'
+C            123456789 123456789 123456789 123456789 123456789 123456
+           CALL LUNDOCPUTCOM(NDOCOUT,COMMEN(1:56),IRTFLG)
+         ENDIF
+
+         IF (MYPID <= 0) THEN
+            IF (VERBOSE) WRITE(NOUT,*) ' '
+            WRITE(NDAT,299)
+299         FORMAT(
+     &      '    NO    IX    IY     XO    YO      HEIGHT         RATIO')
+            IF (NDAT .NE. NOUT) WRITE(NOUT,299)
+            IF (VERBOSE) WRITE(NOUT,*) ' '
+         ENDIF
+
+
+         MLIST = MIN(ML,NMAX)
+
+C        DO NEIGHBOURHOOD EXCLUSION, SETS ALL PEAKS WITHIN THE NEIGHBOURHOOD
+C        OF THE DESIRED PEAK (SEARCHING STARTS FROM THE LARGEST PEAK)
+C        TO ZERO         
+         DO  L = 1, MLIST-1
+            IF (ALIST(L) .NE. 0.0) THEN
+               FK = KLIST(L)
+               FI = ILIST(L)
+               DO 2910 LI = L+1, MLIST
+                  IF (ALIST(LI) .NE. 0.0) THEN
+                     IF ((FK-KLIST(LI))**2+(FI-ILIST(LI))**2
+     &                            > FN2) GOTO 2910
+     
+                     ALIST(LI) = 0.0
+                  ENDIF
+2910           CONTINUE
+            ENDIF
+         ENDDO         
+         
+         
+         NPKCNT = 0
+
+         DO L = 1,MLIST
+            IF (ALIST(L) .NE. 0.0) THEN
+            
+               NPKCNT    = NPKCNT + 1
+               KXLIST(L) = KLIST(L) - NXCTR
+               IXLIST(L) = ILIST(L) - NYCTR
+               RLIST(L)  = ALIST(L) / ALIST(NTAB)
+
+               IF (OPT == 'D') THEN
+                  DLIST(1) = KXLIST(L)
+                  DLIST(2) = IXLIST(L)
+                  DLIST(3) = ALIST(L)
+                  DLIST(4) = RLIST(L)
+
+C                 PUSH DLIST INTO OUTPUT DOC. FILE
+                  CALL LUNDOCWRTDAT(NICDOCOUT,NPKCNT,DLIST,4,IRTFLG)
+
+C                  CALL SAVD(NDOCOUT,DLIST,5,IRTFLG)
+               ENDIF
+               IF (VERBOSE .AND. NDAT .NE. NOUT .AND. MYPID <= 0)
+     &            WRITE(NOUT,301) NPKCNT,KLIST(L),ILIST(L),KXLIST(L),
+     &                            IXLIST(L),ALIST(L),RLIST(L)
+301            FORMAT(5I6,G16.7,2X,F8.5)
+
+               IF (VERBOSE .AND. MYPID <= 0) 
+     &             WRITE(NDAT,301) NPKCNT,KLIST(L),ILIST(L),
+     &                         KXLIST(L), IXLIST(L),ALIST(L),RLIST(L)
+            ENDIF
+         ENDDO
+
+         CLOSE(NDOCOUT)
+         
+         IDIFF = ML - NPKCNT
+
+         WRITE(NOUT,401) ML,NPKCNT,IDIFF
+401      FORMAT('  PEAKS SPECIFIED: ',I6,'  PEAKS PASSED: ',I6,
+     &             '  NEARBY PEAKS EXCLUDED: ',I6)
+
+         CALL REG_SET_NSEL(1,4,FLOAT(KXLIST(1)),FLOAT(IXLIST(1)),
+     &                        ALIST(1),RLIST(1),0.0,IRTFLG)
+
+C        9/25/81 PARABOLIC FIT TO THE 3X3 NEIGHBORHOOD OF THE PEAK POINT
+C        PROGRAM SECTION SENT BY M.VAN HEEL, MODIFIED FOR SPIDER USE. JF
+
+         KL = KLIST(1)
+         DO I=1,3
+            IY = ILIST(1)+I-2
+            IF (IY < 1)  IY = IY+NY
+            IF (IY > NY) IY = IY-NY
+
+            CALL REDLIN(LUN,BUF,NX,IY)
+            I1 = (I-1)*3
+
+            DO K=1,3
+               IX = KL+K-2
+               IF (IX < 1)  IX = IX + NX
+               IF (IX > NX) IX = IX - NX
+
+               RSQ(I1+K) = BUF(IX)
+            ENDDO
+         ENDDO
+
+         CALL PARABL(RSQ,XSH,YSH,PEAKV)
+
+C        HACK FOR ALMOST BINARY PEAK ERROR
+         IF (PEAKV < MAXVAL(RSQ)) PEAKV = MAXVAL(RSQ)
+
+         IF (MYPID <= 0) THEN
+            IF (VERBOSE) WRITE(NOUT,*) ' '
+
+            WRITE(NDAT,302)XSH,YSH,PEAKV
+            IF (NDAT .NE. NOUT) 
+     &         WRITE(NOUT,302)XSH,YSH,PEAKV
+302            FORMAT('  SUB-PIXEL OFFSET OF HIGHEST PEAK: (',
+     &               F5.2,', ',F5.2,')  HEIGHT: ',G15.7)
+
+            IF (MYPID .LE. 0) WRITE(NOUT,*) ' '
+         ENDIF
+
+         XT = XSH + KXLIST(1)
+         YT = YSH + IXLIST(1)
+ 
+         CALL REG_SET_NSEL(5,3,XT,YT,PEAKV, 0.0,0.0,IRTFLG)
+
+         END
+
+@
+
+
+1.7
+log
+@rewrite for lundocwrt
+@
+text
+@d100 1
+a100 1
+     &            'ENTER ORIGIN COORDINATES',IRTFLG)
+@
+
+
+1.6
+log
+@GPL_2010
+@
+text
+@d4 3
+a6 2
+C SPEAKR.F                 ADAPTED FROM SPEAK.F MARCH 2003 BIMAL RATH
+C                          VERBOSE              FEB   2007 ARDEAN LEITH                                    
+d12 1
+a12 1
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+d30 2
+a31 2
+C  PURPOSE: SEARCHES FOR THE ML HIGHEST PEAKS IN THE (REAL) IMAGE
+C           FILNAM AND SEPARATES THE PEAKS BY A NEIGHBOURHOOD DISTANCE
+d34 1
+a34 1
+C  SPEAKR(FILNAM,LUN,NSAM,NROW,MAXDIM,OPT,NDOC)
+d39 1
+a39 1
+C         NSAM,NROW    DIMENSIONS OF IMAGE
+d47 1
+a47 1
+C        NDOC          LOGICAL UNIT NUMBER FOR DOCUMENT FILE
+d60 1
+a60 1
+         SUBROUTINE SPEAKR(FILNAM,LUN,NSAM,NROW,MAXDIM,OPT,NDOC,ML,NOR)
+d63 1
+d67 12
+a78 14
+         CHARACTER *(*) FILNAM
+         CHARACTER      OPT
+         DIMENSION      DLIST(5),RSQ(9)
+         REAL,    DIMENSION(ML) ::   ALIST,RLIST
+         INTEGER, DIMENSION(ML) ::   ILIST,KLIST,KXLIST,IXLIST
+
+#ifdef USE_MPI
+         include 'mpif.h'
+         ICOMM  = MPI_COMM_WORLD
+         MPIERR = 0 
+         CALL MPI_COMM_RANK(ICOMM, MYPID, MPIERR)
+#else 
+         MYPID = -1 
+#endif
+d80 4
+a83 2
+         IF (MAXDIM .LT. 3*NSAM) THEN
+            CALL ERRT(6,'SPEAK ',NE)
+d95 3
+a97 2
+         NXCTR    = NSAM/2+1
+         NYCTR    = NROW/2+1
+d103 2
+a104 2
+            IF (NTAB .LE. 0 .OR. NTAB .GT. ML) THEN
+               CALL ERRT(25,'SPEAK',NE)
+d110 1
+d115 2
+a116 2
+         NSAM1  = NSAM-1
+         NROW1  = NROW -1
+d120 2
+a121 2
+         CALL REDLIN(LUN,BUF,NSAM,1)
+         CALL REDLIN(LUN,BUF(1+NSAM),NSAM,2)
+d123 1
+a123 1
+         DO  I = 3,NROW
+d127 7
+a133 5
+            I1A = (I1-1)*NSAM
+            I2A = (I2-1)*NSAM
+            I3A = (I3-1)*NSAM
+            CALL REDLIN(LUN,BUF(1+I3A),NSAM,I)
+            DO 150  K = 2,NSAM1
+d137 1
+a137 1
+               IF (A.LE.THRESH)       GOTO 150
+d140 9
+a148 8
+               IF (A.LE.BUF(K-1+I2A)) GOTO 150
+               IF (A.LE.BUF(K-1+I1A)) GOTO 150
+               IF (A.LE.BUF(K+I1A))   GOTO 150
+               IF (A.LE.BUF(K+1+I1A)) GOTO 150
+               IF (A.LE.BUF(K+1+I2A)) GOTO 150
+               IF (A.LE.BUF(K+1+I3A)) GOTO 150
+               IF (A.LE.BUF(K+I3A))   GOTO 150
+               IF (A.LE.BUF(K-1+I3A)) GOTO 150
+d150 16
+a165 12
+               DO 100 L = 1,ML
+                  IF (A .LE. ALIST(L)) GOTO 100
+                  IF (L .EQ. ML)GOTO 90
+                  L1 = L+1
+                  DO J = L1,ML
+                     JO = ML-J+L1
+                     JN = ML-J+L1-1
+                     ALIST(JO) = ALIST(JN)
+                     ILIST(JO) = ILIST(JN)
+                     KLIST(JO) = KLIST(JN)
+                  ENDDO
+90                ALIST(L) = A
+d168 4
+a171 4
+                  IF (NMAX .GT. ML) THRESH = ALIST(ML)
+                  GOTO 150
+100            CONTINUE
+150         CONTINUE
+d174 3
+a176 3
+         IF (NMAX .EQ. 0)  THEN
+            IF (MYPID .LE. 0) WRITE(NDAT,*) ' NO PEAK FOUND'
+            IF (NDAT .NE. NOUT .AND. MYPID .LE. 0) 
+d183 26
+a208 3
+         IF (VERBOSE) THEN
+            IF (MYPID .LE. 0) WRITE(NDAT,299)
+            IF (NDAT .NE. NOUT .AND. MYPID .LE. 0) WRITE(NDAT,299)
+a209 1
+299      FORMAT('    NO   NSAM  NROW    X     Y    VALUE         RATIO')
+d211 2
+a212 1
+         MLIST = MIN0(ML,NMAX)
+d224 1
+a224 1
+     &                            .GT. FN2) GOTO 2910
+d234 1
+d238 1
+a238 1
+               NPKCNT = NPKCNT + 1
+d242 11
+a252 8
+C              IF (L .EQ. 1 .AND. NDAT .NE. NOUT)
+               IF (OPT .EQ. 'D') THEN
+                  DLIST(1) = NPKCNT
+                  DLIST(2) = KXLIST(L)
+                  DLIST(3) = IXLIST(L)
+                  DLIST(4) = ALIST(L)
+                  DLIST(5) = RLIST(L)
+                  CALL SAVD(NDOC,DLIST,5,IRTFLG)
+d254 1
+a254 1
+               IF (VERBOSE .AND. NDAT .NE. NOUT .AND. MYPID .LE. 0)
+d259 1
+a259 1
+               IF (VERBOSE .AND. MYPID .LE. 0) 
+d265 1
+a265 2
+         CALL SAVDC
+         CLOSE(NDOC)
+d267 5
+a271 8
+         IDIFF = ML-NPKCNT
+         IF (MYPID .LE. 0) WRITE(NOUT,401) ML,NPKCNT,IDIFF
+401      FORMAT(' **',I5,' PEAKS SPECIFIED ',I6,' PEAKS PASSED ',
+     &       I6,' PEAKS EXCLUDED (NEIGB. DIST. )')
+
+         IF (NDAT .NE. NOUT .AND. MYPID .LE. 0) WRITE(NOUT,302)
+         IF (NDAT .NE. NOUT .AND. MYPID .LE. 0) WRITE(NOUT,302)
+302      FORMAT(/,' LARGEST PEAK:')
+d281 5
+a285 4
+            IROW = ILIST(1)+I-2
+            IF (IROW.LT.1) IROW=IROW+NROW
+            IF (IROW.GT.NROW) IROW = IROW-NROW
+            CALL REDLIN(LUN,BUF,NSAM,IROW)
+d287 1
+d289 3
+a291 3
+               ISAM = KL+K-2
+               IF (ISAM.LT.1) ISAM=ISAM+NSAM
+               IF (ISAM.GT.NSAM) ISAM=ISAM-NSAM
+d293 1
+a293 1
+               RSQ(I1+K) = BUF(ISAM)
+d298 15
+a312 4
+         IF (NOUT .NE. NDAT .AND. MYPID .LE. 0) 
+     &      WRITE(NOUT,351)XSH,YSH,PEAKV
+         IF (MYPID .LE. 0) WRITE(NDAT,351)XSH,YSH,PEAKV
+351      FORMAT('  + (',F5.2,', ',F5.2,')  PEAK VALUE = ',G15.7)
+a318 1
+         RETURN
+@
+
+
+1.5
+log
+@verbose flag
+@
+text
+@a7 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2007  Health Research Inc.                      *
+d9 5
+a13 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d15 1
+a15 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d20 1
+a20 1
+C=* This program is distributed in the hope that it will be useful,    *
+d22 1
+a22 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a23 1
+C=*                                                                    *
+d25 1
+a25 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.4
+log
+@sync write to stdout for MPI
+@
+text
+@d4 2
+a5 2
+C SPEAKR.F                       ADAPTED FROM SPEAK.F MARCH 2003 BIMAL RATH
+C                                     
+d9 1
+a9 1
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d33 3
+a35 3
+C  PURPOSE:  SEARCHES FOR THE ML HIGHEST PEAKS IN THE (REAL) IMAGE
+C            FILNAM AND SEPARATES THE PEAKS BY A NEIGHBOURHOOD DISTANCE
+C            AND PRINTS OUT POSITIONS AND VALUES OF THESE PEAKS.
+d72 3
+a74 2
+         REAL,    DIMENSION(ML) ::    ALIST,RLIST
+         INTEGER, DIMENSION(ML) ::    ILIST,KLIST,KXLIST,IXLIST
+d77 1
+a77 2
+         INTEGER MYPID, ICOMM, MPIERR
+         ICOMM   = MPI_COMM_WORLD
+a103 4
+C            CALL RDPRI1S(NTAB,NOT_USED,
+C     &             'ENTER PEAK NUMBER FOR RATIO',IRTFLG)
+C            IF (IRTFLG .NE. 0) RETURN
+
+d111 1
+a111 1
+         FN2=FNEIGH*FNEIGH
+d176 4
+a179 2
+         IF (MYPID .LE. 0) WRITE(NDAT,299)
+         IF (NDAT .NE. NOUT .AND. MYPID .LE. 0) WRITE(NDAT,299)
+d181 1
+d189 2
+a190 2
+               FK=KLIST(L)
+               FI=ILIST(L)
+d220 3
+a222 3
+               IF (NDAT .NE. NOUT .AND. MYPID .LE. 0)
+     &            WRITE(NOUT,301)NPKCNT,KLIST(L),ILIST(L),KXLIST(L),
+     &              IXLIST(L),ALIST(L),RLIST(L)
+d225 1
+a225 1
+               IF (MYPID .LE. 0) 
+d227 1
+a227 1
+     &             KXLIST(L), IXLIST(L),ALIST(L),RLIST(L)
+a238 1
+
+@
+
+
+1.3
+log
+@GPL License fixed
+@
+text
+@d74 9
+d172 3
+a174 2
+            WRITE(NDAT,*) ' NO PEAK FOUND'
+            IF (NDAT .NE. NOUT) WRITE(NOUT,*) ' NO PEAK FOUND'
+d180 2
+a181 2
+         WRITE(NDAT,299)
+         IF (NDAT .NE. NOUT) WRITE(NDAT,299)
+d221 1
+a221 1
+               IF (NDAT .NE. NOUT)
+d226 3
+a228 2
+               WRITE(NDAT,301) NPKCNT,KLIST(L),ILIST(L),KXLIST(L),
+     &              IXLIST(L),ALIST(L),RLIST(L)
+d236 1
+a236 1
+         WRITE(NOUT,401) ML,NPKCNT,IDIFF
+d241 2
+a242 2
+         IF (NDAT .NE. NOUT) WRITE(NOUT,302)
+         IF (NDAT .NE. NOUT) WRITE(NOUT,302)
+d268 3
+a270 2
+         IF (NOUT .NE. NDAT) WRITE(NOUT,351)XSH,YSH,PEAKV
+         WRITE(NDAT,351)XSH,YSH,PEAKV
+@
+
+
+1.2
+log
+@HRI GPL License used
+@
+text
+@a2 1
+C++************************************************************************
+a7 1
+C * SPIDER - MODULAR IMAGE PROCESSING SYSTEM.    AUTHOR: J.FRANK       *
+d11 1
+a11 1
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *  
+a30 6
+
+C * COPYRIGHT (C)1985, 2001. HEALTH RESEARCH INCORPORATED (HRI),       *
+C * ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+C * THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO HRI AND ARE NOT   *
+C * TO BE DISCLOSED TO OTHERS OR USED FOR PURPOSES OTHER THAN INTENDED *
+C * WITHOUT WRITTEN APPROVAL OF HRI.                                   *
+a61 1
+C--************************************************************************
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d2 1
+d10 24
+d69 1
+@
+

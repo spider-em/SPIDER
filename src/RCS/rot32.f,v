@@ -1,0 +1,660 @@
+head	1.9;
+access;
+symbols
+	pre_getangas:1.8
+	GPL2010:1.8
+	pre_GPL2010:1.7
+	pre_var_equation:1.7
+	pre_fftwrings:1.7
+	pre_opfiles:1.7
+	src:1.7
+	best-code:1.7
+	x-named-regs:1.7
+	x:1.7
+	v13-00:1.7
+	pre_GPL:1.5
+	prec_CA:1.5
+	noindx:1.5
+	Bproc:1.5
+	oct21:1.3
+	last77:1.3;
+locks; strict;
+comment	@c @;
+
+
+1.9
+date	2013.12.03.14.33.01;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2010.06.24.13.26.47;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2005.10.17.20.23.25;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2005.10.17.18.15.38;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2000.08.02.15.58.47;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	99.11.10.23.11.18;	author yuchen;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	99.02.05.13.54.25;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	97.10.14.21.19.38;	author pawel;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	94.05.13.12.52.23;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@copied from USER2:[PSIDER.CMSREF] on 11 May 1994
+@
+
+
+1.9
+log
+@VOLUME RECORD BUG
+@
+text
+@C++*******************************************************************
+C
+C ROT32.F      USED ALLOCATE                       AUG 00 ARDEAN LEITH
+C              VOLUME RECORD BUG                   DEC 13 ARDEAN LEITH
+C
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2013  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C    PURPOSE: ROTATE AN IMAGE BY AN ARBITRARY ANGLE OF
+C     DEGREE BETWEEN 0 AND 360.  CALLED WHEN THE IMAGE IS SMALL
+C     ENOUGH TO FIT IN THE BUFFER.
+C
+C    ROT32(LUNI,LUNO,NX,NROWS,NROWE,NROWSK,BUF,THETA,BACK,SHX,SHY)
+C
+C    PARAMETERS:
+C
+C       LUNI         LOGICAL UNIT NUMBER OF INPUT IMAGE
+C       LUNO         LOGICAL UNIT NUMBER OF OUTPUT IMAGE
+C	NX	     ROW LENGTH
+C	NROWS,NROWE  STARTING AND ENDING ROW
+C       NROWSK       SKIPPING FACTOR FOR ROWS
+C                    (VALUE <0 MEANS NON-SEQUENTIAL INPUT AND OUTPUT) 
+C       THETA        ROTATION ANGLE IN RADIANS
+C       BACK         AVERAGE OF INPUT IMAGE
+C       SHX,SHY      ORIGIN SHIFT
+C       IOFF         OUTPUT OFFSET
+C
+C       POSITIVE THETA: COUNTER-CLOCKWISE ROTATION
+C                       (MATHEMATICALLY POSITIVE DIRECTION)
+C
+C       AN IMAGE CAN BE A SLICE OF A THREE-DIMENSIONAL DENSITY
+C       DISTRIBUTION. FOR THIS REASON, A STARTING ROW UNEQUAL
+C       TO 1 AND AN ENDING ROW UNEQUAL TO NROW IS PERMITTED.
+C
+C--*******************************************************************
+
+	SUBROUTINE ROT32(LUNI,LUNO,NX,NROWS,NROWE,NROWSK,
+     &                   THETA,BACK,SHX,SHY,IOFF)
+
+        INCLUDE 'CMBLOCK.INC'
+        INCLUDE 'CMLIMIT.INC'
+
+	INTEGER  :: LUNI,LUNO,NX,NROWS,NROWE,NROWSK,IOFF
+        REAL     :: THETA,BACK,SHX,SHY
+
+        COMMON /IOBUF/ RBUF(NBUFSIZ)
+ 
+C       DIMENSIONS OF BUF ARE NX + NX * NROW,  WHERE
+C       NROW = ((NROWE-NROWS) / NROWSK) + 1
+
+        REAL, ALLOCATABLE  :: BUF(:)
+  
+	REAL, PARAMETER    ::  PI = 3.14159
+
+        IFLAG1 = 0
+        IF (NROWSK < 0) IFLAG1 = 1
+        IF (NROWSK < 0) NROWSK = -NROWSK
+
+        IF ( THETA == 0.0 ) THEN
+C          ZERO DEGREE ROTATION
+           II = 0
+
+	   DO  I=NROWS,NROWE,NROWSK
+              IF (IFLAG1 == 0) II = II + 1
+              IF (IFLAG1 == 1) II = I
+
+              CALL REDLIN(LUNI,RBUF,NX,I)
+	      CALL WRTLIN(LUNO,RBUF,NX,II)
+	   ENDDO
+	   RETURN
+        ENDIF
+
+ 	NXH   = NX/2
+	NROW  = ((NROWE-NROWS) / NROWSK) + 1
+	NROWH = NROW/2
+	KCENT = NXH+1
+	ICENT = NROWH+1
+
+        ALLOCATE (BUF(NX*NROW), STAT=IRTFLG)
+        IF (IRTFLG .NE. 0) THEN 
+            CALL ERRT(46,'ROT32, BUF',IER)
+            RETURN
+        ENDIF     
+
+  	IF (THETA >  PI) THETA = -2.0 * PI + THETA
+	IF (THETA < -PI) THETA =  2.0 * PI + THETA
+	COD = COS(THETA)
+	SID = SIN(THETA)
+
+C       READ IN WHOLE INPUT IMAGE
+        J = 0
+	DO  I = NROWS,NROWE,NROWSK
+           J = J + 1
+           L = (J-1)*(NX)+1
+           CALL REDLIN(LUNI,BUF(L),NX,I)        
+	ENDDO
+
+        !write(6,*) 'nrows,nrowe,nrowsk:',nrows,nrowe,nrowsk,irecoff
+
+C       NOW GO THROUGH OUTPUT COO SYSTEM; COMPUTE, FOR EACH POINT IN
+C       ROW, THE POSITION IN THE OLD COO SYSTEM.
+C       THEN CALCULATE POINT FROM FOUR SURROUNDING POINTS USING BILINEAR
+C       INTERPOLATION. WRITE OUT EACH LINE AS YOU GO ALONG.
+
+C       JUST TO ALLOW A CHANGE IN THE ROTATIONAL CENTER
+C       (RELATIVE TO THE CENTRAL PIXEL)
+
+        RICENT = ICENT + SHY
+        RKCENT = KCENT + SHX  
+
+        JJ     = 0
+	DO  I = 1,NROW
+           JJ = JJ+1
+           IF (IFLAG1 == 1) II = NROWS + (I-1) * NROWSK
+           IF (IFLAG1 == 0) II = I
+
+           Y    = I - RICENT
+           YCOD =  Y * COD + RICENT
+           YSID = -Y * SID + RKCENT
+
+           DO K = 1,NX
+              RBUF(K) = BACK
+              X       = K - RKCENT
+              XOLD    = X * COD + YSID
+              YOLD    = X * SID + YCOD
+              IYOLD   = YOLD
+              YDIF    = YOLD - IYOLD
+              YREM    = 1.   - YDIF
+              IXOLD   = XOLD
+
+              IF ((IYOLD >= 1 .AND. IYOLD <= NROW-1) .AND.
+     &            (IXOLD >= 1 .AND. IXOLD <= NX-1)) THEN
+
+c                INSIDE BOUNDARIES OF OUTPUT IMAGE
+                 XDIF    = XOLD - IXOLD
+                 XREM    = 1.   - XDIF
+                 NADDR   = (IYOLD-1) * NX + IXOLD 
+                 RBUF(K) = YDIF * (BUF(NADDR+NX) * XREM +
+     &                     BUF(NADDR+NX+1)*XDIF) +
+     &                     YREM * (BUF(NADDR)*XREM + BUF(NADDR+1)*XDIF)
+
+              ENDIF
+           ENDDO
+
+           IRECT = II + IOFF
+           CALL WRTLIN(LUNO,RBUF,NX,IRECT)
+	ENDDO
+
+        IF (ALLOCATED(BUF)) DEALLOCATE(BUF)
+
+	END
+@
+
+
+1.8
+log
+@GPL_2010
+@
+text
+@d3 2
+a4 1
+C ROT32.F                          USED ALLOCATE AUGUST 00 ARDEAN LEITH
+d10 1
+a10 1
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+d28 2
+a29 3
+C    PURPOSE: 
+C     ROTATE AN IMAGE BY AN ARBITRARY ANGLE OF
+C     DEGREE BETWEEN 0 AND 360.  IT IS CALLED WHEN THE IMAGE IS SMALL
+d32 1
+a32 1
+C    ROT32(LUNI,LUNO,NSAM,NROWS,NROWE,NROWSK,BUF,THETA,BACK,SHX,SHY)
+d38 1
+a38 1
+C	NSAM	     ROW LENGTH
+d41 1
+a41 1
+C                    (A NEGATIVE VALUE MEANS NONSEQUENTIAL INPUT AND OUTPUT) 
+d45 1
+d50 3
+a52 3
+C        AN IMAGE CAN BE A SLICE OF A THREE-DIMENSIONAL DENSITY
+C        DISTRIBUTION. FOR THIS REASON, A STARTING ROW UNEQUAL
+C        TO 1 AND AN ENDING ROW UNEQUAL TO NROW IS PERMITTED.
+d56 2
+a57 2
+	SUBROUTINE ROT32
+     &     (LUNI,LUNO,NSAM,NROWS,NROWE,NROWSK,THETA,BACK,SHX,SHY)
+d60 4
+a64 1
+        INCLUDE 'CMLIMIT.INC'
+d67 1
+a67 1
+C       ACTUAL DIMENSIONS OF BUF ARE NSAM + NSAM * NROW,  WHERE
+d69 2
+a70 1
+        REAL, ALLOCATABLE, DIMENSION(:) :: BUF
+d72 1
+a72 1
+	DATA PI/3.14159/
+d75 2
+a76 2
+        IF (NROWSK.LT.0) IFLAG1 = 1
+        IF (NROWSK.LT.0) NROWSK = -NROWSK
+d78 1
+a78 1
+        IF (THETA .EQ. 0.) THEN
+d81 1
+d83 5
+a87 4
+              IF (IFLAG1 .EQ. 0) II = II + 1
+              IF (IFLAG1 .EQ. 1) II = I
+              CALL REDLIN(LUNI,RBUF,NSAM,I)
+	      CALL WRTLIN(LUNO,RBUF,NSAM,II)
+d92 1
+a92 1
+ 	NSAMH = NSAM/2
+d95 1
+a95 1
+	KCENT = NSAMH+1
+d98 1
+a98 1
+        ALLOCATE (BUF(NSAM*NROW), STAT=IRTFLG)
+d104 2
+a105 2
+10	IF (THETA .GT. PI)  THETA = -2.*PI+THETA
+	IF (THETA .LT. -PI) THETA = 2.*PI+THETA
+d113 2
+a114 2
+           L = (J-1)*(NSAM)+1
+           CALL REDLIN(LUNI,BUF(L),NSAM,I)        
+d117 2
+d133 3
+a135 2
+           IF (IFLAG1 .EQ. 1) II = NROWS + (I-1) * NROWSK
+           IF (IFLAG1 .EQ. 0) II = I
+d137 1
+a137 1
+           YCOD = Y * COD + RICENT
+d139 2
+a140 1
+           DO K = 1,NSAM
+d149 4
+a152 2
+              IF ((IYOLD .GE. 1 .AND. IYOLD .LE. NROW-1) .AND.
+     &            (IXOLD .GE. 1 .AND. IXOLD .LE. NSAM-1)) THEN
+d155 6
+a160 5
+                 XREM    = 1. - XDIF
+                 NADDR   = (IYOLD-1) * NSAM + IXOLD 
+                 RBUF(K) = YDIF*(BUF(NADDR+NSAM)*XREM
+     &                    +BUF(NADDR+NSAM+1)*XDIF)
+     &                    +YREM*(BUF(NADDR)*XREM + BUF(NADDR+1)*XDIF)
+d164 2
+a165 1
+           CALL WRTLIN(LUNO,RBUF,NSAM,II)
+a169 1
+	RETURN
+@
+
+
+1.7
+log
+@GPL License fixed
+@
+text
+@a5 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d7 5
+a11 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d13 1
+a13 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d18 1
+a18 1
+C=* This program is distributed in the hope that it will be useful,    *
+d20 1
+a20 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a21 1
+C=*                                                                    *
+d23 1
+a23 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.6
+log
+@HRI GPL License used
+@
+text
+@a5 3
+C **************************************************************************
+C * SPIDER - MODULAR IMAGE PROCESSING SYSTEM.  AUTHOR: J.FRANK         *
+C *  SPIDER - MODULAR IMAGE PROCESSING SYSTEM.  AUTHOR: J.FRANK            *
+d9 1
+a9 1
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *  
+a28 7
+
+C *  COPYRIGHT (C)1981,1987, WADSWORTH CENTER FOR LABORATORIES AND         *
+C *  RESEARCH, NEW YORK STATE DEPARTMENT OF HEALTH, ALBANY, NY 12201.      *
+C *    THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO THE CENTER FOR     *
+C *    LABORATORIES AND RESEARCH AND ARE NOT TO BE DISCLOSED TO OTHERS OR  *
+C *    USED FOR PURPOSES OTHER THAN INTENDED WITHOUT WRITTEN APPROVAL OF   *
+C *    THE CENTER FOR LABORATORIES AND RESEARCH 			   *
+a29 1
+C **************************************************************************
+@
+
+
+1.5
+log
+@allocation added to handle all sizes (rot.f removed)
+@
+text
+@d5 1
+d7 1
+d9 24
+d39 1
+@
+
+
+1.4
+log
+@a
+@
+text
+@d3 1
+a3 1
+C ROT32.FOR
+d15 2
+a16 3
+C    ROT32:    ROTATE AN IMAGE
+C
+C     THIS SUBROUTINE WILL ROTATE AN IMAGE BY AN ARBITRARY ANGLE OF
+d20 4
+a23 1
+C    ROT32(LUNI,LUNO,NSAM,NROWS,NROWE,NROWSK,NBUF,THETA,AV,SHX,SHY)
+a27 2
+C                    (A NEGATIVE NROWE MEANS THAT THE BUFFER IS NOT
+C                     GOING TO BE WRITTING IN DISK BUT LEFT IN BUFFER)
+a29 1
+C       NBUF         LENGTH OF BUFFER ARRAY AVAILABLE
+d31 1
+a31 1
+C       AV           AVERAGE OF INPUT IMAGE
+d34 2
+a35 2
+C              POSITIVE THETA: COUNTER-CLOCKWISE ROTATION
+C                              (MATHEMATICALLY POSITIVE DIRECTION)
+d37 3
+a39 3
+C		AN IMAGE CAN BE A SLICE OF A THREE-DIMENSIONAL DENSITY
+C		DISTRIBUTION. FOR THIS REASON, A STARTING ROW UNEQUAL
+C		TO 1 AND AN ENDING ROW UNEQUAL TO NROW IS PERMITTED.
+d44 1
+a44 3
+     &     (LUNI,LUNO,NSAM,NROWS,NROWE,NROWSK,NBUF,THETA,AV,SHX,SHY)
+
+ 
+d46 1
+a46 2
+C       I DO NOT KNOW IF SAVE IS NEEDED FEB 99 al
+        SAVE
+d48 2
+a49 3
+	COMMON ADUM (80), BUF(1)
+	COMMON /UNITS/LUN,NIN,NOUT,NECHO,IFOUND,NPROC,NDAT
+	INTEGER   NBUF,NADDR,L,I4 
+d51 4
+d56 16
+a71 1
+	I4(I)=I
+a72 18
+        IFLAG1=0
+        IFLAG2=0
+        IF (NROWSK.LT.0) IFLAG1=1
+        IF (NROWSK.LT.0) NROWSK=-NROWSK
+        IF (NROWE.LT.0)  IFLAG2=1
+        IF (NROWE.LT.0)  NROWE=-NROWE	
+        IF ((THETA.NE.0.).OR.(IFLAG2.EQ.1)) GOTO 4
+C	CALL COPY(LUNI,LUNO,NSAM,NROW)
+        II=0
+	DO  I=NROWS,NROWE,NROWSK
+          IF (IFLAG1.EQ.0) II=II+1
+          IF (IFLAG1.EQ.1) II=I
+          CALL REDLIN(LUNI,BUF,NSAM,I)
+	  CALL WRTLIN(LUNO,BUF,NSAM,II)
+	ENDDO
+	RETURN
+4       CONTINUE
+C
+d74 1
+a74 1
+	NROW=((NROWE-NROWS)/NROWSK)+1
+d78 9
+a86 9
+C
+	NOFF1 = NSAM
+	IF (NOFF1+I4(NSAM)*I4(NROW).LE.NBUF) GOTO 10
+	CALL ERRT(34,'ROT32 ',NE)
+	RETURN
+
+C HERE INSERT CORRECT ERROR NUMBER. DIDN'T HAVE IT HANDY.
+10	IF(THETA.GT.PI) THETA = -2.*PI+THETA
+	IF(THETA.LT.-PI) THETA = 2.*PI+THETA
+d89 3
+a91 3
+C
+C READ IN INPUT MATRIX
+        J=0
+d93 3
+a95 3
+        J=J+1
+        L = I4(J-1)*I4(NSAM)+1
+        CALL REDLIN(LUNI,BUF(NOFF1+L),NSAM,I)        
+d98 4
+a101 5
+
+C NOW GO THROUGH OUTPUT COO SYSTEM; COMPUTE, FOR EACH POINT IN
+C ROW, THE POSITION IN THE OLD COO SYSTEM.
+C THEN CALCULATE POINT FROM FOUR SURROUNDING POINTS USING BILINEAR
+C INTERPOLATION. WRITE OUT EACH LINE AS YOU GO ALONG.
+d103 2
+a104 2
+C  JUST TO ALLOW A CHANGE IN THE ROTATIONAL CENTER
+C   (RELATIVE TO THE CENTRAL PIXEL)
+d106 2
+a107 2
+        RICENT=ICENT+SHY
+        RKCENT=KCENT+SHX  
+d109 1
+a109 2
+        NOFF2=NOFF1+NSAM*NROW
+        JJ=0
+d111 26
+a136 30
+        JJ=JJ+1
+        IF (IFLAG1.EQ.1) II=NROWS+(I-1)*NROWSK
+        IF (IFLAG1.EQ.0) II=I
+	Y = I-RICENT
+	YCOD = Y*COD + RICENT
+	YSID = -Y*SID + RKCENT
+	DO 80 K = 1,NSAM
+	BUF(K) = AV
+	X = K-RKCENT
+	XOLD = X*COD + YSID
+	YOLD = X*SID + YCOD
+	IYOLD = YOLD
+	IF(IYOLD.LT.1.OR.IYOLD.GT.NROW-1) GOTO 80
+	YDIF = YOLD -IYOLD
+	YREM = 1.-YDIF
+	IXOLD = XOLD
+	IF(IXOLD.LT.1.OR.IXOLD.GT.NSAM-1) GOTO 80
+	XDIF = XOLD - IXOLD
+	XREM = 1.-XDIF
+	NADDR = I4(IYOLD-1)*I4(NSAM) + IXOLD + NOFF1 
+        IF (IFLAG2.EQ.0) THEN 
+           BUF(K) = YDIF*(BUF(NADDR+NSAM)*XREM
+     &                   +BUF(NADDR+NSAM+1)*XDIF)
+     &                   +YREM*(BUF(NADDR)*XREM + BUF(NADDR+1)*XDIF)
+     
+                    ELSE IF (IFLAG2.EQ.1) THEN
+            BUF(NOFF2+(JJ-1)*NROW+K) = YDIF*(BUF(NADDR+NSAM)*XREM
+     &                   +BUF(NADDR+NSAM+1)*XDIF)
+     &                   +YREM*(BUF(NADDR)*XREM + BUF(NADDR+1)*XDIF)
+        END IF
+d138 1
+a138 2
+80	CONTINUE
+        IF (IFLAG2.EQ.0) CALL WRTLIN (LUNO,BUF,NSAM,II)
+d140 3
+@
+
+
+1.3
+log
+@CNO_SAVE
+@
+text
+@d47 1
+a47 1
+CNO_SAVE 
+@
+
+
+1.2
+log
+@*** empty log message ***
+@
+text
+@a14 1
+C
+d45 3
+a47 1
+     1  (LUNI,LUNO,NSAM,NROWS,NROWE,NROWSK,NBUF,THETA,AV,SHX,SHY)
+d49 3
+d54 2
+a55 1
+	INTEGER   NBUF,NADDR,L,I4  
+d101 2
+a102 2
+C
+C
+d107 1
+a107 1
+C
+d110 1
+a110 1
+C
+d113 1
+a113 1
+C
+d138 3
+a140 3
+         	BUF(K) = YDIF*(BUF(NADDR+NSAM)*XREM
+     1                   +BUF(NADDR+NSAM+1)*XDIF)
+     2                   +YREM*(BUF(NADDR)*XREM + BUF(NADDR+1)*XDIF)
+d143 3
+a145 3
+	        BUF(NOFF2+(JJ-1)*NROW+K) = YDIF*(BUF(NADDR+NSAM)*XREM
+     1                   +BUF(NADDR+NSAM+1)*XDIF)
+     2                   +YREM*(BUF(NADDR)*XREM + BUF(NADDR+1)*XDIF)
+d147 1
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d63 1
+a63 1
+	DO 599 I=NROWS,NROWE,NROWSK
+d68 1
+a68 1
+ 599    CONTINUE
+d91 1
+a91 1
+	DO 50 I = NROWS,NROWE,NROWSK
+d95 1
+a95 1
+50	CONTINUE
+d111 1
+a111 1
+	DO 100 I = 1,NROW
+d144 1
+a144 1
+100	CONTINUE
+@

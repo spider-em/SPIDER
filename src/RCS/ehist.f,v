@@ -1,0 +1,490 @@
+head	1.11;
+access;
+symbols
+	pre_getangas:1.11
+	GPL2010:1.11
+	pre_GPL2010:1.10
+	pre_var_equation:1.10
+	pre_fftwrings:1.10
+	pre_opfiles:1.10
+	src:1.10
+	best-code:1.10
+	x-named-regs:1.10
+	x:1.10
+	v13-00:1.10
+	pre_GPL:1.8
+	prec_CA:1.8
+	noindx:1.8
+	Bproc:1.7
+	oct21:1.7
+	last77:1.6;
+locks; strict;
+comment	@c @;
+
+
+1.11
+date	2010.06.24.13.25.30;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2005.10.17.20.52.05;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2005.10.17.18.42.29;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2002.04.09.14.50.02;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	99.09.08.16.59.07;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	98.08.10.19.13.26;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	98.03.04.15.07.23;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	97.10.06.19.28.47;	author pawel;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	96.08.13.18.56.49;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	96.02.08.17.00.15;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	94.05.13.12.48.27;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@copied from USER2:[PSIDER.CMSREF] on 11 May 1994
+@
+
+
+1.11
+log
+@GPL_2010
+@
+text
+@
+C++*********************************************************************
+C
+C    EHIST.F             FILENAMES LENGTHENED JAN 89 al
+C                        REMOVED RHIST AUG 96 al
+C                        VOLUMES APRIL 2002 al
+C
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C    EHIST(FILNAM,LUN1,LUN2,NSAM,NROW)
+C
+C    PURPOSE:      HISTOGRAM EQUALIZATION
+C
+C    PARAMETERS:
+C        FILNAM    NAME OF FILE
+C        LUN1      LOGICAL UNIT NUMBER OF FILE
+C        LUN2      LOGICAL UNIT NUMBER OF FILE
+C        NSAM      NUMBER OF SAMPLES
+C        NROW      NUMBER OF ROWS
+C        NSLICE    NUMBER OF SLICES
+C
+C--*********************************************************************
+
+      SUBROUTINE EHIST(FILNAM,LUN1,LUN2,NSAM,NROW,NSLICE)
+
+      INCLUDE 'CMBLOCK.INC'
+      INCLUDE 'CMLIMIT.INC'
+
+      COMMON         BUF(1)
+      COMMON /IOBUF/ REDBUF(NBUFSIZ)
+
+      CHARACTER *(*) FILNAM
+      CHARACTER      NULL,ANS
+      LOGICAL        MAPOUT,HISOUT
+
+      NULL   =  CHAR(0)
+
+      MAPOUT = .FALSE.
+      HISOUT = .FALSE.
+      CALL RDPRMC(ANS,NC,.TRUE.,
+     &   'MAPPING FUNCTION AND HISTOGRAM PRINTOUT? (Y/N)',NULL,IRTFLG)
+      IF (IRTFLG .NE. 0) RETURN
+
+      IF (ANS .NE. 'N') THEN
+        MAPOUT = .TRUE.
+        HISOUT = .TRUE.
+      ENDIF
+
+C     FIND HISTOGRAM OF IMAGE, PLACE IT IN BUF
+CCC   CALL HIST(LUN1,NSAM,NSLICE,NROW,0,0,.FALSE.) aug 98 al
+      CALL HIST(LUN1,0,0,NSAM,NROW,NSLICE,HMIN,HMAX,HSIG,HMODE)
+
+C     FIND CUMULATIVE DISTRIBUTION (HISTOGRAM MAPPING FUNCTION)
+      DO K = 2,128
+         BUF(K) = BUF(K) + BUF(K-1)
+      ENDDO
+
+      IF (MAPOUT) THEN
+C       PRINT HISTOGRAM MAPPING FUNCTION IN RESULTS FILE
+        CALL PDATES(FILNAM,0)
+        WRITE(NDAT,*) ' HISTOGRAM MAPPING FUNCTION'
+        CALL GRAPHS(NDAT,BUF,128,1,1,1.0,IRTFLG)
+CCC     CALL GRAPHS(BUF(NSAM+1),128,1) aug 98 al
+      ENDIF
+
+C     HMIN IS MIN OF CUMULATIVE FUNCTION, HMAX IS MAX (TOTAL # OF PIXELS)
+      HMIN = BUF(1)
+      HMAX = BUF(1)
+      DO  K = 1,128
+         HB = BUF(K)
+         IF (HB .LT. HMIN) HMIN = HB
+         IF (HB .GT. HMAX) HMAX = HB
+      ENDDO
+
+      VAL = 2.0 / (HMAX-HMIN)
+      DO  K = 1,128
+        BUF(K) = (BUF(K) - HMIN) * VAL
+      ENDDO
+
+C     HINC IS INCREMENT OF ORIGINAL IMAGE RANGE CORRESPOINDING TO 1 HISTOGRAM UNIT
+      HINC  = (FMAX-FMIN) / 127.0
+      FAC   = (-FMIN/HINC)+ 1.5
+      HINCR = 1.0 / HINC
+
+C     CONVERT IMAGE VALUES TO MAPPED VALUES
+      DO  I = 1,NROW*NSLICE
+         CALL REDLIN(LUN1,REDBUF,NSAM,I)
+         DO  K = 1,NSAM
+
+C          MAP IMAGE VALUE TO RANGE 1...128
+C**        MAP  = (REDBUF(K)-FMIN)/HINC +1.5
+           MAP  = REDBUF(K) * HINCR + FAC
+
+C          REPLACE IMAGE VALUE BY HISTOGRAM MAPPED VALUE
+           REDBUF(K) = BUF(MAP)
+	 ENDDO
+         CALL WRTLIN(LUN2,REDBUF,NSAM,I)
+      ENDDO
+
+C     SET IMAGE HEADER FOR NEW IMAGE CONTENTS
+      CALL SETPRM(LUN2,NSAM,NROW,0.0,0.0,0.0,'U')
+
+C     PRINT HISTOGRAM IN RESULTS FILE IF DESIRED
+      IF (HISOUT) CALL HIST(LUN2,0,0,NSAM,NROW,NSLICE,
+     &                      HMIN,HMAX,HSIG,HMODE)
+
+      RETURN
+      END
+@
+
+
+1.10
+log
+@GPL License fixed
+@
+text
+@a8 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d10 5
+a14 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d16 1
+a16 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d21 1
+a21 1
+C=* This program is distributed in the hope that it will be useful,    *
+d23 1
+a23 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a24 1
+C=*                                                                    *
+d26 1
+a26 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.9
+log
+@HRI GPL License used
+@
+text
+@a2 1
+C++************************************************************************
+a8 3
+C **************************************************************************
+C * SPIDER - MODULAR IMAGE PROCESSING SYSTEM.  AUTHOR: J.FRANK         *
+C *  SPIDER - MODULAR IMAGE PROCESSING SYSTEM.  AUTHOR: J.FRANK            *
+d12 1
+a12 1
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *  
+a31 7
+
+C *  COPYRIGHT (C)1981,1987, WADSWORTH CENTER FOR LABORATORIES AND         *
+C *  RESEARCH, NEW YORK STATE DEPARTMENT OF HEALTH, ALBANY, NY 12201.      *
+C *    THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO THE CENTER FOR     *
+C *    LABORATORIES AND RESEARCH AND ARE NOT TO BE DISCLOSED TO OTHERS OR  *
+C *    USED FOR PURPOSES OTHER THAN INTENDED WITHOUT WRITTEN APPROVAL OF   *
+C *    THE CENTER FOR LABORATORIES AND RESEARCH 			   *
+a32 1
+C **************************************************************************
+a46 1
+C--************************************************************************
+@
+
+
+1.8
+log
+@volumes
+@
+text
+@d2 1
+d9 1
+d11 1
+d13 24
+d43 1
+d58 1
+@
+
+
+1.7
+log
+@CMLIMIT.INC
+@
+text
+@d4 4
+a7 2
+C    EHIST.F                            FILENAMES LENGTHENED JAN 89 al
+C                                       REMOVED RHIST AUG 96 al
+d94 1
+a94 1
+      DO  I = 1,NROW
+@
+
+
+1.6
+log
+@changed graphs parameters & hist parameters
+@
+text
+@d33 1
+a33 1
+CNO_SAVE
+a35 1
+      PARAMETER      (NBUFSIZ = 17008)
+@
+
+
+1.5
+log
+@removed IHIST variable (unused)
+@
+text
+@d4 1
+a4 2
+C    EHIST.FOR
+C                                       FILENAMES LENGTHENED JAN 89 al
+d26 1
+d32 2
+a33 4
+      COMMON IPLOT(128),BUF(1)
+      COMMON /MASTER/ NSAMC,NROWC,IREC,NLABEL,IFORM,IMAMI,FMAX,FMIN,
+     1                AV,SIG,IHIST
+      COMMON/UNITS/ LUN,NIN,NOUT,NECHO,IFOUND,NPROC,NDAT
+d35 4
+d56 3
+a58 3
+C     FIND HISTOGRAM OF IMAGE
+      CALL HIST(LUN1,NSAM,NSLICE,NROW,0,0,.FALSE.)
+
+d62 1
+a62 1
+          BUF(NSAM+K) = BUF(NSAM+K)+BUF(NSAM+K-1)
+d69 2
+a70 1
+        CALL GRAPHS(BUF(NSAM+1),128,1)
+d74 2
+a75 2
+      HMIN = BUF(NSAM+1)
+      HMAX = HMIN
+d77 1
+a77 1
+         HB = BUF(NSAM+K)
+d84 1
+a84 1
+        BUF(NSAM+K) = (BUF(NSAM+K) - HMIN) * VAL
+d88 2
+a89 3
+      HINC = (FMAX-FMIN) / 127.0
+      AV   = 0.0
+      FAC  = (-FMIN/HINC)+ 1.5
+d94 1
+a94 1
+         CALL REDLIN(LUN1,BUF,NSAM,I)
+d98 2
+a99 2
+C**           MAP  = (BUF(K)-FMIN)/HINC +1.5
+           MAP  = BUF(K) * HINCR + FAC
+d102 1
+a102 3
+           T      = BUF(NSAM+MAP)
+           AV     = AV+T
+           BUF(K) = T
+d104 1
+a104 1
+         CALL WRTLIN(LUN2,BUF,NSAM,I)
+a106 1
+
+d108 1
+a108 5
+      AV    = AV/(FLOAT(NSAM)*FLOAT(NROW))
+      FMAX  = 2.
+      FMIN  = 0.
+      SIG   = -1.
+      CALL SETPRM(LUN2,NSAM,NROW,FMAX,FMIN,AV,'U')
+d111 2
+a112 1
+      IF (HISOUT) CALL HIST(LUN2,NSAM,NROW,NSLICE,0,0,.FALSE.)
+@
+
+
+1.4
+log
+@*** empty log message ***
+@
+text
+@a109 1
+      IHIST = 0
+@
+
+
+1.3
+log
+@removed rhist & whist stuff
+@
+text
+@d73 1
+a73 1
+      DO 120 K = 1,128
+d77 1
+a77 1
+120   CONTINUE
+d80 1
+a80 1
+      DO 150 K = 1,128
+d82 1
+a82 1
+150   CONTINUE
+d91 1
+a91 1
+      DO 200 I = 1,NROW
+d93 1
+a93 1
+         DO 180 K = 1,NSAM
+d103 1
+a103 1
+180      CONTINUE
+d105 1
+a105 1
+200   CONTINUE
+@
+
+
+1.2
+log
+@hist parameters changed (to remove radius, etc)
+>> .
+hist parameters changed (to remove radius, etc)
+>> .
+hist parameters changed (to remove radius, etc)
+>> .
+@
+text
+@d6 1
+d54 2
+a55 8
+      IF (IHIST .NE. 1) THEN
+C       FIND HISTOGRAM OF IMAGE
+        CALL HIST(LUN1,NSAM,NSLICE,NROW,0,0,.FALSE.)
+
+      ELSE
+C       RECOVER HISTGRAM FROM HISTOGRAM RECORDS OF IMAGE FILE
+        CALL RHIST(LUN1,BUF(NSAM+1),NSAM,NROW,NSLICE,IER)
+      ENDIF
+d59 3
+a61 3
+      DO 100 K = 2,128
+100   BUF(NSAM+K) = BUF(NSAM+K)+BUF(NSAM+K-1)
+
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d4 1
+a4 1
+C $$ EHIST.FOR
+d16 1
+a16 1
+C $$ EHIST(FILNAM,LUN1,LUN2,NSAM,NROW)
+d40 1
+a40 1
+      NULL=CHAR(0)
+d55 1
+a55 1
+        CALL HIST(LUN1,NSAM,NSLICE,NROW,0)
+d122 1
+a122 1
+      IF (HISOUT) CALL HIST(LUN2,NSAM,NROW,NSLICE,0)
+@

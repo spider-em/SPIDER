@@ -1,0 +1,666 @@
+head	1.8;
+access;
+symbols
+	pre_getangas:1.6
+	GPL2010:1.6
+	pre_GPL2010:1.5
+	pre_var_equation:1.5;
+locks; strict;
+comment	@c @;
+
+
+1.8
+date	2013.01.04.14.48.49;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2012.12.28.16.30.05;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2010.06.24.13.26.11;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2009.05.15.14.53.15;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2008.10.31.15.19.07;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2008.10.21.17.23.40;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2008.10.20.14.51.57;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2008.10.17.12.43.07;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.8
+log
+@MPI_LONG_LONG_INT buggy??
+@
+text
+@
+C ++********************************************************************
+C
+C MPI.F   MPI SUPPORT                               OCT 08 ARDEAN LEITH
+C         ADDED SET_MPI                             MAY 09 ARDEAN LEITH
+C         LONG_LONG _INT                            DEC 12 ARDEAN LEITH
+C
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2012 Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C  CONTAINS:
+C    BCAST_MPI(OPER,VARNAME,VAR,ILEN,CMPITYPE,ICOMM)
+C    SEND_MPI (OPER,VARNAME,VAR,ILEN,CMPITYPE,IDEST,ITAG,ICOMM)
+C    RECV_MPI (OPER,VARNAME,VAR,ILEN,CMPITYPE,ISOURCE,ITAG,ICOMM)
+C    ALLREDUCE_MPI(OPER,VARNAME,VARIN,VAROUT,ILEN,CMPITYPE,CMPIHOW,ICOMM)
+C    SET_MPI(ICOMM,MYPID,IRTFLG)
+C
+C  PURPOSE:  MY MPI SUPPORT ROUTINES
+C            
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C***********************************************************************
+
+
+C **********************************************************************
+C
+C  BCAST_MPI(OPER,VARNAME, VAR,ILEN, CMPITYPE,ICOMM)
+C
+C  PURPOSE:  BRROADCASTS MSG IN MPI
+C            
+C  PARAMETERS:  OPER        OPERATION                             (SENT)
+C               VARNAME     VARIABLE NAME                         (SENT)
+C               VAR         VARIABLE POITER                       (SENT)
+C               ILEN        VARIABLE LENGTH                       (SENT)
+C               MPITYPE     VARIABLE TYPE (I,F,C,L,D..)           (SENT)
+C               ICOMM       MPI SERIES                            (SENT)
+C                                                     
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C***********************************************************************
+
+        SUBROUTINE BCAST_MPI(OPER,VARNAME, VAR,ILEN, CMPITYPE,ICOMM)
+
+#ifdef USE_MPI
+        include 'mpif.h'
+
+        CHARACTER(LEN=*), INTENT(IN) :: OPER
+        CHARACTER(LEN=*), INTENT(IN) :: VARNAME
+        REAL, INTENT(IN)             :: VAR      ! ACTUALLY A POINTER
+        INTEGER, INTENT(IN)          :: ILEN,ICOMM
+        CHARACTER(LEN=1), INTENT(IN) :: CMPITYPE
+        INTEGER                      :: MPIERR,ILENT,NLETO,NLETV
+        INTEGER                      :: MPITYPE
+
+        CALL TYPE_MPI(CMPITYPE,MPITYPE)
+
+        ILENT = MAX(ILEN,1)
+        CALL MPI_BCAST(VAR,ILENT,MPITYPE, 0,ICOMM,MPIERR)
+
+        IF (MPIERR .NE. 0) THEN
+           NLETO = lnblnkn(OPER)
+           NLETV = lnblnkn(VARNAME)
+           WRITE(0,*)OPER(:NLETO),'; FAILED TO BCAST: ',VARNAME(:NLETV)
+           STOP 'FAILED IN BCAST_MPI'
+        ENDIF
+#else
+C       DUMMY ROUTINE, FOR NON-MPI USE
+        RETURN
+#endif
+        END
+
+C **********************************************************************
+C
+C  RECV_MPI(OPER,VARNAME, VAR, ILEN, CMPITYPE, ISOURCE,ITAG, ICOMM)
+C
+C  PURPOSE:  RECEIVES MSG IN MPI
+C            
+C  PARAMETERS:  OPER        OPERATION                             (SENT)
+C               VARNAME     VARIABLE NAME                         (SENT)
+C               VAR         VARIABLE POITER                       (SENT)
+C               ILEN        VARIABLE LENGTH                       (SENT)
+C               CMPITYPE    VARIABLE TYPE (I,F,C,L,D..)           (SENT)
+C               ISOURCE     SOURCE OF MESSAGE                     (SENT)
+C               ITAG        MSG. TAG                              (SENT)
+C               ICOMM       MPI SERIES                            (SENT)
+C                                                     
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C***********************************************************************
+
+        SUBROUTINE RECV_MPI(OPER,VARNAME, VAR, ILEN, CMPITYPE,
+     &                      ISOURCE,ITAG, ICOMM)
+
+#ifdef USE_MPI
+        include 'mpif.h'
+
+        CHARACTER(LEN=*), INTENT(IN) :: OPER
+        CHARACTER(LEN=*), INTENT(IN) :: VARNAME
+        REAL, INTENT(IN)             :: VAR       ! ACTUALLY A POINTER
+        INTEGER, INTENT(IN)          :: ILEN,ISOURCE,ITAG,ICOMM
+        CHARACTER(LEN=1), INTENT(IN) :: CMPITYPE
+
+        INTEGER                      :: MPIERR,ILENT,NLETO,NLETV,ITAGT
+        INTEGER                      :: MPITYPE
+
+        CALL TYPE_MPI(CMPITYPE,MPITYPE)
+
+        ILENT = MAX(ILEN,1)
+
+        ITAGT = ITAG
+        IF (ITAGT .LE. 0) ITAGT = MPI_ANY_TAG  
+
+        CALL MPI_RECV(VAR,ILENT,MPITYPE, ISOURCE,ITAGT,
+     &                ICOMM, MPI_STATUS_IGNORE, MPIERR)
+
+        IF (MPIERR .NE. 0) THEN
+           NLETO = lnblnkn(OPER)
+           NLETV = lnblnkn(VARNAME)
+           WRITE(0,*)OPER(:NLETO),'; FAILED TO RECV: ',VARNAME(:NLETV)
+           STOP
+        ENDIF
+#else
+C       DUMMY ROUTINE, FOR NON-MPI USE
+        RETURN
+#endif
+        END
+
+C **********************************************************************
+C
+C  SEND_MPI(OPER,VARNAME, VAR, ILEN, CMPITYPE, ISOURCE,ITAG, ICOMM)
+C
+C  PURPOSE:  SENDS MSG IN MPI
+C            
+C  PARAMETERS:  OPER        OPERATION                             (SENT)
+C               VARNAME     VARIABLE NAME                         (SENT)
+C               VAR         VARIABLE POITER                       (SENT)
+C               ILEN        VARIABLE LENGTH                       (SENT)
+C               CMPITYPE    VARIABLE TYPE (I,F,C,L,D..)           (SENT)
+C               IDEST       DESTINATION FOR MESSAGE               (SENT)
+C               ITAG        MSG. TAG                              (SENT)
+C               ICOMM       MPI SERIES                            (SENT)
+C                                                     
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C***********************************************************************
+
+        SUBROUTINE SEND_MPI(OPER,VARNAME, VAR, ILEN, CMPITYPE,
+     &                      IDEST,ITAG, ICOMM)
+
+#ifdef USE_MPI
+        include 'mpif.h'
+
+        CHARACTER(LEN=*), INTENT(IN) :: OPER
+        CHARACTER(LEN=*), INTENT(IN) :: VARNAME
+        REAL, INTENT(IN)             :: VAR    ! ACTUALLY A POINTER
+        INTEGER, INTENT(IN)          :: ILEN,ICOMM,IDEST,ITAG
+        CHARACTER(LEN=1), INTENT(IN) :: CMPITYPE
+
+        INTEGER                      :: MPIERR,ILENT,NLETO,NLETV
+        INTEGER                      :: MPITYPE
+
+        CALL TYPE_MPI(CMPITYPE,MPITYPE)
+
+        ILENT = MAX(ILEN,1)
+         
+        CALL MPI_SEND(VAR,ILENT,MPITYPE, IDEST,ITAG, ICOMM,MPIERR)
+        IF (MPIERR .NE. 0) THEN
+           NLETO = lnblnkn(OPER)
+           NLETV = lnblnkn(VARNAME)
+           WRITE(0,*)OPER(:NLETO),'; FAILED TO SEND: ',VARNAME(:NLETV)
+           STOP
+        ENDIF
+#else
+C       DUMMY ROUTINE, FOR NON-MPI USE
+        RETURN
+#endif
+        END
+
+
+C *************************** ALLREDUCE_MPI ****************************
+C
+C  ALLREDUCE_MPI(OPER,VARNAME, VARIN,VAROUT,ILEN,CMPITYPE,CMPIHOW,ICOMM)
+C
+C  PURPOSE:  REDUCES VARIN TO: VAROUT 
+C            
+C  PARAMETERS:  OPER        OPERATION                             (SENT)
+C               VARNAME     VARIABLE NAME                         (SENT)
+C               VARIN       VARIABLE POITER                       (SENT)
+C               VAROUT      VARIABLE POITER                       (RET.)
+C               ILEN        VARIABLE LENGTH                       (SENT)
+C               CMPITYPE    VARIABLE TYPE (I,F,C,L,D..)           (SENT)
+C               CMPITYPE    REDUCTION TYPE (S..)                  (SENT)
+C               ITAG        MSG. TAG                              (SENT)
+C               ICOMM       MPI SERIES                            (SENT)
+C                                                     
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C***********************************************************************
+
+        SUBROUTINE ALLREDUCE_MPI(OPER,VARNAME,VARIN,VAROUT,
+     &                           ILEN, CMPITYPE,CMPIHOW,ICOMM)
+
+#ifdef USE_MPI
+        include 'mpif.h'
+
+        CHARACTER(LEN=*), INTENT(IN) :: OPER
+        CHARACTER(LEN=*), INTENT(IN) :: VARNAME
+        REAL, INTENT(IN)             :: VARIN     ! ACTUALLY A POINTER
+        REAL, INTENT(OUT)            :: VAROUT    ! ACTUALLY A POINTER
+        INTEGER, INTENT(IN)          :: ILEN,ICOMM
+        CHARACTER(LEN=1), INTENT(IN) :: CMPITYPE
+        CHARACTER(LEN=1), INTENT(IN) :: CMPIHOW
+        INTEGER                      :: MPIERR,ILENT,NLETO,NLETV
+        INTEGER                      :: MPITYPE
+
+        CALL TYPE_MPI(CMPITYPE,MPITYPE)
+
+        IF (CMPIHOW == 'S') THEN
+            IHOW = MPI_SUM
+        ELSE
+            CALL ERRT(101,'UNKNOWN REDUCTION METHOD',NE)
+            STOP
+        ENDIF
+
+        ILENT = MAX(ILEN,1)
+        
+        CALL MPI_ALLREDUCE(VARIN,VAROUT,ILENT, MPITYPE,IHOW,
+     &                     ICOMM,MPIERR)
+        IF (MPIERR .NE. 0) THEN
+           NLETO = lnblnkn(OPER)
+           NLETV = lnblnkn(VARNAME)
+           WRITE(0,*)OPER(:NLETO),'; FAILED TO REDUCE: ',VARNAME(:NLETV)
+           STOP
+        ENDIF
+#else
+C       DUMMY ROUTINE, FOR NON-MPI USE
+        RETURN
+#endif
+        END
+
+
+
+C       ------------------------ TYPE_MPI -----------------------
+
+        SUBROUTINE TYPE_MPI(CMPITYPE,MPITYPE)
+
+C       CONVERTS CHAR. MPI TYPE TO MPI VARIABLE TYPE SPECIFICATION
+#ifdef USE_MPI
+        include 'mpif.h'
+
+        CHARACTER(LEN=1), INTENT(IN) :: CMPITYPE
+        INTEGER, INTENT(OUT)         ::  MPITYPE
+ 
+        IF     (CMPITYPE == 'C') THEN
+            MPITYPE = MPI_CHARACTER
+        ELSEIF (CMPITYPE == 'I') THEN
+            MPITYPE = MPI_INTEGER
+        ELSEIF (CMPITYPE == 'R') THEN
+            MPITYPE = MPI_REAL
+        ELSEIF (CMPITYPE == 'D') THEN
+            MPITYPE = MPI_DOUBLE_PRECISION
+        ELSEIF (CMPITYPE == 'L') THEN
+            MPITYPE = MPI_LOGICAL
+        ELSEIF (CMPITYPE == 'X') THEN
+            MPITYPE = MPI_COMPLEX
+        ELSE
+            CALL ERRT(101,'UNKNOWN MPI VARIABLE TYPE',NE)
+            STOP
+        ENDIF
+
+#else
+C       DUMMY ROUTINE, FOR NON-MPI USE
+        RETURN
+#endif
+        END
+
+C ********************************* SET_MPI **************************
+C
+C   SET_MPI(ICOMM,MYPID,IRTFLG)    
+C
+C   PURPOSE: SETS ICOMM AND MYMPID
+C
+C   PARAMETERS:  ICOMM    MPI ICOMM                             (RET.)
+C                MYPID    MPI PROCESS ID                        (RET.)
+C                           -1 IF NOT USING MPI
+C                IRTFLG   UNUSED ERROR FLAG                     (RET.)
+C                            0  IS NORMAL
+C
+C--*********************************************************************
+
+      SUBROUTINE SET_MPI(ICOMM,MYPID,IRTFLG)
+
+#ifdef USE_MPI
+      INCLUDE 'mpif.h'
+
+      ICOMM = MPI_COMM_WORLD
+      CALL MPI_COMM_RANK(ICOMM, MYPID, IERR)
+      IRTFLG = IERR
+#else
+      MYPID  = -1
+      IRTFLG =  0
+#endif
+
+      END
+
+
+
+
+
+
+@
+
+
+1.7
+log
+@added CMPITYPE == '8' .... MPI_LONG_LONG_INT
+@
+text
+@d240 1
+a240 1
+         
+d265 2
+a266 2
+        CHARACTER(LEN=1), INTENT(IN)  :: CMPITYPE
+        INTEGER, INTENT(OUT)          ::  MPITYPE
+a279 2
+        ELSEIF (CMPITYPE == '8') THEN
+            MPITYPE = MPI_LONG_LONG_INT
+d301 1
+a301 1
+C                          0  IS NORMAL
+@
+
+
+1.6
+log
+@GPL_2010
+@
+text
+@d6 1
+d12 1
+a12 1
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+d232 1
+a232 1
+        IF (CMPIHOW .EQ. 'S') THEN
+d268 1
+a268 1
+        IF     (CMPITYPE .EQ. 'C') THEN
+d270 1
+a270 1
+        ELSEIF (CMPITYPE .EQ. 'I') THEN
+d272 1
+a272 1
+        ELSEIF (CMPITYPE .EQ. 'R') THEN
+d274 1
+a274 1
+        ELSEIF (CMPITYPE .EQ. 'D') THEN
+d276 1
+a276 1
+        ELSEIF (CMPITYPE .EQ. 'L') THEN
+d278 1
+a278 1
+        ELSEIF (CMPITYPE .EQ. 'X') THEN
+d280 2
+@
+
+
+1.5
+log
+@added set_mpi.f
+@
+text
+@a7 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2009  Health Research Inc.                      *
+d9 5
+a13 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d15 1
+a15 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d20 1
+a20 1
+C=* This program is distributed in the hope that it will be useful,    *
+d22 1
+a22 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a23 1
+C=*                                                                    *
+d25 1
+a25 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.4
+log
+@mpi changes
+@
+text
+@d5 2
+d9 1
+a9 1
+C=* Copyright (C) 1985-2008  Health Research Inc.                      *
+d33 1
+a33 1
+C  CONTENTS:
+d38 1
+d197 2
+a198 1
+C **********************************************************************
+d294 33
+@
+
+
+1.3
+log
+@recv added
+@
+text
+@d4 1
+a4 1
+C MPI.F   MPI SUPPORT                                OCT 08 ARDEAN LEITH
+d31 15
+a45 1
+C  BCAST_MPI(OPER,VARNAME,VAR,ILEN, MPITYPE,ICOMM)
+a58 2
+C       ------------------------ BCAST_MPI ----------------------------
+
+d66 1
+a66 1
+        REAL, INTENT(IN)             :: VAR  ! ACTUALLY A POINTER
+d81 1
+a81 1
+           STOP
+d89 17
+a105 1
+C       ------------------------ ALLREDUCE_MPI -----------------------
+d107 2
+a108 2
+        SUBROUTINE ALLREDUCE_MPI(OPER,VARNAME,VARIN,VAROUT,
+     &                           ILEN, CMPITYPE,CMPIHOW,ICOMM)
+d115 2
+a116 3
+        REAL, INTENT(IN)             :: VARIN   ! ACTUALLY A POINTER
+        REAL, INTENT(OUT)            :: VAROUT  ! ACTUALLY A POINTER
+        INTEGER, INTENT(IN)          :: ILEN,ICOMM
+d118 2
+a119 2
+        CHARACTER(LEN=1), INTENT(IN) :: CMPIHOW
+        INTEGER                      :: MPIERR,ILENT,NLETO,NLETV
+d124 7
+a130 6
+        IF (CMPIHOW .EQ. 'S') THEN
+            IHOW = MPI_SUM
+        ELSE
+            CALL ERRT(101,'UNKNOWN REDUCTION METHOD',NE)
+            RETURN
+        ENDIF
+a131 4
+        ILENT = MAX(ILEN,1)
+         
+        CALL MPI_ALLREDUCE(VARIN,VAROUT,ILENT, MPITYPE,IHOW,
+     &                     ICOMM,MPIERR)
+d135 1
+a135 1
+           WRITE(0,*)OPER(:NLETO),'; FAILED TO REDUCE: ',VARNAME(:NLETV)
+d144 17
+a160 1
+C       ------------------------ SEND_MPI -----------------------
+d170 1
+a170 1
+        REAL, INTENT(IN)             :: VAR   ! ACTUALLY A POINTER
+d194 18
+a211 1
+C       ------------------------ RECV_MPI -----------------------
+d213 2
+a214 2
+        SUBROUTINE RECV_MPI(OPER,VARNAME, VAR, ILEN, CMPITYPE,
+     &                      ISOURCE,ITAG, ISTAT, ICOMM)
+d221 3
+a223 2
+        REAL, INTENT(IN)             :: VAR   ! ACTUALLY A POINTER
+        INTEGER, INTENT(IN)          :: ILEN,ICOMM,ISOURCE,ITAG,ISTAT
+d225 1
+a225 1
+
+d231 7
+d239 3
+a241 7
+
+        ITAGT = ITAG
+        IF (ITAGT .LE. 0) ITAGT = MPI_ANY_TAG  
+
+        CALL MPI_RECV(VAR,ILENT,MPITYPE, ISOURCE,ITAGT,
+     &                ICOMM,ISTAT,MPIERR)
+
+d245 1
+a245 1
+           WRITE(0,*)OPER(:NLETO),'; FAILED TO RECV: ',VARNAME(:NLETV)
+d254 2
+@
+
+
+1.2
+log
+@complex def. bug
+@
+text
+@d47 1
+a47 1
+        SUBROUTINE BCAST_MPI(OPER,VARNAME,VAR,ILEN, MPITYPE,ICOMM)
+d56 1
+a56 1
+        CHARACTER(LEN=1), INTENT(IN) :: MPITYPE
+d58 1
+d60 1
+a60 15
+        IF     (MPITYPE .EQ. 'C') THEN
+            ITYPE = MPI_CHARACTER
+        ELSEIF (MPITYPE .EQ. 'I') THEN
+            ITYPE = MPI_INTEGER
+        ELSEIF (MPITYPE .EQ. 'R') THEN
+            ITYPE = MPI_REAL
+        ELSEIF (MPITYPE .EQ. 'D') THEN
+            ITYPE = MPI_DOUBLE_PRECISION
+        ELSEIF (MPITYPE .EQ. 'L') THEN
+            ITYPE = MPI_LOGICAL
+        ELSEIF (MPITYPE .EQ. 'X') THEN
+            ITYPE = MPI_COMPLEX
+        ELSE
+            CALL ERRT(101,'UNKNOWN MPI VARIABLE TYPE',NE)
+        ENDIF
+d63 1
+a63 1
+        CALL MPI_BCAST(VAR,ILENT,ITYPE, 0,ICOMM,MPIERR)
+d80 1
+a80 1
+     &                           ILEN, MPITYPE,MPIHOW,ICOMM)
+d90 2
+a91 2
+        CHARACTER(LEN=1), INTENT(IN) :: MPITYPE
+        CHARACTER(LEN=1), INTENT(IN) :: MPIHOW
+d93 1
+d95 1
+a95 15
+        IF     (MPITYPE .EQ. 'C') THEN
+            ITYPE = MPI_CHARACTER
+        ELSEIF (MPITYPE .EQ. 'I') THEN
+            ITYPE = MPI_INTEGER
+        ELSEIF (MPITYPE .EQ. 'R') THEN
+            ITYPE = MPI_REAL
+        ELSEIF (MPITYPE .EQ. 'D') THEN
+            ITYPE = MPI_DOUBLE_PRECISION
+        ELSEIF (MPITYPE .EQ. 'L') THEN
+            ITYPE = MPI_LOGICAL
+        ELSEIF (MPITYPE .EQ. 'X') THEN
+            ITYPE = MPI_COMPLEX
+        ELSE
+            CALL ERRT(101,'UNKNOWN MPI VARIABLE TYPE',NE)
+        ENDIF
+d97 1
+a97 1
+        IF (MPIHOW .EQ. 'S') THEN
+d106 1
+a106 1
+        CALL MPI_ALLREDUCE(VARIN,VAROUT,ILENT, ITYPE,IHOW,
+d119 109
+@
+
+
+1.1
+log
+@mpi support routines
+@
+text
+@d69 2
+d72 1
+a72 1
+            CALL ERRT(101,'UNKNOWN MPITYPE',NE)
+d90 55
+a144 1
+        
+@
+

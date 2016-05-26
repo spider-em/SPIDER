@@ -1,0 +1,1098 @@
+head	1.9;
+access;
+symbols;
+locks; strict;
+comment	@c @;
+
+
+1.9
+date	2013.02.13.15.21.58;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2012.01.10.13.29.14;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2011.12.19.15.03.33;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2011.12.14.16.59.56;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2011.12.12.16.53.45;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2011.12.09.13.13.12;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2011.07.25.16.03.38;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2011.07.25.15.01.37;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2011.06.16.16.37.55;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.9
+log
+@.0) ) THEN
+
+OUT OF BOUNDS TRAP ENLARGED
+@
+text
+@C++*********************************************************************
+C                                                                      *
+C ALRQ_MS_FBS  FBS USED                          JUL 2011 ARDEAN LEITH *
+C              FBS2                              DEC 2011 ARDEAN LEITH *
+C              FBS2 NXP                          DEC 2011 ARDEAN LEITH *
+C              OUT OF BOUNDS TRAP ENLARGED       FEB 2013 ARDEAN LEITH
+C                                                                      *
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2013  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C                                                                      *
+C ALRQ_MS_FBS(XIM, NX,NY, CNS2,CNR2, NUMR,CIRC,LCIRC,                  *
+C             NRING,MODE,NEWFFT,USE_OMP_PARALLEL, AVO,VRIN             *
+C                                                                      *
+C PURPOSE: INTERPOLATES: XIM IMAGE INTO POLAR COORDINATES AND STACKS   *
+C          THE RINGS INTO: CIRC OUTPUT ARRAY.                          * 
+C          FFTW3 WILL BE USED ON RINGS.                                *
+C                                                                      *
+C PARAMETERS:                                                          *
+C             XIM              IMAGE ARRAY                     (INPUT) *
+C             NX,NY            IMAGE DIMENSIONS                (INPUT) *
+C             CNS2,CNR2        PREDEFINED CENTERS              (INPUT) *
+C             NUMR             RING CONTROL ARRAY              (INPUT) *
+C             CIRC             POLAR ARRAY                     (OUTPUT *)
+C             LCIRC            LENGTH OF CIRC ARRAY            (INPUT) *
+C             NRING            NUMBER OF RINGS                 (INPUT) *
+C             MODE             HALF OR FULL CIRCLE             (INPUT) *
+C             NEWFFT                                           (INPUT) *
+C             USE_OMP_PARALLEL                                 (INPUT) * 
+C             AVO                                              (INPUT) *
+C             VRIN                                             (INPUT) *
+C                                                                      *
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C--*********************************************************************
+
+        SUBROUTINE ALRQ_MS_FBS(XIM, NX,NY, CNS2,CNR2, 
+     &                         NUMR,CIRC,LCIRC,
+     &                         NRING,MODE,NEWFFT,USE_OMP_PARALLEL,
+     &                         AVO,VRIN)
+
+        IMPLICIT NONE
+
+        INCLUDE 'CMBLOCK.INC'
+
+        REAL, INTENT(IN)             :: XIM(NX,NY)
+        INTEGER                      :: NX,NY
+        REAL                         :: CNS2,CNR2
+        REAL, INTENT(INOUT)          :: CIRC(LCIRC)
+        INTEGER                      :: LCIRC,NRING
+        INTEGER, INTENT(IN)          :: NUMR(3,NRING)
+        CHARACTER(LEN=1)             :: MODE
+        LOGICAL, INTENT(IN)          :: NEWFFT,USE_OMP_PARALLEL
+        DOUBLE PRECISION, INTENT(IN) :: AVO,VRIN
+
+        REAL, ALLOCATABLE            :: F0(:,:),X1(:,:),Y1(:,:),XY2(:,:)
+
+        DOUBLE PRECISION             :: PI,DFI
+        REAL                         :: CIRCT
+
+        INTEGER                      :: NXLD,IRTFLG,MWANT,IT,INR,IGO
+        INTEGER                      :: NVAL,JT,NE
+        INTEGER                      :: LT,LTIGO,LTLTIGO,LTLTLTIGO,NSIM
+        REAL                         :: X,Y,YQ,XOLD,YOLD,FI,XT,YT
+
+        REAL                         :: fbs2
+
+C       CNS2 AND CNR2 ARE PREDEFINED CENTERS
+
+        NXLD   = NX + 2 - MOD(NX,2)
+
+        ALLOCATE (F0 (NXLD, NY),
+     &            X1 (NXLD, NY),
+     &            Y1 (NXLD, NY),
+     &            XY2(NXLD, NY),
+     &            STAT=IRTFLG)
+        IF (IRTFLG /= 0) THEN 
+            MWANT = 4*NXLD*NY 
+            CALL ERRT(46,'ALRQ_MS_FBS; F0...',MWANT)
+            GOTO 9999
+        ENDIF  
+
+C       PAD XIM INTO F0 
+        F0(1:NX,1:NY) = XIM(1:NX,1:NY)
+
+C       CALCULATE F0 DERIVATIVES: X1,Y1,XY2
+        CALL FBS2_PREP(F0, X1,Y1,XY2, NXLD,NX,NY, IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 9999
+
+C       CNS2 AND CNR2 ARE PREDEFINED CENTERS
+
+C       USING NORMALIZATION JUST FROM RINGS GIVES DIFFERENT ANSWERS
+C       FROM NORMASC, PROBABLY OK BUT I WILL NOT USE IT.
+
+        PI     = 2 * DATAN(1.0D0)  ! NOT REALLY PI!!
+
+C       FILL ALL THE RINGS
+
+        IF (USE_OMP_PARALLEL) THEN  ! --------------------------------
+
+c$omp   parallel do private(it,inr,yq,igo,nval,lt,
+c$omp&  ltigo,ltltigo,ltltltigo,nsim,dfi,xold,yold,
+c$omp&  circt,jt,fi,x,y)
+        DO  IT=1,NRING 
+
+           INR  = NUMR(1,IT)        ! RADIUS OF THE CURRENT RING
+           YQ   = INR               ! FLOATING POINT RADIUS
+           IGO  = NUMR(2,IT)        ! STARTING LOCATION FOR RING 
+           NVAL = NUMR(3,IT)        ! LENGTH OF THIS RING
+
+           IF (NEWFFT) THEN
+C             THE ACTUAL, POWER-OF-TWO LENGTH IS NUMR(3,I)-2, ADDITIONAL
+C             TWO LOCATIONS ARE ONLY FOR THE NEW FFT.
+              CIRC(IGO+NVAL-1) = 0.0
+              CIRC(IGO+NVAL-2) = 0.0
+              NVAL             = NVAL - 2
+           ENDIF
+
+           IF (MODE == 'H')  THEN
+              LT = NVAL / 2
+           ELSEIF (MODE.EQ.'F') THEN
+              LT = NVAL / 4
+           ENDIF
+
+           LTIGO        = LT + IGO
+           LTLTIGO      = LT + LT + IGO
+           LTLTLTIGO    = LT + LT + LT + IGO
+
+           NSIM         = LT - 1
+           DFI          = PI / (NSIM+1)
+
+C          TO AVOID SLOW BOUNDARY TESTS IN FBS2, PUT THEM HERE
+           X            = CNS2
+           Y            = INR + CNR2
+           IF (X < 2.0 .OR. X  >  (FLOAT(NX)-1.0) .OR. 
+     &         Y < 2.0 .OR. Y  >  (FLOAT(NY)-1.0) ) THEN
+                  WRITE(NOUT,*) 'For image size1: ',NX,NY,INR
+               WRITE(NOUT,90) X,Y
+90             FORMAT('  FOR LOCATION: (',F7.1,',',F7.1,')')
+               CALL ERRT(101,'RING GOES OUTSIDE IMAGE',NE)
+C              RETURN NOT POSSIBLE WITH INTEL PARALLEL COMPILER
+               STOP
+           ENDIF
+
+           CIRCT     = FBS2(X,Y, NXLD,NX,NY, 
+     &                      XIM,NX, X1,Y1,XY2, .FALSE.)
+           CIRC(IGO) = (CIRCT - AVO) * VRIN
+
+C          TO AVOID SLOW BOUNDARY TESTS IN FBS2, PUT THEM HERE
+           X            = INR + CNS2
+           Y            =     + CNR2
+           IF (X  <  2.0 .OR. X  >  (FLOAT(NX)-1.0) .OR. 
+     &         Y  <  2.0 .OR. Y  >  (FLOAT(NY)-1.0) ) THEN
+                  WRITE(NOUT,*) 'For image size2: ',NX,NY,INR
+               WRITE(NOUT,90) X,Y
+               CALL ERRT(101,'RING GOES OUTSIDE IMAGE',NE)
+C              RETURN NOT POSSIBLE WITH INTEL PARALLEL COMPILER
+               STOP
+           ENDIF
+
+           CIRCT       = FBS2(X,Y, NXLD,NX,NY, 
+     &                        XIM,NX, X1,Y1,XY2, .FALSE.)
+           CIRC(LTIGO) = (CIRCT - AVO) * VRIN
+
+           IF (MODE .EQ. 'F')  THEN
+C             FILL OTHER HALF OF CIRCLE
+
+C             TO AVOID SLOW BOUNDARY TESTS IN FBS2, PUT THEM HERE
+              X     = 0.0  + CNS2
+              Y     = -INR + CNR2
+              IF (X  <  2.0 .OR. X  >  (FLOAT(NX)-1.0) .OR. 
+     &            Y  <  2.0 .OR. Y  >  (FLOAT(NY)-1.0) ) THEN
+                  WRITE(NOUT,*) 'For image size3: ',NX,NY,INR
+                  WRITE(NOUT,90) X,Y
+                  CALL ERRT(101,'RING GOES OUTSIDE IMAGE',NE)
+C                 RETURN NOT POSSIBLE WITH INTEL PARALLEL COMPILER
+                  STOP
+              ENDIF
+
+              CIRCT         =  FBS2(X,Y, NXLD,NX,NY,
+     &                              XIM,NX, X1,Y1,XY2, .FALSE.)
+              CIRC(LTLTIGO) = (CIRCT - AVO) * VRIN
+
+C             TO AVOID SLOW BOUNDARY TESTS IN FBS2, PUT THEM HERE
+              X     = -INR + CNS2
+              Y     =  0.0 + CNR2
+              IF (X  <  2.0 .OR. X  >  (FLOAT(NX)-1.0) .OR. 
+     &            Y  <  2.0 .OR. Y  >  (FLOAT(NY)-1.0) ) THEN
+                  WRITE(NOUT,*) 'For image size4: ',NX,NY,INR
+                  WRITE(NOUT,90) X,Y
+                  CALL ERRT(101,'RING GOES OUTSIDE IMAGE',NE)
+C                 RETURN NOT POSSIBLE WITH INTEL PARALLEL COMPILER
+                  STOP
+              ENDIF
+              CIRCT           = FBS2(X,Y, NXLD,NX,NY,
+     &                             XIM,NX, X1,Y1,XY2, .FALSE.)
+              CIRC(LTLTLTIGO) = (CIRCT - AVO) * VRIN
+           ENDIF
+
+           DO JT=1,NSIM     ! LOOP NSIM TIMES TO FILL RING
+              FI    = DFI * JT
+              X     = SIN(FI) * YQ
+              Y     = COS(FI) * YQ
+
+              CIRCT        = FBS2(X+CNS2,Y+CNR2,  NXLD,NX,NY,
+     &                            XIM,NX, X1,Y1,XY2, .FALSE.)
+              CIRC(JT+IGO) = (CIRCT - AVO) * VRIN
+
+              CIRCT        = FBS2(Y+CNS2,-X+CNR2, NXLD,NX,NY,
+     &                            XIM,NX, X1,Y1,XY2, .FALSE.)
+              CIRC(JT+LTIGO) = (CIRCT - AVO) * VRIN
+
+              IF (MODE .EQ. 'F')  THEN
+C                FILL OTHER HALF OF CIRCLE
+                 CIRCT = FBS2(-X+CNS2,-Y+CNR2, NXLD,NX,NY,
+     &                        XIM,NX, X1,Y1,XY2, .FALSE.)
+                 CIRC(JT+LTLTIGO) = (CIRCT - AVO) * VRIN
+
+                 CIRCT = FBS2(-Y+CNS2,X+CNR2, NXLD,NX,NY,
+     &                        XIM,NX, X1,Y1,XY2, .FALSE.)
+                 CIRC(JT+LTLTLTIGO) = (CIRCT - AVO) * VRIN
+              ENDIF
+	   ENDDO
+	ENDDO
+
+
+        ELSE ! -------------------------------- NOT IN OMP --------
+
+C       FILL ALL THE RINGS 
+        DO  IT=1,NRING 
+
+           INR  = NUMR(1,IT)        ! RADIUS OF THE CURRENT RING
+           YQ   = INR               ! FLOATING POINT RADIUS
+           IGO  = NUMR(2,IT)        ! STARTING LOCATION FOR RING 
+           NVAL = NUMR(3,IT)        ! LENGTH OF THIS RING
+
+           IF (NEWFFT) THEN
+C             THE ACTUAL, POWER-OF-TWO LENGTH IS NUMR(3,I)-2, ADDITIONAL
+C             TWO LOCATIONS ARE ONLY FOR THE NEW FFT.
+              CIRC(IGO+NVAL-1) = 0.0
+              CIRC(IGO+NVAL-2) = 0.0
+              NVAL             = NVAL - 2
+           ENDIF
+
+           IF (MODE .EQ. 'H')  THEN
+              LT = NVAL / 2
+           ELSEIF (MODE.EQ.'F') THEN
+              LT = NVAL / 4
+           ENDIF
+
+           LTIGO        = LT + IGO
+           LTLTIGO      = LT + LT + IGO
+           LTLTLTIGO    = LT + LT + LT + IGO
+
+           NSIM         = LT - 1
+           DFI          = PI / (NSIM+1)
+
+C          TO AVOID SLOW BOUNDARY TESTS IN FBS2, PUT THEM HERE
+           X            = CNS2
+           Y            = INR + CNR2
+
+           IF (X  <  2.0 .OR. X  >  (FLOAT(NX)-1.0) .OR. 
+     &         Y  <  2.0 .OR. Y  >  (FLOAT(NY)-1.0) ) THEN
+               !WRITE(NOUT,*) 'For image size1: ',NX,NY,INR
+               WRITE(NOUT,90) X,Y
+               CALL ERRT(101,'RING GOES OUTSIDE IMAGE',NE)
+               RETURN
+           ENDIF
+
+           CIRCT        = FBS2(X,Y, NXLD,NX,NY, 
+     &                         XIM,NX, X1,Y1,XY2,.FALSE.)
+           CIRC(IGO)    = (CIRCT - AVO) * VRIN
+
+C          TO AVOID SLOW BOUNDARY TESTS IN FBS2, PUT THEM HERE
+           X            = INR + CNS2
+           Y            =     + CNR2
+           IF (X  <  2.0 .OR. X  >  (FLOAT(NX)-1.0) .OR. 
+     &         Y  <  2.0 .OR. Y  >  (FLOAT(NY)-1.0) ) THEN
+               !WRITE(NOUT,*) 'For image size2: ',NX,NY,INR
+               WRITE(NOUT,90) X,Y
+               CALL ERRT(101,'RING GOES OUTSIDE IMAGE',NE)
+               STOP
+           ENDIF
+
+           CIRCT        = FBS2(X,Y, NXLD,NX,NY,
+     &                         XIM,NX, X1,Y1,XY2, .FALSE.)
+           CIRC(LTIGO)  = (CIRCT - AVO) * VRIN
+
+           IF (MODE .EQ. 'F')  THEN
+C             FILL OTHER HALF OF CIRCLE
+
+C             TO AVOID SLOW BOUNDARY TESTS IN FBS2, PUT THEM HERE
+              X     = 0.0  + CNS2
+              Y     = -INR + CNR2
+              IF (X  <  2.0 .OR. X  >  (FLOAT(NX)-1.0) .OR. 
+     &            Y  <  2.0 .OR. Y  >  (FLOAT(NY)-1.0) ) THEN
+                  !WRITE(NOUT,*) 'For image size3: ',NX,NY,INR
+                  WRITE(NOUT,90) X,Y
+                  CALL ERRT(101,'RING GOES OUTSIDE IMAGE',NE)
+                  STOP
+              ENDIF
+
+              CIRCT =  FBS2(X,Y, NXLD,NX,NY, 
+     &                      XIM,NX, X1,Y1,XY2,.FALSE.)
+
+              CIRC(LTLTIGO) = (CIRCT - AVO) * VRIN
+
+C             TO AVOID SLOW BOUNDARY TESTS IN FBS2, PUT THEM HERE
+              X     = -INR + CNS2
+              Y     =  0.0 + CNR2
+              IF (X  <  2.0 .OR. X  >  (FLOAT(NX)-1.0) .OR. 
+     &            Y  <  2.0 .OR. Y  >  (FLOAT(NY)-1.0) ) THEN
+                  !WRITE(NOUT,*) 'For image size4: ',NX,NY,INR
+                  WRITE(NOUT,90) X,Y
+                  CALL ERRT(101,'RING GOES OUTSIDE IMAGE',NE)
+                  STOP
+              ENDIF
+              CIRCT = FBS2(X,Y, NXLD,NX,NY, 
+     &                     XIM,NX, X1,Y1,XY2, .FALSE.)
+              CIRC(LTLTLTIGO) = (CIRCT - AVO) * VRIN
+           ENDIF
+          
+           DO JT=1,NSIM     ! LOOP NSIM TIMES TO FILL RING
+              FI = DFI * JT
+              X  = SIN(FI) * YQ
+              Y  = COS(FI) * YQ
+
+              XT    = X+CNS2
+              YT    = Y+CNR2
+              CIRCT = FBS2(XT,YT, NXLD,NX,NY, 
+     &                     XIM,NX, X1,Y1,XY2,.FALSE.)
+              CIRC(JT+IGO) = (CIRCT - AVO) * VRIN
+ 
+              XT =  Y+CNS2
+              YT = -X+CNR2
+
+              CIRCT = FBS2(XT,YT, NXLD,NX,NY, 
+     &                     XIM,NX, X1,Y1,XY2,.FALSE.)
+              CIRC(JT+LTIGO) = (CIRCT - AVO) * VRIN
+
+              IF (MODE .EQ. 'F')  THEN
+C                FILL OTHER HALF OF CIRCLE
+                 XT    = -X+CNS2
+                 YT    = -Y+CNR2
+                 CIRCT = FBS2(XT,YT, NXLD,NX,NY,
+     &                        XIM,NX, X1,Y1,XY2, .FALSE.)
+                 CIRC(JT+LTLTIGO) = (CIRCT - AVO) * VRIN
+
+                 XT    = -Y+CNS2
+                 YT    =  X+CNR2
+                 CIRCT = FBS2(XT,YT, NXLD,NX,NY,
+     &                        XIM,NX, X1,Y1,XY2, .FALSE.)
+                 CIRC(JT+LTLTLTIGO) = (CIRCT - AVO) * VRIN
+              ENDIF
+	   ENDDO
+	ENDDO
+
+        ENDIF
+
+9999    IF (ALLOCATED(F0))  DEALLOCATE (F0)
+        IF (ALLOCATED(X1))  DEALLOCATE (X1)
+        IF (ALLOCATED(Y1))  DEALLOCATE (Y1)
+        IF (ALLOCATED(XY2)) DEALLOCATE (XY2)
+
+        END
+@
+
+
+1.8
+log
+@LTIGO,LTLTIGO,LTLTLTIGO omp bug
+@
+text
+@d6 1
+d12 1
+a12 1
+C=* Copyright 1985-2011  Health Research Inc.,                         *
+d152 2
+a153 2
+           IF (X <= 2.0 .OR. X  >=  (FLOAT(NX)-1.0) .OR. 
+     &         Y  <=  2.0 .OR. Y  >=  (FLOAT(NY)-1.0) ) THEN
+d169 2
+a170 2
+           IF (X  <=  2.0 .OR. X  >=  (FLOAT(NX)-1.0) .OR. 
+     &         Y  <=  2.0 .OR. Y  >=  (FLOAT(NY)-1.0) ) THEN
+d188 2
+a189 2
+              IF (X  <=  2.0 .OR. X  >=  (FLOAT(NX)-1.0) .OR. 
+     &            Y  <=  2.0 .OR. Y  >=  (FLOAT(NY)-1.0) ) THEN
+d204 2
+a205 2
+              IF (X  <=  2.0 .OR. X  >=  (FLOAT(NX)-1.0) .OR. 
+     &            Y  <=  2.0 .OR. Y  >=  (FLOAT(NY)-1.0) ) THEN
+d279 2
+a280 2
+          IF (X  <=  2.0 .OR. X  >=  (FLOAT(NX)-1.0) .OR. 
+     &         Y  <=  2.0 .OR. Y  >=  (FLOAT(NY)-1.0) ) THEN
+d294 2
+a295 2
+           IF (X  <=  2.0 .OR. X  >=  (FLOAT(NX)-1.0) .OR. 
+     &         Y  <=  2.0 .OR. Y  >=  (FLOAT(NY)-1.0) ) THEN
+d312 2
+a313 2
+              IF (X  <=  2.0 .OR. X  >=  (FLOAT(NX)-1.0) .OR. 
+     &            Y  <=  2.0 .OR. Y  >=  (FLOAT(NY)-1.0) ) THEN
+d328 2
+a329 2
+              IF (X  <=  2.0 .OR. X  >=  (FLOAT(NX)-1.0) .OR. 
+     &            Y  <=  2.0 .OR. Y  >=  (FLOAT(NY)-1.0) ) THEN
+@
+
+
+1.7
+log
+@fbs2 parameter added
+@
+text
+@d46 1
+a46 1
+C             USE_OMP_PARALLEL                                 (INPUT) *                                         (INPUT)
+d58 2
+d62 8
+a69 5
+        REAL, INTENT(INOUT)          :: XIM(NX,NY), CIRC(LCIRC)
+        INTEGER, INTENT(IN)          :: NUMR(3,NRING), NRING,LCIRC
+        CHARACTER*1                  :: MODE
+        LOGICAL, INTENT(IN)          :: NEWFFT
+        LOGICAL, INTENT(IN)          :: USE_OMP_PARALLEL
+d72 2
+d77 8
+a84 2
+        REAL, ALLOCATABLE            :: F0(:)
+        REAL, ALLOCATABLE            :: X1(:,:),Y1(:,:),XY2(:,:)
+d88 4
+a91 4
+        ALLOCATE (F0 (NXLD * NY),
+     &            X1 (NXLD,  NY),
+     &            Y1 (NXLD,  NY),
+     &            XY2(NXLD,  NY),
+d93 2
+a94 2
+        IF (IRTFLG .NE. 0) THEN 
+            MWANT = 3*NXLD*NY 
+d100 1
+a100 10
+        DO ILOC     = NX*NY + 1,NXLD*NY
+           F0(ILOC) = 0
+        ENDDO
+        ILOC = 1
+        DO J = 1,NY
+           DO I = 1,NX
+              F0(ILOC) = XIM(I,J)
+              ILOC     = ILOC + 1
+           ENDDO
+        ENDDO
+d102 1
+a102 1
+C       CALCULATE F0 DERIVAES: X1,Y1,XY2
+d117 2
+a118 1
+c$omp   parallel do private(it,inr,yq,igo,nval,lt,nsim,dfi,xold,yold,
+d135 1
+a135 1
+           IF (MODE .EQ. 'H')  THEN
+d151 2
+a152 2
+           IF (X .LE. 2.0 .OR. X .GE. (FLOAT(NX)-1.0) .OR. 
+     &         Y .LE. 2.0 .OR. Y .GE. (FLOAT(NY)-1.0) ) THEN
+d168 2
+a169 2
+           IF (X .LE. 2.0 .OR. X .GE. (FLOAT(NX)-1.0) .OR. 
+     &         Y .LE. 2.0 .OR. Y .GE. (FLOAT(NY)-1.0) ) THEN
+d187 2
+a188 2
+              IF (X .LE. 2.0 .OR. X .GE. (FLOAT(NX)-1.0) .OR. 
+     &            Y .LE. 2.0 .OR. Y .GE. (FLOAT(NY)-1.0) ) THEN
+d203 2
+a204 2
+              IF (X .LE. 2.0 .OR. X .GE. (FLOAT(NX)-1.0) .OR. 
+     &            Y .LE. 2.0 .OR. Y .GE. (FLOAT(NY)-1.0) ) THEN
+d243 1
+a243 1
+        ELSE
+d245 1
+a245 1
+C       FILL ALL THE RINGS ----------------------------------------
+d278 2
+a279 2
+          IF (X .LE. 2.0 .OR. X .GE. (FLOAT(NX)-1.0) .OR. 
+     &         Y .LE. 2.0 .OR. Y .GE. (FLOAT(NY)-1.0) ) THEN
+d293 2
+a294 2
+           IF (X .LE. 2.0 .OR. X .GE. (FLOAT(NX)-1.0) .OR. 
+     &         Y .LE. 2.0 .OR. Y .GE. (FLOAT(NY)-1.0) ) THEN
+d311 2
+a312 2
+              IF (X .LE. 2.0 .OR. X .GE. (FLOAT(NX)-1.0) .OR. 
+     &            Y .LE. 2.0 .OR. Y .GE. (FLOAT(NY)-1.0) ) THEN
+d327 2
+a328 2
+              IF (X .LE. 2.0 .OR. X .GE. (FLOAT(NX)-1.0) .OR. 
+     &            Y .LE. 2.0 .OR. Y .GE. (FLOAT(NY)-1.0) ) THEN
+@
+
+
+1.6
+log
+@fbs2 parameters changed
+@
+text
+@d2 5
+a6 4
+C
+C ALRQ_MS_FBS  FBS USED                          JUL 2011 ARDEAN LEITH
+C              FBS2                              DEC 2011 ARDEAN LEITH
+C
+d28 22
+a49 22
+C
+C ALRQ_MS_FBS(XIM, NSAM,NROW, CNS2,CNR2, NUMR,CIRC,LCIRC,
+C             NRING,MODE,NEWFFT,USE_OMP_PARALLEL, AVO,VRIN
+C
+C PURPOSE: INTERPOLATES: XIM IMAGE INTO POLAR COORDINATES AND STACKS
+C          THE RINGS INTO: CIRC OUTPUT ARRAY.  
+C          FFTW3 WILL BE USED ON RINGS.
+C
+C PARAMETERS:
+C             XIM              IMAGE ARRAY                     (INPUT)
+C             NSAM,NROW        IMAGE DIMENSIONS                (INPUT)
+C             CNS2,CNR2        PREDEFINED CENTERS              (INPUT)
+C             NUMR             RING CONTROL ARRAY              (INPUT)
+C             CIRC             POLAR ARRAY                     (OUTPUT)
+C             LCIRC            LENGTH OF CIRC ARRAY            (INPUT)
+C             NRING            NUMBER OF RINGS                 (INPUT)
+C             MODE             HALF OR FULL CIRCLE             (INPUT)
+C             NEWFFT                                           (INPUT)
+C             USE_OMP_PARALLEL                                 (INPUT)                                         (INPUT)
+C             AVO                                              (INPUT)
+C             VRIN                                             (INPUT)
+C
+d53 1
+a53 1
+        SUBROUTINE ALRQ_MS_FBS(XIM, NSAM,NROW, CNS2,CNR2, 
+d60 1
+a60 1
+        REAL, INTENT(INOUT)          :: XIM(NSAM,NROW), CIRC(LCIRC)
+d73 1
+a73 1
+        NXLD   = NSAM + 2 - MOD(NSAM,2)
+d75 4
+a78 4
+        ALLOCATE (F0 (NXLD * NROW),
+     &            X1 (NXLD,  NROW),
+     &            Y1 (NXLD,  NROW),
+     &            XY2(NXLD,  NROW),
+d81 1
+a81 1
+            MWANT = 3*NXLD*NROW 
+d87 1
+a87 1
+        DO ILOC     = NSAM*NROW + 1,NXLD*NROW
+d91 2
+a92 2
+        DO J = 1,NROW
+           DO I = 1,NSAM
+d99 1
+a99 1
+        CALL FBS2_PREP(F0, X1,Y1,XY2, NXLD,NSAM,NROW, IRTFLG)
+d146 3
+a148 3
+           IF (X .LE. 2.0 .OR. X .GE. (FLOAT(NSAM)-1.0) .OR. 
+     &         Y .LE. 2.0 .OR. Y .GE. (FLOAT(NROW)-1.0) ) THEN
+                  WRITE(NOUT,*) 'For image size1: ',NSAM,NROW,INR
+d156 2
+a157 2
+           CIRCT     = FBS2(X,Y, NXLD,NSAM,NROW, 
+     &                      XIM, X1,Y1,XY2, .FALSE.)
+d163 3
+a165 3
+           IF (X .LE. 2.0 .OR. X .GE. (FLOAT(NSAM)-1.0) .OR. 
+     &         Y .LE. 2.0 .OR. Y .GE. (FLOAT(NROW)-1.0) ) THEN
+                  WRITE(NOUT,*) 'For image size2: ',NSAM,NROW,INR
+d172 2
+a173 2
+           CIRCT       = FBS2(X,Y, NXLD,NSAM,NROW, 
+     &                        XIM, X1,Y1,XY2, .FALSE.)
+d182 3
+a184 3
+              IF (X .LE. 2.0 .OR. X .GE. (FLOAT(NSAM)-1.0) .OR. 
+     &            Y .LE. 2.0 .OR. Y .GE. (FLOAT(NROW)-1.0) ) THEN
+                  WRITE(NOUT,*) 'For image size3: ',NSAM,NROW,INR
+d191 2
+a192 2
+              CIRCT         =  FBS2(X,Y, NXLD,NSAM,NROW,
+     &                              XIM, X1,Y1,XY2, .FALSE.)
+d198 3
+a200 3
+              IF (X .LE. 2.0 .OR. X .GE. (FLOAT(NSAM)-1.0) .OR. 
+     &            Y .LE. 2.0 .OR. Y .GE. (FLOAT(NROW)-1.0) ) THEN
+                  WRITE(NOUT,*) 'For image size4: ',NSAM,NROW,INR
+d206 2
+a207 2
+              CIRCT           = FBS2(X,Y, NXLD,NSAM,NROW,
+     &                             XIM, X1,Y1,XY2, .FALSE.)
+d216 2
+a217 2
+              CIRCT        = FBS2(X+CNS2,Y+CNR2,  NXLD,NSAM,NROW,
+     &                            XIM, X1,Y1,XY2, .FALSE.)
+d220 2
+a221 2
+              CIRCT        = FBS2(Y+CNS2,-X+CNR2, NXLD,NSAM,NROW,
+     &                            XIM, X1,Y1,XY2, .FALSE.)
+d226 2
+a227 2
+                 CIRCT = FBS2(-X+CNS2,-Y+CNR2, NXLD,NSAM,NROW,
+     &                        XIM, X1,Y1,XY2, .FALSE.)
+d230 2
+a231 2
+                 CIRCT = FBS2(-Y+CNS2,X+CNR2, NXLD,NSAM,NROW,
+     &                        XIM, X1,Y1,XY2, .FALSE.)
+d273 3
+a275 3
+          IF (X .LE. 2.0 .OR. X .GE. (FLOAT(NSAM)-1.0) .OR. 
+     &         Y .LE. 2.0 .OR. Y .GE. (FLOAT(NROW)-1.0) ) THEN
+               !WRITE(NOUT,*) 'For image size1: ',NSAM,NROW,INR
+d281 2
+a282 2
+           CIRCT        = FBS2(X,Y, NXLD,NSAM,NROW, 
+     &                         XIM, X1,Y1,XY2,.FALSE.)
+d288 3
+a290 3
+           IF (X .LE. 2.0 .OR. X .GE. (FLOAT(NSAM)-1.0) .OR. 
+     &         Y .LE. 2.0 .OR. Y .GE. (FLOAT(NROW)-1.0) ) THEN
+               !WRITE(NOUT,*) 'For image size2: ',NSAM,NROW,INR
+d296 2
+a297 2
+           CIRCT        = FBS2(X,Y, NXLD,NSAM,NROW,
+     &                         XIM, X1,Y1,XY2, .FALSE.)
+d306 3
+a308 3
+              IF (X .LE. 2.0 .OR. X .GE. (FLOAT(NSAM)-1.0) .OR. 
+     &            Y .LE. 2.0 .OR. Y .GE. (FLOAT(NROW)-1.0) ) THEN
+                  !WRITE(NOUT,*) 'For image size3: ',NSAM,NROW,INR
+d314 2
+a315 2
+              CIRCT =  FBS2(X,Y, NXLD,NSAM,NROW, 
+     &                      XIM, X1,Y1,XY2,.FALSE.)
+d322 3
+a324 3
+              IF (X .LE. 2.0 .OR. X .GE. (FLOAT(NSAM)-1.0) .OR. 
+     &            Y .LE. 2.0 .OR. Y .GE. (FLOAT(NROW)-1.0) ) THEN
+                  !WRITE(NOUT,*) 'For image size4: ',NSAM,NROW,INR
+d329 2
+a330 2
+              CIRCT = FBS2(X,Y, NXLD,NSAM,NROW, 
+     &                     XIM, X1,Y1,XY2, .FALSE.)
+d341 2
+a342 2
+              CIRCT = FBS2(XT,YT, NXLD,NSAM,NROW, 
+     &                     XIM, X1,Y1,XY2,.FALSE.)
+d348 2
+a349 2
+              CIRCT = FBS2(XT,YT, NXLD,NSAM,NROW, 
+     &                     XIM, X1,Y1,XY2,.FALSE.)
+d356 2
+a357 2
+                 CIRCT = FBS2(XT,YT, NXLD,NSAM,NROW,
+     &                        XIM, X1,Y1,XY2, .FALSE.)
+d362 2
+a363 2
+                 CIRCT = FBS2(XT,YT, NXLD,NSAM,NROW,
+     &                        XIM, X1,Y1,XY2, .FALSE.)
+@
+
+
+1.5
+log
+@fbs2 CHKBOUND parameter is false
+@
+text
+@d28 2
+a29 1
+C ALRQ_MS_FBS
+a71 1
+
+d84 3
+a86 2
+ 
+        DO ILOC = NSAM*NROW + 1,NXLD*NROW
+d89 1
+a89 1
+           ILOC = 1
+d93 1
+a93 1
+             ILOC     = ILOC + 1
+d97 2
+a98 1
+        CALL FBS2_PREP(F0, X1,Y1, XY2, NXLD, NSAM,NROW, IRTFLG)
+d155 3
+a157 2
+           CIRCT        = FBS2(X,Y,NSAM,NROW,XIM,X1,Y1,XY2,.FALSE.)
+           CIRC(IGO)    = (CIRCT - AVO) * VRIN
+d171 3
+a173 2
+           CIRCT        = FBS2(X,Y,NSAM,NROW,XIM,X1,Y1,XY2,.FALSE.)
+           CIRC(LTIGO)  = (CIRCT - AVO) * VRIN
+d190 2
+a191 1
+              CIRCT         =  FBS2(X,Y,NSAM,NROW,XIM,X1,Y1,XY2,.FALSE.)
+d205 2
+a206 1
+              CIRCT         = FBS2(X,Y,NSAM,NROW,XIM,X1,Y1,XY2,.FALSE.)
+d215 2
+a216 2
+              CIRCT        = FBS2(X+CNS2,Y+CNR2,NSAM,NROW,
+     &                                  XIM,X1,Y1,XY2,.FALSE.)
+d219 2
+a220 2
+              CIRCT        = FBS2(Y+CNS2,-X+CNR2,NSAM,NROW,
+     &                                   XIM,X1,Y1,XY2,.FALSE.)
+d225 2
+a226 2
+                 CIRCT = FBS2(-X+CNS2,-Y+CNR2,NSAM,NROW,
+     &                            XIM,X1,Y1,XY2,.FALSE.)
+d229 2
+a230 2
+                 CIRCT = FBS2(-Y+CNS2,X+CNR2,NSAM,NROW,
+     &                            XIM,X1,Y1,XY2,.FALSE.)
+d280 2
+a281 1
+           CIRCT        = FBS2(X,Y,NSAM,NROW,XIM,X1,Y1,XY2,.FALSE.)
+d295 2
+a296 1
+           CIRCT        = FBS2(X,Y,NSAM,NROW,XIM,X1,Y1,XY2,.FALSE.)
+d313 3
+a315 1
+              CIRCT =  FBS2(X,Y,NSAM,NROW,XIM,X1,Y1,XY2,.FALSE.)
+d328 2
+a329 1
+              CIRCT = FBS2(X,Y,NSAM,NROW,XIM,X1,Y1,XY2,.FALSE.)
+d340 2
+a341 1
+              CIRCT = FBS2(XT,YT,NSAM,NROW,XIM,X1,Y1,XY2,.FALSE.)
+d347 2
+a348 1
+              CIRCT = FBS2(XT,YT,NSAM,NROW,XIM,X1,Y1,XY2,.FALSE.)
+d355 2
+a356 1
+                 CIRCT = FBS2(XT,YT,NSAM,NROW,XIM,X1,Y1,XY2,.FALSE.)
+d361 2
+a362 1
+                 CIRCT = FBS2(XT,YT,NSAM,NROW,XIM,X1,Y1,XY2,.FALSE.)
+@
+
+
+1.4
+log
+@fbs --> fbs2
+@
+text
+@d153 1
+a153 1
+           CIRCT        = FBS2(X,Y,NSAM,NROW,XIM,X1,Y1,XY2)
+d168 1
+a168 1
+           CIRCT        = FBS2(X,Y,NSAM,NROW,XIM,X1,Y1,XY2)
+d186 1
+a186 1
+              CIRCT         =  FBS2(X,Y,NSAM,NROW,XIM,X1,Y1,XY2)
+d200 1
+a200 1
+              CIRCT           = FBS2(X,Y,NSAM,NROW,XIM,X1,Y1,XY2)
+d210 1
+a210 1
+     &                                  XIM,X1,Y1,XY2)
+d214 1
+a214 1
+     &                                   XIM,X1,Y1,XY2)
+d220 1
+a220 1
+     &                            XIM,X1,Y1,XY2)
+d224 1
+a224 1
+     &                            XIM,X1,Y1,XY2)
+d274 1
+a274 1
+           CIRCT        = FBS2(X,Y,NSAM,NROW,XIM,X1,Y1,XY2)
+d288 1
+a288 1
+           CIRCT        = FBS2(X,Y,NSAM,NROW,XIM,X1,Y1,XY2)
+d305 1
+a305 1
+              CIRCT =  FBS2(X,Y,NSAM,NROW,XIM,X1,Y1,XY2)
+d318 1
+a318 1
+              CIRCT = FBS2(X,Y,NSAM,NROW,XIM,X1,Y1,XY2)
+d329 1
+a329 1
+              CIRCT = FBS2(XT,YT,NSAM,NROW,XIM,X1,Y1,XY2)
+d335 1
+a335 1
+              CIRCT = FBS2(XT,YT,NSAM,NROW,XIM,X1,Y1,XY2)
+d342 1
+a342 1
+                 CIRCT = FBS2(XT,YT,NSAM,NROW,XIM,X1,Y1,XY2)
+d347 1
+a347 1
+                 CIRCT = FBS2(XT,YT,NSAM,NROW,XIM,X1,Y1,XY2)
+@
+
+
+1.3
+log
+@typo
+@
+text
+@d4 1
+a4 1
+C ALRQ_MS_FBP  FBP USED                          JUN 2011 ARDEAN LEITH
+d96 1
+a96 1
+        CALL FBS_PREP(F0, X1,Y1, XY2, NXLD, NSAM,NROW, IRTFLG)
+d140 1
+a140 1
+C          TO AVOID SLOW BOUNDARY TESTS IN FBS_FAST, PUT THEM HERE
+d153 1
+a153 1
+           CIRCT        = FBS_FAST(X,Y,NSAM,NROW,XIM,X1,Y1,XY2)
+d156 1
+a156 1
+C          TO AVOID SLOW BOUNDARY TESTS IN FBS_FAST, PUT THEM HERE
+d168 1
+a168 1
+           CIRCT        = FBS_FAST(X,Y,NSAM,NROW,XIM,X1,Y1,XY2)
+d174 1
+a174 1
+C             TO AVOID SLOW BOUNDARY TESTS IN FBS_FAST, PUT THEM HERE
+d186 1
+a186 1
+              CIRCT         =  FBS_FAST(X,Y,NSAM,NROW,XIM,X1,Y1,XY2)
+d189 1
+a189 1
+C             TO AVOID SLOW BOUNDARY TESTS IN FBS_FAST, PUT THEM HERE
+d200 1
+a200 1
+              CIRCT           = FBS_FAST(X,Y,NSAM,NROW,XIM,X1,Y1,XY2)
+d209 1
+a209 1
+              CIRCT        = FBS_FAST(X+CNS2,Y+CNR2,NSAM,NROW,
+d213 1
+a213 1
+              CIRCT        = FBS_FAST(Y+CNS2,-X+CNR2,NSAM,NROW,
+d219 1
+a219 1
+                 CIRCT = FBS_FAST(-X+CNS2,-Y+CNR2,NSAM,NROW,
+d223 1
+a223 1
+                 CIRCT = FBS_FAST(-Y+CNS2,X+CNR2,NSAM,NROW,
+d262 1
+a262 1
+C          TO AVOID SLOW BOUNDARY TESTS IN FBS_FAST, PUT THEM HERE
+d274 1
+a274 1
+           CIRCT        = FBS_FAST(X,Y,NSAM,NROW,XIM,X1,Y1,XY2)
+d277 1
+a277 1
+C          TO AVOID SLOW BOUNDARY TESTS IN FBS_FAST, PUT THEM HERE
+d288 1
+a288 1
+           CIRCT        = FBS_FAST(X,Y,NSAM,NROW,XIM,X1,Y1,XY2)
+d294 1
+a294 1
+C             TO AVOID SLOW BOUNDARY TESTS IN FBS_FAST, PUT THEM HERE
+d305 1
+a305 1
+              CIRCT =  FBS_FAST(X,Y,NSAM,NROW,XIM,X1,Y1,XY2)
+d308 1
+a308 1
+C             TO AVOID SLOW BOUNDARY TESTS IN FBS_FAST, PUT THEM HERE
+d318 1
+a318 1
+              CIRCT = FBS_FAST(X,Y,NSAM,NROW,XIM,X1,Y1,XY2)
+d329 1
+a329 1
+              CIRCT = FBS_FAST(XT,YT,NSAM,NROW,XIM,X1,Y1,XY2)
+d335 1
+a335 1
+              CIRCT = FBS_FAST(XT,YT,NSAM,NROW,XIM,X1,Y1,XY2)
+d342 1
+a342 1
+                 CIRCT = FBS_FAST(XT,YT,NSAM,NROW,XIM,X1,Y1,XY2)
+d347 1
+a347 1
+                 CIRCT = FBS_FAST(XT,YT,NSAM,NROW,XIM,X1,Y1,XY2)
+@
+
+
+1.2
+log
+@used spile
+used spline
+@
+text
+@d69 1
+a69 1
+        REAL, ALLOCATABLE            :: X1(:,:),Y1(:,:),YY2(:,:)
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d3 1
+d28 1
+a28 1
+C ALRQ_MS_FBP
+a47 3
+C NOTE:  THIS ROUTINE AND THE CALLED FBP_FAST FUNCTION TAKE ???? (17%) ?
+C        OF TIME IN: 'AP SH'
+C
+d51 1
+a51 1
+        SUBROUTINE ALRQ_MS_FBP(XIM, NSAM,NROW, CNS2,CNR2, 
+d69 1
+a69 1
+        REAL, ALLOCATABLE            :: X1(:,:),Y1(:,:)
+d74 4
+a77 3
+        ALLOCATE (F0(NXLD * NROW),
+     &            X1(NXLD,  NROW),
+     &            Y1(NXLD,  NROW),
+d81 1
+a81 1
+            CALL ERRT(46,'ALRQ_MS_NEW; F0...',MWANT)
+d96 1
+a96 1
+        CALL FBP_PREP(F0, X1,Y1, NXLD, NSAM,NROW, IRTFLG)
+d140 1
+a140 1
+C          TO AVOID SLOW BOUNDARY TESTS IN FBP_FAST, PUT THEM HERE
+d153 1
+a153 1
+           CIRCT        = FBP_FAST(X,Y,NSAM,NROW,XIM,X1,Y1)
+d156 1
+a156 1
+C          TO AVOID SLOW BOUNDARY TESTS IN FBP_FAST, PUT THEM HERE
+d168 1
+a168 1
+           CIRCT        = FBP_FAST(X,Y,NSAM,NROW,XIM,X1,Y1)
+d174 1
+a174 1
+C             TO AVOID SLOW BOUNDARY TESTS IN FBP_FAST, PUT THEM HERE
+d186 1
+a186 1
+              CIRCT         =  FBP_FAST(X,Y,NSAM,NROW,XIM,X1,Y1)
+d189 1
+a189 1
+C             TO AVOID SLOW BOUNDARY TESTS IN FBP_FAST, PUT THEM HERE
+d200 1
+a200 1
+              CIRCT           = FBP_FAST(X,Y,NSAM,NROW,XIM,X1,Y1)
+d209 2
+a210 2
+              CIRCT        = FBP_FAST(X+CNS2,Y+CNR2,NSAM,NROW,
+     &                                  XIM,X1,Y1)
+d213 2
+a214 2
+              CIRCT        = FBP_FAST(Y+CNS2,-X+CNR2,NSAM,NROW,
+     &                                   XIM,X1,Y1)
+d219 2
+a220 1
+                 CIRCT = FBP_FAST(-X+CNS2,-Y+CNR2,NSAM,NROW,XIM,X1,Y1)
+d223 2
+a224 1
+                 CIRCT = FBP_FAST(-Y+CNS2,X+CNR2,NSAM,NROW,XIM,X1,Y1)
+d262 1
+a262 1
+C          TO AVOID SLOW BOUNDARY TESTS IN FBP_FAST, PUT THEM HERE
+d274 1
+a274 1
+           CIRCT        = FBP_FAST(X,Y,NSAM,NROW,XIM,X1,Y1)
+d277 1
+a277 1
+C          TO AVOID SLOW BOUNDARY TESTS IN FBP_FAST, PUT THEM HERE
+d288 1
+a288 1
+           CIRCT        = FBP_FAST(X,Y,NSAM,NROW,XIM,X1,Y1)
+d294 1
+a294 1
+C             TO AVOID SLOW BOUNDARY TESTS IN FBP_FAST, PUT THEM HERE
+d305 1
+a305 1
+              CIRCT =  FBP_FAST(X,Y,NSAM,NROW,XIM,X1,Y1)
+d308 1
+a308 1
+C             TO AVOID SLOW BOUNDARY TESTS IN FBP_FAST, PUT THEM HERE
+d318 1
+a318 1
+              CIRCT = FBP_FAST(X,Y,NSAM,NROW,XIM,X1,Y1)
+d329 1
+a329 1
+              CIRCT = FBP_FAST(XT,YT,NSAM,NROW,XIM,X1,Y1)
+d335 1
+a335 1
+              CIRCT = FBP_FAST(XT,YT,NSAM,NROW,XIM,X1,Y1)
+d342 1
+a342 1
+                 CIRCT = FBP_FAST(XT,YT,NSAM,NROW,XIM,X1,Y1)
+d347 1
+a347 1
+                 CIRCT = FBP_FAST(XT,YT,NSAM,NROW,XIM,X1,Y1)
+d358 1
+a360 1
+
+@

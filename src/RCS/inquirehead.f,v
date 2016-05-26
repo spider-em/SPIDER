@@ -1,0 +1,827 @@
+head	1.15;
+access;
+symbols
+	pre_getangas:1.8
+	GPL2010:1.4
+	pre_GPL2010:1.3
+	pre_var_equation:1.3;
+locks; strict;
+comment	@c @;
+
+
+1.15
+date	2013.10.17.15.47.56;	author leith;	state Exp;
+branches;
+next	1.14;
+
+1.14
+date	2012.12.04.18.51.10;	author leith;	state Exp;
+branches;
+next	1.13;
+
+1.13
+date	2011.08.09.16.14.33;	author leith;	state Exp;
+branches;
+next	1.12;
+
+1.12
+date	2011.08.01.17.18.45;	author leith;	state Exp;
+branches;
+next	1.11;
+
+1.11
+date	2011.06.15.14.12.04;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2011.06.15.14.09.11;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2011.05.26.16.25.32;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2010.11.26.17.09.29;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2010.11.24.16.12.07;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2010.11.23.19.51.59;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2010.11.03.19.17.25;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2010.06.24.13.25.58;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2009.05.15.16.18.13;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2009.05.15.15.12.12;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2009.05.15.14.15.01;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.15
+log
+@GLONUM
+@
+text
+@C++*********************************************************************
+C                                                                      *
+C  INQUIREHEAD.F     NEW                         MAY 2009 ARDEAN LEITH *
+C                    NORM CALL                   NOV 2010 ARDEAN LEITH *                          
+C                    PIXSIZ LOC.                 NOV 2010 ARDEAN LEITH * 
+C                    1PG FORMAT                  NOV 2010 ARDEAN LEITH *                       
+C                    NX.., PROJ...               JUN 2011 ARDEAN LEITH *                       
+C                    GLONUM                      OCT 2013 ARDEAN LEITH *                       
+C                                                                      *
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2013  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C   INQUIREHEAD(LUN,NX,NY,NZ.IRTFLG)    
+C
+C   PURPOSE: RETRIEVES VALUES OF HEADER VARIABLE(S) INTO REGISTERS
+C
+C   PARAMETERS:  LUN       I/O UNIT                           (SENT)
+C                NX..      FILE SIZE                          (SENT)
+C                IRTFLG    ERROR FLAG                         (RET.)
+C                          0  IS NORMAL
+C                          1 INQUIRY WAS NOT AS EXPECTED
+C
+C--*********************************************************************
+
+      SUBROUTINE INQUIREHEAD(LUN,NX,NY,NZ,IRTFLG)
+
+      IMPLICIT NONE
+
+      INCLUDE 'CMBLOCK.INC' 
+      INCLUDE 'CMLIMIT.INC' 
+ 
+      INTEGER                   :: LUN,NX,NY,NZ,IRTFLG
+
+      INTEGER, PARAMETER        :: MAXREGNAM = 10
+      CHARACTER(LEN=MAXREGNAM)  :: REGNAME
+
+C     MAXNSEL IS CURRENTLY SAME AS IN REG_SET.F !!!
+      INTEGER, PARAMETER        :: MAXNSEL = 24  ! SEARCH & REGISTER LIST
+      INTEGER                   :: LOCATION(MAXNSEL)
+      INTEGER                   :: IREGSELS(MAXNSEL)
+      REAL                      :: VALUES(MAXNSEL)
+      CHARACTER(LEN=8)          :: NAMES(MAXNSEL)
+
+      INTEGER                   :: ICOMM,MYPID,IVALS,I,NREG,IHEDLOC
+      INTEGER                   :: UNUSED,LEN,LENT
+      INTEGER                   :: lnblnkn
+
+      CALL SET_MPI(ICOMM,MYPID,IRTFLG)   ! RETURNS MPI PROCESS ID OR -1
+
+      CALL INQUIREHEAD_LOC(LOCATION,NAMES,IVALS,IRTFLG)
+      IF (IRTFLG .NE. 0) RETURN
+
+      DO I=1,IVALS     ! LOOP OVER ALL  WANTED HEADER VALUES
+         !write(6,*) 'locs:', location(I),names(i)
+         IF (LOCATION(I) >= 7 .AND. LOCATION(I) <= 10) THEN
+            IF (IMAMI .NE. 1) THEN
+C              STATISTICS NOT DETERMINED YET!
+               CALL NORM3(LUN,NX,NY,NZ, FMAX,FMIN,AV)
+            ENDIF
+            EXIT
+         ENDIF
+      ENDDO
+
+C     RETRIEVE REGISTER NUMBER(S) (IF ANY)  FROM OPERATION LISTING
+      CALL REG_GET_SELS(IREGSELS,MAXNSEL,NREG,IRTFLG)
+
+      DO I=1,IVALS    ! LOOP OVER ALL  WANTED HEADER VALUES
+
+        IHEDLOC = LOCATION(I)     ! HEADER LOCATION WANTED
+
+C       GET HEADER VALUE FROM  THIS HEADER LOCATION  
+        CALL GETLAB(LUN,NX,UNUSED,IHEDLOC,1,VALUES(I),IRTFLG)
+
+        !write(6,*) ' IHEDLOC: ',IHEDLOC,names(i), VALUES(I)
+
+C       KLUDGE FOR NZ < 0
+        IF (LOCATION(I) == 1 .AND. VALUES(I) .LT. 0) 
+     &      VALUES(I) = ABS(VALUES(I))
+
+        IF (VERBOSE .AND. (MYPID <= 0) ) THEN
+C          ECHO VALUE
+
+           IF (NREG <= 0) THEN
+C             NOT SETTING ANY REGISTER, ECHO VALUE ONLY
+              !WRITE(NOUT,90) NAMES(I)(1:LENT),VALUES(I),LENT
+              WRITE(NOUT,90) NAMES(I),VALUES(I)
+90            FORMAT('  ',A,' = ',1PG11.3)
+           ELSE
+C             GET REGISTER NAME
+              CALL REG_GET_NAME(IREGSELS(I),REGNAME,LEN,IRTFLG)
+
+C             ECHO HEADER VALUE & REGISTER SETTING
+              WRITE(NOUT,91) REGNAME(1:LEN),NAMES(I),VALUES(I)
+91            FORMAT('  REGISTER VARIABLE: ',A,'  HOLDS: ',A,
+     &                  ' = ',1PG11.3)
+           ENDIF
+        ENDIF  ! END OF: IF (VERBOSE .AND. (MYPID <= 0) ) THEN
+      ENDDO    ! END OF: DO I=1,IVALS  
+  
+C     SET REGISTER VARIABLES TO HEADER VALUES
+      CALL REG_SET_NSELA(IVALS,VALUES,.FALSE.,IRTFLG)
+ 
+      END
+
+C     -------------------- INQUIREHEAD_LOC ----------------------------
+
+
+      SUBROUTINE INQUIREHEAD_LOC(LOCATION,NAMEGOT,IVALS,IRTFLG)
+
+      IMPLICIT NONE
+      INCLUDE 'CMBLOCK.INC' 
+      INCLUDE 'CMLIMIT.INC' 
+ 
+C     MAXNSEL IS CURRENTLY SAME AS IN REG_SET.F !!!
+      INTEGER, PARAMETER        :: MAXNSEL = 24  ! SEARCH & REGISTER LIST
+      INTEGER                   :: LOCATION(MAXNSEL)
+      CHARACTER(LEN=8)          :: NAMEGOT(MAXNSEL)
+      INTEGER                   :: IVALS
+      INTEGER                   :: IRTFLG
+
+      LOGICAL                   :: STRIP
+      CHARACTER(LEN=80)         :: RESPONSE,ARGNOW,MSG
+      CHARACTER(LEN=1)          :: NULL = CHAR(0)
+      INTEGER                   :: ICOMM,MYPID,NT,ILOC,LENVAR,LENT,NE
+      INTEGER                   :: I,IFIRST, IGO, IEND, NLETA, IVAR
+      INTEGER                   :: lnblnk
+
+      INTEGER, PARAMETER        :: MAXHEDNAM = 50
+      CHARACTER(LEN=8)          :: NAME(MAXHEDNAM)
+
+      CALL SET_MPI(ICOMM,MYPID,IRTFLG)   ! RETURNS MPI PROCESS ID OR -1
+
+      DO I=1,MAXHEDNAM
+        NAME(I) = ''
+      ENDDO
+
+      NAME(1)  =  'NZ'
+      NAME(2)  =  'NY'
+      NAME(3)  =  'IREC'
+      NAME(4)  =  'UNUSED'
+      NAME(5)  =  'IFORM'
+      NAME(6)  =  'IMAMI'
+      NAME(7)  =  'FMAX'
+      NAME(8)  =  'FMIN'
+      NAME(9)  =  'AV'
+      NAME(10) =  'SIG'
+      NAME(11) =  'UNUSED'
+      NAME(12) =  'NX'
+      NAME(13) =  'LABREC'
+      NAME(14) =  'IANGLE'
+      NAME(15) =  'PHI'
+      NAME(16) =  'THETA'
+      NAME(17) =  'PSI'
+      NAME(18) =  'XOFF'
+      NAME(19) =  'YOFF'
+      NAME(20) =  'ZOFF'
+      NAME(21) =  'SCALE'
+      NAME(22) =  'LABBYT'
+      NAME(23) =  'LENBYT'
+      NAME(24) =  'ISTACK'
+      NAME(25) =  'UNUSED'
+      NAME(26) =  'MAXIM'
+      NAME(27) =  'IMGNUM'
+      NAME(28) =  'LASTINDX'
+      NAME(29) =  'UNUSED'
+      NAME(30) =  'UNUSED'
+      NAME(31) =  'KANGLE'
+      NAME(32) =  'PHI1'
+      NAME(33) =  'THETA1'
+      NAME(34) =  'PSI1'
+      NAME(35) =  'PHI2'
+      NAME(36) =  'THETA2'
+      NAME(37) =  'PSI2'
+      NAME(38) =  'PIXSIZ'
+      NAME(39) =  'EV'
+      NAME(40) =  'PROJ'
+      NAME(41) =  'MIC'
+      NAME(42) =  'NUM'
+      NAME(43) =  'GLONUM'
+      NAME(44) =  'UNUSED'
+      NAME(45) =  'UNUSED'
+      NAME(46) =  'UNUSED'
+      NAME(47) =  'UNUSED'
+      NAME(48) =  'UNUSED'
+      NAME(49) =  'UNUSED'
+      NAME(50) =  'UNUSED'
+
+      STRIP     = .TRUE.
+      CALL RDPRMC(RESPONSE,NLETA,STRIP,'HEADER VARIABLE(S)',
+     &            NULL,IRTFLG)
+      IF (IRTFLG .NE. 0) RETURN
+
+      IFIRST = 1
+      IVALS  = 0
+      DO WHILE (IFIRST .LT. NLETA) 
+         CALL GETNEXTTOKEN(RESPONSE,IFIRST,IGO,IEND)
+         IF (IGO <= 0) EXIT
+         ARGNOW = RESPONSE(IGO:IEND)
+         IFIRST = IEND + 1         ! START OF NEXT TOKEN
+         NT     = IEND - IGO + 1   ! CHAR. IN ARGNOW
+
+         ! write(6,*) ' token: ',argnow(1:nt)
+
+         IVAR = 0
+
+         IF     (ARGNOW(1:NT) == 'MAX') THEN
+C           SPECIAL ALLOWS 'MAX' FOR 'FMAX'
+            IVAR = 7
+         ELSEIF (ARGNOW(1:NT) == 'AVG') THEN
+            IVAR = 9               ! ALTERNATE LABEL
+
+         ELSEIF (ARGNOW(1:NT) == 'NSAM') THEN
+            IVAR = 12              ! ALTERNATE LABEL
+
+         ELSEIF (ARGNOW(1:NT) == 'NROW') THEN
+            IVAR = 2               ! ALTERNATE LABEL
+
+         ELSEIF (ARGNOW(1:NT) == 'NSLICE') THEN
+            IVAR = 1               ! ALTERNATE LABEL
+
+         ELSE
+            DO I = 1,MAXHEDNAM
+               ILOC = INDEX(NAME(I),ARGNOW(1:NT))
+               IF (ILOC > 0) THEN
+C                 POSSIBLE MATCH
+
+                  LENVAR = lnblnk(NAME(I))
+                  !write(6,*) ' matches: ',name(i),nt,lenvar
+
+                  IF (NT == LENVAR) THEN
+                     IVAR = I
+                     EXIT       ! COMPLETE MATCH
+
+                  ELSEIF (IVAR > 0) THEN
+C                    DOUBLE MATCH
+                     MSG = 'HEADER VARIABLE NAME: "'// ARGNOW(1:NT) // 
+     &                     '" IS NOT UNIQUE, USE LONGER NAME'
+                     LENT = lnblnk(MSG)
+                     CALL ERRT(101,MSG(1:LENT),NE)
+                     RETURN
+                  ENDIF            
+                  IVAR = I
+               ENDIF
+            ENDDO
+         ENDIF
+
+         IF (IVAR <= 0) THEN
+            MSG = 'UNKNOWN HEADER VARIABLE: "' // ARGNOW(1:NT) //'"' 
+            CALL ERRT(101,MSG,NE)
+            IRTFLG = 1
+            RETURN
+
+         ELSEIF (IVAR > 0) THEN
+C           GOT A MATCHING HEADER VARIABLE
+            IVALS = IVALS + 1
+            IF (IVALS > MAXNSEL) THEN
+                CALL ERRT(102,
+     &                 'TOO MANY VARIABLES REQUESTED, LIMIT',MAXNSEL)
+                IRTFLG = 1
+                RETURN
+            ENDIF
+            LOCATION(IVALS)      = IVAR
+            NAMEGOT(IVALS)(1:8)  = NAME(IVAR)(1:8)
+            !write(6,*) ' matched',ivar,namegot(ivals)
+         ENDIF
+      ENDDO  ! END OF: DO WHILE (IFIRST .LT. NLETA) 
+C     NOW HAVE LISTED ALL MATCHING VARIABLE NUMBERS IN: LOCATION 
+
+      ! write(6,*) ' matching values',ivals
+ 
+      END
+
+
+
+@
+
+
+1.14
+log
+@nx,  nsam label now nx
+@
+text
+@d8 1
+d14 1
+a14 1
+C=* Copyright 1985-2012  Health Research Inc.,                         *
+d198 1
+a198 1
+      NAME(43) =  'UNUSED'
+@
+
+
+1.13
+log
+@bad term msg names
+@
+text
+@d13 1
+a13 1
+C=* Copyright 1985-2011  Health Research Inc.,                         *
+d31 1
+a31 1
+C   INQUIREHEAD(LUN,NSAM,NROW,NSLICE.IRTFLG)    
+d36 1
+a36 1
+C                NSAM..    FILE SIZE                          (SENT)
+d43 1
+a43 1
+      SUBROUTINE INQUIREHEAD(LUN,NSAM,NROW,NSLICE,IRTFLG)
+d50 1
+a50 1
+      INTEGER                   :: LUN,NSAM,NROW,NSLICE,IRTFLG
+d76 1
+a76 1
+               CALL NORM3(LUN,NSAM,NROW,NSLICE, FMAX,FMIN,AV)
+d90 1
+a90 1
+        CALL GETLAB(LUN,NSAM,UNUSED,IHEDLOC,1,VALUES(I),IRTFLG)
+d94 2
+a95 2
+C       KLUDGE FOR NSLICE < 0
+        IF (LOCATION(I) .EQ. 1 .AND. VALUES(I) .LT. 0) 
+d98 1
+a98 1
+        IF (VERBOSE .AND. (MYPID .LE. 0) ) THEN
+d101 1
+a101 1
+           IF (NREG .LE. 0) THEN
+d115 1
+a115 1
+        ENDIF  ! END OF: IF (VERBOSE .AND. (MYPID .LE. 0) ) THEN
+d155 2
+a156 4
+C     NAMES ALSO DEFINED IN: SETHEAD.F!! (SHOULD BE CONSOLIDATED)
+
+      NAME(1)  =  'NSLICE'
+      NAME(2)  =  'NROW'
+d166 1
+a166 1
+      NAME(12) =  'NSAM'
+d215 1
+a215 1
+         IF (IGO .LE. 0) EXIT
+d224 1
+a224 1
+         IF (ARGNOW(1:NT) .EQ. 'MAX') THEN
+d227 1
+a227 1
+         ELSEIF (ARGNOW(1:NT) .EQ. 'AVG') THEN
+d230 1
+a230 1
+         ELSEIF (ARGNOW(1:NT) .EQ. 'NX') THEN
+d233 1
+a233 1
+         ELSEIF (ARGNOW(1:NT) .EQ. 'NY') THEN
+d236 1
+a236 1
+         ELSEIF (ARGNOW(1:NT) .EQ. 'NZ') THEN
+d242 1
+a242 1
+               IF (ILOC .GT. 0) THEN
+d248 1
+a248 1
+                  IF (NT .EQ. LENVAR) THEN
+d252 1
+a252 1
+                  ELSEIF (IVAR .GT. 0) THEN
+d265 1
+a265 1
+         IF (IVAR .LE. 0) THEN
+d271 1
+a271 1
+         ELSEIF (IVAR .GT. 0) THEN
+d274 1
+a274 1
+            IF (IVALS .GT. MAXNSEL) THEN
+@
+
+
+1.12
+log
+@bad results file output fixed
+@
+text
+@d111 1
+a111 1
+              WRITE(NOUT,91) REGNAME(1:LEN),NAMES(IHEDLOC),VALUES(I)
+@
+
+
+1.11
+log
+@typo
+@
+text
+@d63 2
+a64 1
+      INTEGER                   :: UNUSED,LEN
+d72 1
+d103 3
+a105 2
+              WRITE(NOUT,90) NAMES(IHEDLOC),VALUES(I)
+90            FORMAT('  ',A,' = ',G11.3)
+d248 1
+a248 1
+                  ! write(6,*) ' matches: ',name(i),nt,lenvar
+d282 3
+a284 2
+            LOCATION(IVALS) = IVAR
+            NAMEGOT(IVALS)  = NAME(IVAR)
+@
+
+
+1.10
+log
+@locs: 40,41,42,  nx, alternate for nsam
+@
+text
+@d227 1
+a227 1
+            IVAR = 9               // ALTERNATE LABEL
+d230 1
+a230 1
+            IVAR = 12              // ALTERNATE LABEL
+d233 1
+a233 1
+            IVAR = 2              // ALTERNATE LABEL
+d236 1
+a236 1
+            IVAR = 1              // ALTERNATE LABEL
+@
+
+
+1.9
+log
+@new name getting routine & optional min,max,av names
+@
+text
+@d7 1
+d13 1
+a13 1
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+d193 3
+a195 3
+      NAME(40) =  'UNUSED'
+      NAME(41) =  'UNUSED'
+      NAME(42) =  'UNUSED'
+d227 10
+a236 1
+            IVAR = 9
+@
+
+
+1.8
+log
+@comment
+@
+text
+@d44 2
+d49 1
+a49 3
+      LOGICAL                   :: STRIP
+      CHARACTER(LEN=80)         :: RESPONSE,ARGNOW,MSG
+      CHARACTER(LEN=1)          :: NULL
+a50 2
+      INTEGER, PARAMETER        :: MAXHEDNAM = 50
+      CHARACTER(LEN=8)          :: NAME(MAXHEDNAM)
+d54 1
+a54 1
+C     CURRENTLY SAME AS IN REG_SET.F !!!
+d59 64
+d124 20
+a143 1
+      NULL = CHAR(0)
+a220 7
+         DO I = 1,MAXHEDNAM
+            ILOC = INDEX(NAME(I),ARGNOW(1:NT))
+            IF (ILOC .GT. 0) THEN
+C              POSSIBLE MATCH
+
+               LENVAR = lnblnk(NAME(I))
+               ! write(6,*) ' matches: ',name(i),nt,lenvar
+d222 27
+a248 1
+               IF (NT .EQ. LENVAR) THEN
+d250 3
+a252 12
+                  EXIT       ! COMPLETE MATCH
+               ELSEIF (IVAR .GT. 0) THEN
+C                 DOUBLE MATCH
+                  MSG = 'HEADER VARIABLE NAME: "'// ARGNOW(1:NT) // 
+     &                  '" IS NOT UNIQUE, USE LONGER NAME'
+                  LENT = lnblnk(MSG)
+                  CALL ERRT(101,MSG(1:LENT),NE)
+                  RETURN
+               ENDIF            
+               IVAR = I
+            ENDIF
+         ENDDO
+d270 1
+a275 47
+
+      DO I=1,IVALS     ! LOOP OVER ALL  WANTED HEADER VALUES
+         IF (LOCATION(I) >= 7 .AND. LOCATION(I) <= 10) THEN
+            IF (IMAMI .NE. 1) THEN
+C              STATISTICS NOT DETERMINED YET!
+               CALL NORM3(LUN,NSAM,NROW,NSLICE, FMAX,FMIN,AV)
+            ENDIF
+            EXIT
+         ENDIF
+      ENDDO
+
+C     RETRIEVE REGISTER NUMBER(S) (IF ANY)  FROM OPERATION LISTING
+      CALL REG_GET_SELS(IREGSELS,MAXNSEL,NREG,IRTFLG)
+
+      DO I=1,IVALS    ! LOOP OVER ALL  WANTED HEADER VALUES
+
+        IHEDLOC = LOCATION(I)     ! HEADER LOCATION WANTED
+
+C       GET HEADER VALUE FROM  THIS HEADER LOCATION  
+        CALL GETLAB(LUN,NSAM,UNUSED,IHEDLOC,1,VALUES(I),IRTFLG)
+        !write(6,*) ' IHEDLOC: ',IHEDLOC,VALUES(I)
+
+C       KLUDGE FOR NSLICE < 0
+        IF (LOCATION(I) .EQ. 1 .AND. VALUES(I) .LT. 0) 
+     &      VALUES(I) = ABS(VALUES(I))
+
+        IF (VERBOSE .AND. (MYPID .LE. 0) ) THEN
+C          ECHO VALUE
+
+           IF (NREG .LE. 0) THEN
+C             NOT SETTING ANY REGISTER, ECHO VALUE ONLY
+              WRITE(NOUT,90) NAME(IHEDLOC),VALUES(I)
+90            FORMAT('  ',A,' = ',G11.3)
+           ELSE
+C             GET REGISTER NAME
+              CALL REG_GET_NAME(IREGSELS(I),REGNAME,LEN,IRTFLG)
+
+C             ECHO HEADER VALUE & REGISTER SETTING
+              WRITE(NOUT,91) REGNAME(1:LEN),NAME(IHEDLOC),VALUES(I)
+91            FORMAT('  REGISTER VARIABLE: ',A,'  HOLDS: ',A,
+     &                  ' = ',1PG11.3)
+           ENDIF
+        ENDIF  ! END OF: IF (VERBOSE .AND. (MYPID .LE. 0) ) THEN
+      ENDDO    ! END OF: DO I=1,IVALS  
+  
+C     SET REGISTER VARIABLES TO HEADER VALUES
+      CALL REG_SET_NSELA(IVALS,VALUES,.FALSE.,IRTFLG)
+a277 2
+
+
+@
+
+
+1.7
+log
+@ 1PG FORMAT
+@
+text
+@d7 1
+d69 2
+@
+
+
+1.6
+log
+@PIXSIZ LOC shud be 38
+@
+text
+@d2 5
+a6 4
+C
+C  INQUIREHEAD.F     NEW                         MAY 2009 ARDEAN LEITH
+C                    NORM CALL                   NOV 2010 ARDEAN LEITH                          
+C                    PIXSIZ LOC.                NOV 2010 ARDEAN LEITH                          
+d201 1
+a201 2
+
+       ! write(6,*) ' IHEDLOC: ',IHEDLOC,VALUES(I)
+d221 1
+a221 1
+     &                  ' = ',G11.3)
+@
+
+
+1.5
+log
+@STATISTICS determined if necessary
+@
+text
+@d5 1
+d105 13
+a117 4
+      NAME(38) =  'UNUSED'
+      NAME(39) =  'UNUSED'
+      NAME(40) =  'EV'
+      NAME(41) =  'PIXSIZ'
+@
+
+
+1.4
+log
+@GPL_2010
+@
+text
+@d3 2
+a4 2
+C  INQUIREHEAD.F                     NEW ROUTINE  MAY 2009 ARDEAN LEITH
+C                                
+d27 1
+a27 1
+C   INQUIREHEAD()    
+d31 3
+a33 3
+C   PARAMETERS:  LUN      I/O UNIT                      (SENT)
+C                NSAM     FILE NSAM                     (SENT)
+C                IRTFLG   ERROR FLAG
+d39 1
+a39 1
+      SUBROUTINE INQUIREHEAD(LUN,NSAM,IRTFLG)
+d44 8
+a51 8
+      LOGICAL                                :: STRIP
+      CHARACTER(LEN=80)                      :: RESPONSE,ARGNOW,MSG
+      CHARACTER(LEN=1)                       :: NULL
+
+      INTEGER, PARAMETER                     :: MAXHEDNAM = 50
+      CHARACTER(LEN=8), DIMENSION(MAXHEDNAM) :: NAME
+      INTEGER, PARAMETER                     :: MAXREGNAM = 10
+      CHARACTER(LEN=MAXREGNAM)               :: REGNAME
+d54 4
+a57 4
+      INTEGER, PARAMETER :: MAXNSEL = 24  ! SEARCH & REGISTER LIST
+      INTEGER, DIMENSION(MAXNSEL)            :: LOCATION
+      INTEGER, DIMENSION(MAXNSEL)            :: IREGSELS
+      REAL, DIMENSION(MAXNSEL)               :: VALUES
+d170 10
+@
+
+
+1.3
+log
+@prompt
+@
+text
+@a5 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2009  Health Research Inc.                      *
+d7 5
+a11 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d13 1
+a13 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d18 1
+a18 1
+C=* This program is distributed in the hope that it will be useful,    *
+d20 1
+a20 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a21 1
+C=*                                                                    *
+d23 1
+a23 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.2
+log
+@error msg
+@
+text
+@d114 2
+a115 1
+      CALL RDPRMC(RESPONSE,NLETA,STRIP,'HEADER VARIABLE',NULL,IRTFLG)
+@
+
+
+1.1
+log
+@new
+@
+text
+@d126 1
+a126 1
+C         write(6,*) ' token: ',argnow(1:nt)
+a132 1
+C              write(6,*) ' matches: ',name(i)
+d134 7
+a140 1
+               IF (IVAR .GT. 0) THEN
+d153 2
+a154 2
+C           NO MATCH
+            CALL ERRT(102, 'UNKNOWN HEADER VARIABLE',NE)
+d159 1
+a159 1
+C           GOT A MATCHing HEADER VARIABLE
+d172 1
+a172 1
+C      write(6,*) ' matching values',ivals
+d184 1
+a184 1
+C       write(6,*) ' IHEDLOC: ',IHEDLOC,VALUES(I)
+@
+

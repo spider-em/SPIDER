@@ -1,0 +1,307 @@
+head	1.3;
+access;
+symbols
+	pre_getangas:1.1;
+locks; strict;
+comment	@c @;
+
+
+1.3
+date	2013.10.30.14.01.06;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2012.04.16.18.23.30;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2011.01.03.14.09.55;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.3
+log
+@IF (IC < 32 .OR. IC > 126) bug if not checked!!
+@
+text
+@
+C++*********************************************************************
+C                                                                      *
+C    XMIPP.F      XMIPP SELFILE SUPPORT          DEC 2010 ARDEAN LEITH *
+C                                                                      *
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C     OPENXMSELFILE(FILXM,LUNXM,NSEL,IRTFLG)
+C
+C     PURPOSE:      SUPPORT ROUTINES FOR XMIPP
+C                         
+C     PARAMETERS:   FILXM        SELFILE NAME                   (SENT)
+C                   LUNXM        DOC FILE I/O UNIT              (SENT)
+C                   NSEL         # SELECTED FILES IN LIST       (RET.)
+C                   FILNAM       FIRST FILE IN LIST             (RET.)
+C                   NLET         # CHAR IN FILNAM               (RET.)
+C                   IRTFLG       ERROR FLAG; 0 IS NORMAL        (RET.)
+C  !!! MAY NEED MPI MODS???
+C--*********************************************************************
+
+      SUBROUTINE OPENXMSELFILE(FILXM,LUNXM,FILNAM1,NLET1,NSEL,IRTFLG)
+
+      IMPLICIT NONE
+      INCLUDE 'CMBLOCK.INC'
+      INCLUDE 'CMLIMIT.INC'
+
+      CHARACTER(LEN=*)      :: FILXM 
+      INTEGER               :: LUNXM
+      CHARACTER(LEN=*)      :: FILNAM1 
+      INTEGER               :: NLET1,NSEL
+      INTEGER               :: IRTFLG
+
+      INTEGER               :: LNBLNKN
+      LOGICAL               :: ISOPEN,EX
+      INTEGER               :: LUNOP,LENREC,ISEL
+      CHARACTER(LEN=MAXNAM) :: RECLIN,FILNAM  
+      CHARACTER(LEN=1)      :: NULL = CHAR(0)  
+      INTEGER               :: NLET,I,IC
+
+      FILNAM1 = NULL
+      NSEL    = 0
+
+C     SEE IF THIS FILE EXISTS, (RETURNS EX, ISOPEN, LUNOP)
+      INQUIRE(FILE=FILXM,EXIST=EX,OPENED=ISOPEN,
+     &        NUMBER=LUNOP,IOSTAT=IRTFLG)
+      IF (IRTFLG .NE. 0) RETURN
+
+      IF (.NOT. EX) THEN
+C        NO SUCH FILE
+         !nlet = lnblnkn(filxm)
+         !write(6,*) ' Not a Xmipp selfile:',filxm(:nlet),ex
+         RETURN
+      ENDIF
+
+      LENREC = 0              ! FORMATTED, SEQ. ACCESS
+      CALL OPAUXFILE(.FALSE.,FILXM,NULL,LUNXM,LENREC,
+     &               'O', ' ',.FALSE.,IRTFLG)
+      !write(6,*) ' opened Xmipp selfile:',filxm(1:nlet),irtflg 
+      IF (IRTFLG .NE. 0) RETURN
+
+      OUTER: DO 
+         READ(LUNXM,'(A)',END=999,IOSTAT=IRTFLG) RECLIN
+         !write(6,*) ' read Xmipp selfile:',irtflg,':',reclin(1:maxnam)
+         IF (IRTFLG .NE. 0) EXIT
+          
+         DO I = 1,MAXNAM
+            IC = ICHAR(RECLIN(I:I))
+            IF (IC < 32 .OR. IC > 126) THEN
+               IRTFLG = 1
+               EXIT OUTER
+            ENDIF
+         ENDDO
+
+         CALL PARSE_XMSEL(RECLIN,.FALSE.,FILNAM,NLET,ISEL,IRTFLG)
+         !write(6,*) ' pars Xmipp selfile:',irtflg,':',filnam(1:nlet)
+         IF (IRTFLG .NE. 0) EXIT
+
+         IF (ISEL > 0) NSEL = NSEL + 1   ! # OF SELECTED IMAGES
+
+         IF (NSEL == 1) THEN
+            FILNAM1 = FILNAM             ! SAVE FIRST FILE NAME
+            NLET1   = NLET
+         ENDIF
+      ENDDO OUTER
+ 
+      IF (IRTFLG .NE. 0) THEN
+C        NOT VALID XMIPP SELFILE
+         CLOSE(LUNXM)
+         FILNAM = NULL
+         NSEL   = 0
+         RETURN
+      ENDIF
+
+999   REWIND(LUNXM)                      ! END OF LIST
+ 
+C     POSITION AT SECOND FILE LINE IN LIST  
+      DO    
+         READ(LUNXM,'(A)',IOSTAT=IRTFLG) RECLIN
+         CALL PARSE_XMSEL(RECLIN,.FALSE.,FILNAM,NLET,ISEL,IRTFLG)
+         IF (IRTFLG .NE. 0) EXIT
+         IF (ISEL > 0) EXIT            ! NOT A COMMENT
+      ENDDO
+         
+      !write(6,'(a,a,2x,i6)')' xmipp 1st selfile: ',filnam(:nlet),isel
+      !write(6,'(a,I6)')' Xmipp selfiles: ',NSEL
+
+      END
+ 
+C      *********************** PARSE_XMSEL ********************************
+
+       SUBROUTINE PARSE_XMSEL(RECLIN,CALLERRT, FILNAM,NLET,ISEL,IRTFLG)
+
+C      FINDS LOCATION OF COMMENT AND ANY TRAILING BLANKS BEFORE COMMENT
+
+       IMPLICIT NONE
+       INCLUDE 'CMBLOCK.INC'
+
+       CHARACTER(LEN=*) :: RECLIN
+       LOGICAL          :: CALLERRT
+       CHARACTER(LEN=*) :: FILNAM
+       INTEGER          :: NLET
+       INTEGER          :: ISEL,IRTFLG
+
+       INTEGER          :: NCHAR,I,IERR,NE
+       LOGICAL          :: INSIDE
+       CHARACTER(LEN=1) :: CTEMP
+       
+       INTEGER          :: lnblnkn
+
+       NLET   = 0
+       INSIDE = .FALSE.
+       NCHAR  = lnblnkn(RECLIN)
+
+       DO I = 1,NCHAR
+          CTEMP = RECLIN(I:I)
+
+          IF ((CTEMP .LT. '!' .OR. CTEMP .GT. '~')) THEN
+C            GOT NON PRINTING CHAR LIKE A BLANK
+
+             IF (INSIDE) THEN
+C               END OF FILENAME, GET SELECTION INDICATOR
+                INSIDE = .FALSE.
+
+#if defined (SP_GFORTRAN)
+                READ(RECLIN(I:),'(I12)',IOSTAT=IERR) ISEL
+#else
+                READ(RECLIN(I:),'(I)',IOSTAT=IERR) ISEL
+#endif
+
+                !write(6,*) ' isel:',isel
+                IF (IERR .NE. 0) THEN
+                  IF (CALLERRT) THEN
+                      WRITE(NOUT,90) RECLIN
+90                    FORMAT('  *** UNABLE TO PARSE SEL. FILE LINE: ',A)
+                      CALL ERRT(100,'PARSE_XMSEL',NE)
+                   ENDIF
+                   IRTFLG = 1
+                ENDIF
+
+                EXIT
+             ENDIF
+
+          ELSEIF (CTEMP .EQ. ';' .OR. CTEMP .EQ. '#') THEN
+C            GOT COMMENT CHAR
+             NLET = 0
+             ISEL = 0
+             EXIT
+
+          ELSEIF ((CTEMP .GE. '!' .AND. CTEMP .LE. '~')) THEN
+C            GOT PRINTING CHAR
+             NLET              = NLET + 1
+             FILNAM(NLET:NLET) = CTEMP
+             INSIDE            = .TRUE.
+           ENDIF
+       ENDDO
+
+       IRTFLG = 0
+
+       END
+  
+C      *********************** GETNEXT_XMSEL ********************************
+
+       SUBROUTINE GETNEXT_XMSEL(LUNXM,CALLERRT,FILNAM,NLET,IRTFLG)
+
+       IMPLICIT NONE
+       INCLUDE 'CMLIMIT.INC'
+
+       INTEGER                :: LUNXM         ! INPUT UNIT 
+       LOGICAL                :: CALLERRT      ! CALL ERRT IF ERROR
+       CHARACTER (LEN=MAXNAM) :: FILNAM        ! RETURNED FILNAME
+       INTEGER                :: NLET          ! FILNAM LENGTH
+       INTEGER                :: IRTFLG        ! ERROR FLAG
+
+       INTEGER                :: lnblnkn
+       INTEGER                :: ISEL          ! SELECTED FLAG
+       CHARACTER (LEN=MAXNAM) :: RECLIN        ! RETURNED FILNAME
+
+       DO 
+          READ(LUNXM,'(A)',IOSTAT=IRTFLG) RECLIN
+          !write(6,*) ' READ, irtflg:',irtflg,reclin
+          IF (IRTFLG .NE. 0) EXIT
+
+          CALL PARSE_XMSEL(RECLIN,CALLERRT, FILNAM,NLET,ISEL,IRTFLG)
+           !write(6,*) ' Parse, irtflg:',irtflg
+
+           IF (IRTFLG .NE. 0 .OR. ISEL > 0) EXIT
+       ENDDO            
+
+       IF (IRTFLG .NE. 0) THEN
+          CLOSE(LUNXM)            ! CLOSE THE SELFILE INPUT UNIT
+          FILNAM = CHAR(0)        ! NULL
+          NLET   = 0
+       ENDIF
+
+       END
+@
+
+
+1.2
+log
+@#if defined (SP_GFORTRAN)READ(RECLIN(I:),'(I12)'..
+@
+text
+@d58 1
+a58 1
+      INTEGER               :: NLET
+d71 1
+a71 1
+         !write(6,*) ' Not a Xmipp selfile:',filxm(:nlet)
+d78 1
+d81 1
+a81 1
+      DO 
+d83 1
+d85 8
+d95 1
+d100 1
+a100 1
+         IF (NSEL .EQ. 1) THEN
+d104 2
+a105 2
+      ENDDO
+
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d153 3
+d157 2
+@

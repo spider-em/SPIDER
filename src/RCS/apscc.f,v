@@ -1,0 +1,1502 @@
+head	1.11;
+access;
+symbols
+	pre_getangas:1.5
+	GPL2010:1.5
+	pre_GPL2010:1.4
+	pre_var_equation:1.2
+	pre_fftwrings:1.2;
+locks; strict;
+comment	@c @;
+
+
+1.11
+date	2014.12.19.14.31.07;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2014.12.17.16.44.58;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2014.09.19.17.44.59;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2014.09.18.12.24.17;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2014.01.12.19.48.15;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2011.09.09.16.11.30;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2010.06.24.13.25.05;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2010.02.26.14.12.37;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2009.08.10.16.36.25;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2008.03.13.18.15.12;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2008.03.13.18.10.57;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.11
+log
+@sigr bug
+@
+text
+@C++*********************************************************************
+C
+C APSCC            NEW                             FEB 08 ArDean Leith
+C                  FLIPPED EXP & REF BUG           AUG 09 ArDean Leith
+C                  REMOVED FROM APMASTER           AUG 09 ArDean Leith
+C                  ISHX = 0 ALLOWED                FEB 10 ArDean Leith
+C                  NORMIT BUG                      SEP 11 ArDean Leith
+C                  NZP SIZE BUG                    SEP 14 ArDean Leith
+C                  NEXTFILES USED, PADVAL BUG      SEP 14 ArDean Leith
+C                  SIGR BUG                        DEC 14 ArDean Leith
+C
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2014  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C                  
+C APSCC
+C
+C PURPOSE:  2D & 3D PADDED, CROSS CORRELATION MULTI-REFERENCE 
+C           SHIFT ALIGNMENT
+C  
+C VARIABLES:
+C       IREFLST               LIST OF REF. IMAGE FILE NUMBERS   (INPUT)
+C       NUMREF                NO. OF IMAGES                     (INPUT)
+C       IEXPLST               LIST OF EXP. IMAGE FILE NUMBERS   (INPUT)
+C       NUMEXP                NO. OF IMAGES                     (INPUT)
+C       NX,NY,NZ              ACTUAL (NOT-WINDOWED) IMAGE SIZE  (INPUT)
+C       ISHX,ISHY,ISHZ        SHIFT SEARCH RANGE                (INPUT)
+C       NORMIT                NORMALIZATION WANTED FLAG         (INPUT)
+C       REFPAT                REF. IMAGE SERIES FILE TEMPLATE   (INPUT)
+C       EXPPAT                EXP. IMAGE SERIES FILE TEMPLATE   (INPUT)
+C       LUNREF,LUNEXP,LUNDOC  I/O UNITS                         (INPUT)
+C
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C--*********************************************************************
+
+        SUBROUTINE APSCC()
+
+        IMPLICIT NONE
+
+        INCLUDE 'CMLIMIT.INC'
+        INCLUDE 'CMBLOCK.INC'
+
+        CHARACTER (LEN=MAXNAM) :: REFPAT,EXPPAT,OUTANG
+        INTEGER                :: IEXPLST(NIMAX)
+
+	CHARACTER(LEN=1)       :: NULL = CHAR(0)
+	CHARACTER(LEN=80)      :: YN
+	CHARACTER(LEN=160)     :: COMMEN
+        LOGICAL                :: NEWFILE,NORMIT,PADIT
+        INTEGER                :: NILMAX,NX,NY,NZ,NDUM,NPADVAL
+        INTEGER                :: IDUM,ITYPER,ITYPEE,NUMREF,IREF
+        INTEGER                :: NUMEXP,IEXP,IRTFLG,NLET,NOT_USED
+        INTEGER                :: ITYPE,MAXIME,MAXIMR,NSEL_USED,ipad
+        REAL                   :: UNUSED
+        REAL                   :: AVR,SIGR,AVE,SIGE
+
+        INTEGER                :: ICOMM,MYPID,MPIERR
+        INTEGER                :: ISHX,ISHY,ISHZ,NX2,NY2,NZ2,NOUTANG
+
+        LOGICAL                :: FOUROK    = .TRUE.
+
+        INTEGER,PARAMETER      :: LUNREF    = 21 
+        INTEGER,PARAMETER      :: LUNEXP    = 22
+        INTEGER,PARAMETER      :: LUNDOCSEL = 81
+        INTEGER,PARAMETER      :: LUNXMR    = 82
+        INTEGER,PARAMETER      :: LUNXME    = 83
+        INTEGER,PARAMETER      :: LUNDOC    = 84
+
+	!DATA  INPIC,INANG,NDOC,NSCF/77,78,55,50/ !USED IN CALLED ROUTINE
+
+        CALL SET_MPI(ICOMM,MYPID,MPIERR) ! SETS ICOMM AND MYPID 
+
+        NILMAX = NIMAX  ! FROM CMLIMIT.INC
+
+C       ASK FOR TEMPLATE AND NUMBERS FOR REFERENCE IMAGES
+C       OPEN FIRST REFERENCE IMAGE TO BE ALIGNED
+        CALL OPFILES(0,LUNREF,LUNDOCSEL,LUNXMR, 
+     &        .TRUE.,REFPAT,NLET, 'O',
+     &        ITYPER,NX,NY,NZ,MAXIMR,
+     &        'REFERENCE IMAGE FILE NAME OR TEMPLATE (E.G. STK@@****)~',
+     &        FOUROK,INUMBR,NILMAX, 
+     &        NDUM,NUMREF,IREF, IRTFLG) 
+        IF (IRTFLG .NE. 0) RETURN
+
+C       NUMREF - TOTAL NUMBER OF REF. IMAGES
+        IF (NUMREF == 0 .AND. IREF > 0) NUMREF = 1
+        IF (NUMREF <= 0)  THEN
+           CALL ERRT(101,'No reference images',IDUM)
+           GOTO 9999
+        ELSEIF (MYPID <= 0) THEN
+           WRITE(NOUT,'(A,I0)')'  Number of reference images: ',NUMREF
+        ENDIF
+
+
+C       FIND SEARCH RANGE
+        ISHX = 0
+        ISHY = 0
+        ISHZ = 0 
+        CALL RDPRI3S(ISHX,ISHY,ISHZ,NOT_USED,
+     &     'SEARCH RANGE IN X, Y, & Z (ZERO FOR ALL)' ,IRTFLG)
+        IF (IRTFLG .NE. 0)  GOTO 9999
+
+C       POSSIBLE SHIFT AMOUNTS FOR SEARCH
+        IF (ISHX == 0) ISHX = NX / 2
+        IF (ISHY == 0) ISHY = NY / 2
+        IF (ISHZ == 0) ISHZ = NZ / 2
+        IF (ISHX <  0) ISHX = 0
+        IF (ISHY <  0) ISHY = 0
+        IF (ISHZ <  0) ISHZ = 0
+
+        
+        IRTFLG = 0
+        IF (ITYPER > 0)  THEN
+C          REAL IMAGE INPUT
+           CALL RDPRMC(YN,NLET,.TRUE.,
+     &       'NORMALIZE PEAK HEIGHT, 2x PAD IMAGES (Y/N)', NULL,IRTFLG)
+        ELSE
+C          FOURIER INPUT (MUST ALREADY BE PADDED IF DESIRED)
+           CALL RDPRMC(YN,NLET,.TRUE.,
+     &        'NORMALIZE PEAK HEIGHT, 2x PADDED IMAGES (Y/N)', 
+     &         NULL,IRTFLG)
+        ENDIF
+        IF (IRTFLG .NE. 0)  GOTO 9999
+        NORMIT = ( YN(1:1) .NE. 'N' )
+
+        PADIT  = (INDEX(YN(2:NLET),'N') == 0 )
+
+        AVR  = AV
+        SIGR = SIG
+        IF (IMAMI .NE. 1 .AND. ITYPER > 0 ) THEN
+           CALL NORM3(LUNREF,NX,NY,NZ,FMAX,FMIN,AV)
+           AVR  = AV
+           SIGR = SIG
+        ENDIF
+
+
+C       OPEN FIRST EXPERIMENTAL IMAGE TO BE ALIGNED
+        CALL OPFILES(0,LUNEXP,LUNDOCSEL,LUNXME, 
+     &      .TRUE.,EXPPAT,NLET, 'O',
+     &      ITYPEE,NX2,NY2,NZ2,MAXIME,
+     &      'EXPERIMENTAL IMAGE FILE NAME OR TEMPLATE (E.G. STK@@****)~',
+     &      FOUROK,IEXPLST,NILMAX, 
+     &      NDUM,NUMEXP,IEXP, IRTFLG) 
+        IF (IRTFLG .NE. 0)  GOTO 9999
+
+C       IMAGES MUST BE SAME SIZE AND IFORM 
+        CALL SIZCHK(UNUSED, NX,NY,NZ,ITYPER, NX2,NY2,NZ2,ITYPEE, IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 9999
+
+        IF (NUMEXP == 0 .AND. IEXP > 0) NUMEXP = 1
+        IF (MYPID <= 0) THEN
+          WRITE(NOUT,'(A,I0)')'  Number of experimental images: ',NUMEXP
+        ENDIF
+
+        AVE  = AV
+        SIGE = SIG
+        IF (IMAMI .NE. 1 .AND. ITYPER > 0) THEN 
+           CALL NORM3(LUNEXP,NX,NY,NZ,FMAX,FMIN,AV)
+           AVE  = AV
+           SIGE = SIG
+        ENDIF
+
+C       GET NAME FOR OUTPUT DOC FILE
+        CALL REG_GET_USED(NSEL_USED)
+
+C       OPEN OUTPUT DOC FILE (FOR APPENDING)
+        NOUTANG = LUNDOC
+        CALL OPENDOC(OUTANG,.TRUE.,NLET,LUNDOC,NOUTANG,.TRUE.,
+     &           'OUTPUT ALIGNMENT DOCUMENT',.FALSE.,.TRUE.,.TRUE.,
+     &            NEWFILE,IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 9999
+        IF (IRTFLG == -1) THEN
+C          DO NOT WANT OUTPUT DOC FILE
+           NOUTANG = 0
+        ELSE
+C          WANT OUTPUT DOC FILE
+           COMMEN = '       ' //
+     &         'EXP#,         REF#,         SX,           SY,       '//
+     &         '    SZ,           PEAK'
+           CALL LUNDOCPUTCOM(NOUTANG,COMMEN,IRTFLG)
+        ENDIF
+
+
+        CALL APSCC_DO(IREF,INUMBR,NUMREF ,IEXP,IEXPLST,NUMEXP,
+     &              NX,NY,NZ, ISHX,ISHY,ISHZ, NORMIT, PADIT,
+     &              AVE,SIGE,AVR,SIGR, MAXIMR,MAXIME,ITYPER,
+     &              REFPAT,EXPPAT,LUNREF,LUNEXP,NOUTANG,LUNXME,LUNXMR)
+
+9999    CLOSE(LUNDOC)
+
+        END
+
+C       ------------------- APSCC_DO ----------------------------------
+
+        SUBROUTINE APSCC_DO(IREF,IREFLST,NUMREF, IEXP,IEXPLST,NUMEXP,
+     &             NXT,NYT,NZT,  ISHX,ISHY,ISHZ, NORMIT, PADIT,
+     &             AVE,SIGE,AVR,SIGR, MAXIMR,MAXIME,ITYPE, 
+     &             REFPAT,EXPPAT, LUNREF,LUNEXP,LUNDOC,LUNXME,LUNXMR)
+
+        IMPLICIT NONE
+
+        INCLUDE 'CMLIMIT.INC'
+        INCLUDE 'CMBLOCK.INC'
+
+        INTEGER                :: IEXP,IREF
+	INTEGER                :: IREFLST(NUMREF)
+	INTEGER                :: NUMREF
+	INTEGER                :: IEXPLST(NUMEXP) 
+	INTEGER                :: NUMEXP 
+	INTEGER                :: NXT,NYT,NZT, ISHX,ISHY,ISHZ
+        LOGICAL                :: NORMIT,PADIT
+        REAL                   :: AVR,SIGR,AVE,SIGE
+        INTEGER                :: MAXIMR,MAXIME,ITYPE
+        CHARACTER (LEN=*)      :: REFPAT,EXPPAT
+	INTEGER                :: LUNREF,LUNEXP,LUNDOC,LUNXME,LUNXMR  
+
+C       ALLOCATABLE ARRAYS
+	REAL, ALLOCATABLE      :: BUFI(:),BUFR(:),BUFE(:)
+
+C       AUTOMATIC ARRAYS
+        REAL                   :: DLIST(6)
+
+	INTEGER                :: NSEL_USED,NXP,NYP,NZP,LSE,IRTFLG
+	INTEGER                :: NINDXR,NINDXE,IKEY
+	INTEGER                :: MWANT,NLET,MAXIM,LX,LY,LZ  
+	INTEGER                :: INV,NPADVAL  
+	INTEGER                :: NX,NY,NZ
+
+        REAL                   :: UNUSED,PADVAL
+        REAL                   :: XSHNEW,YSHNEW,ZSHNEW,PEAKV
+
+        LOGICAL                :: SPIDER_SIGN  = .FALSE.
+        LOGICAL                :: SPIDER_SCALE = .FALSE.
+
+        LOGICAL                :: APCC_NORM    = .TRUE.
+        LOGICAL                :: DO_FFT_I     = .TRUE.
+        LOGICAL                :: DO_FFT_R     = .TRUE.
+        LOGICAL                :: FOUROK       = .TRUE.
+
+        DOUBLE PRECISION       :: DAV,DSIG 
+
+        CALL REG_GET_USED(NSEL_USED)
+
+        NPADVAL = 1
+        IF (PADIT) NPADVAL = 2 
+
+        IF ( ITYPE >= 0 ) THEN
+C          REAL SPACE INPUT IMAGES, MAY WANT PADDED x 2
+           NX  = NXT
+           NXP = NX * NPADVAL
+           LSE = NXP + 2 - MOD(NXP,2)
+
+           NY  = NYT
+           NYP = NYT * NPADVAL
+           NZ  = NZT
+           NZP = NZT * NPADVAL
+
+        ELSEIF ( ITYPE == -11 .OR. ITYPE == -21 ) THEN
+C          FOURIER INPUT IMAGES, SINCE ODD WAS NOT PADDED x 2
+           NX  = NXT - 1
+           NXP = NX 
+           LSE = NXT
+
+           NY  = NYT 
+           NYP = NYT  
+           NZ  = NZT 
+           NZP = NZT  
+
+        ELSEIF ( ITYPE == -12 .OR. ITYPE == -22 ) THEN
+C          FOURIER INPUT IMAGES, MAY HAVE BEEN PADDED x 2
+           NXP = NXT - 2
+           NX  = NXP / NPADVAL
+           LSE = NXT
+
+           NY  = NYT / NPADVAL
+           NYP = NYT  
+           NZ  = NZT / NPADVAL
+           NZP = NZT
+
+        ELSE
+           CALL ERRT(101,'UNKNOWN IMAGE FOURIER TYPE',ITYPE)
+           GOTO 9999
+        ENDIF
+
+        IF (NY == 1) NYP = 1
+        IF (NZ == 1) NZP = 1
+
+        ! write(6,*) 'nx,ny,nz:',nx,ny,nz, nxp,nyp,nzp
+        ! write(6,*) 'lse,itype:',lse,itype
+
+C       MAKE BUFI & BUFR FOR PADDED IMAGES WITH FOURIER ROW LENGTH
+	ALLOCATE(BUFR(LSE*NYP*NZP), 
+     &           BUFI(LSE*NYP*NZP),
+     &           STAT=IRTFLG)
+	IF (IRTFLG .NE. 0) THEN
+           MWANT = 2 * LSE * NYP * NZP
+           CALL ERRT(46,'BUFI & BUFR...',MWANT)
+           GOTO 9999
+        ENDIF
+
+        IF (NUMREF > 1) THEN
+C          MUST SAVE BUFI SINCE IT IS OVERWRITTEN BY APCC
+	   ALLOCATE(BUFE(LSE*NYP*NZP),   STAT=IRTFLG)
+	   IF (IRTFLG .NE. 0) THEN
+              MWANT = LSE * NYP * NZP
+              CALL ERRT(46,'BUFE',MWANT)
+              GOTO 9999
+           ENDIF
+        ENDIF
+
+        NINDXE = 1
+        NINDXR = 1
+        IKEY   = 0
+
+        DO 
+
+C          LOAD & PAD EXP. IMAGE INTO FOURIER SIZE BUFFER
+           IF (ITYPE >= 0) THEN
+
+              PADVAL = AVE        ! CAN NOT USE PADVAL==ZERO
+              CALL REDNPADVOL(LUNEXP,PADVAL,
+     &                        NX,NY,NZ,
+     &                        LSE, NYP,NZP,
+     &                        BUFI, IRTFLG)
+           ELSE
+              CALL REDVOL(LUNEXP,LSE,NY,1,NZ, BUFI,IRTFLG)
+           ENDIF
+
+           !call chkfile('jnkpaded',66,1,lse,nyp,nzp, bufi,irtflg)
+
+           IF (NUMREF > 1) THEN
+C             MUST SAVE BUFI SINCE IT IS OVERWRITTEN BY APCC
+              BUFE = BUFI
+           ENDIF
+
+           NINDXR = 1
+           DO     ! LOOP OVER REFERENCES
+
+C             LOAD & PAD REF. IMAGE INTO FOURIER SIZE BUFFER
+              IF (ITYPE >= 0) THEN
+
+                 PADVAL = AVR        ! CAN NOT USE PADVAL==ZERO
+                 CALL REDNPADVOL(LUNREF,PADVAL,
+     &                        NX,NY,NZ,
+     &                        LSE, NYP,NZP,
+     &                        BUFR, IRTFLG)
+              ELSE
+                 CALL REDVOL(LUNREF,LSE,NY,1,NZ, BUFR,IRTFLG)
+              ENDIF
+
+   
+C             CROSS CORRELATION --------------------------------------- CC
+
+C             APCC RETURNS PEAK IMAGE IN: BUFR, BUFI(0,0) SET TO 0,0
+              CALL APCC_NEW(LSE, NXP,NYP,NZP, BUFI,BUFR,
+     &                      DO_FFT_I,DO_FFT_R, 
+     &                      .FALSE.,APCC_NORM,SPIDER_SIGN, 
+     &                      ISHX,ISHY,ISHZ,
+     &                      XSHNEW,YSHNEW,ZSHNEW, PEAKV,IRTFLG)
+
+              IF (IRTFLG .NE. 0)  GOTO 9999
+ 
+              IF (NORMIT) THEN
+C                NORMALIZATION 
+C                USING PADDED SIGS DOES NOT GIVE BETTER CC VALUE!! al
+                 PEAKV = PEAKV /FLOAT(NX*NY*NZ-1)/SIGE/SIGR
+              ENDIF
+
+              IKEY     = IKEY + 1
+	      DLIST(1) = IEXPLST(IEXP)
+              DLIST(2) = IREFLST(IREF)
+              DLIST(3) = XSHNEW
+              DLIST(4) = YSHNEW
+              DLIST(5) = ZSHNEW
+              DLIST(6) = PEAKV
+
+              IF (LUNDOC > 0) THEN
+C                 SAVE IN ALIGNMENT DOC FILE
+C                 IMG#, REF#, SX,SY,SZ, PEAK-HEIGHT
+                  CALL LUNDOCWRTDAT(LUNDOC,IKEY,DLIST,6,IRTFLG)
+                  IF (IRTFLG .NE. 0) GOTO 9999
+              ENDIF
+ 
+              IF (NSEL_USED > 0) THEN
+C                 OUTPUT TO SPIDER'S REGISTERS
+                  CALL REG_SET_NSEL(1,5, DLIST(1),DLIST(2),DLIST(3),
+     &                                   DLIST(4),DLIST(5),IRTFLG)
+                  CALL REG_SET_NSEL(6,1, DLIST(6),0.0,0.0,
+     &                                   0.0,0.0,IRTFLG)
+              ENDIF
+
+              IF (NUMREF > 1) THEN
+C                MUST RETRIEVE BUFI SINCE IT IS OVERWRITTEN BY APCC
+                 BUFI = BUFE
+              ENDIF
+
+C             OPEN NEXT REFERENCE INPUT FILE, UPDATE NINDXR 
+              CALL NEXTFILE(NINDXR, IREFLST, 
+     &                      FOUROK,  LUNXMR,
+     &                      NUMREF,  MAXIMR,  
+     &                      LUNREF,  0,  
+     &                      REFPAT,  'O',
+     &                      IREF,    IRTFLG)
+
+              !write(6,*) 'iref, irtflg:',iref, irtflg,nindxe
+
+
+             IF (IRTFLG .NE. 0) EXIT      ! ERROR / END OF INPUT STACK
+
+             IF (IMAMI .NE. 1 .AND. ITYPE > 0 .AND. ITYPE > 0) THEN
+                CALL NORM3(LUNREF,NX,NY,NZ,FMAX,FMIN,AV)
+                AVR  = AV
+                SIGR = SIG
+             ENDIF
+
+           ENDDO
+
+           IF (IRTFLG < 0) THEN 
+C             OPEN NEXT REFERENCE INPUT FILE, RESET NINDXR 
+              NINDXR = 0
+              CALL NEXTFILE(NINDXR, IREFLST, 
+     &                      FOUROK,  LUNXMR,
+     &                      NUMREF,  MAXIMR,  
+     &                      LUNREF,  0,  
+     &                      REFPAT,  'O',
+     &                      IREF,    IRTFLG)
+             IF (IRTFLG .NE. 0) EXIT      ! ERROR / END OF INPUT STACK
+          ENDIF
+
+          !write(6,*) 'iref, irtflg:',iref, irtflg,nindxe
+          !write(6,*) 'calling nextfile exp, iexp, irtflg:',iexp, irtflg
+
+C          OPEN NEXT EXP. INPUT FILE, UPDATE NINDXR 
+           CALL NEXTFILE(NINDXE, IEXPLST, 
+     &                   FOUROK,  LUNXME,
+     &                   NUMEXP,  MAXIME,  
+     &                   LUNEXP,  0,  
+     &                   EXPPAT,  'O',
+     &                   IEXP,    IRTFLG)
+
+           IF (IRTFLG .NE. 0) EXIT      ! ERROR / END OF INPUT STACK
+
+           AVE  = AV
+           SIGE = SIG
+           IF (IMAMI .NE. 1 .AND. ITYPE > 0 .AND. ITYPE > 0) THEN
+              CALL NORM3(LUNEXP,NX,NY,NZ,FMAX,FMIN,AV)
+              AVE  = AV
+              SIGE = SIG
+           ENDIF
+
+        ENDDO
+ 
+9999    IF (ALLOCATED(BUFI))   DEALLOCATE(BUFI)
+        IF (ALLOCATED(BUFR))   DEALLOCATE(BUFR)
+        IF (ALLOCATED(BUFE))   DEALLOCATE(BUFE)
+
+        END
+
+
+
+
+
+
+
+
+C        ----------------- UNUSED BELOW HERE --------------------------
+
+#ifdef NEVER
+#ifdef DEBUG
+           write(6,*)'  '
+           write(6,*)'peakv: ',peakv
+
+           !peakv = peakv / float(nxp*nyp*nzp)
+           !write(6,*)'  '
+           !write(6,*)'peakv /(nxp*nyp*nzp): ',peakv
+
+           write(6,*)'peakv/sigef/sigrf: ',peakv/sigef/sigrf
+           write(6,*)'peakv/sige/sigr:   ',peakv/sige/sigr
+           nnn  = nx*ny*nz
+           nnnp = nxp*nyp*nzp
+
+           write(6,*)'peakv/float(nnn)/sigef/sigrf: ',
+     &                peakv/float(nnn)/sigef/sigrf
+
+           write(6,*)'peakv/float(nnnp)/sigef/sigrf: ',
+     &                peakv/float(nnnp)/sigef/sigrf
+
+           write(6,*)'peakv/float(nnn)/sige/sigr: ',
+     &                peakv/float(nnn)/sige/sigr
+
+           write(6,*)'peakv/float(nnnp)/sige/sigr: ',
+     &                peakv/float(nnnp)/sige/sigr
+           write(6,*)'  '
+           write(6,*)'final peakv: ',peakv
+#endif
+
+c----------------------
+        maxim = 0
+        itype = 3
+        call opfilec(0,.false.,'jnkexppad',98,'u',itype,
+     &                lse,nyp,nzp,maxim,' ',.false.,irtflg)
+        call wrtvol(98,lse,nyp, 1,nzp, bufi,irtflg)
+        close(98)
+
+        maxim = 0
+        itype = 3
+        call opfilec(0,.false.,'jnkrefpad',98,'u',itype,
+     &                lse,nyp,nzp,maxim,' ',.false.,irtflg)
+        call wrtvol(98,lse,nyp,1,nzp, bufr,irtflg)
+        close(98)
+c-----------------------
+#endif
+
+
+@
+
+
+1.10
+log
+@can use single sets of images now
+@
+text
+@d10 1
+d62 1
+a62 1
+        INTEGER                :: EXPLST(NIMAX)
+d71 1
+a71 1
+        INTEGER                :: ITYPE,MAXIME,MAXIMR,NSEL_USED
+d144 1
+a144 1
+        PADIT  = (INDEX('N',YN(2:NLET)) == 0 )
+d146 3
+a148 1
+        IF (IMAMI .NE. 1 .AND. ITYPER > 0 .AND. PADIT) THEN
+d160 1
+a160 1
+     &      FOUROK,EXPLST,NILMAX, 
+d173 3
+a175 1
+        IF (IMAMI .NE. 1 .AND. ITYPER > 0 .AND. PADIT) THEN 
+d202 1
+a202 1
+        CALL APSCC_DO(IREF,INUMBR,NUMREF ,IEXP,EXPLST,NUMEXP,
+d461 2
+@
+
+
+1.9
+log
+@PADVAL = AVR  bug fix
+@
+text
+@d3 7
+a9 6
+C APSCC            NEW                             FEB 08 ARDEAN LEITH
+C                  FLIPPED EXP & REF BUG           AUG 09 ARDEAN LEITH
+C                  REMOVED FROM APMASTER           AUG 09 ARDEAN LEITH
+C                  ISHX = 0 ALLOWED                FEB 10 ARDEAN LEITH
+C                  NORMIT BUG                      SEP 11 ARDEAN LEITH
+C                  NZP SIZE BUG                    SEP 14 ARDEAN LEITH
+d55 2
+d60 2
+a61 4
+        INTEGER, ALLOCATABLE   :: IMGLST(:)
+        INTEGER, ALLOCATABLE   :: NUMR(:,:)
+
+        CHARACTER (LEN=MAXNAM) :: FILNAM,REFPAT,EXPPAT,OUTANG
+d63 2
+a64 1
+	CHARACTER(LEN=1)       :: MODE,NULL,YN
+d66 19
+a84 1
+        LOGICAL                :: NEWFILE,NORMIT
+d86 1
+a86 2
+	DATA  LUNREF,LUNEXP/50,51/
+	DATA  INPIC,INANG,NDOC,NSCF/77,78,55,50/ !USED IN CALLED ROUTINE
+d90 1
+a90 1
+        NULL   = CHAR(0)
+d93 7
+a99 3
+        NILMAX = NIMAX
+        CALL FILELIST(.TRUE.,LUNREF,REFPAT,NLET,INUMBR,NILMAX,NUMREF,
+     &           'TEMPLATE FOR REFERENCE IMAGES',IRTFLG)
+d103 1
+d107 2
+a109 2
+        IF (MYPID <= 0) WRITE(NOUT,90) NUMREF
+90      FORMAT('  Number of reference images: ',I0)
+a110 10
+C       GET FIRST REFERENCE IMAGE TO DETERMINE DIMENSIONS
+        NLET = 0
+        CALL  FILGET(REFPAT,FILNAM,NLET,INUMBR(1),INTFLG)
+
+        MAXIM = 0
+        CALL OPFILEC(0,.FALSE.,FILNAM,LUNREF,'O',
+     &               IFORM,NX,NY,NZ,
+     &               MAXIM,' ',.FALSE.,IRTFLG)
+        IF (IRTFLG .NE. 0)  GOTO 9999
+        CLOSE(LUNREF)
+d112 1
+a112 1
+C       MULTI-SHIFT CROSS-CORRELATION
+d117 1
+a117 1
+     &     'SEARCH RANGE IN X,Y,& Z (ZERO FOR WHOLE IMAGE)' ,IRTFLG)
+d128 31
+a158 2
+        CALL RDPRMC(YN,NLET,.TRUE.,'NORMALIZE PEAK HEIGHT (Y/N)',
+     &                  NULL,IRTFLG)
+a159 1
+        NORMIT = (YN == 'Y')
+d161 21
+a181 21
+C        GET LIST OF EXPERIMENTAL IMAGES TO BE ALIGNED
+         ALLOCATE(IMGLST(NILMAX),STAT=IRTFLG)
+         IF (IRTFLG .NE. 0) THEN
+            CALL ERRT(46,'IMGLST',NILMAX)
+            GOTO 9999
+         ENDIF
+
+         CALL FILELIST(.TRUE.,LUNEXP,EXPPAT,NLEP,
+     &         IMGLST,NILMAX,NUMEXP,
+     &        'TEMPLATE FOR IMAGE SERIES TO BE ALIGNED',IRTFLG)
+         IF (IRTFLG .NE. 0) GOTO 9999
+
+         IF (MYPID <= 0) WRITE(NOUT,91) NUMEXP
+91       FORMAT('  Number of experimental images: ',I0)
+
+C        GET NAME FOR OUTPUT DOC FILE
+         CALL REG_GET_USED(NSEL_USED)
+
+C        OPEN OUTPUT DOC FILE (FOR APPENDING)
+         NOUTANG = NDOC
+         CALL OPENDOC(OUTANG,.TRUE.,NLET,NDOC,NOUTANG,.TRUE.,
+d184 7
+a190 7
+         IF (IRTFLG .NE. 0) GOTO 9999
+         IF (IRTFLG == -1) THEN
+C           DO NOT WANT OUTPUT DOC FILE
+            NOUTANG = 0
+         ELSE
+C           WANT OUTPUT DOC FILE
+            COMMEN = '       ' //
+d193 2
+a194 2
+            CALL LUNDOCPUTCOM(NOUTANG,COMMEN,IRTFLG)
+         ENDIF
+a195 7
+         CALL APSCC_DO(INUMBR,NUMREF ,IMGLST,NUMEXP,
+     &              NX,NY,NZ, ISHX,ISHY,ISHZ, NORMIT,
+     &              REFPAT,EXPPAT,LUNREF,LUNEXP,NOUTANG)
+
+9999     IF (ALLOCATED(IMGLST))  DEALLOCATE(IMGLST)
+	 IF (ALLOCATED(NUMR))    DEALLOCATE(NUMR)
+         CLOSE(NDOC)
+d197 8
+a204 1
+         END
+d208 4
+a211 3
+        SUBROUTINE APSCC_DO(IREFLST,NUMREF, IEXPLST,NUMEXP,
+     &             NX,NY,NZ,  ISHX,ISHY,ISHZ, NORMIT,
+     &             REFPAT,EXPPAT, LUNREF,LUNEXP,LUNDOC)
+d214 1
+d218 1
+a218 1
+
+d223 4
+a226 2
+	INTEGER                :: NX,NY,NZ, ISHX,ISHY,ISHZ 
+        LOGICAL                :: NORMIT 
+d228 1
+a228 3
+	INTEGER                :: LUNREF,LUNEXP,LUNDOC  
+
+        CHARACTER (LEN=MAXNAM) :: FILNAM
+d236 5
+a240 4
+	INTEGER                :: NSEL_USED,NXP,NYP,NZP
+	INTEGER                :: LSE,IRTFLG  
+	INTEGER                :: MWANT,IEXP,NLET,MAXIM,LX,LY,LZ  
+	INTEGER                :: IREF,INV  
+a244 4
+        real                   :: avi,avip,sigi,sigip
+        real                   :: avr,avrp,sigr,sigrp
+        real                   :: fnpixm1,fnpixu,fnpix
+
+d251 1
+d257 42
+a298 3
+        NXP  = NX * 2
+        NYP  = NY * 2
+        NZP  = NZ * 2
+d301 2
+a302 2
+C       EXTRA SPACE FOR FOURIER TRANSFORM
+        LSE = NXP + 2 - MOD(NXP,2)
+d316 1
+a316 2
+	   ALLOCATE(BUFE(LSE*NYP*NZP), 
+     &              STAT=IRTFLG)
+d319 1
+a319 1
+              CALL ERRT(46,'BUFE...',MWANT)
+d324 17
+a340 29
+        DO IEXP = 1,NUMEXP
+
+C          GET EXP IMAGE
+           NLET = 0
+           CALL FILGET(EXPPAT,FILNAM,NLET,IEXPLST(IEXP),IRTFLG)
+           IF (IRTFLG .NE. 0)  GOTO 9999
+ 
+           MAXIM = 0
+           CALL OPFILEC(0,.FALSE.,FILNAM,LUNEXP,'O',IFORM,
+     &                     LX,LY,LZ,
+     &                     MAXIM,' ',.FALSE.,IRTFLG)
+           IF (IRTFLG .NE. 0)  GOTO 9999
+
+           CALL SIZCHK(UNUSED,NX,NY,NZ,0,
+     &                        LX,LY,LZ,0, IRTFLG)
+           IF (IRTFLG .NE. 0) GOTO 9999
+
+           IF (IMAMI .NE. 1) 
+     &        CALL NORM3(LUNEXP,NX,NY,NZ,FMAX,FMIN,AV)
+           AVI  = AV
+           SIGI = SIG
+
+C          LOAD & PAD EXP. IMAGE TO DOUBLE SIZE
+           PADVAL = AVI        ! CAN NOT USE ZERO 
+           CALL REDNPADVOL(LUNEXP,PADVAL,
+     &                     NX,NY,NZ,
+     &                     LSE, NYP,NZP,
+     &                     BUFI, IRTFLG)
+           CLOSE(LUNEXP)
+a343 9
+#ifdef NEVER
+           IF (NORMIT) THEN
+               CALL NORMVALSP(BUFI, NXP, NYP, NZP,
+     &                              LSE, NYP,NZP,
+     &                              DAV, DSIG, .TRUE.)
+               SIGIP = DSIG
+           ENDIF
+#endif
+
+d349 2
+a350 9
+           DO IREF = 1,NUMREF
+              NLET = 0
+              CALL FILGET(REFPAT,FILNAM,NLET,IREFLST(IREF),IRTFLG)
+              IF (IRTFLG .NE. 0)  GOTO 9999
+ 
+              MAXIM = 0
+              CALL OPFILEC(0,.FALSE.,FILNAM,LUNREF,'O',IFORM,
+     &                     LX,LY,LZ,MAXIM,' ',.FALSE.,IRTFLG)
+              IF (IRTFLG .NE. 0)  GOTO 9999
+d352 2
+a353 16
+              CALL SIZCHK(UNUSED,NX,NY,NZ,0,
+     &                           LX,LY,LZ,0, IRTFLG)
+              IF (IRTFLG .NE. 0) GOTO 9999
+
+              IF (IMAMI .NE. 1) 
+     &           CALL NORM3(LUNREF,NX,NY,NZ,FMAX,FMIN,AV)
+              AVR  = AV    
+              SIGR = SIG
+
+C             LOAD & PAD REFERENCE IMAGE TO DOUBLE SIZE
+              PADVAL = AVR        ! CAN NOT USE ZERO 
+              CALL REDNPADVOL(LUNREF,PADVAL,
+     &                       NX,  NY, NZ,
+     &                       LSE,NYP,NZP,
+     &                       BUFR, IRTFLG)
+              CLOSE(LUNREF)
+d355 7
+a361 6
+#ifdef NEVER
+              IF (NORMIT) THEN
+                 CALL NORMVALSP(BUFR, NXP, NYP, NZP,
+     &                                LSE,  NYP,NZP,
+     &                                DAV,  DSIG, .TRUE.)
+                 SIGRP = DSIG
+d363 1
+a363 1
+#endif
+d369 4
+a372 4
+     &                  DO_FFT_I,DO_FFT_R, 
+     &                  .FALSE.,APCC_NORM,SPIDER_SIGN, 
+     &                  ISHX,ISHY,ISHZ,
+     &                  XSHNEW,YSHNEW,ZSHNEW, PEAKV,IRTFLG)
+a374 10
+
+              !fnpix   = NXp*NYp*NZp
+              !fnpixm1 = NXp*NYp*NZp-1
+              !fnpixu  = NX *NY *NZ
+              !write(6,*)'peakv,sigi,sigip:  ',peakv,sigi,sigip
+              !write(6,*)'peakv,sigr,sigrp:  ',peakv,sigr,sigrp
+              !write(6,*)'peakv1: ',peakv /fnpixm1 /sigi  /sigr   ! 0.12
+              !write(6,*)'peakv2: ',peakv /fnpixm1 /sigip /sigrp  ! 0.98
+              !write(6,*)'peakv2: ',peakv /fnpix   /sigip /sigrp  ! 0.98
+              !write(6,*)'peakv3: ',peakv /fnpixu  /sigi  /sigr   ! 0.99
+d379 1
+a379 1
+                 PEAKV = PEAKV /FLOAT(NX*NY*NZ-1)/SIGI/SIGR
+d382 1
+d393 1
+a393 1
+                  CALL LUNDOCWRTDAT(LUNDOC,IEXP,DLIST,6,IRTFLG)
+d409 20
+d430 33
+a462 1
+         ENDDO
+d484 1
+a484 1
+           !PEAKV = PEAKV / FLOAT(NXP*NYP*NZP)
+d486 1
+a486 1
+           !write(6,*)'PEAKV /(NXP*NYP*NZP): ',peakv
+d488 2
+a489 2
+           write(6,*)'peakv/sigif/sigrf: ',peakv/sigif/sigrf
+           write(6,*)'peakv/sigi/sigr: ',peakv/sigi/sigr
+d493 2
+a494 2
+           write(6,*)'peakv/float(nnn)/sigif/sigrf: ',
+     &                peakv/float(nnn)/sigif/sigrf
+d496 2
+a497 2
+           write(6,*)'peakv/float(nnnp)/sigif/sigrf: ',
+     &                peakv/float(nnnp)/sigif/sigrf
+d499 2
+a500 2
+           write(6,*)'peakv/float(nnn)/sigi/sigr: ',
+     &                peakv/float(nnn)/sigi/sigr
+d502 2
+a503 2
+           write(6,*)'peakv/float(nnnp)/sigi/sigr: ',
+     &                peakv/float(nnnp)/sigi/sigr
+@
+
+
+1.8
+log
+@IF (NZ == 1) NZP = 1,   nx, ==
+@
+text
+@d103 1
+a103 1
+     &     'TRANSLATION SEARCH RANGE IN X,Y,& Z (ZERO FOR ALL)' ,IRTFLG)
+d267 1
+a267 1
+           PADVAL = 0.0        ! CAN USE ZERO FOR ONE IMAGE
+d310 2
+a311 1
+              CALL REDNPADVOL(LUNREF,AVR,
+@
+
+
+1.7
+log
+@enter
+@
+text
+@d3 6
+a8 5
+C APSCC            NEW                               FEB 08 ARDEAN LEITH
+C                  FLIPPED EXP & REF BUG             AUG 09 ARDEAN LEITH
+C                  REMOVED FROM APMASTER             AUG 09 ARDEAN LEITH
+C                  ISHX = 0 ALLOWED                  FEB 10 ARDEAN LEITH
+C                  NORMIT BUG                        SEP 11 ARDEAN LEITH
+d14 1
+a14 1
+C=* Copyright 1985-2011  Health Research Inc.,                         *
+d42 1
+a42 1
+C       NSAM,NROW,NSLICE      ACTUAL (NOT-WINDOWED) IMAGE SIZE  (INPUT)
+d80 1
+a80 1
+        IF (NUMREF .LE. 0)  THEN
+d84 2
+a85 2
+        IF (MYPID .LE. 0) WRITE(NOUT,90) NUMREF
+90      FORMAT('  Number of reference images: ',I7)
+d93 1
+a93 1
+     &               IFORM,NSAM,NROW,NSLICE,
+d107 6
+a112 6
+        IF (ISHX .EQ. 0) ISHX = NSAM   / 2
+        IF (ISHY .EQ. 0) ISHY = NROW   / 2
+        IF (ISHZ .EQ. 0) ISHZ = NSLICE / 2
+        IF (ISHX .LT. 0) ISHX = 0
+        IF (ISHY .LT. 0) ISHY = 0
+        IF (ISHZ .LT. 0) ISHZ = 0
+d117 1
+a117 1
+        NORMIT = (YN .EQ. 'Y')
+d131 2
+a132 2
+         IF (MYPID .LE. 0) WRITE(NOUT,91) NUMEXP
+91       FORMAT('  Number of experimental images: ',I6)
+d143 1
+a143 1
+         IF (IRTFLG .EQ. -1) THEN
+d150 1
+a150 1
+     &         'SZ,           PEAK'
+d155 1
+a155 1
+     &              NSAM,NROW,NSLICE, ISHX,ISHY,ISHZ, NORMIT,
+d167 1
+a167 1
+     &             NSAM,NROW,NSLICE,  ISHX,ISHY,ISHZ, NORMIT,
+d179 1
+a179 1
+	INTEGER                :: NSAM,NROW,NSLICE, ISHX,ISHY,ISHZ 
+d192 3
+a194 3
+	INTEGER                :: NSEL_USED,NSAMP,NROWP,NSLICEP
+	INTEGER                :: NSAMP1,NROWP1,NSLICEP1,LSE,IRTFLG  
+	INTEGER                :: MWANT,IEXP,NLET,MAXIM,LSAM,LROW,LSLICE  
+d202 1
+a202 1
+        real                :: fnpixm1,fnpixu,fnpix
+d215 4
+a218 7
+        NSAMP    = NSAM   * 2
+        NROWP    = NROW   * 2
+        NSLICEP  = NSLICE * 2
+
+        NSAMP1   = NSAM   + 1
+        NROWP1   = NROW   + 1
+        NSLICEP1 = NSLICE + 1
+d221 1
+a221 1
+        LSE = NSAMP + 2 - MOD(NSAMP,2)
+d224 2
+a225 2
+	ALLOCATE(BUFR(LSE*NROWP*NSLICEP), 
+     &           BUFI(LSE*NROWP*NSLICEP),
+d228 1
+a228 1
+           MWANT = 2 * LSE * NROWP * NSLICEP
+d233 1
+a233 1
+        IF (NUMREF .GT. 1) THEN
+d235 2
+a236 2
+	   ALLOCATE(BUFE(LSE*NROWP*NSLICEP), 
+     &           STAT=IRTFLG)
+d238 1
+a238 1
+              MWANT = LSE * NROWP * NSLICEP
+d253 1
+a253 1
+     &                     LSAM,LROW,LSLICE,
+d257 2
+a258 2
+           CALL SIZCHK(UNUSED,NSAM,NROW,NSLICE,0,
+     &                        LSAM,LROW,LSLICE,0, IRTFLG)
+d262 2
+a263 2
+     &        CALL NORM3(LUNEXP,NSAM,NROW,NSLICE,FMAX,FMIN,AV)
+           avi  = av
+d269 2
+a270 2
+     &                     NSAM,NROW, NSLICE,
+     &                     LSE, NROWP,NSLICEP,
+d274 2
+d278 3
+a280 3
+               CALL NORMVALSP(BUFI, NSAMP, NROWP, NSLICEP,
+     &                              LSE,  NROWP,NSLICEP,
+     &                              DAV,  DSIG, .TRUE.)
+d285 1
+a285 1
+           IF (NUMREF .GT. 1) THEN
+d297 1
+a297 1
+     &                  LSAM,LROW,LSLICE,MAXIM,' ',.FALSE.,IRTFLG)
+d300 2
+a301 2
+              CALL SIZCHK(UNUSED,NSAM,NROW,NSLICE,0,
+     &                           LSAM,LROW,LSLICE,0, IRTFLG)
+d305 1
+a305 1
+     &           CALL NORM3(LUNREF,NSAM,NROW,NSLICE,FMAX,FMIN,AV)
+d311 2
+a312 2
+     &                       NSAM,  NROW, NSLICE,
+     &                       LSE,NROWP,NSLICEP,
+d318 2
+a319 2
+                 CALL NORMVALSP(BUFR, NSAMP, NROWP, NSLICEP,
+     &                                LSE,  NROWP,NSLICEP,
+d328 1
+a328 1
+              CALL APCC_NEW(LSE, NSAMP,NROWP,NSLICEP, BUFI,BUFR,
+d336 3
+a338 3
+              !fnpix   = nsamp*nrowp*nslicep
+              !fnpixm1 = nsamp*nrowp*nslicep-1
+              !fnpixu  = nsam *nrow *nslice
+d349 1
+a349 1
+                 PEAKV = PEAKV /FLOAT(NSAM*NROW*NSLICE-1)/SIGI/SIGR
+d359 1
+a359 1
+              IF (LUNDOC .GT. 0) THEN
+d366 1
+a366 1
+              IF (NSEL_USED .GT. 0) THEN
+d374 1
+a374 1
+              IF (NUMREF .GT. 1) THEN
+d401 1
+a401 1
+           !PEAKV = PEAKV / FLOAT(NSAMP*NROWP*NSLICEP)
+d403 1
+a403 1
+           !write(6,*)'PEAKV /(NSAMP*NROWP*NSLICEP): ',peakv
+d407 2
+a408 2
+           nnn = nsam*nrow*nslice
+           nnnp = nsamp*nrowp*nslicep
+d428 3
+a430 3
+        call opfilec(0,.false.,'jnkexppad',98,'U',itype,
+     &                lse,nrowp,nslicep,maxim,' ',.false.,irtflg)
+        call wrtvol(98,lse,nrowp, 1,nslicep, bufi,irtflg)
+d435 3
+a437 3
+        call opfilec(0,.false.,'jnkrefpad',98,'U',itype,
+     &                lse,nrowp,nslicep,maxim,' ',.false.,irtflg)
+        call wrtvol(98,lse,nrowp,1,nslicep, bufr,irtflg)
+@
+
+
+1.6
+log
+@normalization fixed
+@
+text
+@d75 1
+a75 1
+     &           'ENTER TEMPLATE FOR REFERENCE IMAGES',IRTFLG)
+d127 1
+a127 1
+     &        'ENTER TEMPLATE FOR IMAGE SERIES TO BE ALIGNED',IRTFLG)
+@
+
+
+1.5
+log
+@GPL_2010
+@
+text
+@d7 1
+d13 1
+a13 1
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+d31 1
+a31 3
+C APSCC(IREFLST,NUMREF, IEXPLST,NUMEXP,
+C         NSAM,NROW,NSLICE,  ISHX,ISHY,ISHZ, NORMIT,
+C         REFPAT,EXPPAT, LUNREF,LUNEXP,LUNDOC)
+d36 1
+a36 1
+C PARAMETERS:
+d56 2
+a57 2
+        INTEGER, ALLOCATABLE, DIMENSION(:)   :: IMGLST
+        INTEGER, ALLOCATABLE, DIMENSION(:,:) :: NUMR
+a64 2
+        CALL SET_MPI(ICOMM,MYPID,MPIERR) ! SETS ICOMM AND MYPID 
+
+d68 2
+d91 2
+a92 1
+        CALL OPFILEC(0,.FALSE.,FILNAM,LUNREF,'O',IFORM,NSAM,NROW,NSLICE,
+a152 1
+         NORMIT = .TRUE.
+d169 1
+a172 4
+	INTEGER, DIMENSION(NUMREF)       :: IREFLST 
+	INTEGER, DIMENSION(NUMEXP)       :: IEXPLST 
+        CHARACTER (LEN=*)                :: REFPAT,EXPPAT
+        LOGICAL                          :: NORMIT,SPIDER_SIGN
+d174 10
+a183 1
+        CHARACTER (LEN=MAXNAM)           :: FILNAM
+d186 1
+a186 1
+	REAL, ALLOCATABLE, DIMENSION(:)  :: BUFI,BUFR,BUFE
+d189 22
+a210 1
+        REAL                             :: DLIST(6)
+d240 1
+a240 1
+              MWANT = 1 * LSE * NROWP * NSLICEP
+d247 2
+d255 2
+a256 1
+     &                     LSAM,LROW,LSLICE,MAXIM,' ',.FALSE.,IRTFLG)
+d259 3
+a261 5
+           IF (LSAM.NE.NSAM.OR.LROW.NE.NROW.OR.LSLICE.NE.NSLICE)THEN
+              CALL ERRT(102,'INCONSISTENT IMAGE SIZE',LSAM)
+              IRTFLG = 1
+              GOTO 9999
+           ENDIF
+d264 3
+a266 3
+     &          CALL NORM3(LUNEXP,NSAM,NROW,NSLICE,FMAX,FMIN,AV)
+           AVI  = AV     ! NOT IMPLEMENTED
+           AVI  = 0.0
+d269 5
+a273 19
+           ILOC = 1
+           IREC = 1
+           DO ISLICE = 1,NSLICE
+              DO IROW = 1,NROW
+                 CALL REDLIN(LUNEXP,BUFI(ILOC),NSAM,IREC)
+                 IREC = IREC + 1
+
+C                FILL REMAINING PADDING COLS 
+                 BUFI(ILOC+NSAM: ILOC+LSE-1)             = AVI
+                 BUFI(ILOC+LSE*NROW:ILOC+LSE*NROW+LSE-1) = AVI
+
+                 ILOC = ILOC + LSE
+              ENDDO
+              ILOC = ILOC + LSE * NROW
+           ENDDO
+
+C          FILL REMAINING PADDING SLICES
+           BUFI(LSE*NROW*NSLICE+1:LSE*NROWP*NSLICEP) = AVI
+
+d276 8
+a283 2
+           IF (NORMIT) CALL NRMS(BUFI,LSE,NSAMP,NROWP,NSLICEP,SIGI)
+           !write(6,*)'sigif,sigi: ',sigif,sigi
+d293 1
+a293 1
+              IF (IRTFLG .NE. 0)  RETURN
+d298 1
+a298 1
+              IF (IRTFLG .NE. 0)  RETURN
+d300 3
+a302 5
+              IF (LSAM.NE.NSAM.OR.LROW.NE.NROW.OR.LSLICE.NE.NSLICE)THEN
+                 CALL ERRT(102,'INCONSISTENT IMAGE SIZE',LSAMT)
+                 IRTFLG = 1
+                 RETURN
+              ENDIF
+d306 2
+a307 2
+              AVR  = AV     ! NOT IMPLEMENTED
+              AVR  = 0.0
+d310 5
+a314 15
+              ILOC = 1
+              IREC = 1
+              DO ISLICE = 1,NSLICE
+                 DO IROW = 1,NROW
+                    CALL REDLIN(LUNREF,BUFR(ILOC),NSAM,IREC)
+                    IREC = IREC + 1
+
+C                   FILL REMAINING PADDING COLS 
+                    BUFR(ILOC+NSAM:ILOC+LSE-1)              = AVR
+                    BUFR(ILOC+LSE*NROW:ILOC+LSE*NROW+LSE-1) = AVR
+ 
+                    ILOC = ILOC + LSE
+                 ENDDO
+                 ILOC = ILOC + LSE * NROW
+              ENDDO
+d316 8
+a323 6
+C             FILL REMAINING PADDING SLICES
+              BUFR(LSE*NROW*NSLICE+1:LSE*NROWP*NSLICEP) = AVR
+
+              CLOSE(LUNREF)
+              IF (NORMIT) CALL NRMS(BUFR,LSE,NSAMP,NROWP,NSLICEP,SIGR)
+              ! write(6,*)'sigrf,sigr: ',sigrf,sigr
+d328 18
+a345 11
+              SPIDER_SIGN = .FALSE.
+              CALL APCC(LSE, NSAMP,NROWP,NSLICEP, BUFI,BUFR,
+     &                 .FALSE.,NORMIT,SPIDER_SIGN, ISHX,ISHY,ISHZ,
+     &                 XSHNEW,YSHNEW,ZSHNEW, PEAKV,IRTFLG)
+
+              IF (IRTFLG .NE. 0)  THEN
+                 CALL ERRT(101,' CC ERROR',NE)
+                 GOTO 9999
+              ENDIF
+              !write(6,*)'peakv,sigi,sigr: ',peakv,sigi,sigr
+
+d348 2
+a349 1
+                 PEAKV = PEAKV/FLOAT(NSAMP*NROWP*NSLICEP-1)/SIGI/SIGR
+d351 1
+a351 1
+ 
+d385 1
+a385 1
+         END
+@
+
+
+1.4
+log
+@*** empty log message ***
+@
+text
+@d9 4
+a12 3
+C=* This file is part of:                                              * 
+C=* SPIDER - Modular Image Processing System.   Author: J. FRANK       *
+C=* Copyright 1985-2010  Health Research Inc.,                          *
+d23 1
+a23 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a24 1
+C=*                                                                    *
+d26 1
+a26 1
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *                      *
+@
+
+
+1.3
+log
+@;multiple exp & ref were buggy
+@
+text
+@d6 1
+d11 1
+a11 1
+C=* Copyright 1985-2009  Health Research Inc.,                          *
+d30 1
+a30 1
+C  APSCC_DO(IREFLST,NUMREF, IEXPLST,NUMEXP,
+d34 2
+a35 2
+C  PURPOSE:  2D & 3D PADDED, CROSS CORRELATION MULTI-REFERENCE 
+C            SHIFT ALIGNMENT
+d109 3
+@
+
+
+1.2
+log
+@float
+@
+text
+@d4 2
+d8 5
+a12 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2008  Health Research Inc.                      *
+d14 1
+a14 6
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+C=*                                                                    *
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d19 1
+a19 1
+C=* This program is distributed in the hope that it will be useful,    *
+d25 1
+a25 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+d29 2
+a30 2
+C  APSCC(IREFLST,NUMREF, IEXPLST,NUMEXP,
+C         NSAM,NROW,NSLICE,  NSIX,NSIY,NSIZ, NORMIT,
+d42 1
+a42 1
+C       NSIX,NSIY,NSIZ        SHIFT SEARCH RANGE                (INPUT)
+d51 113
+a163 2
+        SUBROUTINE APSCC(IREFLST,NUMREF, IEXPLST,NUMEXP,
+     &             NSAM,NROW,NSLICE,  NSIX,NSIY,NSIZ, NORMIT,
+d177 1
+a177 1
+	REAL, ALLOCATABLE, DIMENSION(:)  :: BUFI,BUFR
+d205 12
+a216 1
+        DO IREF = 1,NUMREF
+d218 2
+a219 2
+           CALL FILGET(REFPAT,FILNAM,NLET,IREFLST(IREF),IRTFLG)
+           IF (IRTFLG .NE. 0)  RETURN
+d222 3
+a224 3
+           CALL OPFILEC(0,.FALSE.,FILNAM,LUNREF,'O',IFORM,
+     &                  LSAM,LROW,LSLICE,MAXIM,' ',.FALSE.,IRTFLG)
+           IF (IRTFLG .NE. 0)  RETURN
+d227 1
+a227 1
+              CALL ERRT(102,'INCONSISTENT IMAGE SIZE',LSAMT)
+d229 1
+a229 1
+              RETURN
+d233 3
+a235 3
+     &       CALL NORM3(LUNREF,NSAM,NROW,NSLICE,FMAX,FMIN,AV)
+           AVR  = AV     ! NOT IMPLEMENTED
+           AVR  = 0.0
+d237 1
+a237 1
+C          LOAD & PAD REFERENCE IMAGE TO DOUBLE SIZE
+d242 1
+a242 2
+                 
+                 CALL REDLIN(LUNREF,BUFR(ILOC),NSAM,IREC)
+d246 3
+a248 3
+                 BUFR(ILOC+NSAM:ILOC+LSE-1)              = AVR
+                 BUFR(ILOC+LSE*NROW:ILOC+LSE*NROW+LSE-1) = AVR
+ 
+d255 6
+a260 1
+           BUFR(LSE*NROW*NSLICE+1:LSE*NROWP*NSLICEP) = AVR
+d262 4
+a265 3
+           CLOSE(LUNREF)
+           IF (NORMIT) CALL NRMS(BUFR,LSE,NSAMP,NROWP,NSLICEP,SIGR)
+           ! write(6,*)'sigrf,sigr: ',sigrf,sigr
+d267 1
+a267 1
+           DO IEXP = 1,NUMEXP
+d269 2
+a270 2
+              CALL FILGET(EXPPAT,FILNAM,NLET,IEXPLST(IEXP),IRTFLG)
+              IF (IRTFLG .NE. 0)  GOTO 9999
+d273 3
+a275 3
+              CALL OPFILEC(0,.FALSE.,FILNAM,LUNEXP,'O',IFORM,
+     &                     LSAM,LROW,LSLICE,MAXIM,' ',.FALSE.,IRTFLG)
+              IF (IRTFLG .NE. 0)  GOTO 9999
+d280 1
+a280 1
+                 GOTO 9999
+d284 3
+a286 3
+     &          CALL NORM3(LUNEXP,NSAM,NROW,NSLICE,FMAX,FMIN,AV)
+              AVI  = AV     ! NOT IMPLEMENTED
+              AVI  = 0.0
+d288 1
+a288 1
+C             LOAD & PAD EXP. IMAGE TO DOUBLE SIZE
+d293 1
+a293 1
+                    CALL REDLIN(LUNEXP,BUFI(ILOC),NSAM,IREC)
+d297 3
+a299 3
+                    BUFI(ILOC+NSAM: ILOC+LSE-1)             = AVI
+                    BUFI(ILOC+LSE*NROW:ILOC+LSE*NROW+LSE-1) = AVI
+
+d306 1
+a306 6
+              BUFI(LSE*NROW*NSLICE+1:LSE*NROWP*NSLICEP) = AVI
+
+              CLOSE(LUNEXP)
+
+              IF (NORMIT) CALL NRMS(BUFI,LSE,NSAMP,NROWP,NSLICEP,SIGI)
+              !write(6,*)'sigif,sigi: ',sigif,sigi
+d308 4
+d314 1
+a314 8
+              ISHX = NSIX
+              ISHY = NSIY
+              ISHZ = NSIZ
+
+              IF (NSIX .EQ. 0) ISHX = NSAM   / 2
+              IF (NSIX .EQ. 0) ISHY = NROW   / 2
+              IF (NSIX .EQ. 0) ISHZ = NSLICE / 2
+
+d324 1
+d331 2
+a332 2
+	      DLIST(1) = IEXP
+              DLIST(2) = IREF
+d352 5
+d362 1
+d367 6
+@
+
+
+1.1
+log
+@*** empty log message ***
+@
+text
+@d210 1
+a210 1
+                 PEAKV = PEAKV/FLOAT(NSAMP*NROWP*NSLICEP-1.0)/SIGI/SIGR
+@
+

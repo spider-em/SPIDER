@@ -1,0 +1,652 @@
+head	1.10;
+access;
+symbols;
+locks; strict;
+comment	@c @;
+
+
+1.10
+date	2012.09.05.13.53.43;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2012.04.27.13.46.25;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2011.12.19.17.32.40;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2011.12.15.16.24.32;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2011.12.08.17.18.11;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2011.12.08.17.11.57;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2011.10.31.19.47.32;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2011.10.28.17.34.57;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2011.10.12.15.17.03;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2011.10.06.16.06.41;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.10
+log
+@*** empty log message ***
+@
+text
+@C++*********************************************************************
+C                                                                      *
+C ROTATES3FBS.F   NEW                         Oct  4 2011 ArDean Leith *
+C                 OMP                         Oct 31 2011 ArDean Leith *
+C                 KLY,KNY BUG                 APR 27 2012 ArDean Leith *                                                                     *
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2012  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C                                                                      *
+C  ROTATES3FBS(LUN2,Q1,KLX,KNX,KLY,KNY,KLZ,KNZ,DRM,USEBACK,BACK)       *
+C                                                                      *
+C  PURPOSE:     3D ROTATION USING MATRIX DRM.                          *
+C               AND FOUIER-BASED TRICUBIC SPLINE INTERPOLATION.        *
+C               VOLUME TRUNCATED AT ORIGINAL BORDERS.                  *
+C                                                                      *
+C               SUBROUTINES FBS3_PREP and FUNCTION FBS3 are used       *
+C                                                                      *
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C--*********************************************************************
+
+       SUBROUTINE ROTATES3FBS(LUN2,Q1 ,KLX,KNX,  KLY,KNY, KLZ,KNZ,
+     &                          DRM, USEBACK,BACK, IRTFLG)
+
+       IMPLICIT NONE
+
+       INTEGER            :: LUN2,KLX,KNX,KLY,KNY,KLZ,KNZ
+       REAL               :: Q1(KLX:KNX, KLY:KNY, KLZ:KNZ)
+       DOUBLE PRECISION   :: DRM(3,3)
+       LOGICAL            :: USEBACK
+       REAL               :: BACK
+       INTEGER            :: IRTFLG
+
+       INTEGER            :: I, J, K
+       INTEGER            :: NXLD, NX, NY, NZ,ISLICE
+       INTEGER            :: IZ, IY, IX
+       INTEGER            :: IOX, IOY, IOZ
+
+       REAL               :: Q2(KLX:KNX,KLY:KNY)  ! AUTOMATIC ARRAY
+       REAL               :: QR(3)
+       REAL               :: QR1,QR2,QR3
+
+       REAL               :: FBS3
+
+       REAL, ALLOCATABLE  :: F1  (:,:,:)
+
+       REAL, ALLOCATABLE  :: XYZ (:,:,:)
+       REAL, ALLOCATABLE  :: X1  (:,:,:)
+       REAL, ALLOCATABLE  :: Y1  (:,:,:)
+       REAL, ALLOCATABLE  :: Z1  (:,:,:)
+       REAL, ALLOCATABLE  :: XY2 (:,:,:)
+       REAL, ALLOCATABLE  :: XZ2 (:,:,:)
+       REAL, ALLOCATABLE  :: YZ2 (:,:,:)
+
+       NX   = KNX - KLX + 1
+       NY   = KNY - KLY + 1
+       NZ   = KNZ - KLZ + 1
+
+       NXLD = NX + 2 - MOD(NX,2)
+
+       ALLOCATE (F1  (NXLD, NY, NZ),
+     &           XYZ (NXLD, NY, NZ),
+     &           X1  (NXLD, NY, NZ),
+     &           Y1  (NXLD, NY, NZ),
+     &           Z1  (NXLD, NY, NZ),
+     &           XY2 (NXLD, NY, NZ),
+     &           XZ2 (NXLD, NY, NZ),
+     &           YZ2 (NXLD, NY, NZ),
+     &                  STAT=IRTFLG)
+
+        IF (IRTFLG .NE. 0) THEN
+           CALL ERRT(46,'ROTATES3FBS; XYZ...',7*NXLD*NY*NZ)
+           RETURN
+        ENDIF
+
+C       PAD: Q1 INTO: F1 WITH PADDING
+        DO K = 1,NZ
+           DO J = 1,NY
+              DO I = NX + 1,NXLD
+                 F1(I,J,K) = 0
+              ENDDO
+           ENDDO
+        ENDDO
+
+        DO K = 1,NZ
+           DO J = 1,NY
+              DO I = 1,NX
+                 F1(I,J,K) = Q1(I+KLX-1,J+KLY-1,K+KLZ-1)
+              ENDDO
+           ENDDO
+        ENDDO
+
+        XYZ = F1     ! ARRAY ASSIGNMENT
+
+        CALL FBS3_PREP(XYZ, NXLD, NX, NY, NZ,
+     &                  X1, Y1, Z1, XY2, XZ2, YZ2)
+
+        ISLICE = 0
+
+        DO IZ=KLZ,KNZ
+
+C          OMP GAVE TIME: 56 ON 8 PROCS VS 80 ON 1
+c$omp      parallel do private(iy,qr,ix,iox,ioy,ioz,qr1,qr2,qr3)
+           DO IY=KLY,KNY
+
+              QR(1) = DRM(1,1)*KLX + DRM(2,1)*IY + DRM(3,1)*IZ
+              QR(2) = DRM(1,2)*KLX + DRM(2,2)*IY + DRM(3,2)*IZ
+              QR(3) = DRM(1,3)*KLX + DRM(2,3)*IY + DRM(3,3)*IZ
+
+              DO IX=KLX,KNX
+
+C                IOX..  INTEGER LOCATION IN -NSAM/2...NSAM/2 ARRAY
+                 IOX = FLOOR(QR(1))   ! QR CHANGES IN LOOP!
+                 IOY = FLOOR(QR(2))   
+                 IOZ = FLOOR(QR(3))   
+
+                 IF ((IOX > KLX .AND. IOX < KNX) .AND.
+     &               (IOY > KLY .AND. IOY < KNY) .AND.
+     &               (IOZ > KLZ .AND. IOZ < KNZ)) THEN
+C                  ROTATED POSITION IS INSIDE OF VOLUME
+
+C                  EVALUATE INTENSITY AT: QR(..)
+
+                   QR1 = QR(1) - KLX + 1
+                   QR2 = QR(2) - KLY + 1
+                   QR3 = QR(3) - KLZ + 1
+
+                   Q2(IX,IY) = FBS3(QR1,QR2,QR3,
+     &                            NXLD, NX, NY, NZ,
+     &                            F1,NXLD, XYZ,
+     &                            X1, Y1, Z1,
+     &                            XY2,XZ2,YZ2)
+                 ELSE
+C                   ROTATED POSITION IS OUTSIDE VOLUME
+                    IF (USEBACK) THEN
+                       Q2(IX,IY) = BACK  
+                    ELSE
+                       Q2(IX,IY) = Q1(IX,IY,IZ)
+                    ENDIF
+                 ENDIF
+
+                 QR(1) = QR(1) + DRM(1,1)
+                 QR(2) = QR(2) + DRM(1,2)
+                 QR(3) = QR(3) + DRM(1,3)
+              ENDDO
+
+           ENDDO
+
+           ISLICE = ISLICE + 1
+           CALL WRTVOL(LUN2,NX,NY,ISLICE,ISLICE,Q2,IRTFLG)
+        ENDDO
+
+        IF (ALLOCATED(F1))    DEALLOCATE(F1)
+        IF (ALLOCATED(XYZ))   DEALLOCATE(XYZ)
+        IF (ALLOCATED(X1))    DEALLOCATE(X1)
+        IF (ALLOCATED(Y1))    DEALLOCATE(Y1)
+        IF (ALLOCATED(Z1))    DEALLOCATE(Z1)
+        IF (ALLOCATED(XY2))   DEALLOCATE(XY2)
+        IF (ALLOCATED(XZ2))   DEALLOCATE(XZ2)
+        IF (ALLOCATED(YZ2))   DEALLOCATE(YZ2)
+
+        IRTFLG = 0
+
+        END
+@
+
+
+1.9
+log
+@KLY,KNY BUG
+@
+text
+@d30 1
+a30 1
+C  PURPOSE:     3D ROTATION USING MATRIX DM.                           *
+@
+
+
+1.8
+log
+@fbs3 nxp parameter
+@
+text
+@d5 1
+a5 1
+C                                                                      *
+d10 1
+a10 1
+C=* Copyright 1985-2011  Health Research Inc.,                         *
+d39 1
+a39 1
+         SUBROUTINE ROTATES3FBS(LUN2,Q1 ,KLX,KNX,KLY, KNY,KLZ,KNZ,
+d42 33
+a74 1
+         IMPLICIT NONE
+d76 1
+a76 32
+         INTEGER            :: LUN2,KLX,KNX,KLY,KNY,KLZ,KNZ
+         REAL               :: Q1(KLX:KNX, KLY:KNY, KLZ:KNZ)
+         DOUBLE PRECISION   :: DRM(3,3)
+         LOGICAL            :: USEBACK
+         REAL               :: BACK
+         INTEGER            :: IRTFLG
+
+         INTEGER            :: I, J, K
+         INTEGER            :: NXLD, NX, NY, NZ,ISLICE
+         INTEGER            :: IZ, IY, IX
+         INTEGER            :: IOX, IOY, IOZ
+
+         REAL               :: Q2(KLX:KNX,KLZ:KNZ)  ! AUTOMATIC ARRAY
+         REAL               :: QR(3)
+         REAL               :: QR1,QR2,QR3
+
+         REAL               :: FBS3
+
+         REAL, ALLOCATABLE  :: F1  (:,:,:)
+
+         REAL, ALLOCATABLE  :: XYZ (:,:,:)
+         REAL, ALLOCATABLE  :: X1  (:,:,:)
+         REAL, ALLOCATABLE  :: Y1  (:,:,:)
+         REAL, ALLOCATABLE  :: Z1  (:,:,:)
+         REAL, ALLOCATABLE  :: XY2 (:,:,:)
+         REAL, ALLOCATABLE  :: XZ2 (:,:,:)
+         REAL, ALLOCATABLE  :: YZ2 (:,:,:)
+
+         NX   = KNX-KLX+1
+         NY   = KNY-KLY+1
+         NZ   = KNZ-KLZ+1
+         NXLD = NX + 2 - MOD(NX,2)
+d170 2
+a171 2
+        IF (ALLOCATED(XYZ))    DEALLOCATE(F1)
+        IF (ALLOCATED(XYZ))    DEALLOCATE(XYZ)
+@
+
+
+1.7
+log
+@renamed f1 --> XYZ
+cosmetic
+@
+text
+@d146 1
+a146 1
+     &                            F1, XYZ,
+@
+
+
+1.6
+log
+@omp & cosmetic
+@
+text
+@d63 2
+a64 1
+         REAL, ALLOCATABLE  :: F0  (:,:,:)
+d78 1
+a78 1
+     &           F0  (NXLD, NY, NZ),
+d85 1
+a85 1
+     &                 STAT=IRTFLG)
+d88 1
+a88 1
+           CALL ERRT(46,'ROTATES3FBS; F0...',7*NXLD*NY*NZ)
+d92 1
+d96 1
+a96 1
+           F1(I,J,K) = 0
+d103 2
+a104 2
+                DO I = 1,NX
+           F1(I,J,K) = Q1(I+KLX-1,J+KLY-1,K+KLZ-1)
+d109 1
+a109 1
+        F0 = F1     ! ARRAY ASSIGNMENT
+d111 1
+a111 1
+        CALL FBS3_PREP(F0, NXLD, NX, NY, NZ,
+d133 3
+a135 3
+                 IF ((IOX.GT.KLX .AND. IOX.LT.(KNX)) .AND.
+     &               (IOY.GT.KLY .AND. IOY.LT.(KNY)) .AND.
+     &               (IOZ.GT.KLZ .AND. IOZ.LT.(KNZ))) THEN
+d146 1
+a146 1
+     &                            F1, F0,
+d169 2
+a170 2
+        IF (ALLOCATED(F0))    DEALLOCATE(F1)
+        IF (ALLOCATED(F0))    DEALLOCATE(F0)
+@
+
+
+1.5
+log
+@gpk04's changes
+@
+text
+@d39 1
+a39 1
+         SUBROUTINE ROTATES3FBS(LUN2,Q1,KLX,KNX,KLY,KNY,KLZ,KNZ,
+d45 6
+a54 3
+         INTEGER            :: IRTFLG
+
+         LOGICAL            :: USEBACK
+a55 2
+         DOUBLE PRECISION   :: DRM(3,3)
+         REAL               :: Q1(KLX:KNX, KLY:KNY, KLZ:KNZ)
+a56 1
+         REAL               :: BACK
+d107 1
+a107 1
+           F0 = F1
+d117 1
+a117 1
+C          c$omp      parallel do private(iy,qr,ix,iox,ioy,ioz)
+d134 1
+a134 1
+C                   ROTATED POSITION IS INSIDE OF VOLUME
+d136 1
+a136 1
+C                   EVALUATE INTENSITY AT: QR(..)
+d138 3
+a140 3
+                 QR1 = QR(1) - KLX + 1
+                 QR2 = QR(2) - KLY + 1
+                 QR3 = QR(3) - KLZ + 1
+@
+
+
+1.4
+log
+@comment
+@
+text
+@d30 5
+a34 3
+C  PURPOSE:        3D ROTATION USING MATRIX DM.                        *
+C                  FOUIER-BASED TRICUBIC SPLINE INTERPOLATION.         *
+C                  VOLUME TRUNCATED AT ORIGINAL BORDERS.               *
+d45 4
+a48 4
+         REAL               :: Q1(KLX:KNX, KLY:KNY, KLZ:KNZ)
+         DOUBLE PRECISION   :: DRM(3,3)
+         LOGICAL            :: USEBACK
+         REAL               :: BACK
+d51 1
+a51 3
+         DOUBLE PRECISION   :: QR(3),DX,DY,DZ
+         INTEGER            :: L,IZ,IY,IX,IOX,IOY,IOZ,I,J,K
+         INTEGER            :: NXLD, NX, NY, NZ,ISLICE
+d53 6
+a58 1
+         REAL               :: fbs3
+d60 1
+a60 1
+         REAL               :: Q2(KLX:KNX,KLZ:KNZ)  ! AUTOMATIC ARRAY
+d62 1
+d76 9
+a84 8
+         ALLOCATE( F0  (0:NXLD-1, 0:NY-1, 0:NZ-1),
+     &             X1  (0:NXLD-1, 0:NY-1, 0:NZ-1),
+     &             Y1  (0:NXLD-1, 0:NY-1, 0:NZ-1),
+     &             Z1  (0:NXLD-1, 0:NY-1, 0:NZ-1),
+     &             XY2 (0:NXLD-1, 0:NY-1, 0:NZ-1),
+     &             XZ2 (0:NXLD-1, 0:NY-1, 0:NZ-1),
+     &             YZ2 (0:NXLD-1, 0:NY-1, 0:NZ-1),
+     &                       STAT=IRTFLG)
+d91 5
+a95 5
+        DO I = 0,NXLD-1
+           DO J = 0,NY-1
+               DO L = 0,NZ-1
+                  F0(I,J,L) = 0
+               ENDDO
+d99 5
+a103 5
+        DO I = 0,NX-1
+           DO J = 0,NY-1
+             DO L = 0,NZ-1
+                F0(I,J,L) = Q1(I+KLX,J+KLY,L+KLZ)
+             ENDDO
+d107 2
+d117 1
+a117 1
+c$omp      parallel do private(iy,qr,ix,iox,ioy,ioz)
+d137 6
+a142 1
+                    Q2(IX,IY) = FBS3(QR(1),QR(2),QR(3),
+d144 1
+a144 1
+     &                            Q1, F0,
+d167 1
+@
+
+
+1.3
+log
+@OMP added
+@
+text
+@d3 2
+a4 1
+C ROTATES3FBS.F                       NEW Oct 4 2011 ArDean Leith      *
+@
+
+
+1.2
+log
+@ok now
+@
+text
+@d49 2
+a50 2
+         INTEGER            :: L,NSAM,IREC,IZ,IY,IX,IOX,IOY,IOZ,I,J,K
+         REAL               :: Q2(KLX:KNX)  ! AUTOMATIC ARRAY
+d54 2
+a55 1
+         INTEGER            :: NXLD, NX, NY, NZ, IRTFLG
+a63 4
+         NSAM = KNX - KLX + 1
+         IREC = 0
+
+         NXLD = NSAM + 2 - MOD(NSAM,2)
+d67 1
+d79 1
+a79 1
+           CALL ERRT(46,'NUMR & WR',7*NXLD*NY*NZ)
+a90 1
+
+d99 1
+a99 1
+         CALL FBS3_PREP(F0, NXLD, NX, NY, NZ,
+d102 6
+a107 1
+         DO IZ=KLZ,KNZ
+d110 3
+a112 3
+              QR(1) = DRM(1,1)*KLX+DRM(2,1)*IY+DRM(3,1)*IZ
+              QR(2) = DRM(1,2)*KLX+DRM(2,2)*IY+DRM(3,2)*IZ
+              QR(3) = DRM(1,3)*KLX+DRM(2,3)*IY+DRM(3,3)*IZ
+d117 1
+a117 1
+                 IOX = FLOOR(QR(1))   
+d126 2
+a127 3
+C                   EVALUATE INTENSITY AT PX,PY,PZ
+
+                    Q2(IX) = FBS3(QR(1),QR(2),QR(3),
+a131 1
+
+d135 1
+a135 1
+                       Q2(IX) = BACK  
+d137 1
+a137 1
+                       Q2(IX) = Q1(IX,IY,IZ)
+d146 1
+a146 2
+              IREC = IREC + 1
+              CALL WRTLIN(LUN2,Q2,NSAM,IREC)
+d148 2
+a149 1
+           ENDDO
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d27 1
+a27 1
+C  ROTATES3FBS(LUN2,Q1,KLX,KNX,KLY,KNY,KLZ,KNZ, DRM,BACKC,BACK)        *
+d37 1
+a37 1
+     &                          DRM, USEBACK,BACK)
+d46 1
+d52 1
+a52 3
+         INTEGER, PARAMETER :: NSIZE = 27
+         INTEGER            :: X(NSIZE),Y(NSIZE),Z(NSIZE)
+         REAL               :: F(NSIZE)
+a53 1
+         REAL               :: FBS3
+d63 2
+a64 8
+         ALLOCATE( F0  ((KNX-KLX+3),(KNY-KLY+1),(KNZ-KLZ+1)),
+     &             X1  ((KNX-KLX+3),(KNY-KLY+1),(KNZ-KLZ+1)),
+     &             Y1  ((KNX-KLX+3),(KNY-KLY+1),(KNZ-KLZ+1)),
+     &             Z1  ((KNX-KLX+3),(KNY-KLY+1),(KNZ-KLZ+1)),
+     &             XY2 ((KNX-KLX+3),(KNY-KLY+1),(KNZ-KLZ+1)),
+     &             XZ2 ((KNX-KLX+3),(KNY-KLY+1),(KNZ-KLZ+1)),
+     &             YZ2 ((KNX-KLX+3),(KNY-KLY+1),(KNZ-KLZ+1)),
+     &             STAT=IRTFLG)
+d66 1
+a66 3
+         F0 = Q1
+
+         NXLD = KNX-KLX+3
+d71 31
+a104 36
+C        SET THE KNOWN COORDINATE GRID
+C        Replaced by loops below, data does not agree with openmp.
+C         DATA X/  
+C     &          -1, 0, 1, -1, 0, 1, -1, 0, 1, 
+C     &          -1, 0, 1, -1, 0, 1, -1, 0, 1, 
+C     &          -1, 0, 1, -1, 0, 1, -1, 0, 1/ 
+
+C         DATA Y/ 
+C     &          -1,-1,-1,  0, 0, 0,  1, 1, 1, 
+C     &          -1,-1,-1,  0, 0, 0,  1, 1, 1, 
+C     &          -1,-1,-1,  0, 0, 0,  1, 1, 1/ 
+ 
+C         DATA Z/  
+C     &          -1,-1,-1, -1,-1,-1, -1,-1,-1, 
+C     &           0, 0, 0,  0, 0, 0,  0, 0, 0,
+C     &           1, 1, 1,  1, 1, 1,  1, 1, 1/
+ 
+
+C        SET THE KNOWN COORDINATE GRID
+	 DO  L=1,NSIZE,3
+	   X(L)   = -1
+	   X(L+1) = 0
+	   X(L+2) = 1
+	   Y(L)   = MOD(L/3,3)-1
+	   Y(L+1) = MOD(L/3,3)-1
+	   Y(L+2) = MOD(L/3,3)-1
+	 ENDDO
+
+	 DO  L=1,NSIZE
+	   Z(L) = (L-1)/9-1
+	 ENDDO
+C
+
+         NSAM  = KNX - KLX + 1
+         IREC  = 0
+
+a118 5
+C                DX.. OFFSET FROM INTEGER ARRAY
+                 DX  = QR(1) - IOX
+                 DY  = QR(2) - IOY
+                 DZ  = QR(3) - IOZ
+
+d124 1
+a124 13
+C                   FIND INTENSITIES ON 3x3x3 COORDINATE GRID
+                    DO L = 1,NSIZE
+                       I    = IOX + X(L)
+                       J    = IOY + Y(L)
+                       K    = IOZ + Z(L)
+                       F(L) = Q1(I,J,K)
+                    ENDDO
+
+c                   write(6,*) 'iox,ioy,ioz:',iox,ioy,ioz
+c                   write(6,*) 'qr:',qr
+c                   write(6,*) 'dx,dy,dz:',dx,dy,dz
+c                   write(6,*) 'dx,dy,dz:',dx,dy,dz
+c                   write(6,*) 'iox,ioy,ioz:',iox,ioy,ioz
+d126 1
+a126 2
+C                   EVALUATE INTENSITY AT PX,PY,PZ
+                    Q2(IX) = FBS3(X, Y, Z,
+d151 11
+@

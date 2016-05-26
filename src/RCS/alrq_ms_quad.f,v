@@ -1,0 +1,1839 @@
+head	1.16;
+access;
+symbols
+	pre_getangas:1.12
+	GPL2010:1.12
+	pre_GPL2010:1.11
+	pre_var_equation:1.11
+	pre_fftwrings:1.7
+	pre_opfiles:1.7
+	src:1.7
+	best-code:1.7
+	x-named-regs:1.7
+	x:1.7
+	v13-00:1.7
+	pre_GPL:1.5
+	prec_CA:1.5
+	noindx:1.5
+	Bproc:1.1
+	oct21:1.1;
+locks; strict;
+comment	@c @;
+
+
+1.16
+date	2013.02.13.15.22.25;	author leith;	state Exp;
+branches;
+next	1.15;
+
+1.15
+date	2012.01.10.13.29.36;	author leith;	state Exp;
+branches;
+next	1.14;
+
+1.14
+date	2011.08.29.17.56.23;	author leith;	state Exp;
+branches;
+next	1.13;
+
+1.13
+date	2011.06.16.16.18.23;	author leith;	state Exp;
+branches;
+next	1.12;
+
+1.12
+date	2010.06.24.13.25.02;	author leith;	state Exp;
+branches;
+next	1.11;
+
+1.11
+date	2009.01.12.15.51.19;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2008.07.03.11.32.56;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2008.06.19.12.53.23;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2008.05.19.12.02.41;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2005.10.17.20.49.22;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2005.10.17.18.39.47;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2001.10.01.19.04.15;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2001.10.01.19.01.24;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2001.09.28.20.26.52;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2000.10.03.20.25.00;	author bimal;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	99.08.05.13.26.12;	author pawel;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.16
+log
+@OUT OF BOUNDS TRAP ENLARGED
+@
+text
+@
+C++*********************************************************************
+C
+C ALRQ_MS_NEW  MODIFIED FOR FFTW USE             MAR 2008 ARDEAN LEITH
+C              NO RETURN IN || ON INTEL FORT     JUL 2008 ARDEAN LEITH
+C              STOP ON RING OUTSIDE BORDER       JAN 2009 ARDEAN LEITH
+C              FILE RENAMED                      JUN 2011 ARDEAN LEITH
+C              FILE RENAMED                      AUG 2011 ARDEAN LEITH
+C              OUT OF BOUNDS TRAP ENLARGED       FEB 2013 ARDEAN LEITH
+C
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2013  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C ALRQ_MS_QUAD
+C
+C PURPOSE: INTERPOLATES: XIM IMAGE INTO POLAR COORDINATES AND STACKS
+C          THE RINGS INTO: CIRC OUTPUT ARRAY.  
+C          FFTW3 WILL BE USED ON RINGS.
+C
+C PARAMETERS:
+C             XIM          IMAGE ARRAY                        (INPUT)
+C             NX,NY        IMAGE DIMENSIONS                   (INPUT)
+C             CNS2,CNR2    PREDEFINED CENTERS                 (INPUT)
+C             NUMR         RING CONTROL ARRAY                 (INPUT)
+C             CIRC         POLAR ARRAY                        (OUTPUT)
+C             LCIRC        LENGTH OF CIRC ARRAY               (INPUT)
+C             NRING        NUMBER OF RINGS                    (INPUT)
+C             MODE         HALF OR FULL CIRCLE                (INPUT)
+C             NEWFFT                                          (INPUT)  
+C             USE_OMP_PARALLEL                                (INPUT)   
+C             AVO                                             (INPUT)  
+C             VRIN                                            (INPUT)  
+C
+C NOTE:  THIS ROUTINE AND THE CALLED QUADRI FUNCTION TAKE 17% 
+C        OF TIME IN: 'AP SH'
+C
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C--*********************************************************************
+
+        SUBROUTINE ALRQ_MS_QUAD(XIM, NX,NY, CNS2,CNR2, 
+     &                         NUMR,CIRC,LCIRC,
+     &                         NRING,MODE,NEWFFT,USE_OMP_PARALLEL,
+     &                         AVO,VRIN)
+        IMPLICIT NONE
+        INCLUDE 'CMBLOCK.INC'
+
+        REAL, INTENT(IN)             :: XIM(NX,NY)
+        INTEGER                      :: NX,NY
+        REAL                         :: CNS2,CNR2
+        REAL, INTENT(INOUT)          :: CIRC(LCIRC)
+        INTEGER                      :: LCIRC,NRING
+        INTEGER, INTENT(IN)          :: NUMR(3,NRING)
+        CHARACTER(LEN=1)             :: MODE
+        LOGICAL, INTENT(IN)          :: NEWFFT,USE_OMP_PARALLEL
+        DOUBLE PRECISION, INTENT(IN) :: AVO,VRIN
+
+        DOUBLE PRECISION             :: PI,DFI
+        REAL                         :: CIRCT
+
+        INTEGER                      :: IRTFLG,NSIM,IT,INR,IGO,NVAL,JT
+        INTEGER                      :: LT,LTIGO,LTLTIGO,LTLTLTIGO,NE
+        REAL                         :: X,Y,YQ,XOLD,YOLD,FI,XT,YT
+
+        REAL                         :: quadri_fast
+
+C       CNS2 AND CNR2 ARE PREDEFINED CENTERS
+
+C       USING NORMALIZATION JUST FROM RINGS GIVES DIFFERENT ANSWERS
+C       FROM NORMASC, PROBABLY OK BUT I WILL NOT USE IT.
+
+        PI     = 2 * DATAN(1.0D0)
+
+C       FILL ALL THE RINGS
+
+        IF (USE_OMP_PARALLEL) THEN  ! ---------------- OMP -------------
+
+c$omp   parallel do private(it,inr,yq,igo,nval,lt,
+c$omp&  ltigo,ltltigo,ltltltigo,nsim,dfi,xold,yold,
+c$omp&  circt,jt,fi,x,y)
+        DO  IT=1,NRING 
+
+           INR  = NUMR(1,IT)        ! RADIUS OF THE CURRENT RING
+           YQ   = INR               ! FLOATING POINT RADIUS
+           IGO  = NUMR(2,IT)        ! STARTING LOCATION FOR RING 
+           NVAL = NUMR(3,IT)        ! LENGTH OF THIS RING
+
+           IF (NEWFFT) THEN
+C             THE ACTUAL, POWER-OF-TWO LENGTH IS NUMR(3,I)-2, ADDITIONAL
+C             TWO LOCATIONS ARE ONLY FOR THE NEW FFT.
+              CIRC(IGO+NVAL-1) = 0.0
+              CIRC(IGO+NVAL-2) = 0.0
+              NVAL             = NVAL - 2
+           ENDIF
+
+           IF (MODE  ==  'H')  THEN
+              LT = NVAL / 2
+           ELSEIF (MODE == 'F') THEN
+              LT = NVAL / 4
+           ENDIF
+
+           LTIGO        = LT + IGO
+           LTLTIGO      = LT + LT + IGO
+           LTLTLTIGO    = LT + LT + LT + IGO
+
+           NSIM         = LT - 1
+           DFI          = PI / (NSIM+1)
+
+C          TO AVOID SLOW BOUNDARY TESTS IN QUADRI_FAST, PUT THEM HERE
+           X            = CNS2
+           Y            = INR + CNR2
+           IF (X  <  2.0 .OR. X  >  (FLOAT(NX)-1.0) .OR. 
+     &         Y  <  2.0 .OR. Y  >  (FLOAT(NY)-1.0) ) THEN
+                  WRITE(NOUT,*) 'For image size1: ',NX,NY,INR
+               WRITE(NOUT,90) X,Y
+90             FORMAT('  FOR LOCATION: (',F7.1,',',F7.1,')')
+               CALL ERRT(101,'RING GOES OUTSIDE IMAGE',NE)
+C              RETURN NOT POSSIBLE WITH INTEL PARALLEL COMPILER
+               STOP
+           ENDIF
+
+           CIRCT        = QUADRI_FAST(X,Y,NX,NY,XIM)
+           CIRC(IGO)    = (CIRCT - AVO) * VRIN
+
+C          TO AVOID SLOW BOUNDARY TESTS IN QUADRI_FAST, PUT THEM HERE
+           X            = INR + CNS2
+           Y            =     + CNR2
+           IF (X  <  2.0 .OR. X  >  (FLOAT(NX)-1.0) .OR. 
+     &         Y  <  2.0 .OR. Y  >  (FLOAT(NY)-1.0) ) THEN
+                  WRITE(NOUT,*) 'For image size2: ',NX,NY,INR
+               WRITE(NOUT,90) X,Y
+               CALL ERRT(101,'RING GOES OUTSIDE IMAGE',NE)
+C              RETURN NOT POSSIBLE WITH INTEL PARALLEL COMPILER
+               STOP
+           ENDIF
+
+           CIRCT        = QUADRI_FAST(X,Y,NX,NY,XIM)
+           CIRC(LTIGO)  = (CIRCT - AVO) * VRIN
+
+           IF (MODE  ==  'F')  THEN
+C             FILL OTHER HALF OF CIRCLE
+
+C             TO AVOID SLOW BOUNDARY TESTS IN QUADRI_FAST, PUT THEM HERE
+              X     = 0.0  + CNS2
+              Y     = -INR + CNR2
+              IF (X  <  2.0 .OR. X  >  (FLOAT(NX)-1.0) .OR. 
+     &            Y  <  2.0 .OR. Y  >  (FLOAT(NY)-1.0) ) THEN
+                  WRITE(NOUT,*) 'For image size3: ',NX,NY,INR
+                  WRITE(NOUT,90) X,Y
+                  CALL ERRT(101,'RING GOES OUTSIDE IMAGE',NE)
+C                 RETURN NOT POSSIBLE WITH INTEL PARALLEL COMPILER
+                  STOP
+              ENDIF
+
+              CIRCT         =  QUADRI_FAST(X,Y,NX,NY,XIM)
+              CIRC(LTLTIGO) = (CIRCT - AVO) * VRIN
+
+C             TO AVOID SLOW BOUNDARY TESTS IN QUADRI_FAST, PUT THEM HERE
+              X     = -INR + CNS2
+              Y     =  0.0 + CNR2
+              IF (X  <  2.0 .OR. X  >  (FLOAT(NX)-1.0) .OR. 
+     &            Y  <  2.0 .OR. Y  >  (FLOAT(NY)-1.0) ) THEN
+                  WRITE(NOUT,*) 'For image size4: ',NX,NY,INR
+                  WRITE(NOUT,90) X,Y
+                  CALL ERRT(101,'RING GOES OUTSIDE IMAGE',NE)
+C                 RETURN NOT POSSIBLE WITH INTEL PARALLEL COMPILER
+                  STOP
+              ENDIF
+              CIRCT           = QUADRI_FAST(X,Y,NX,NY,XIM)
+              CIRC(LTLTLTIGO) = (CIRCT - AVO) * VRIN
+           ENDIF
+
+           DO JT=1,NSIM     ! LOOP NSIM TIMES TO FILL RING
+              FI    = DFI * JT
+              X     = SIN(FI) * YQ
+              Y     = COS(FI) * YQ
+
+              CIRCT        = QUADRI_FAST(X+CNS2,Y+CNR2,NX,NY,XIM)
+              CIRC(JT+IGO) = (CIRCT - AVO) * VRIN
+
+              CIRCT        = QUADRI_FAST(Y+CNS2,-X+CNR2,NX,NY,XIM)
+              CIRC(JT+LTIGO) = (CIRCT - AVO) * VRIN
+
+              IF (MODE  ==  'F')  THEN
+C                FILL OTHER HALF OF CIRCLE
+                 CIRCT = QUADRI_FAST(-X+CNS2,-Y+CNR2,NX,NY,XIM)
+                 CIRC(JT+LTLTIGO) = (CIRCT - AVO) * VRIN
+
+                 CIRCT = QUADRI_FAST(-Y+CNS2,X+CNR2,NX,NY,XIM)
+                 CIRC(JT+LTLTLTIGO) = (CIRCT - AVO) * VRIN
+              ENDIF
+	   ENDDO
+	ENDDO
+
+
+        ELSE
+
+C       FILL ALL THE RINGS
+        DO  IT=1,NRING 
+
+           INR  = NUMR(1,IT)        ! RADIUS OF THE CURRENT RING
+           YQ   = INR               ! FLOATING POINT RADIUS
+           IGO  = NUMR(2,IT)        ! STARTING LOCATION FOR RING 
+           NVAL = NUMR(3,IT)        ! LENGTH OF THIS RING
+
+           IF (NEWFFT) THEN
+C             THE ACTUAL, POWER-OF-TWO LENGTH IS NUMR(3,I)-2, ADDITIONAL
+C             TWO LOCATIONS ARE ONLY FOR THE NEW FFT.
+              CIRC(IGO+NVAL-1) = 0.0
+              CIRC(IGO+NVAL-2) = 0.0
+              NVAL             = NVAL - 2
+           ENDIF
+
+           IF (MODE  ==  'H')  THEN
+              LT = NVAL / 2
+           ELSEIF (MODE == 'F') THEN
+              LT = NVAL / 4
+           ENDIF
+
+           LTIGO        = LT + IGO
+           LTLTIGO      = LT + LT + IGO
+           LTLTLTIGO    = LT + LT + LT + IGO
+
+           NSIM         = LT - 1
+           DFI          = PI / (NSIM+1)
+
+C          TO AVOID SLOW BOUNDARY TESTS IN QUADRI_FAST, PUT THEM HERE
+           X            = CNS2
+           Y            = INR + CNR2
+
+           IF (X  <  2.0 .OR. X  >  (FLOAT(NX)-1.0) .OR. 
+     &         Y  <  2.0 .OR. Y  >  (FLOAT(NY)-1.0) ) THEN
+               !WRITE(NOUT,*) 'For image size1: ',NX,NY,INR
+               WRITE(NOUT,90) X,Y
+               CALL ERRT(101,'RING GOES OUTSIDE IMAGE',NE)
+               RETURN
+           ENDIF
+
+           CIRCT        = QUADRI_FAST(X,Y,NX,NY,XIM)
+           CIRC(IGO)    = (CIRCT - AVO) * VRIN
+
+C          TO AVOID SLOW BOUNDARY TESTS IN QUADRI_FAST, PUT THEM HERE
+           X            = INR + CNS2
+           Y            =     + CNR2
+           IF (X  <  2.0 .OR. X  >  (FLOAT(NX)-1.0) .OR. 
+     &         Y  <  2.0 .OR. Y  >  (FLOAT(NY)-1.0) ) THEN
+               !WRITE(NOUT,*) 'For image size2: ',NX,NY,INR
+               WRITE(NOUT,90) X,Y
+               CALL ERRT(101,'RING GOES OUTSIDE IMAGE',NE)
+               STOP
+           ENDIF
+
+           CIRCT        = QUADRI_FAST(X,Y,NX,NY,XIM)
+           CIRC(LTIGO)  = (CIRCT - AVO) * VRIN
+
+           IF (MODE  ==  'F')  THEN
+C             FILL OTHER HALF OF CIRCLE
+
+C             TO AVOID SLOW BOUNDARY TESTS IN QUADRI_FAST, PUT THEM HERE
+              X     = 0.0  + CNS2
+              Y     = -INR + CNR2
+              IF (X  <  2.0 .OR. X  >  (FLOAT(NX)-1.0) .OR. 
+     &            Y  <  2.0 .OR. Y  >  (FLOAT(NY)-1.0) ) THEN
+                  !WRITE(NOUT,*) 'For image size3: ',NX,NY,INR
+                  WRITE(NOUT,90) X,Y
+                  CALL ERRT(101,'RING GOES OUTSIDE IMAGE',NE)
+                  STOP
+              ENDIF
+
+              CIRCT =  QUADRI_FAST(X,Y,NX,NY,XIM)
+              CIRC(LTLTIGO) = (CIRCT - AVO) * VRIN
+
+C             TO AVOID SLOW BOUNDARY TESTS IN QUADRI_FAST, PUT THEM HERE
+              X     = -INR + CNS2
+              Y     =  0.0 + CNR2
+              IF (X  <  2.0 .OR. X  >  (FLOAT(NX)-1.0) .OR. 
+     &            Y  <  2.0 .OR. Y  >  (FLOAT(NY)-1.0) ) THEN
+                  !WRITE(NOUT,*) 'For image size4: ',NX,NY,INR
+                  WRITE(NOUT,90) X,Y
+                  CALL ERRT(101,'RING GOES OUTSIDE IMAGE',NE)
+                  STOP
+              ENDIF
+              CIRCT = QUADRI_FAST(X,Y,NX,NY,XIM)
+              CIRC(LTLTLTIGO) = (CIRCT - AVO) * VRIN
+           ENDIF
+          
+           DO JT=1,NSIM     ! LOOP NSIM TIMES TO FILL RING
+              FI = DFI * JT
+              X  = SIN(FI) * YQ
+              Y  = COS(FI) * YQ
+
+              XT           = X+CNS2
+              YT           = Y+CNR2
+              CIRCT        = QUADRI_FAST(XT,YT,NX,NY,XIM)
+              CIRC(JT+IGO) = (CIRCT - AVO) * VRIN
+ 
+              XT =  Y+CNS2
+              YT = -X+CNR2
+
+              CIRCT          = QUADRI_FAST(XT,YT,NX,NY,XIM)
+              CIRC(JT+LTIGO) = (CIRCT - AVO) * VRIN
+
+              IF (MODE  ==  'F')  THEN
+C                FILL OTHER HALF OF CIRCLE
+                 XT    = -X+CNS2
+                 YT    = -Y+CNR2
+                 CIRCT = QUADRI_FAST(XT,YT,NX,NY,XIM)
+                 CIRC(JT+LTLTIGO) = (CIRCT - AVO) * VRIN
+
+                 XT    = -Y+CNS2
+                 YT    =  X+CNR2
+                 CIRCT = QUADRI_FAST(XT,YT,NX,NY,XIM)
+                 CIRC(JT+LTLTLTIGO) = (CIRCT - AVO) * VRIN
+              ENDIF
+	   ENDDO
+	ENDDO
+
+        ENDIF
+
+        END
+@
+
+
+1.15
+log
+@LTIGO,LTLTIGO,LTLTLTIGO omp bug
+@
+text
+@d9 1
+d15 1
+a15 1
+C=* Copyright 1985-2011  Health Research Inc.,                         *
+d130 2
+a131 2
+           IF (X  <=  2.0 .OR. X  >=  (FLOAT(NX)-1.0) .OR. 
+     &         Y  <=  2.0 .OR. Y  >=  (FLOAT(NY)-1.0) ) THEN
+d146 2
+a147 2
+           IF (X  <=  2.0 .OR. X  >=  (FLOAT(NX)-1.0) .OR. 
+     &         Y  <=  2.0 .OR. Y  >=  (FLOAT(NY)-1.0) ) THEN
+d164 2
+a165 2
+              IF (X  <=  2.0 .OR. X  >=  (FLOAT(NX)-1.0) .OR. 
+     &            Y  <=  2.0 .OR. Y  >=  (FLOAT(NY)-1.0) ) THEN
+d179 2
+a180 2
+              IF (X  <=  2.0 .OR. X  >=  (FLOAT(NX)-1.0) .OR. 
+     &            Y  <=  2.0 .OR. Y  >=  (FLOAT(NY)-1.0) ) THEN
+d249 2
+a250 2
+          IF (X  <=  2.0 .OR. X  >=  (FLOAT(NX)-1.0) .OR. 
+     &         Y  <=  2.0 .OR. Y  >=  (FLOAT(NY)-1.0) ) THEN
+d263 2
+a264 2
+           IF (X  <=  2.0 .OR. X  >=  (FLOAT(NX)-1.0) .OR. 
+     &         Y  <=  2.0 .OR. Y  >=  (FLOAT(NY)-1.0) ) THEN
+d280 2
+a281 2
+              IF (X  <=  2.0 .OR. X  >=  (FLOAT(NX)-1.0) .OR. 
+     &            Y  <=  2.0 .OR. Y  >=  (FLOAT(NY)-1.0) ) THEN
+d294 2
+a295 2
+              IF (X  <=  2.0 .OR. X  >=  (FLOAT(NX)-1.0) .OR. 
+     &            Y  <=  2.0 .OR. Y  >=  (FLOAT(NY)-1.0) ) THEN
+d310 3
+a312 3
+              XT    = X+CNS2
+              YT    = Y+CNR2
+              CIRCT = QUADRI_FAST(XT,YT,NX,NY,XIM)
+d318 1
+a318 1
+              CIRCT = QUADRI_FAST(XT,YT,NX,NY,XIM)
+@
+
+
+1.14
+log
+@renamed from: alrq_ms_new
+@
+text
+@d40 1
+a40 1
+C             NSAM,NROW    MAGE DIMENSIONS                    (INPUT)
+d47 4
+d58 1
+a58 1
+        SUBROUTINE ALRQ_MS_QUAD(XIM, NSAM,NROW, CNS2,CNR2, 
+d62 2
+d65 8
+a72 5
+        REAL, INTENT(INOUT)          :: XIM(NSAM,NROW), CIRC(LCIRC)
+        INTEGER, INTENT(IN)          :: NUMR(3,NRING), NRING,LCIRC
+        CHARACTER*1                  :: MODE
+        LOGICAL, INTENT(IN)          :: NEWFFT
+        LOGICAL, INTENT(IN)          :: USE_OMP_PARALLEL
+d78 5
+a82 1
+        INCLUDE 'CMBLOCK.INC'
+d93 1
+a93 1
+        IF (USE_OMP_PARALLEL) THEN
+d95 2
+a96 1
+c$omp   parallel do private(it,inr,yq,igo,nval,lt,nsim,dfi,xold,yold,
+d113 1
+a113 1
+           IF (MODE .EQ. 'H')  THEN
+d115 1
+a115 1
+           ELSEIF (MODE.EQ.'F') THEN
+d129 3
+a131 3
+           IF (X .LE. 2.0 .OR. X .GE. (FLOAT(NSAM)-1.0) .OR. 
+     &         Y .LE. 2.0 .OR. Y .GE. (FLOAT(NROW)-1.0) ) THEN
+                  WRITE(NOUT,*) 'For image size1: ',NSAM,NROW,INR
+d139 1
+a139 1
+           CIRCT        = QUADRI_FAST(X,Y,NSAM,NROW,XIM)
+d145 3
+a147 3
+           IF (X .LE. 2.0 .OR. X .GE. (FLOAT(NSAM)-1.0) .OR. 
+     &         Y .LE. 2.0 .OR. Y .GE. (FLOAT(NROW)-1.0) ) THEN
+                  WRITE(NOUT,*) 'For image size2: ',NSAM,NROW,INR
+d154 1
+a154 1
+           CIRCT        = QUADRI_FAST(X,Y,NSAM,NROW,XIM)
+d157 1
+a157 1
+           IF (MODE .EQ. 'F')  THEN
+d163 3
+a165 3
+              IF (X .LE. 2.0 .OR. X .GE. (FLOAT(NSAM)-1.0) .OR. 
+     &            Y .LE. 2.0 .OR. Y .GE. (FLOAT(NROW)-1.0) ) THEN
+                  WRITE(NOUT,*) 'For image size3: ',NSAM,NROW,INR
+d172 1
+a172 1
+              CIRCT         =  QUADRI_FAST(X,Y,NSAM,NROW,XIM)
+d178 3
+a180 3
+              IF (X .LE. 2.0 .OR. X .GE. (FLOAT(NSAM)-1.0) .OR. 
+     &            Y .LE. 2.0 .OR. Y .GE. (FLOAT(NROW)-1.0) ) THEN
+                  WRITE(NOUT,*) 'For image size4: ',NSAM,NROW,INR
+d186 1
+a186 1
+              CIRCT           = QUADRI_FAST(X,Y,NSAM,NROW,XIM)
+d195 1
+a195 1
+              CIRCT        = QUADRI_FAST(X+CNS2,Y+CNR2,NSAM,NROW,XIM)
+d198 1
+a198 1
+              CIRCT        = QUADRI_FAST(Y+CNS2,-X+CNR2,NSAM,NROW,XIM)
+d201 1
+a201 1
+              IF (MODE .EQ. 'F')  THEN
+d203 1
+a203 1
+                 CIRCT = QUADRI_FAST(-X+CNS2,-Y+CNR2,NSAM,NROW,XIM)
+d206 1
+a206 1
+                 CIRCT = QUADRI_FAST(-Y+CNS2,X+CNR2,NSAM,NROW,XIM)
+d231 1
+a231 1
+           IF (MODE .EQ. 'H')  THEN
+d233 1
+a233 1
+           ELSEIF (MODE.EQ.'F') THEN
+d248 3
+a250 3
+          IF (X .LE. 2.0 .OR. X .GE. (FLOAT(NSAM)-1.0) .OR. 
+     &         Y .LE. 2.0 .OR. Y .GE. (FLOAT(NROW)-1.0) ) THEN
+               !WRITE(NOUT,*) 'For image size1: ',NSAM,NROW,INR
+d256 1
+a256 1
+           CIRCT        = QUADRI_FAST(X,Y,NSAM,NROW,XIM)
+d262 3
+a264 3
+           IF (X .LE. 2.0 .OR. X .GE. (FLOAT(NSAM)-1.0) .OR. 
+     &         Y .LE. 2.0 .OR. Y .GE. (FLOAT(NROW)-1.0) ) THEN
+               !WRITE(NOUT,*) 'For image size2: ',NSAM,NROW,INR
+d270 1
+a270 1
+           CIRCT        = QUADRI_FAST(X,Y,NSAM,NROW,XIM)
+d273 1
+a273 1
+           IF (MODE .EQ. 'F')  THEN
+d279 3
+a281 3
+              IF (X .LE. 2.0 .OR. X .GE. (FLOAT(NSAM)-1.0) .OR. 
+     &            Y .LE. 2.0 .OR. Y .GE. (FLOAT(NROW)-1.0) ) THEN
+                  !WRITE(NOUT,*) 'For image size3: ',NSAM,NROW,INR
+d287 1
+a287 1
+              CIRCT =  QUADRI_FAST(X,Y,NSAM,NROW,XIM)
+d293 3
+a295 3
+              IF (X .LE. 2.0 .OR. X .GE. (FLOAT(NSAM)-1.0) .OR. 
+     &            Y .LE. 2.0 .OR. Y .GE. (FLOAT(NROW)-1.0) ) THEN
+                  !WRITE(NOUT,*) 'For image size4: ',NSAM,NROW,INR
+d300 1
+a300 1
+              CIRCT = QUADRI_FAST(X,Y,NSAM,NROW,XIM)
+d311 1
+a311 1
+              CIRCT = QUADRI_FAST(XT,YT,NSAM,NROW,XIM)
+d317 1
+a317 1
+              CIRCT = QUADRI_FAST(XT,YT,NSAM,NROW,XIM)
+d320 1
+a320 1
+              IF (MODE .EQ. 'F')  THEN
+d324 1
+a324 1
+                 CIRCT = QUADRI_FAST(XT,YT,NSAM,NROW,XIM)
+d329 1
+a329 1
+                 CIRCT = QUADRI_FAST(XT,YT,NSAM,NROW,XIM)
+@
+
+
+1.13
+log
+@renamed containing file
+@
+text
+@d8 1
+d32 1
+a32 1
+C ALRQ_MS_NEW
+d54 1
+a54 1
+        SUBROUTINE ALRQ_MS_NEW(XIM, NSAM,NROW, CNS2,CNR2, 
+@
+
+
+1.12
+log
+@GPL_2010
+@
+text
+@d4 1
+a4 1
+C ALRQ_MS.F    MODIFIED FOR FFTW USE             MAR 2008 ARDEAN LEITH
+d7 1
+d13 1
+a13 1
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+d31 1
+a31 1
+C ALRQ_MS(XIM, NSAM,NROW, CNS2,CNR2, NUMR,CIRC,LCIRC, NRING,MODE)
+@
+
+
+1.11
+log
+@*** empty log message ***
+@
+text
+@a8 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2009  Health Research Inc.                      *
+d10 5
+a14 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d16 1
+a16 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d21 1
+a21 1
+C=* This program is distributed in the hope that it will be useful,    *
+d23 1
+a23 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a24 1
+C=*                                                                    *
+d26 1
+a26 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.10
+log
+@ NO RETURN IN || ON INTEL FORT
+@
+text
+@d6 1
+d10 1
+a10 1
+C=* Copyright (C) 1985-2008  Health Research Inc.                      *
+a55 3
+ 
+C       --------------------- ALRQ_MS_NEW --------------------------
+
+d124 1
+d139 1
+d157 1
+d172 1
+d255 1
+a255 1
+               RETURN
+d272 1
+a272 1
+                  RETURN
+d286 1
+a286 1
+                  RETURN
+@
+
+
+1.9
+log
+@ fast quadri
+@
+text
+@d4 2
+a5 1
+C ALRQ_MS.F              MODIFIED FOR FFTW USE     MAR 2008 ARDEAN LEITH
+d125 1
+a125 1
+               RETURN
+d139 1
+a139 1
+               RETURN
+d156 1
+a156 1
+                  RETURN
+d170 1
+a170 1
+                  RETURN
+@
+
+
+1.8
+log
+@FFTW3 plan changes, FFTW aprings
+@
+text
+@d34 3
+a36 2
+C PURPOSE: INTERPOLATION INTO POLAR COORDINATES
+C          NEW FFT TO BE USED ON RINGS
+d39 8
+a46 1
+C      CNS2 AND CNR2      PREDEFINED CENTERS                     SENT
+d48 2
+d54 1
+a54 83
+        SUBROUTINE ALRQ_MS(XIM, NSAM,NROW, CNS2,CNR2, NUMR,CIRC,LCIRC,
+     &                     NRING,MODE)
+
+        DIMENSION         :: XIM(NSAM,NROW), CIRC(LCIRC)
+        INTEGER           :: NUMR(3,NRING)
+        CHARACTER*1       :: MODE
+        DOUBLE PRECISION  :: PI,DFI
+
+C       CNS2 AND CNR2 ARE PREDEFINED CENTERS
+
+        PI = 2 * DATAN(1.0D0)
+
+C       FILL ALL THE RINGS
+        DO  IT=1,NRING 
+
+C          RADIUS OF THE RING
+           INR   = NUMR(1,IT)
+           YQ    = INR
+
+           KCIRC = NUMR(2,IT)      ! STARTING LOCATION FOR RING 
+           L     = NUMR(3,IT)      ! LENGTH OF THIS RING
+
+           IF (MODE .EQ. 'H')  THEN
+              LT = L / 2
+           ELSEIF (MODE.EQ.'F')  THEN
+              LT = L / 4
+           ENDIF
+
+           NSIM  = LT - 1
+           DFI   = PI / (NSIM+1)
+           XOLD  = 0.0
+           YOLD  = INR
+           CIRC(KCIRC) = QUADRI(XOLD+CNS2,YOLD+CNR2,NSAM,NROW,XIM)
+
+           XOLD  = INR
+           YOLD  = 0.0
+           CIRC(LT+KCIRC) = 
+     &          QUADRI(XOLD+CNS2,YOLD+CNR2,NSAM,NROW,XIM)
+
+           IF (MODE .EQ. 'F')  THEN
+C             FILL OTHER HALF OF CIRCLE
+              XOLD = 0.0
+              YOLD = -INR
+              CIRC(LT+LT+KCIRC) = 
+     &            QUADRI(XOLD+CNS2,YOLD+CNR2,NSAM,NROW,XIM)
+
+              XOLD = -INR
+              YOLD = 0.0
+              CIRC(LT+LT+LT+KCIRC) =
+     &             QUADRI(XOLD+CNS2,YOLD+CNR2,NSAM,NROW,XIM)
+           ENDIF
+
+           DO JT=1,NSIM     ! LOOP NSIM TIMES TO FILL RING
+              FI   = DFI * JT
+              X    = SIN(FI) * YQ
+              Y    = COS(FI) * YQ
+
+              XOLD = X
+              YOLD = Y
+              CIRC(JT+KCIRC) = 
+     &             QUADRI(XOLD+CNS2,YOLD+CNR2,NSAM,NROW,XIM)
+
+              XOLD = Y
+              YOLD = -X
+              CIRC(JT+LT+KCIRC) =
+     &             QUADRI(XOLD+CNS2,YOLD+CNR2,NSAM,NROW,XIM)
+
+              IF (MODE .EQ. 'F')  THEN
+C                FILL OTHER HALF OF CIRCLE
+                 XOLD = -X
+                 YOLD = -Y
+                 CIRC(JT+LT+LT+KCIRC) =
+     &               QUADRI(XOLD+CNS2,YOLD+CNR2,NSAM,NROW,XIM)
+
+                 XOLD = -Y
+                 YOLD = X
+                 CIRC(JT+LT+LT+LT+KCIRC) =
+     &               QUADRI(XOLD+CNS2,YOLD+CNR2,NSAM,NROW,XIM)
+              ENDIF
+	   ENDDO
+	ENDDO
+        END
+
+d72 1
+d75 1
+d82 1
+d90 1
+a90 1
+           YQ   = INR               ! INTEGER RADIUS
+d108 4
+d114 14
+a127 3
+           XOLD         = 0.0
+           YOLD         = INR
+           CIRCT        = QUADRI(XOLD+CNS2,YOLD+CNR2,NSAM,NROW,XIM)
+d130 13
+a142 4
+           XOLD         = INR
+           YOLD         = 0.0
+           CIRCT        = QUADRI(XOLD+CNS2,YOLD+CNR2,NSAM,NROW,XIM)
+           CIRC(LT+IGO) = (CIRCT - AVO) * VRIN
+d146 27
+a172 9
+              XOLD  = 0.0
+              YOLD  = -INR
+              CIRCT =  QUADRI(XOLD+CNS2,YOLD+CNR2,NSAM,NROW,XIM)
+              CIRC(LT+LT+IGO) = (CIRCT - AVO) * VRIN
+
+              XOLD  = -INR
+              YOLD  = 0.0
+              CIRCT = QUADRI(XOLD+CNS2,YOLD+CNR2,NSAM,NROW,XIM)
+              CIRC(LT+LT+LT+IGO) = (CIRCT - AVO) * VRIN
+d180 1
+a180 3
+              XOLD  = X
+              YOLD  = Y
+              CIRCT = QUADRI(XOLD+CNS2,YOLD+CNR2,NSAM,NROW,XIM)
+d183 2
+a184 4
+              XOLD  =  Y
+              YOLD  = -X
+              CIRCT = QUADRI(XOLD+CNS2,YOLD+CNR2,NSAM,NROW,XIM)
+              CIRC(JT+LT+IGO) = (CIRCT - AVO) * VRIN
+d188 5
+a192 9
+                 XOLD  = -X
+                 YOLD  = -Y
+                 CIRCT = QUADRI(XOLD+CNS2,YOLD+CNR2,NSAM,NROW,XIM)
+                 CIRC(JT+LT+LT+IGO) = (CIRCT - AVO) * VRIN
+
+                 XOLD = -Y
+                 YOLD =  X
+                 CIRCT = QUADRI(XOLD+CNS2,YOLD+CNR2,NSAM,NROW,XIM)
+                 CIRC(JT+LT+LT+LT+IGO) = (CIRCT - AVO) * VRIN
+d204 1
+a204 1
+           YQ   = INR               ! INTEGER RADIUS
+d222 4
+d228 14
+a241 3
+           XOLD         = 0.0
+           YOLD         = INR
+           CIRCT        = QUADRI(XOLD+CNS2,YOLD+CNR2,NSAM,NROW,XIM)
+d244 13
+a256 4
+           XOLD         = INR
+           YOLD         = 0.0
+           CIRCT        = QUADRI(XOLD+CNS2,YOLD+CNR2,NSAM,NROW,XIM)
+           CIRC(LT+IGO) = (CIRCT - AVO) * VRIN
+d260 27
+a286 9
+              XOLD  = 0.0
+              YOLD  = -INR
+              CIRCT =  QUADRI(XOLD+CNS2,YOLD+CNR2,NSAM,NROW,XIM)
+              CIRC(LT+LT+IGO) = (CIRCT - AVO) * VRIN
+
+              XOLD  = -INR
+              YOLD  = 0.0
+              CIRCT = QUADRI(XOLD+CNS2,YOLD+CNR2,NSAM,NROW,XIM)
+              CIRC(LT+LT+LT+IGO) = (CIRCT - AVO) * VRIN
+d288 1
+a288 1
+
+d290 7
+a296 7
+              FI    = DFI * JT
+              X     = SIN(FI) * YQ
+              Y     = COS(FI) * YQ
+
+              XOLD  = X
+              YOLD  = Y
+              CIRCT = QUADRI(XOLD+CNS2,YOLD+CNR2,NSAM,NROW,XIM)
+d298 3
+d302 2
+a303 4
+              XOLD  =  Y
+              YOLD  = -X
+              CIRCT = QUADRI(XOLD+CNS2,YOLD+CNR2,NSAM,NROW,XIM)
+              CIRC(JT+LT+IGO) = (CIRCT - AVO) * VRIN
+d307 9
+a315 9
+                 XOLD  = -X
+                 YOLD  = -Y
+                 CIRCT = QUADRI(XOLD+CNS2,YOLD+CNR2,NSAM,NROW,XIM)
+                 CIRC(JT+LT+LT+IGO) = (CIRCT - AVO) * VRIN
+
+                 XOLD = -Y
+                 YOLD =  X
+                 CIRCT = QUADRI(XOLD+CNS2,YOLD+CNR2,NSAM,NROW,XIM)
+                 CIRC(JT+LT+LT+LT+IGO) = (CIRCT - AVO) * VRIN
+@
+
+
+1.7
+log
+@GPL License fixed
+@
+text
+@d1 1
+a1 1
+C
+d4 1
+a4 1
+C ALRQ_MS.F
+d8 1
+a8 1
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d31 3
+a33 1
+
+d35 4
+a39 1
+C IMAGE_PROCESSING_ROUTINE
+d44 2
+a45 2
+        SUBROUTINE  ALRQ_MS
+     &     (XIM,NSAM,NROW,CNS2,CNR2,NUMR,CIRC,LCIRC,NRING,MODE)
+d47 6
+a52 9
+        DIMENSION    XIM(NSAM,NROW),CIRC(LCIRC)
+        INTEGER      NUMR(3,NRING)
+        CHARACTER*1  MODE
+        DOUBLE       PRECISION  PI,DFI
+
+C        CNS2 AND CNR2 ARE PREDEFINED CENTERS
+CC       NO NEED TO SET TO ZERO, ALL ELEMENTS ARE DEFINED
+C        DO  10  I=1,LCIRC
+C 10     CIRC(I)=0.0
+d55 3
+a57 1
+        DO  IT=1,NRING
+d60 5
+a64 2
+           INR = NUMR(1,IT)
+           YQ  = INR
+d66 1
+a66 2
+           L = NUMR(3,IT)
+           IF (MODE.EQ.'H')  THEN
+a67 1
+
+a73 1
+           KCIRC = NUMR(2,IT)
+d76 1
+a76 2
+           CIRC(KCIRC) = 
+     &          QUADRI(XOLD+CNS2,YOLD+CNR2,NSAM,NROW,XIM)
+d83 2
+a84 1
+           IF (MODE.EQ.'F')  THEN
+a93 1
+
+d96 1
+a96 1
+           DO JT=1,NSIM
+d111 2
+a112 1
+              IF (MODE.EQ.'F')  THEN
+d122 54
+d177 131
+d312 2
+@
+
+
+1.6
+log
+@HRI GPL License used
+@
+text
+@a2 1
+C++************************************************************************
+a6 1
+C * SPIDER - MODULAR IMAGE PROCESSING SYSTEM.    AUTHOR: J.FRANK       *
+d10 1
+a10 1
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *  
+a29 6
+
+C * COPYRIGHT (C)1985, 2001. HEALTH RESEARCH INCORPORATED (HRI),       *
+C * ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+C * THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO HRI AND ARE NOT   *
+C * TO BE DISCLOSED TO OTHERS OR USED FOR PURPOSES OTHER THAN INTENDED *
+C * WITHOUT WRITTEN APPROVAL OF HRI.                                   *
+a37 1
+C--************************************************************************
+@
+
+
+1.5
+log
+@non-inlined quadri version
+@
+text
+@d2 1
+d9 24
+d45 1
+@
+
+
+1.4
+log
+@inilined quadri.f version
+@
+text
+@d35 1
+a35 1
+        PI=2*DATAN(1.0D0)
+a52 1
+
+d55 2
+a56 62
+
+C -----------------------------------------------------------------
+ 
+      XT = XOLD+CNS2
+      YT = YOLD+CNR2
+
+      I   = IFIX(XT)
+      J   = IFIX(YT)
+
+      DX0 = XT - I
+      DY0 = YT - J
+
+      IP1 = I + 1
+      IM1 = I - 1
+      JP1 = J + 1
+      JM1 = J - 1
+
+      IF (IP1 .GT. NSAM) IP1 = IP1 - NSAM     
+      IF (IM1 .LT. 1)    IM1 = IM1 + NSAM
+      IF (JP1 .GT. NROW) JP1 = JP1 - NROW        
+      IF (JM1 .LT. 1)    JM1 = JM1 + NROW
+
+      F0  = XIM(I,J)
+      C1  = XIM(IP1,J) - F0
+      C2  = (C1 - F0 + XIM(IM1,J)) * 0.5
+      C3  = XIM(I,JP1) - F0 
+      C4  = (C3 - F0 + XIM(I,JM1)) * 0.5 
+
+      DXB = (DX0 - 1)
+      DYB = (DY0 - 1)
+
+C     HXC & HYC ARE EITHER 1 OR -1
+      HXC = INT(SIGN(1.0,DX0))
+      HYC = INT(SIGN(1.0,DY0)) 
+ 
+      IC  = I + HXC
+      JC  = J + HYC
+
+      IF (IC .GT .NSAM) THEN
+         IC = IC - NSAM    
+      ELSEIF (IC .LT. 1)  THEN
+         IC = IC + NSAM
+      ENDIF
+
+      IF (JC .GT. NROW)  THEN
+         JC = JC - NROW
+      ELSEIF (JC .LT. 1)  THEN
+         JC = JC + NROW
+      ENDIF
+
+      C5  =  ((XIM(IC,JC) - F0 - 
+     &         HXC * C1 - 
+     &        (HXC * (HXC - 1.0)) * C2 -
+     &         HYC * C3 - 
+     &        (HYC * (HYC - 1.0)) * C4) * 
+     &        (HXC * HYC)) 
+
+      QUADRIT = F0 + 
+     &         DX0 * (C1 + DXB * C2 + DY0 * C5) + 
+     &         DY0 * (C3 + DYB * C4)
+
+      CIRC(KCIRC) = QUADRIT
+a57 2
+c------------------------------------------------------------------
+
+d60 2
+a61 62
+
+C -----------------------------------------------------------------
+ 
+      XT = XOLD+CNS2
+      YT = YOLD+CNR2
+
+      I   = IFIX(XT)
+      J   = IFIX(YT)
+
+      DX0 = XT - I
+      DY0 = YT - J
+
+      IP1 = I + 1
+      IM1 = I - 1
+      JP1 = J + 1
+      JM1 = J - 1
+
+      IF (IP1 .GT. NSAM) IP1 = IP1 - NSAM     
+      IF (IM1 .LT. 1)    IM1 = IM1 + NSAM
+      IF (JP1 .GT. NROW) JP1 = JP1 - NROW        
+      IF (JM1 .LT. 1)    JM1 = JM1 + NROW
+
+      F0  = XIM(I,J)
+      C1  = XIM(IP1,J) - F0
+      C2  = (C1 - F0 + XIM(IM1,J)) * 0.5
+      C3  = XIM(I,JP1) - F0 
+      C4  = (C3 - F0 + XIM(I,JM1)) * 0.5 
+
+      DXB = (DX0 - 1)
+      DYB = (DY0 - 1)
+
+C     HXC & HYC ARE EITHER 1 OR -1
+      HXC = INT(SIGN(1.0,DX0))
+      HYC = INT(SIGN(1.0,DY0)) 
+ 
+      IC  = I + HXC
+      JC  = J + HYC
+
+      IF (IC .GT .NSAM) THEN
+         IC = IC - NSAM    
+      ELSEIF (IC .LT. 1)  THEN
+         IC = IC + NSAM
+      ENDIF
+
+      IF (JC .GT. NROW)  THEN
+         JC = JC - NROW
+      ELSEIF (JC .LT. 1)  THEN
+         JC = JC + NROW
+      ENDIF
+
+      C5  =  ((XIM(IC,JC) - F0 - 
+     &         HXC * C1 - 
+     &        (HXC * (HXC - 1.0)) * C2 -
+     &         HYC * C3 - 
+     &        (HYC * (HYC - 1.0)) * C4) * 
+     &        (HXC * HYC)) 
+
+      QUADRIT = F0 + 
+     &         DX0 * (C1 + DXB * C2 + DY0 * C5) + 
+     &         DY0 * (C3 + DYB * C4)
+
+      CIRC(LT+KCIRC) = QUADRIT
+a62 2
+c------------------------------------------------------------------
+
+d66 2
+a67 62
+
+C -----------------------------------------------------------------
+ 
+      XT = XOLD+CNS2
+      YT = YOLD+CNR2
+
+      I   = IFIX(XT)
+      J   = IFIX(YT)
+
+      DX0 = XT - I
+      DY0 = YT - J
+
+      IP1 = I + 1
+      IM1 = I - 1
+      JP1 = J + 1
+      JM1 = J - 1
+
+      IF (IP1 .GT. NSAM) IP1 = IP1 - NSAM     
+      IF (IM1 .LT. 1)    IM1 = IM1 + NSAM
+      IF (JP1 .GT. NROW) JP1 = JP1 - NROW        
+      IF (JM1 .LT. 1)    JM1 = JM1 + NROW
+
+      F0  = XIM(I,J)
+      C1  = XIM(IP1,J) - F0
+      C2  = (C1 - F0 + XIM(IM1,J)) * 0.5
+      C3  = XIM(I,JP1) - F0 
+      C4  = (C3 - F0 + XIM(I,JM1)) * 0.5 
+
+      DXB = (DX0 - 1)
+      DYB = (DY0 - 1)
+
+C     HXC & HYC ARE EITHER 1 OR -1
+      HXC = INT(SIGN(1.0,DX0))
+      HYC = INT(SIGN(1.0,DY0)) 
+ 
+      IC  = I + HXC
+      JC  = J + HYC
+
+      IF (IC .GT .NSAM) THEN
+         IC = IC - NSAM    
+      ELSEIF (IC .LT. 1)  THEN
+         IC = IC + NSAM
+      ENDIF
+
+      IF (JC .GT. NROW)  THEN
+         JC = JC - NROW
+      ELSEIF (JC .LT. 1)  THEN
+         JC = JC + NROW
+      ENDIF
+
+      C5  =  ((XIM(IC,JC) - F0 - 
+     &         HXC * C1 - 
+     &        (HXC * (HXC - 1.0)) * C2 -
+     &         HYC * C3 - 
+     &        (HYC * (HYC - 1.0)) * C4) * 
+     &        (HXC * HYC)) 
+
+      QUADRIT = F0 + 
+     &         DX0 * (C1 + DXB * C2 + DY0 * C5) + 
+     &         DY0 * (C3 + DYB * C4)
+
+      CIRC(LT+LT+KCIRC) = QUADRIT
+a68 2
+c------------------------------------------------------------------
+
+d71 2
+a72 62
+
+C -----------------------------------------------------------------
+ 
+      XT = XOLD+CNS2
+      YT = YOLD+CNR2
+
+      I   = IFIX(XT)
+      J   = IFIX(YT)
+
+      DX0 = XT - I
+      DY0 = YT - J
+
+      IP1 = I + 1
+      IM1 = I - 1
+      JP1 = J + 1
+      JM1 = J - 1
+
+      IF (IP1 .GT. NSAM) IP1 = IP1 - NSAM     
+      IF (IM1 .LT. 1)    IM1 = IM1 + NSAM
+      IF (JP1 .GT. NROW) JP1 = JP1 - NROW        
+      IF (JM1 .LT. 1)    JM1 = JM1 + NROW
+
+      F0  = XIM(I,J)
+      C1  = XIM(IP1,J) - F0
+      C2  = (C1 - F0 + XIM(IM1,J)) * 0.5
+      C3  = XIM(I,JP1) - F0 
+      C4  = (C3 - F0 + XIM(I,JM1)) * 0.5 
+
+      DXB = (DX0 - 1)
+      DYB = (DY0 - 1)
+
+C     HXC & HYC ARE EITHER 1 OR -1
+      HXC = INT(SIGN(1.0,DX0))
+      HYC = INT(SIGN(1.0,DY0)) 
+ 
+      IC  = I + HXC
+      JC  = J + HYC
+
+      IF (IC .GT .NSAM) THEN
+         IC = IC - NSAM    
+      ELSEIF (IC .LT. 1)  THEN
+         IC = IC + NSAM
+      ENDIF
+
+      IF (JC .GT. NROW)  THEN
+         JC = JC - NROW
+      ELSEIF (JC .LT. 1)  THEN
+         JC = JC + NROW
+      ENDIF
+
+      C5  =  ((XIM(IC,JC) - F0 - 
+     &         HXC * C1 - 
+     &        (HXC * (HXC - 1.0)) * C2 -
+     &         HYC * C3 - 
+     &        (HYC * (HYC - 1.0)) * C4) * 
+     &        (HXC * HYC)) 
+
+      QUADRIT = F0 + 
+     &         DX0 * (C1 + DXB * C2 + DY0 * C5) + 
+     &         DY0 * (C3 + DYB * C4)
+
+      CIRC(LT+LT+LT+KCIRC) = QUADRIT
+a73 1
+c------------------------------------------------------------------
+d83 2
+a85 64
+C -----------------------------------------------------------------
+ 
+      XT = XOLD+CNS2
+      YT = YOLD+CNR2
+
+      I   = IFIX(XT)
+      J   = IFIX(YT)
+
+      DX0 = XT - I
+      DY0 = YT - J
+
+      IP1 = I + 1
+      IM1 = I - 1
+      JP1 = J + 1
+      JM1 = J - 1
+
+      IF (IP1 .GT. NSAM) IP1 = IP1 - NSAM     
+      IF (IM1 .LT. 1)    IM1 = IM1 + NSAM
+      IF (JP1 .GT. NROW) JP1 = JP1 - NROW        
+      IF (JM1 .LT. 1)    JM1 = JM1 + NROW
+
+      F0  = XIM(I,J)
+      C1  = XIM(IP1,J) - F0
+      C2  = (C1 - F0 + XIM(IM1,J)) * 0.5
+      C3  = XIM(I,JP1) - F0 
+      C4  = (C3 - F0 + XIM(I,JM1)) * 0.5 
+
+      DXB = (DX0 - 1)
+      DYB = (DY0 - 1)
+
+C     HXC & HYC ARE EITHER 1 OR -1
+      HXC = INT(SIGN(1.0,DX0))
+      HYC = INT(SIGN(1.0,DY0)) 
+ 
+      IC  = I + HXC
+      JC  = J + HYC
+
+      IF (IC .GT .NSAM) THEN
+         IC = IC - NSAM    
+      ELSEIF (IC .LT. 1)  THEN
+         IC = IC + NSAM
+      ENDIF
+
+      IF (JC .GT. NROW)  THEN
+         JC = JC - NROW
+      ELSEIF (JC .LT. 1)  THEN
+         JC = JC + NROW
+      ENDIF
+
+      C5  =  ((XIM(IC,JC) - F0 - 
+     &         HXC * C1 - 
+     &        (HXC * (HXC - 1.0)) * C2 -
+     &         HYC * C3 - 
+     &        (HYC * (HYC - 1.0)) * C4) * 
+     &        (HXC * HYC)) 
+
+      QUADRIT = F0 + 
+     &         DX0 * (C1 + DXB * C2 + DY0 * C5) + 
+     &         DY0 * (C3 + DYB * C4)
+
+      CIRC(JT+KCIRC) = QUADRIT
+
+c------------------------------------------------------------------
+
+d88 2
+a89 64
+
+C -----------------------------------------------------------------
+ 
+      XT = XOLD+CNS2
+      YT = YOLD+CNR2
+
+      I   = IFIX(XT)
+      J   = IFIX(YT)
+
+      DX0 = XT - I
+      DY0 = YT - J
+
+      IP1 = I + 1
+      IM1 = I - 1
+      JP1 = J + 1
+      JM1 = J - 1
+
+      IF (IP1 .GT. NSAM) IP1 = IP1 - NSAM     
+      IF (IM1 .LT. 1)    IM1 = IM1 + NSAM
+      IF (JP1 .GT. NROW) JP1 = JP1 - NROW        
+      IF (JM1 .LT. 1)    JM1 = JM1 + NROW
+
+      F0  = XIM(I,J)
+      C1  = XIM(IP1,J) - F0
+      C2  = (C1 - F0 + XIM(IM1,J)) * 0.5
+      C3  = XIM(I,JP1) - F0 
+      C4  = (C3 - F0 + XIM(I,JM1)) * 0.5 
+
+      DXB = (DX0 - 1)
+      DYB = (DY0 - 1)
+
+C     HXC & HYC ARE EITHER 1 OR -1
+      HXC = INT(SIGN(1.0,DX0))
+      HYC = INT(SIGN(1.0,DY0)) 
+ 
+      IC  = I + HXC
+      JC  = J + HYC
+
+      IF (IC .GT .NSAM) THEN
+         IC = IC - NSAM    
+      ELSEIF (IC .LT. 1)  THEN
+         IC = IC + NSAM
+      ENDIF
+
+      IF (JC .GT. NROW)  THEN
+         JC = JC - NROW
+      ELSEIF (JC .LT. 1)  THEN
+         JC = JC + NROW
+      ENDIF
+
+      C5  =  ((XIM(IC,JC) - F0 - 
+     &         HXC * C1 - 
+     &        (HXC * (HXC - 1.0)) * C2 -
+     &         HYC * C3 - 
+     &        (HYC * (HYC - 1.0)) * C4) * 
+     &        (HXC * HYC)) 
+
+      QUADRIT = F0 + 
+     &         DX0 * (C1 + DXB * C2 + DY0 * C5) + 
+     &         DY0 * (C3 + DYB * C4)
+
+      CIRC(JT+LT+KCIRC) = QUADRIT
+
+c------------------------------------------------------------------
+d94 2
+a96 64
+C -----------------------------------------------------------------
+ 
+      XT = XOLD+CNS2
+      YT = YOLD+CNR2
+
+      I   = IFIX(XT)
+      J   = IFIX(YT)
+
+      DX0 = XT - I
+      DY0 = YT - J
+
+      IP1 = I + 1
+      IM1 = I - 1
+      JP1 = J + 1
+      JM1 = J - 1
+
+      IF (IP1 .GT. NSAM) IP1 = IP1 - NSAM     
+      IF (IM1 .LT. 1)    IM1 = IM1 + NSAM
+      IF (JP1 .GT. NROW) JP1 = JP1 - NROW        
+      IF (JM1 .LT. 1)    JM1 = JM1 + NROW
+
+      F0  = XIM(I,J)
+      C1  = XIM(IP1,J) - F0
+      C2  = (C1 - F0 + XIM(IM1,J)) * 0.5
+      C3  = XIM(I,JP1) - F0 
+      C4  = (C3 - F0 + XIM(I,JM1)) * 0.5 
+
+      DXB = (DX0 - 1)
+      DYB = (DY0 - 1)
+
+C     HXC & HYC ARE EITHER 1 OR -1
+      HXC = INT(SIGN(1.0,DX0))
+      HYC = INT(SIGN(1.0,DY0)) 
+ 
+      IC  = I + HXC
+      JC  = J + HYC
+
+      IF (IC .GT .NSAM) THEN
+         IC = IC - NSAM    
+      ELSEIF (IC .LT. 1)  THEN
+         IC = IC + NSAM
+      ENDIF
+
+      IF (JC .GT. NROW)  THEN
+         JC = JC - NROW
+      ELSEIF (JC .LT. 1)  THEN
+         JC = JC + NROW
+      ENDIF
+
+      C5  =  ((XIM(IC,JC) - F0 - 
+     &         HXC * C1 - 
+     &        (HXC * (HXC - 1.0)) * C2 -
+     &         HYC * C3 - 
+     &        (HYC * (HYC - 1.0)) * C4) * 
+     &        (HXC * HYC)) 
+
+      QUADRIT = F0 + 
+     &         DX0 * (C1 + DXB * C2 + DY0 * C5) + 
+     &         DY0 * (C3 + DYB * C4)
+
+      CIRC(JT+LT+LT+KCIRC) = QUADRIT
+
+c------------------------------------------------------------------
+
+d99 2
+a100 62
+
+C -----------------------------------------------------------------
+ 
+      XT = XOLD+CNS2
+      YT = YOLD+CNR2
+
+      I   = IFIX(XT)
+      J   = IFIX(YT)
+
+      DX0 = XT - I
+      DY0 = YT - J
+
+      IP1 = I + 1
+      IM1 = I - 1
+      JP1 = J + 1
+      JM1 = J - 1
+
+      IF (IP1 .GT. NSAM) IP1 = IP1 - NSAM     
+      IF (IM1 .LT. 1)    IM1 = IM1 + NSAM
+      IF (JP1 .GT. NROW) JP1 = JP1 - NROW        
+      IF (JM1 .LT. 1)    JM1 = JM1 + NROW
+
+      F0  = XIM(I,J)
+      C1  = XIM(IP1,J) - F0
+      C2  = (C1 - F0 + XIM(IM1,J)) * 0.5
+      C3  = XIM(I,JP1) - F0 
+      C4  = (C3 - F0 + XIM(I,JM1)) * 0.5 
+
+      DXB = (DX0 - 1)
+      DYB = (DY0 - 1)
+
+C     HXC & HYC ARE EITHER 1 OR -1
+      HXC = INT(SIGN(1.0,DX0))
+      HYC = INT(SIGN(1.0,DY0)) 
+ 
+      IC  = I + HXC
+      JC  = J + HYC
+
+      IF (IC .GT .NSAM) THEN
+         IC = IC - NSAM    
+      ELSEIF (IC .LT. 1)  THEN
+         IC = IC + NSAM
+      ENDIF
+
+      IF (JC .GT. NROW)  THEN
+         JC = JC - NROW
+      ELSEIF (JC .LT. 1)  THEN
+         JC = JC + NROW
+      ENDIF
+
+      C5  =  ((XIM(IC,JC) - F0 - 
+     &         HXC * C1 - 
+     &        (HXC * (HXC - 1.0)) * C2 -
+     &         HYC * C3 - 
+     &        (HYC * (HYC - 1.0)) * C4) * 
+     &        (HXC * HYC)) 
+
+      QUADRIT = F0 + 
+     &         DX0 * (C1 + DXB * C2 + DY0 * C5) + 
+     &         DY0 * (C3 + DYB * C4)
+
+      CIRC(JT+LT+LT+LT+KCIRC) = QUADRIT
+a101 1
+c------------------------------------------------------------------
+@
+
+
+1.3
+log
+@cosmetic
+@
+text
+@d35 1
+a35 1
+        PI = 2 * DATAN(1.0D0)
+d53 1
+d56 62
+a117 2
+           CIRC(KCIRC) = 
+     &          QUADRI(XOLD+CNS2,YOLD+CNR2,NSAM,NROW,XIM)
+d119 2
+d123 62
+a184 2
+           CIRC(LT+KCIRC) = 
+     &          QUADRI(XOLD+CNS2,YOLD+CNR2,NSAM,NROW,XIM)
+d186 2
+d191 62
+a252 2
+              CIRC(LT+LT+KCIRC) = 
+     &            QUADRI(XOLD+CNS2,YOLD+CNR2,NSAM,NROW,XIM)
+d254 2
+d258 62
+a319 2
+              CIRC(LT+LT+LT+KCIRC) =
+     &             QUADRI(XOLD+CNS2,YOLD+CNR2,NSAM,NROW,XIM)
+d321 1
+a330 2
+              CIRC(JT+KCIRC) = 
+     &             QUADRI(XOLD+CNS2,YOLD+CNR2,NSAM,NROW,XIM)
+d332 64
+d398 64
+a461 2
+              CIRC(JT+LT+KCIRC) =
+     &             QUADRI(XOLD+CNS2,YOLD+CNR2,NSAM,NROW,XIM)
+a465 2
+                 CIRC(JT+LT+LT+KCIRC) =
+     &               QUADRI(XOLD+CNS2,YOLD+CNR2,NSAM,NROW,XIM)
+d467 64
+d533 62
+a594 2
+                 CIRC(JT+LT+LT+LT+KCIRC) =
+     &               QUADRI(XOLD+CNS2,YOLD+CNR2,NSAM,NROW,XIM)
+d596 1
+@
+
+
+1.2
+log
+@header & cosmetic
+@
+text
+@d4 1
+a4 1
+C $$ ALRQ_MS.FOR
+d6 10
+a15 10
+C **************************************************************************
+C *  SPIDER - MODULAR IMAGE PROCESSING SYSTEM.  AUTHOR: J.FRANK            *
+C *  COPYRIGHT (C)1981,1987, WADSWORTH CENTER FOR LABORATORIES AND         *
+C *  RESEARCH, NEW YORK STATE DEPARTMENT OF HEALTH, ALBANY, NY 12201.      *
+C *  THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO THE CENTER FOR       *
+C *  LABORATORIES AND RESEARCH AND ARE NOT TO BE DISCLOSED TO OTHERS OR    *
+C *  USED FOR PURPOSES OTHER THAN INTENDED WITHOUT WRITTEN APPROVAL OF     *
+C *  THE CENTER FOR LABORATORIES AND RESEARCH                              *
+C **************************************************************************
+C
+a18 1
+C        1         2         3         4         5         6         7
+d21 1
+a21 3
+C
+C $$ ALRQ_MS.FOR
+C
+d23 4
+a26 3
+     &  (XIM,NSAM,NROW,CNS2,CNR2,NUMR,CIRC,LCIRC,NRING,MODE)
+        DIMENSION  XIM(NSAM,NROW),CIRC(LCIRC)
+        INTEGER  NUMR(3,NRING)
+d28 4
+a31 6
+        DOUBLE PRECISION  PI,DFI
+C
+C  INTERPOLATION INTO POLAR COORDINATES
+C
+C        CNS2 and CNR2 are predefined centers
+CC no need to set to zero, all elements are defined
+d34 14
+a47 11
+C
+        PI=2*DATAN(1.0D0)
+        DO  I=1,NRING
+C
+C  RADIUS OF THE RING
+           INR=NUMR(1,I)
+           YQ=INR
+
+           L=NUMR(3,I)
+           IF(MODE.EQ.'H')  THEN
+              LT=L/2
+d49 25
+a73 2
+           IF(MODE.EQ.'F')  THEN
+              LT=L/4
+d75 27
+a101 35
+           NSIM=LT-1
+           DFI=PI/(NSIM+1)
+           KCIRC=NUMR(2,I)
+           XOLD=0.0
+           YOLD=INR
+        CIRC(KCIRC)=QUADRI(XOLD+CNS2,YOLD+CNR2,NSAM,NROW,XIM)
+           XOLD=INR
+           YOLD=0.0
+        CIRC(LT+KCIRC)=QUADRI(XOLD+CNS2,YOLD+CNR2,NSAM,NROW,XIM)
+           IF(MODE.EQ.'F')  THEN
+              XOLD=0.0
+              YOLD=-INR
+        CIRC(LT+LT+KCIRC)=QUADRI(XOLD+CNS2,YOLD+CNR2,NSAM,NROW,XIM)
+              XOLD=-INR
+              YOLD=0.0
+        CIRC(LT+LT+LT+KCIRC)=QUADRI(XOLD+CNS2,YOLD+CNR2,NSAM,NROW,XIM)
+           ENDIF
+           DO   J=1,NSIM
+              FI=DFI*J
+              X=SIN(FI)*YQ
+              Y=COS(FI)*YQ
+
+              XOLD=X
+              YOLD=Y
+        CIRC(J+KCIRC)=QUADRI(XOLD+CNS2,YOLD+CNR2,NSAM,NROW,XIM)
+              XOLD=Y
+              YOLD=-X
+        CIRC(J+LT+KCIRC)=QUADRI(XOLD+CNS2,YOLD+CNR2,NSAM,NROW,XIM)
+              IF(MODE.EQ.'F')  THEN
+                 XOLD=-X
+                 YOLD=-Y
+        CIRC(J+LT+LT+KCIRC)=QUADRI(XOLD+CNS2,YOLD+CNR2,NSAM,NROW,XIM)
+                 XOLD=-Y
+                 YOLD=X
+        CIRC(J+LT+LT+LT+KCIRC)=QUADRI(XOLD+CNS2,YOLD+CNR2,NSAM,NROW,XIM)
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d17 3
+d43 15
+a57 15
+        INR=NUMR(1,I)
+        YQ=INR
+C
+        L=NUMR(3,I)
+        IF(MODE.EQ.'H')  THEN
+        LT=L/2
+        ENDIF
+        IF(MODE.EQ.'F')  THEN
+        LT=L/4
+        ENDIF
+        NSIM=LT-1
+        DFI=PI/(NSIM+1)
+        KCIRC=NUMR(2,I)
+        XOLD=0.0
+        YOLD=INR
+d59 2
+a60 2
+        XOLD=INR
+        YOLD=0.0
+d62 3
+a64 3
+        IF(MODE.EQ.'F')  THEN
+        XOLD=0.0
+        YOLD=-INR
+d66 2
+a67 2
+        XOLD=-INR
+        YOLD=0.0
+d69 8
+a76 8
+        ENDIF
+        DO   J=1,NSIM
+        FI=DFI*J
+        X=SIN(FI)*YQ
+        Y=COS(FI)*YQ
+C
+        XOLD=X
+        YOLD=Y
+d78 2
+a79 2
+        XOLD=Y
+        YOLD=-X
+d81 3
+a83 3
+        IF(MODE.EQ.'F')  THEN
+        XOLD=-X
+        YOLD=-Y
+d85 2
+a86 2
+        XOLD=-Y
+        YOLD=X
+d88 2
+a89 1
+        ENDIF
+d91 1
+a91 2
+	ENDDO
+C
+@

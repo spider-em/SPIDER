@@ -1,0 +1,539 @@
+head	1.9;
+access;
+symbols
+	pre_getangas:1.9
+	GPL2010:1.9
+	pre_GPL2010:1.8
+	pre_var_equation:1.8
+	pre_fftwrings:1.8
+	pre_opfiles:1.8
+	src:1.8
+	best-code:1.8
+	x-named-regs:1.8
+	x:1.8
+	v13-00:1.8
+	pre_GPL:1.6
+	prec_CA:1.6
+	noindx:1.6
+	Bproc:1.6
+	oct21:1.5
+	last77:1.5;
+locks; strict;
+comment	@c @;
+
+
+1.9
+date	2010.06.24.13.27.17;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2005.10.17.20.27.49;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2005.10.17.18.19.22;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	99.11.10.23.11.25;	author yuchen;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	97.05.15.14.22.56;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	96.08.21.13.31.32;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	95.11.29.21.25.18;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	94.05.13.14.12.44;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	94.05.13.12.53.52;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@unix specific source code with preprocessor lines
+@
+
+
+1.9
+log
+@GPL_2010
+@
+text
+@
+C++*******************************************************************
+C
+C WINDOW.F
+C
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C   WINDOW(LUN1,LUN2,BUF,NSAM,NROW,NSLICE,NSAMW1,NROWW1,
+C              NSLIW1,NSAM2,NROW2,NSLIC2,BACKG)
+C
+C   PURPOSE:    CUTS OUT A RECTANGULAR IMAGE SECTION
+C
+C       THIS SUBROUTINE CUTS OUT A RECTANGULAR IMAGE SECTION FROM
+C       PICTURE 1 WITH A SPECIFIED SIZE NSAM2,NROW2 AT A SPECIFIED
+C       LOCATION NSAMW1,NROWW1 AND WRITES OUT AN IMAGE.
+C
+C       WINDOW(LUN1,LUN2,BUF,NSAM,NROW,NSLICE,NSAMW1,NROWW1,
+C              NSLIW1,NSAM2,NROW2,NSLIC2)
+C         LUN1           	LOGICAL UNIT NUMBER OF INPUT IMAGE
+C         LUN2           	LOGICAL UNIT NUMBER OF OUTPUT IMAGE
+C         BUF            	BUFFER ARRAY OF SIZE NSAM + NSAM2
+C         NSAM,NROW,NSLICE 	DIMENSIONS OF INPUT VOLUME/PICTURE
+C         NSAMW1,NROWW1,NSLIW1  COORDINATES, WITH RESPECT TO INPUT VOLUME, 
+C                        	OF TOP LEFT CORNER OF WINDOW
+C         NSAM2,NROW2,NSLIC2    DIMENSIONS OF WINDOW = DIMENSIONS OF OUTPUT 
+C                        	VOLUME
+C
+C NOTE: THIS APPEARS TO BE POORLY DESIGNED FOR EFFICIENCY, BUT I AM
+C       RELUCTANT TO TAMPER WITH IT. agl NOV 95
+C
+C       FINALLY FIXED THIS ROUTINE. IT HAS BEEN BUGGY FOR YEARS
+C       AND SLOW ALSO.  agl AUG 96
+C
+C--*******************************************************************
+
+      SUBROUTINE WINDOW(LUN1,LUN2, NSAM,  NROW,  NSLICE, 
+     &                             NSAMW1,NROWW1,NSLIW1, 
+     &                             NSAM2, NROW2, NSLIC2, BACKG)
+
+      INCLUDE 'CMBLOCK.INC'
+
+
+      COMMON   BUF(1)
+C     ASSUMES THAT COMMON BUFFER > NSAM + 2 * NSAMW1 
+
+      IF (NSAMW1 .GT. NSAM .OR. NROWW1 .GT. NROW .OR. 
+     &    NSLIW1 .GT. NSLICE) THEN
+          WRITE(NOUT,*) '*** WINDOW OUTSIDE OF IMAGE.'
+          CALL ERRT(100,'WINDOW',NE)
+          RETURN
+      ENDIF
+
+C     FIND NUMBER OF BLANK SLICES AT TOP OF WINDOW
+      ITOPS = 0
+      IF (NSLIW1 .LT. 1) ITOPS = -NSLIW1 + 1
+C     FIND NUMBER OF BLANK SLICES AT BOTTEM OF WINDOW
+      IBOTS = 0
+      NSLIW2 = NSLIW1 + NSLIC2 - 1
+      IF (NSLIW2 .GT. NSLICE) IBOTS = NSLIW2 - NSLICE 
+
+      NSLS   = 1
+      NSLE   = 1
+      IF (NSLICE .GT. 1) THEN
+C        INPUT/OUTPUT FILE IS A VOLUME
+         NSLS = MAX(1,NSLIW1)
+         NSLE = MIN(NSLIW2,NSLICE)
+      ENDIF
+
+C     FIND NUMBER OF BLANK ROWS AT TOP OF WINDOW
+      ITOP = 0
+      IF (NROWW1 .LT. 1) ITOP = -NROWW1 + 1
+C     FIND NUMBER OF BLANK ROWS AT BOTTEM OF WINDOW
+      IBOT = 0
+      NROWW2 = NROWW1 + NROW2 -1
+      IF (NROWW2 .GT. NROW) IBOT = NROWW2 - NROW 
+
+C     FIND FIRST ROW READ FROM IMAGE
+      NS = MAX(NROWW1,1)
+C     FIND LAST ROW READ FROM IMAGE
+      NE = MIN(NROWW2,NROW)
+
+C     CLEAR BUFFERS ONCE
+      IF ((ITOP  .GT. 0 .OR. IBOT  .GT. 0) .OR.
+     &    (ITOPS .GT. 0 .OR. IBOTS .GT. 0)) THEN
+C        FILL BLANKING BUFFER FOR TOP / BOTTEM OVERFLOW
+         DO  I=1,NSAM2
+            BUF(I) = BACKG
+         ENDDO
+      ENDIF
+
+C     SET BUFFER LOCATION FOR READ/WRITE OF IMAGE DATA
+      KBUF1 = NSAM2 + 1
+      IIN   = KBUF1
+      IIOUT = KBUF1 + NSAMW1 - 1
+
+      IF (NSAMW1 .LT. 1) THEN
+C        WINDOW STARTS BEFORE SOURCE IMAGE ON LEFT
+         IIN   = KBUF1 - NSAMW1 + 1
+         IIOUT = KBUF1
+      ENDIF
+ 
+      IF (NSAMW1 .LT. 1 .OR. (NSAMW1 + NSAM2 - 1) .GT. NSAM) THEN
+C        FILL OUTBUT BUFFER FOR LEFT / RIGHT OVERFLOW
+         DO  I=KBUF1,KBUF1+NSAM2+NSAM+NSAM2
+            BUF(I) = BACKG
+         ENDDO
+      ENDIF
+
+      IRECT = 1
+      IF (ITOPS .GT. 0) THEN
+C        FILL BLANK SLICES BEFORE WINDOW
+         DO  L = 1,ITOPS*NROW2
+             CALL WRTLIN(LUN2,BUF,NSAM2,IRECT)
+             IRECT = IRECT + 1
+         ENDDO
+      ENDIF                 
+  
+      DO  L = NSLS,NSLE
+        IRECIN  = (L-1)*NROW
+
+        IF (ITOP .GT. 0) THEN
+C         WINDOW STARTS BEFORE IMAGE AT TOP, FILL ROWS WITH BACKG
+          DO I = 1,ITOP
+             CALL WRTLIN(LUN2,BUF,NSAM2,IRECT)
+             IRECT = IRECT + 1
+          ENDDO
+        ENDIF
+
+        DO I = NS,NE
+           CALL REDLIN(LUN1,BUF(IIN),  NSAM, I+IRECIN)
+           CALL WRTLIN(LUN2,BUF(IIOUT),NSAM2,IRECT)
+           IRECT = IRECT + 1 
+        ENDDO
+
+        IF (IBOT .GT. 0) THEN
+C         WINDOW GOES OFF IMAGE AT BOTTEM, FILL THESE WITH BACKG
+          DO I = 1,IBOT
+             CALL WRTLIN(LUN2,BUF,NSAM2,IRECT)
+             IRECT = IRECT + 1
+          ENDDO
+        ENDIF
+      ENDDO
+
+      IF (IBOTS .GT. 0) THEN
+C        FILL BLANK SLICES AFTER WINDOW
+         DO  L = 1,IBOTS*NROW2
+             CALL WRTLIN(LUN2,BUF,NSAM2,IRECT)
+             IRECT = IRECT + 1
+         ENDDO
+      ENDIF  
+               
+      RETURN
+      END
+@
+
+
+1.8
+log
+@GPL License fixed
+@
+text
+@a6 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d8 5
+a12 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d14 1
+a14 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d19 1
+a19 1
+C=* This program is distributed in the hope that it will be useful,    *
+d21 1
+a21 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a22 1
+C=*                                                                    *
+d24 1
+a24 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.7
+log
+@HRI GPL License used
+@
+text
+@a6 3
+C **************************************************************************
+C * SPIDER - MODULAR IMAGE PROCESSING SYSTEM.  AUTHOR: J.FRANK         *
+C *  SPIDER - MODULAR IMAGE PROCESSING SYSTEM.  AUTHOR: J.FRANK            *
+d10 1
+a10 1
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *  
+a29 7
+
+C *  COPYRIGHT (C)1981,1987, WADSWORTH CENTER FOR LABORATORIES AND         *
+C *  RESEARCH, NEW YORK STATE DEPARTMENT OF HEALTH, ALBANY, NY 12201.      *
+C *    THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO THE CENTER FOR     *
+C *    LABORATORIES AND RESEARCH AND ARE NOT TO BE DISCLOSED TO OTHERS OR  *
+C *    USED FOR PURPOSES OTHER THAN INTENDED WITHOUT WRITTEN APPROVAL OF   *
+C *    THE CENTER FOR LABORATORIES AND RESEARCH 			   *
+a30 1
+C **************************************************************************
+@
+
+
+1.6
+log
+@a
+@
+text
+@d6 1
+d8 1
+d10 24
+d40 1
+@
+
+
+1.5
+log
+@added trap for window start beyond image
+@
+text
+@d49 1
+a49 1
+CNO_SAVE
+@
+
+
+1.4
+log
+@fixed off image bug, added off slice capability
+@
+text
+@d4 1
+a4 1
+C WINDOW.FOR
+d16 2
+a17 1
+C  WINDOW:    CUTS OUT A RECTANGULAR IMAGE SECTION
+d19 2
+d25 2
+a26 2
+C       CALL WINDOW(LUN1,LUN2,BUF,NSAM,NROW,NSLICE,NSAMW1,NROWW1,
+C       NSLIW1,NSAM2,NROW2,NSLIC2)
+d54 7
+d66 1
+a66 1
+      NSLIW2 = NSLIW1 + NSLIC2 -1
+@
+
+
+1.3
+log
+@cosmetic (trying to see if it could foul up first line anyhow)
+@
+text
+@a15 1
+C
+d20 1
+a20 1
+C       LOCATION NSAMW1,NROWW1 AND WRITES OUT A PICTURE 2.
+d36 3
+d41 3
+a43 3
+
+      SUBROUTINE WINDOW(LUN1,LUN2, NSAM,NROW,NSLICE, NSAMW1,NROWW1,
+     &                  NSLIW1, NSAM2,NROW2,NSLIC2)
+a44 1
+#ifdef SP_UNIX
+d46 1
+a46 3
+#else
+      INCLUDE 'COMMON1:CMBLOCK.INC'
+#endif
+d48 2
+a49 1
+      COMMON         BUF(1)
+d51 7
+a57 2
+      B = 0.0
+      IF (FCHAR(4:4).EQ.'B') CALL RDPRM(B,NLOOP,ILOOP,'BACKGROUND')
+a58 2
+      NSAMD  = NSAM+NSAM2
+      NROWW2 = NROWW1+NROW2-1
+d61 5
+a65 1
+      NS     = NROWW1
+d67 21
+a87 4
+C     CLEAR BUFFER:
+      DO  I=NSAM+1,NSAM+NSAM2
+         BUF(I)=B
+      ENDDO
+d89 16
+a104 3
+      IF (NSLICE .NE. 1) THEN
+         NSLS = NSLIW1
+         NSLE = NSLIW1+NSLIC2-1
+d107 17
+a123 13
+10    DO 600 L=NSLS,NSLE
+        I1 = (L-NSLS)*NROW2
+        I2 = (L-1)*NROW
+
+        IF (NS .LT. 1) THEN
+C         WINDOW STARTS BEFORE IMAGE AT TOP, FILL THESE ROWS WITH B
+          NEW = 1 - NS
+          DO K = 1,NSAM2
+             BUF(K) = B
+          ENDDO
+
+          DO I = 1,NEW
+             CALL WRTLIN(LUN2,BUF,NSAM2,I+I1)
+a124 1
+          NS = 1
+d127 5
+a131 8
+        NE = NROWW2
+        IF (NE .GT. NROW) THEN
+C         WINDOW GOES OFF IMAGE AT BOTTEM, FILL THESE ROWS WITH B
+          NE    = NROW
+          NROWP = NROW+1
+          DO K = 1,NSAMD
+             BUF(K) = B
+          ENDDO
+d133 5
+a137 2
+          DO I = NROWP,NROWW2
+             CALL WRTLIN(LUN2,BUF,NSAM2,I-NS+1+I1)
+d140 1
+a140 19
+
+
+        DO I = NS,NE
+           CALL REDLIN(LUN1,BUF,NSAM,I+I2)
+           IF (NSAMW1 .LT. 1) THEN
+C             WINDOW STARTS BEFORE LEFT SIDE OF IMAGE, FILL WITH B
+              IL = -NSAMW1+1
+              DO II=1,IL
+                BUF(NSAM+II)=B
+              ENDDO
+              DO  II=IL+1,NSAM2
+                BUF(NSAM+II)=BUF(II)
+              ENDDO
+              CALL WRTLIN(LUN2,BUF(NSAM+1),NSAM2,I-NS+1+I1) 
+           ELSE
+              CALL WRTLIN(LUN2,BUF(NSAMW1),NSAM2,I-NS+1+I1) 
+           ENDIF
+        ENDDO
+600   CONTINUE
+d142 8
+@
+
+
+1.2
+log
+@cpp_lines_added
+@
+text
+@d4 1
+a4 1
+C $$ WINDOW.FOR
+d17 1
+a17 1
+C $$ WINDOW:    CUTS OUT A RECTANGULAR IMAGE SECTION
+d34 3
+d40 2
+a41 2
+      SUBROUTINE WINDOW(LUN1,LUN2,NSAM,NROW,NSLICE,NSAMW1,NROWW1,
+     1 NSLIW1,NSAM2,NROW2,NSLIC2)
+d48 1
+d51 2
+a52 2
+      B=0.
+      IF(FCHAR(4:4).EQ.'B') CALL RDPRM(B,NLOOP,ILOOP,'BACKGROUND$')
+d59 5
+a63 5
+C
+C CLEAR BUFFER:
+      DO 1 I=NSAM+1,NSAM+NSAM2
+      BUF(I)=B
+1     CONTINUE
+d66 2
+a67 2
+         NSLS   = NSLIW1
+         NSLE   = NSLIW1+NSLIC2-1
+d75 9
+a83 5
+          NEW = 1-NS
+          DO 15 K = 1,NSAM2
+15        BUF(K) = B
+          DO 20 I = 1,NEW
+20        CALL WRTLIN(LUN2,BUF,NSAM2,I+I1)
+d89 2
+a90 1
+          NE = NROW
+d92 7
+a98 4
+          DO 100 K = 1,NSAMD
+100       BUF(K) = B
+          DO 200 I = NROWP,NROWW2
+200       CALL WRTLIN(LUN2,BUF,NSAM2,I-NS+1+I1)
+d101 17
+a117 15
+        DO 500 I = NS,NE
+          CALL REDLIN(LUN1,BUF,NSAM,I+I2)
+        IF(NSAMW1.LT.1) THEN
+            IL=-NSAMW1+1
+              DO 501 II=1,IL
+              BUF(NSAM+II)=B
+501           CONTINUE
+              DO 502 II=IL+1,NSAM2
+              BUF(NSAM+II)=BUF(II)
+502           CONTINUE
+            CALL WRTLIN(LUN2,BUF(NSAM+1),NSAM2,I-NS+1+I1) 
+        ELSE
+         CALL WRTLIN(LUN2,BUF(NSAMW1),NSAM2,I-NS+1+I1) 
+      ENDIF
+500   CONTINUE
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d40 3
+d44 1
+@

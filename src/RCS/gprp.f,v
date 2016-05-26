@@ -1,0 +1,289 @@
+head	1.6;
+access;
+symbols
+	pre_getangas:1.6
+	GPL2010:1.6
+	pre_GPL2010:1.5
+	pre_var_equation:1.5
+	pre_fftwrings:1.4
+	pre_opfiles:1.4
+	src:1.4
+	best-code:1.4
+	x-named-regs:1.3
+	x:1.3
+	v13-00:1.3
+	pre_GPL:1.1
+	prec_CA:1.1;
+locks; strict;
+comment	@c @;
+
+
+1.6
+date	2010.06.24.13.25.52;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2009.05.22.10.56.52;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2005.12.16.21.30.14;	author cyang;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2005.10.17.19.55.35;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2005.10.17.17.52.19;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2003.09.08.15.40.35;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.6
+log
+@GPL_2010
+@
+text
+@C++*********************************************************************
+C
+C GPRP.F          REMOVED FROM UTIL@@           ARDEAN LEITH  9/05/03    
+C                 SETPRMB PARAMETERS           ARDEAN LEITH  5/19/09
+C 
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C  GPRP(LUN,NSAM,NROW,NSLICE,FCHART)
+C
+C  PURPOSE:         GET OR RPLACE SINGLE PIXEL FROM IMAGE/VOLUME
+C
+C  PARAMETERS:      FCHART         FCHAR
+C
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C--*********************************************************************
+
+        SUBROUTINE GPRP(LUN,NSAM,NROW,NSLICE,FCHART)
+
+C       USE INLINE BUFFER COMMON AREA
+        INCLUDE 'INLN_INFO.INC'
+
+	INCLUDE 'CMBLOCK.INC'
+	INCLUDE 'CMLIMIT.INC'
+
+        COMMON /IOBUF/ BUF(NBUFSIZ)
+
+        CHARACTER(LEN=*) :: FCHART
+        CALL SET_MPI(ICOMM,MYPID,MPIERR)  ! SET MYPID
+
+        IF (NSLICE .LE. 1) THEN
+	   CALL RDPRIS(IX,IY,NOT_USED,'COLUMN & ROW',IRTFLG)
+           IZ = 1
+        ELSE
+           IZ = 0
+           CALL RDPRI3S(IX,IY,IZ,NOT_USED,
+     &                    'COLUMN, ROW, & SLICE',IRTFLG)
+           IF (IRTFLG .NE. 0) RETURN
+           IF (IZ .LE. 0) THEN
+               CALL RDPRI1S(IZ,NOT_USED,'SLICE',IRTFLG)
+           ENDIF
+        ENDIF
+        IF (IRTFLG .NE. 0) RETURN
+
+        IF (IX .LT. 1 .OR. IX .GT. NSAM .OR.
+     &      IY .LT. 1 .OR. IY .GT. NROW .OR.
+     &      IZ .LT. 1 .OR. IZ .GT. NSLICE) THEN
+           CALL ERRT(101,'OUTSIDE IMAGE/VOLUME BOUNDS',NE)
+           IRTFLG = 1
+           RETURN
+        ENDIF
+
+
+        IF (FCHART(1:2) .EQ. 'GP') THEN 
+C          OPERATION  GP -- (GET PIXEL VALUE)--------------------- 'GP' 
+
+           IF (ISINLINE(LUN)) THEN
+C             USE INLINED BUFFER FOR I/O (SEE OPENINLN.F)
+              CALL INLN_REDVOX(LUN,NROW,BVAL,1,
+     &                         IX,IY,IZ,IRTFLG)
+              IF (IRTFLG .NE. 0) RETURN
+           ELSE
+	      IREC = (IZ-1) * NROW + IY
+ 	      CALL REDLIN(LUN,BUF,NSAM,IREC)
+              BVAL = BUF(IX)
+           ENDIF
+
+	   IF (MYPID .LE. 0) WRITE(NOUT,90) IX,IY,IZ,BVAL
+90         FORMAT('  LOCATION: ',3I7,'  VALUE: ',1PE12.5)
+
+           CALL REG_SET_NSEL(1,1,BVAL, 0.0, 0.0, 
+     &                       0.0, 0.0, IRTFLG)
+
+        ELSE
+C          OPERATION  RP ---(REPLACE PIXEL) --------------------- 'RP' 
+
+	   CALL RDPRM(BVAL,NOT_USED,'NEW PIXEL VALUE')
+
+           IF (ISINLINE(LUN)) THEN
+C             USE INLINED BUFFER FOR I/O (SEE OPENINLN.F)
+              CALL INLN_WRTVOX(LUN,NROW,BVAL,1,
+     &                         IX,IY,IZ,IRTFLG)
+              IF (IRTFLG .NE. 0) RETURN
+
+           ELSE
+	      IREC = (IZ-1) * NROW + IY
+	      CALL REDLIN(LUN,BUF,NSAM,IREC)
+              BUF(IX) = BVAL
+ 	      CALL WRTLIN(LUN,BUF,NSAM,IREC)
+           ENDIF
+
+C          SET UNDETERMINED STATISTICS FLAG
+           IF (IFORM.GT.0) CALL SETPRMB(LUN, 0.0,0.0, 0.0,0.0)
+        ENDIF
+
+        IRTFLG = 0
+        RETURN
+        END
+
+
+
+@
+
+
+1.5
+log
+@rdprmb parameters
+@
+text
+@a6 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2009  Health Research Inc.                      *
+d8 5
+a12 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d14 1
+a14 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d19 1
+a19 1
+C=* This program is distributed in the hope that it will be useful,    *
+d21 1
+a21 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a22 1
+C=*                                                                    *
+d24 1
+a24 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.4
+log
+@sync write to stdout for MPI
+@
+text
+@d3 2
+a4 1
+C GPRP.F            REMOVED FROM UTIL@@           ARDEAN LEITH  9/05/03 * 
+d8 1
+a8 1
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d32 1
+a32 1
+C  GPRP(FCHART)
+d52 1
+a52 9
+#ifdef USE_MPI
+         include 'mpif.h'
+         INTEGER MYPID, ICOMM, MPIERR
+         ICOMM   = MPI_COMM_WORLD
+         MPIERR = 0
+         CALL MPI_COMM_RANK(ICOMM, MYPID, MPIERR)
+#else
+         MYPID = -1
+#endif
+d115 2
+a116 3
+C          SET UNDETERMINED SATATISTICS FLAG FOR REAL FILES
+           IF (IFORM.GT.0) CALL SETPRMB(BUF,LUN,NSAM,NROW,
+     &                      0.0,0.0,0.0,'U')
+@
+
+
+1.3
+log
+@GPL License fixed
+@
+text
+@d51 9
+d98 1
+a98 1
+	   WRITE(NOUT,90) IX,IY,IZ,BVAL
+@
+
+
+1.2
+log
+@HRI GPL License used
+@
+text
+@a5 1
+C * SPIDER - MODULAR IMAGE PROCESSING SYSTEM.    AUTHOR: J.FRANK       *
+d9 1
+a9 1
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *  
+a28 6
+
+C * COPYRIGHT (C)1985, 2003. HEALTH RESEARCH INCORPORATED (HRI),       *
+C * ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+C * THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO HRI AND ARE NOT   *
+C * TO BE DISCLOSED TO OTHERS OR USED FOR PURPOSES OTHER THAN INTENDED *
+C * WITHOUT WRITTEN APPROVAL OF HRI.                                   *
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d7 24
+@
+

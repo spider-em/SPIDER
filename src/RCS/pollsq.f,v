@@ -1,0 +1,669 @@
+head	1.14;
+access;
+symbols
+	pre_getangas:1.14
+	GPL2010:1.14
+	pre_GPL2010:1.13
+	pre_var_equation:1.13
+	pre_fftwrings:1.13
+	pre_opfiles:1.13
+	src:1.13
+	best-code:1.13
+	x-named-regs:1.12
+	x:1.12
+	v13-00:1.12
+	pre_GPL:1.10
+	prec_CA:1.10
+	noindx:1.10
+	Bproc:1.9
+	oct21:1.8
+	last77:1.7;
+locks; strict;
+comment	@c @;
+
+
+1.14
+date	2010.06.24.13.26.30;	author leith;	state Exp;
+branches;
+next	1.13;
+
+1.13
+date	2006.01.06.15.21.13;	author leith;	state Exp;
+branches;
+next	1.12;
+
+1.12
+date	2005.10.18.14.04.02;	author leith;	state Exp;
+branches;
+next	1.11;
+
+1.11
+date	2005.10.17.20.59.22;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2002.03.11.14.08.56;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2000.08.10.15.40.20;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	99.05.26.15.28.12;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	98.10.20.17.14.10;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	97.10.17.20.52.56;	author pawel;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	97.10.10.18.58.55;	author pawel;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	96.07.16.13.28.33;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	96.01.03.19.10.44;	author michael;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	94.05.13.14.09.00;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	94.05.13.12.51.25;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@unix specific source code with preprocessor lines
+@
+
+
+1.14
+log
+@GPL_2010
+@
+text
+@
+C ++********************************************************************
+C
+C POLLSQ.F                             REDUCED ORDER MAY 99 ARDEAN LEITH
+C                                      USED REG_SET AUG 00 AL
+C
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C                                                                      
+C  PROGRAM TO FIT A POLYNOMIAL TO NUMBERS IN A DOCUMENT FILE READ
+C  BEFORE CALLING THIS PROGRAM WITH UNSDAL INTO DBUF.
+C  MAXIMUM ORDER OF POLYNOM IS 10  10/14/87 MR.
+C
+C  REDUCED ORDER TO 5 DUE TO INABILITY OF ALGORITHM TO COPE WITH
+C  HIGHER ORDER DATA IN SOME CIRCUMSTANCES MAY 99 al
+C                                                                      
+C***********************************************************************
+
+	SUBROUTINE POLLSQ(DBUF,MAXREG,MAXKEY,NDOC)
+
+        INCLUDE 'CMBLOCK.INC'
+
+        COMMON     BUF(1)
+        CHARACTER  YN,NULL
+        DIMENSION  REG(3)
+        DIMENSION  DBUF(MAXREG,MAXKEY),C(11)
+
+        NULL = CHAR(0)
+
+        CALL RDPRMI(KEY1,KEY2,NOT_USED,'FIRST, LAST KEY NUMBER')
+
+	CALL RDPRMI(IABS,IORD,NOT_USED,
+     &             'COLUMN #S FOR ABSCISSA, ORDINATE (0=KEY)')
+
+        CALL RDPRM2(SCALEX,SCALEY,NOT_USED,'SCALEX, SCALEY (DEF=1)')
+        IF (SCALEX .LE. 0.0) SCALEX = 1.0
+        IF (SCALEY .LE. 0.0) SCALEY = 1.0
+
+        NORD = 1
+        CALL RDPRI1S(NORD,NOT_USED,
+     &              'ORDER OF POLYNOMIAL (1-5, DEFAULT= 1)',IRTFLG)
+        IF (NORD .LE. 0) NORD = 1
+        IF (NORD .GT. 5) THEN
+           CALL ERRT(31,'POLLSQ',IDUM)
+           GOTO 9999
+        ENDIF
+
+C       INCREASE IABS & IORD BY 1 BECAUSE DBUF(1,*) CONTAINS KEY, 
+C       FOLLOWED BY REGISTERS 
+        IABS = IABS + 1
+        IORD = IORD + 1
+
+C       STORE COORDINATES INTO ARRAYS. X IN BUF(1)... , 
+C                                      Y IN BUF(IOFF+1)...
+
+        ILINE = 0                          
+        IDO   = 1  
+        IOFF  = KEY2 - KEY1 + 1
+        DO  I=KEY1,KEY2        
+           BUF(IDO)      = DBUF(IABS,I) * SCALEX
+           BUF(IDO+IOFF) = DBUF(IORD,I) * SCALEY
+           IDO           = IDO + 1
+	ENDDO
+
+C       WRITE OUT INPUT VALUES
+        WRITE(NOUT,101) (BUF(L),BUF(IOFF+L),L=1,IOFF)
+101     FORMAT(' ',2E12.4)
+
+C       POLFIT DOES THE LEAST SQUARE FIT, INCLUDING THE CREATION OF THE
+C       MATRIX SYSTEM. RESULT IS RETURNED IN C(1)... C(NORD+1). 
+C       IOFF IS DIMENSION  OF ARRAYS CONTAINING X AND Y
+ 
+        CALL POLFIT(BUF(1),BUF(IOFF+1),NORD,IOFF,C)
+ 
+        IF (NORD+1 .LT. 11) THEN
+C          ZERO UNUSED C VALUES
+           DO K = NORD+2,11
+              C(K) = 0.0
+           ENDDO
+        ENDIF
+
+C       STORE RESULT INTO REGISTERS (MAXIMUM 6 I.E. POLYNOM ORDER 5)
+        ILAST = MAX(6,NORD+1)
+        CALL REG_SET_NSELA(ILAST,C,.TRUE.,IRTFLG)
+        
+C       WRITE OUT RESULTS
+        WRITE(NOUT,100) (C(I),I=1,NORD+1) 
+100     FORMAT('  RESULTING POLYNOM:',/,1X,              
+     &   E12.4,' + '
+     &  ,E12.4,' *X + '
+     &  ,E12.4,' *X**2 + '
+     &  ,E12.4,' *X**3 + '
+     &  ,E12.4,' *X**4 + '
+     &  ,E12.4,' *X**5 + ',/)
+
+C       1X
+C    &  ,E12.4,' *X**6 + '
+C    &  ,E12.4,' *X**7 + '
+C    &  ,E12.4,' *X**8 + '
+C    &  ,E12.4,' *X**9 + '
+C    &  ,E12.4,' *X**10 + ')
+ 
+C       CURRENTLY A DOCUMENT FILE CAN BE CREATED, THAT CAN BE PLOTTED LATER.
+        CALL RDPRMC(YN,NCHAR,.TRUE.,
+     &     'CREATE OUTPUT DOCUMENT FILE (Y/N)',NULL,IRTFLG)
+        IF (YN .NE. 'Y') RETURN
+
+        CALL RDPRM2(XA,XE,NOT_USED,'X FROM, TO')
+        CALL RDPRM(XIN,NOT_USED,'IN INTERVALS OF')
+
+        NPOINT = (XE - XA) / XIN + 1.0
+        X      = XA
+        DO  I=1,NPOINT
+           POLY = C(1)
+           DO  K=1,NORD
+              POLY = POLY + C(K+1) * X ** K
+	   ENDDO
+ 
+C          OUTPUT INTO DOCUMENT FILE:
+           REG(1) = I
+           REG(2) = X
+           REG(3) = POLY
+           CALL SAVD(NDOC,REG,3,IRTFLG)
+           X = X + XIN
+	ENDDO
+       
+9999    CALL SAVDC
+        CLOSE(NDOC)
+
+        RETURN
+        END
+
+@
+
+
+1.13
+log
+@_nsela param
+@
+text
+@a7 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d9 5
+a13 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d15 1
+a15 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d20 1
+a20 1
+C=* This program is distributed in the hope that it will be useful,    *
+d22 1
+a22 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a23 1
+C=*                                                                    *
+d25 1
+a25 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.12
+log
+@GPL License fixed
+@
+text
+@d107 1
+a107 4
+C       DO  K=1,ILAST
+C          IF (NSEL(K) .NE. 0) PARAM(NSEL(K)) = C(K)                  
+C	ENDDO
+        CALL REG_SET_NSELA(ILAST,C,IRTFLG)
+d111 1
+a111 1
+100     FORMAT(' RESULTING POLYNOM:',/,1X,              
+d133 1
+d139 1
+a139 1
+             POLY = POLY + C(K+1) * X ** K
+@
+
+
+1.11
+log
+@GPL License fixed
+@
+text
+@a30 1
+C *    APPROVAL OF HEALTH RESEARCH INC.                                *
+@
+
+
+1.10
+log
+@nloop,iloop_removed
+@
+text
+@d8 23
+a30 5
+C *  SPIDER - MODULAR IMAGE PROCESSING SYSTEM.  AUTHOR: J.FRANK        *
+C *  COPYRIGHT (C)1985, 1996 HEALTH RESEARCH INCORPORATED, ALBANY, NY  *
+C *    THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO HEALTH         *
+C *    RESEARCH INC. AND ARE NOT TO BE DISCLOSED TO OTHERS             *
+C *    OR USED FOR PURPOSES OTHER THAN INTENDED WITHOUT WRITTEN        *
+@
+
+
+1.9
+log
+@used reg_set
+@
+text
+@d36 1
+a36 1
+        CALL RDPRMI(KEY1,KEY2,NLOOP,ILOOP,'FIRST, LAST KEY NUMBER')
+d38 1
+a38 1
+	CALL RDPRMI(IABS,IORD,NLOOP,ILOOP,
+d41 1
+a41 1
+        CALL RDPRM2(SCALEX,SCALEY,NLOOP,ILOOP,'SCALEX, SCALEY (DEF=1)')
+d46 1
+a46 1
+        CALL RDPRI1S(NORD,NLOOP,ILOOP,
+d117 2
+a118 2
+        CALL RDPRM2(XA,XE,NLOOP,ILOOP,'X FROM, TO')
+        CALL RDPRM(XIN,NLOOP,ILOOP,'IN INTERVALS OF')
+@
+
+
+1.8
+log
+@order 5
+@
+text
+@d5 1
+d90 4
+a93 3
+        DO  K=1,ILAST
+           IF (NSEL(K) .NE. 0) PARAM(NSEL(K)) = C(K)                  
+	ENDDO
+@
+
+
+1.7
+log
+@return registers needed to be zeroed
+bad input line for scalex,scaley fixed
+@
+text
+@d4 1
+a4 1
+C POLLSQ.F
+d17 4
+a20 2
+C  MAXIMUM ORDER OF POLYNOM IS 10
+C  10/14/87 MR.
+d27 1
+a27 1
+CNO_SAVE
+d36 1
+d39 1
+d41 11
+a51 5
+        IF (SCALEX .EQ. 0.0) SCALEX = 1.0
+        IF (SCALEY .EQ. 0.0) SCALEY = 1.0
+        CALL RDPRMI(NORD,IDUM,NLOOP,ILOOP,
+     &              'ORDER OF POLYNOM (1-10, DEF=1)')
+        IF (NORD .EQ. 0) NORD = 1
+a54 1
+
+d69 2
+d87 2
+a88 2
+C       STORE RESULT INTO REGISTERS (MAXIMUM 10 I.E. POLYNOM ORDER 9)
+        ILAST = MAX(10,NORD+1)
+d95 3
+a97 2
+100     FORMAT(' RESULTING POLYNOM:'/1X,              
+     &   E12.4,' + ',E12.4,' *X + '
+d101 8
+a108 6
+     &  ,E12.4,' *X**5 + '/1X
+     &  ,E12.4,' *X**6 + '
+     &  ,E12.4,' *X**7 + '
+     &  ,E12.4,' *X**8 + '
+     &  ,E12.4,' *X**9 + '
+     &  ,E12.4,' *X**10 + ')
+d133 1
+a133 1
+        CALL SAVDC
+@
+
+
+1.6
+log
+@H
+@
+text
+@d15 1
+a15 1
+C  PROGRAM TO FIT A POLYNOM TO NUMBERS IN A DOCUMENT FILE READ
+d25 2
+a26 2
+
+        COMMON     DUM(80),BUF(1)
+d31 1
+a31 1
+        NULL=CHAR(0)
+d35 4
+a38 4
+     $             'COLUMN #S FOR ABSCISSA, ORDINATE (0=KEY)')
+        CALL RDPRM2(SX,SY,NLOOP,ILOOP,'SCALEX, SCALEY (DEF=1)')
+        IF (SCALEX.EQ.0) SCALEX=1.
+        IF (SCALEY.EQ.0) SCALEY=1.
+d40 2
+a41 2
+     $              'ORDER OF POLYNOM (1-10, DEF=1)')
+        IF(NORD.EQ.0.)NORD=1
+d43 2
+a44 2
+C  ICREASE IABS & IORD BY 1 BECAUSE DBUF(1,*) CONTAINS KEY, FOLLOWED BY
+C  REGISTERS 
+d46 2
+a47 2
+        IABS=IABS+1
+        IORD=IORD+1
+d49 2
+a50 1
+C  STORE COORDINATES INTO ARRAYS. X IN BUF(1)... , Y IN BUF(IOFF+1)...
+d52 3
+a54 3
+        ILINE=0                          
+        IDO=1  
+        IOFF=KEY2-KEY1+1
+d56 3
+a58 3
+           BUF(IDO)=DBUF(IABS,I)*SCALEX
+           BUF(IDO+IOFF)=DBUF(IORD,I)*SCALEY
+           IDO=IDO+1
+d63 3
+a65 3
+C  POLFIT DOES THE LEAST SQUARE FIT, INCLUDING THE CREATION OF THE
+C  MATRIX SYSTEM. RESULT RETURNED IN C(1).. C(NORD+1). IOFF IS DIMENSION
+C  OF ARRAYS CONTAINING X AND Y
+d69 6
+a74 1
+C       STORE RESULT INTO REGISTER (MAXIMUM 10 I.E. POLYNOM ORDER 9)
+d76 2
+a77 1
+        ILAST=MAX(10,NORD+1)
+d79 1
+a79 1
+          PARAM(NSEL(K))=C(K)                  
+d81 1
+a81 1
+
+a82 1
+
+d85 10
+a94 10
+     $   E12.4,' + ',E12.4,' *X + '
+     $  ,E12.4,' *X**2 + '
+     $  ,E12.4,' *X**3 + '
+     $  ,E12.4,' *X**4 + '
+     $  ,E12.4,' *X**5 + '/1X
+     $  ,E12.4,' *X**6 + '
+     $  ,E12.4,' *X**7 + '
+     $  ,E12.4,' *X**8 + '
+     $  ,E12.4,' *X**9 + '
+     $  ,E12.4,' *X**10 + ')
+a95 1
+C       HERE WOULD FOLLOW THE GENERATION OF A PLOT.
+d98 2
+a99 2
+     $     'CREATE OUTPUT DOCUMENT FILE (Y/N)',NULL,IRTFLG)
+        IF (YN.NE.'Y') RETURN
+d103 2
+a104 2
+        NPOINT=(XE-XA)/XIN+1.
+        X=XA
+d106 1
+a106 1
+           POLY=C(1)
+d108 1
+a108 1
+             POLY=POLY+C(K+1)*X**K
+d112 3
+a114 3
+           REG(1)=I
+           REG(2)=X
+           REG(3)=POLY
+d116 1
+a116 1
+           X=X+XIN
+d121 1
+@
+
+
+1.5
+log
+@*** empty log message ***
+@
+text
+@d60 1
+a60 1
+101     FORMAT(1H ,2E12.4)
+d78 1
+a78 1
+100     FORMAT(1H ,'RESULTING POLYNOM:'/1X,              
+@
+
+
+1.4
+log
+@changed prompts
+@
+text
+@d54 1
+a54 1
+        DO 1 I=KEY1,KEY2        
+d58 1
+a58 1
+1       CONTINUE
+d71 3
+a73 2
+        DO 2 K=1,ILAST
+2       PARAM(NSEL(K))=C(K)                  
+d100 1
+a100 1
+        DO 3 I=1,NPOINT
+d102 1
+a102 1
+           DO 4 K=1,NORD
+d104 1
+a104 1
+4          CONTINUE
+d112 1
+a112 1
+3       CONTINUE
+@
+
+
+1.3
+log
+@close document file
+@
+text
+@d2 1
+d4 11
+d19 2
+a23 1
+#ifdef SP_UNIX
+d25 2
+a26 4
+#else
+        INCLUDE 'COMMON1:CMBLOCK.INC'
+#endif
+        COMMON DUM(80),BUF(1)
+d28 2
+a29 2
+        DIMENSION REG(3)
+        DIMENSION DBUF(MAXREG,MAXKEY),C(11)
+d33 1
+a33 1
+        CALL RDPRMI(KEY1,KEY2,NLOOP,ILOOP,'FIRST,LAST KEY NUMBER$')
+d35 4
+a38 4
+     $  'COLUMN #S FOR ABSCISSA,ORDINATE (0=KEY)$')
+        CALL RDPRM2(SX,SY,NLOOP,ILOOP,'SCALEX,SCALEY (DEF=1)$')
+        IF(SCALEX.EQ.0) SCALEX=1.
+        IF(SCALEY.EQ.0) SCALEY=1.
+d40 1
+a40 1
+     $  'ORDER OF POLYNOM (1-10,DEF=1)$')
+d48 1
+a48 1
+C
+d50 1
+a50 1
+C
+d61 1
+a61 1
+C
+d65 1
+a65 1
+C
+d67 3
+a69 3
+C
+C  STORE RESULT INTO REGISTER (MAXIMUM 10 I.E. POLYNOM ORDER 9)
+C
+d73 3
+a75 3
+C
+C  WRITE OUT RESULTS
+C
+d88 3
+a90 3
+C
+C  HERE WOULD FOLLOW THE GENERATION OF A PLOT.
+C  CURRENTLY A DOCUMENT FILE CAN BE CREATED, THAT CAN BE PLOTTED LATER.
+d92 5
+a96 4
+     $     'CREATE OUTPUT DOCUMENT FILE (Y/N)$',NULL,IRTFLG)
+        IF(YN.NE.'Y') RETURN
+        CALL RDPRM2(XA,XE,NLOOP,ILOOP,'X FROM, TO$')
+        CALL RDPRM(XIN,NLOOP,ILOOP,'IN INTERVALS OF$')
+d104 1
+a104 1
+C
+a105 2
+C
+           NLIST=3
+@
+
+
+1.2
+log
+@cpp_lines_added
+@
+text
+@d102 1
+a102 1
+
+d104 1
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d10 3
+d14 1
+@

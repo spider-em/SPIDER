@@ -1,0 +1,305 @@
+head	1.4;
+access;
+symbols
+	best-code:1.4
+	x-named-regs:1.4
+	x:1.4
+	v13-00:1.4
+	prec_CA:1.3
+	noindx:1.2
+	Bproc:1.1;
+locks; strict;
+comment	@c @;
+
+
+1.4
+date	2005.04.29.16.36.19;	author leith;	state dead;
+branches;
+next	1.3;
+
+1.3
+date	2003.02.20.19.40.26;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2002.03.11.14.09.07;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	99.11.10.23.10.05;	author yuchen;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.4
+log
+@obsolete
+@
+text
+@
+C++************************************************************************
+C
+C PROJ3.F          LONG FILENAMES                  JAN 23 89 al
+C                  OPFILEC                         FEB 03 ARDEAN LEITH
+C
+C **************************************************************************
+C *  SPIDER - MODULAR IMAGE PROCESSING SYSTEM.  AUTHOR: J.FRANK            *
+C *  COPYRIGHT (C)1981,1987, WADSWORTH CENTER FOR LABORATORIES AND         *
+C *  RESEARCH, NEW YORK STATE DEPARTMENT OF HEALTH, ALBANY, NY 12201.      *
+C *    THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO THE CENTER FOR     *
+C *    LABORATORIES AND RESEARCH AND ARE NOT TO BE DISCLOSED TO OTHERS OR  *
+C *    USED FOR PURPOSES OTHER THAN INTENDED WITHOUT WRITTEN APPROVAL OF   *
+C *    THE CENTER FOR LABORATORIES AND RESEARCH 			   *
+C **************************************************************************
+C
+C    PROJ3(LUN3,LUNP,MAXDIM,IER)
+C
+C    PURPOSE:      COMPUTES THE PROJECTION OF A 3-D ARRAY IN ARBITRARY
+C                  DIRECTION. ADOPTED FROM MICHAEL RADERMACHER'S 
+C                  MRPROJ 11/6/83.
+C
+C    PARAMETERS:
+C
+C--********************************************************************
+
+        SUBROUTINE PROJ3(LUN3,LUNP,MAXDIM,IER,OPTTH)
+
+C       I DO NOT KNOW IF SAVE IS NEEDED FEB 99 al
+        SAVE
+
+	COMMON    ADUM(80),BUF(1)
+	REAL      DPO(3),DP(3),XP(2),X(3),DM(3,3)
+	INTEGER   IROW,INDP,MAXDIM,MA,IMA
+        CHARACTER *1  NULL
+        LOGICAL OPTTH
+
+	INCLUDE 'CMBLOCK.INC'
+        INCLUDE 'CMLIMIT.INC' 
+ 
+        CHARACTER(LEN=MAXNAM)   ::  FILNAM
+        COMMON /COMMUN/FILNAM
+
+	DATA PI/3.14159265/
+        NULL = CHAR(0)
+
+        MAXIM = 0
+        CALL OPFILEC(0,.TRUE.,FILNAM,LUN3,'O',IFORM,NSAM,NROW,NSLICE,
+     &                   MAXIM,'THREED',.FALSE.,IRTFLG)
+	IF (IRTFLG .NE. 0)  GOTO 9300
+	IF (IFORM .NE. 3) GOTO 9100
+
+	IER=1
+        IF (OPTTH) CALL RDPRM2(THRU,THRL,NOT_USED,
+     $             'UPPER,LOWER THRESHOLD')
+
+	CALL RDPRMI(NSAMP,NROWP,NOT_USED,'PROJECTION SAMPLE DIM.')
+        IF (NROWP.EQ.0) THEN
+	   NROWP=NSAMP*(FLOAT(NROW)/FLOAT(NSAM))
+        ENDIF
+	IF (NSAMP .EQ. 0) GOTO 9200
+
+        MAXIM  = 0
+        IFORM  = 1
+        NSLICE = 1
+        CALL OPFILEC(0,.TRUE.,FILNAM,LUNP,'U',IFORM,NSAMP,NROWP,NSLICE,
+     &              MAXIM,'OUTPUT',.FALSE.,IRTFLG)
+	IF (IRTFLG .NE. 0)  GOTO 9300
+
+	IER = 0
+	CALL RDPRM(PHI,NOT_USED,'AZIMUTH ANGLE (PHI)')
+	CALL RDPRM(THETA,NOT_USED,'TILT ANGLE (THETA)')
+	PHIR=PHI*PI/180.
+	THETAR=THETA*PI/180.
+
+C       FOLLOWING ARE INCREMENTS THAT WERE IN THE ORIGINAL PROGRAM
+C       ON THE SCALE OF THE OBJECT.
+	DX=1.
+	DY=1.
+	DZ=1.
+	DXP=1.
+	DYP=1.
+
+	DP(1)=FLOAT(NSAMP)/2.
+	DP(2)=FLOAT(NROWP)/2.
+	DPO(1)=FLOAT(NSAM)/2.
+	DPO(2)=FLOAT(NROW)/2.
+	DPO(3)=FLOAT(NSLICE)/2.
+
+C CALCULATE THE DIRECTION OF PROJECTION AND PROJECTION PLANE.
+
+	CPHI=COS(PHIR)
+	SPHI=SIN(PHIR)
+	CTHE=COS(THETAR)
+	STHE=SIN(THETAR)
+
+	DM(1,1)=CPHI*CTHE
+	DM(2,1)=SPHI*CTHE
+	DM(3,1)=-STHE
+	DM(1,2)=-SPHI
+	DM(2,2)=CPHI
+	DM(3,2)=0.0
+	DM(1,3)=CPHI*STHE
+	DM(2,3)=SPHI*STHE
+	DM(3,3)=CTHE
+	WRITE(NOUT,200)(DM(I,3),I=1,3)
+  200	FORMAT(' ** DIRECTION OF PROJECTION : ',3F8.3)
+
+C       MOVED DOWN HERE TO AVOID COMMON BUFFER COLLISION JAN 88 al
+c**	MA=FLOAT(NSAMP)*FLOAT(NROWP)+0.5      28 mar 89 al TRY THIS ????
+        MA=FLOAT(NSAMP)*FLOAT(NROWP+2) +0.5
+
+	DO  IMA = 1, MA
+        BUF(IMA) = 0.
+	ENDDO
+
+
+C COMPUTATION OF THE PROJECTION POINT
+
+        IROW = 0                                 
+	X(3) =-DZ
+	DO  I1= 1, NSLICE
+	X(3)=X(3)+DZ
+	X(2)=-DY
+
+	DO  I2 = 1, NROW
+	X(2)=X(2)+DY
+	X(1)=-DX
+C	IROW=FLOAT(I1-1)*FLOAT(NROW)+I2+0.5
+        IROW = IROW + 1                             
+	CALL REDLIN(LUN3, BUF, NSAM, IROW)          
+C	READ(LUN3'IROW+1)(BUF(K),K=1,NSAM)
+
+	DO 400 I3 = 1, NSAM
+	X(1) = X(1)+DX
+	XP(1)=0.0
+	XP(2)=0.0
+
+	DO  I4 = 1, 3
+	XP(1)=XP(1)+(X(I4)-DPO(I4))*DM(I4,1)
+  	XP(2)=XP(2)+(X(I4)-DPO(I4))*DM(I4,2)
+	ENDDO
+	XP(1)=XP(1)+DP(1)
+	XP(2)=XP(2)+DP(2)
+
+	IF (XP(1) .LT. 0.0  .OR.  XP(1) .GT. NSAMP-DXP  .OR.
+     1      XP(2) .LT. 0.0  .OR.  XP(2) .GT. NROWP-DYP)  GO TO 400
+
+	ZWX =XP(1)
+C	ZWX =XP(1)/DXP
+	ZWY =XP(2)
+C	ZWY =XP(2)/DYP
+	IPX =IFIX(ZWX)
+	IPY =IFIX(ZWY)
+	DIPX=ZWX-FLOAT(IPX)
+	DIPY=ZWY-FLOAT(IPY)
+	W=BUF(I3)
+C
+C THRESHOLD OPTION:
+C
+        IF(OPTTH) THEN
+           IF(W.LT.THRL) W=0.
+           IF(W.GT.THRU) W=0.
+        ENDIF
+       
+C	INDP=FLOAT(IPX)+1+FLOAT(IPY)*FLOAT(NSAMP) + NSAM+0.5
+C       INDP = 1 + NSAM + IPY*NSAMP + IPX     !NAIK 5/23/86
+        INDP = NSAMP
+        INDP = INDP*IPY + IPX + NSAM + 1
+	BUF(INDP)=BUF(INDP)+(1.0-DIPX)*(1.0-DIPY)*W
+	BUF(INDP+1)=BUF(INDP+1)+DIPX*(1.0-DIPY)*W
+	INDP=INDP+NSAMP
+	BUF(INDP)=BUF(INDP)+(1.0-DIPX)*DIPY*W
+	BUF(INDP+1)=BUF(INDP+1)+DIPX*DIPY*W
+  400	CONTINUE
+	ENDDO
+	ENDDO
+
+C NOW STORE PROJECTION ARRAY INTO FILE
+	DO  I = 1, NROWP
+C	INDP=FLOAT(I-1)*FLOAT(NSAMP)+1+NSAM+0.5
+C       INDP = (I-1)*NSAMP + NSAM + 1               
+        INDP = NSAMP
+        INDP = INDP*(I-1) + NSAM + 1
+	CALL WRTLIN(LUNP, BUF(INDP), NSAMP, I)
+	ENDDO
+
+	CLOSE(LUN3)
+	CLOSE(LUNP)
+	RETURN
+
+9100	CALL ERRT(2,'PROJ3 ',NE)
+	RETURN
+
+9200	CALL ERRT(31,'PROJ3 ',NE)
+	RETURN
+
+9300	CALL ERRT(4,'PROJ3 ',NE)
+	RETURN
+
+	END
+
+@
+
+
+1.3
+log
+@opfilec
+@
+text
+@@
+
+
+1.2
+log
+@nloop,iloop_removed
+@
+text
+@d4 2
+a5 1
+C PROJ3.F                      LONG FILENAMES JAN 23 89 al
+a28 2
+ 
+
+a34 1
+        CHARACTER *81 FILNAM
+a35 1
+        COMMON /COMMUN/ FILNAM
+d39 4
+d48 1
+a48 1
+        CALL OPFILE(.TRUE.,FILNAM,LUN3,'O',IFORM,NSAM,NROW,NSLICE,
+d54 1
+a54 1
+        IF(OPTTH) CALL RDPRM2(THRU,THRL,NOT_USED,
+d66 1
+a66 1
+        CALL OPFILE(.TRUE.,FILNAM,LUNP,'U',IFORM,NSAMP,NROWP,NSLICE,
+d188 2
+a189 2
+	CLOSE(UNIT=LUN3)
+	CLOSE(UNIT=LUNP)
+@
+
+
+1.1
+log
+@a
+@
+text
+@d53 1
+a53 1
+        IF(OPTTH) CALL RDPRM2(THRU,THRL,NLOOP,ILOOP,
+d56 1
+a56 1
+	CALL RDPRMI(NSAMP,NROWP,NLOOP,ILOOP,'PROJECTION SAMPLE DIM.')
+d70 2
+a71 2
+	CALL RDPRM(PHI,NLOOP,ILOOP,'AZIMUTH ANGLE (PHI)')
+	CALL RDPRM(THETA,NLOOP,ILOOP,'TILT ANGLE (THETA)')
+@

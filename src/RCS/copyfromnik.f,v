@@ -1,0 +1,544 @@
+head	1.9;
+access;
+symbols
+	pre_getangas:1.9
+	GPL2010:1.9
+	pre_GPL2010:1.8
+	pre_var_equation:1.7
+	pre_fftwrings:1.6
+	pre_opfiles:1.6
+	src:1.6
+	best-code:1.6
+	x-named-regs:1.5
+	x:1.5
+	v13-00:1.5
+	pre_GPL:1.3;
+locks; strict;
+comment	@c @;
+
+
+1.9
+date	2010.06.24.13.25.19;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2009.10.13.13.15.19;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2008.12.19.15.14.53;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2006.02.02.19.47.29;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2005.10.17.19.54.40;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2005.10.17.17.51.34;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2005.08.26.15.34.56;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2005.01.20.19.05.21;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2005.01.13.19.57.27;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.9
+log
+@GPL_2010
+@
+text
+@C ++********************************************************************
+C                                                                      *
+C COPYFROMNIK              CREATED               JAN 2005 ARDEAN LEITH                                            *
+C                          READING IBOFF         FEB 2006 ARDEAN LEITH
+C                          NPIX8                 DEC 2008 ARDEAN LEITH
+C                          SWABTAG               OCT 2009 ARDEAN LEITH
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C                                                                      
+C COPYFROMNIK(LUNIN,LUNOUT,MAXMEM)                                                                     *
+C 
+C PURPOSE: CONVERT NIKON COOLSCAN TIFF  IMAGE TO SPIDER IMAGE
+C                                                                     
+C PARAMETER:                                                                      *
+C       COMMON TIFF TAGS 
+C	TIFFTAG_IMAGEWIDTH		256
+C	TIFFTAG_IMAGELENGTH		257
+C	TIFFTAG_BITSPERSAMPLE		258
+C	TIFFTAG_COMPRESSION		259
+C	TIFFTAG_PHOTOMETRIC		262
+C	TIFFTAG_STRIPOFFSETS		273
+C	TIFFTAG_ROWSPERSTRIP		278
+C	TIFFTAG_STRIPBYTECOUNTS		279
+C	TIFFTAG_RESOLUTIONUNIT		296
+C
+C od -u -N200 RSp614.tif
+C *********************************************************************
+
+        SUBROUTINE COPYFROMNIK(LUNIN,LUNOUT,IRTFLG)
+
+        INCLUDE 'CMBLOCK.INC'
+        INCLUDE 'CMLIMIT.INC' 
+ 
+        COMMON   BUFRAW(NBUFSIZ)
+
+        CHARACTER(LEN=MAXNAM)         :: FILOLD,FILNEW
+        CHARACTER(LEN=1)              :: NULL,CTEMP
+        CHARACTER(LEN=4)              :: C4
+
+        INTEGER, PARAMETER            :: NLISTMAX = 16000
+        CHARACTER(LEN=NLISTMAX)       :: CTEXT
+        INTEGER*2                     :: ITEXT(NLISTMAX/2)
+        INTEGER*2                     :: I2VAL
+        INTEGER*4                     :: I4VAL
+        LOGICAL                       :: SWAB,FOLD,SWABTAG
+        INTEGER *8                    :: NPIX8
+
+        NULL = CHAR(0)
+
+22      CALL OPAUXFILE(.TRUE.,FILOLD,NULL,LUNIN,0,
+     &                 'O','NIKON TIFF',.TRUE.,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+       
+        READ(LUNIN,80,IOSTAT=IRTFLG) CTEXT
+80      FORMAT(A)
+        IF (IRTFLG .NE. 0) RETURN
+
+        WRITE(NOUT,*) ' '
+
+        IMAGIC = TRANSFER(CTEXT(3:4),I2VAL)
+        SWAB   = .FALSE.
+
+        IF (IMAGIC .NE. 42) THEN
+C          SWAP BYTES FIRST
+           WRITE(NOUT,*) CTEXT
+ 
+            WRITE(NOUT,*) 
+     &         ' Swapped bytes trying to match TIFF magic number'
+
+            DO I = 1,NLISTMAX,2
+               CTEMP          = CTEXT(I:I)
+               CTEXT(I:I)     = CTEXT(I+1:I+1)
+               CTEXT(I+1:I+1) = CTEMP
+            ENDDO
+            SWAB = .TRUE.
+        ENDIF
+
+        IMAGIC = TRANSFER(CTEXT(3:4),I2VAL)
+        WRITE(NOUT,90) IMAGIC
+90      FORMAT('  MAGIC NUMBER (42):    ',I7) 
+
+        IF (IMAGIC .NE. 42) THEN
+            CALL ERRT(102,'BAD MAGIC NUMBER',IMAGIC)
+            RETURN
+         ENDIF
+
+c       INIK = INDEX(CTEXT,'Nikon')
+c       WRITE(NOUT,*) ' inik: ',inik
+C       WRITE(NOUT,*) ' got input: ',ctext
+       
+        WRITE(NOUT,91) CTEXT(1:2)
+91      FORMAT('  ENDEDNESS:                 ',A) 
+              
+        IBOFFSET = TRANSFER(CTEXT(5:8),I2VAL)
+        WRITE(NOUT,92) IBOFFSET
+92      FORMAT('  TIFF TAG DIR. OFFSET: ',I7) 
+        WRITE(NOUT,*) ' AT ALBANY THIS OFFSET USED TO BE: 799' 
+        !iboffset = 799 ! this offset used with Raj's scanner
+
+        IF (IBOFFSET .GE. NLISTMAX) THEN
+           CALL ERRT(102,'NLISTMAX OVERFLOW, IBOFFSET',IBOFFSET)
+           RETURN
+        ENDIF
+
+        NDIR = TRANSFER(CTEXT(IBOFFSET+1:IBOFFSET+2),I2VAL)
+        WRITE(NOUT,93) NDIR
+93      FORMAT('  TIFF TAGS:            ',I7,/) 
+
+        NUNUSED = 0
+
+        DO IDIR = 1,NDIR
+           IOFF = (IDIR - 1) * 12 + IBOFFSET + 3
+
+           IF ((IOFF + 12) .GT. NLISTMAX) THEN
+              WRITE(NOUT,*) ' *** SKIPPING SOME TAGS TO AVOID OVERFLOW' 
+              WRITE(NOUT,*) ' *** CHECK YOUR RESULTS' 
+C              CALL ERRT(102,'NLISTMAX OVERFLOW, IOFF',IOFF)
+              EXIT
+           ENDIF
+
+           ITAG   = TRANSFER(CTEXT(IOFF  :IOFF+1), I2VAL)
+           ITYPE  = TRANSFER(CTEXT(IOFF+2:IOFF+3), I2VAL)
+
+           C4(1:2) = CTEXT(IOFF+6:IOFF+7)
+           C4(3:4) = CTEXT(IOFF+4:IOFF+5)
+           ICOUNT  = TRANSFER(C4, I4VAL)
+
+           SWABTAG = .FALSE.
+           IF (ICOUNT .GT. 65535) THEN
+              C4(3:4) = CTEXT(IOFF+6:IOFF+7)
+              C4(1:2) = CTEXT(IOFF+4:IOFF+5)
+              ICOUNT  = TRANSFER(C4, I4VAL)
+              SWABTAG = .TRUE.
+           ENDIF
+
+           IF (SWABTAG) THEN
+              C4(3:4) = CTEXT(IOFF+10:IOFF+11)
+              C4(1:2) = CTEXT(IOFF+8:IOFF+9)
+           ELSE
+              C4(1:2) = CTEXT(IOFF+10:IOFF+11)
+              C4(3:4) = CTEXT(IOFF+8:IOFF+9)
+           ENDIF
+           IVAL    = TRANSFER(C4,I4VAL)
+
+c          WRITE(NOUT,*)' '
+           WRITE(NOUT,98)ITAG,ITYPE,ICOUNT,IVAL
+98         FORMAT('  TAG: ',I7,' TYPE:',I3,'  LENGTH: ',I6,
+     &            '   VALUE:',I10, i8) 
+ 
+           IREL = IOFF + 8
+
+           IF (ITAG .EQ. 256) THEN
+C             NSAM = TRANSFER(CTEXT(IOFF+8:IOFF+9),  I2VAL)
+              NSAM = IVAL
+
+c              WRITE(NOUT,94) NSAM
+94            FORMAT('  NSAM:                 ',I7) 
+
+           ELSEIF (ITAG .EQ. 257) THEN
+C             NROW = TRANSFER(CTEXT(IOFF+8:IOFF+9),  I2VAL)
+              NROW = IVAL
+
+c              WRITE(NOUT,95) NROW
+95            FORMAT('  NROW:                 ',I7) 
+
+           ELSEIF (ITAG .EQ. 273) THEN
+              IHEAD = IVAL
+
+c              WRITE(NOUT,96) IHEAD
+96            FORMAT('  HEADER BYTES:         ',I7) 
+
+           ELSE
+c             WRITE(NOUT,*) ' UNUSED TAG:      ',ITAG
+              NUNUSED = NUNUSED + 1
+           ENDIF
+
+        ENDDO
+
+        WRITE(NOUT,*) ' '
+        IF (SWABTAG) WRITE(NOUT,*)' SWAPPED BYTES IN TAG CONTENTS'
+
+        WRITE(NOUT,97) NUNUSED
+97      FORMAT('  UNUSED TAGS:  ',I7,/) 
+
+        WRITE(NOUT,99) NSAM,NROW,IHEAD
+99      FORMAT('  NSAM: ',I7,'  NROW: ',I7,'     HEADER BYTES: ',I7,/) 
+      
+C       OPEN NEW OUTPUT SPIDER IMAGE FILE WITH SPECIFIED SIZE
+        IFORM  = 1
+        NSLICE = 1
+        MAXIM = 0 
+        CALL OPFILEC(0,.TRUE.,FILNEW,LUNOUT,'U',IFORM,NSAM,NROW,NSLICE,
+     &              MAXIM,'NEW SPIDER IMAGE',.FALSE.,IRTFLG)
+       IF (IRTFLG .EQ. -1) GOTO 22
+       IF (IRTFLG .NE. 0) GOTO 9999
+
+        CLOSE(LUNIN)
+C       REOPEN RAW FILE AS DIRECT ACCESS, UNFORMATTED REC. 
+        LENOPEN = NSAM * 2
+        CALL OPAUXFILE(.FALSE.,FILOLD,CHAR(0),LUNIN,LENOPEN,'O',
+     &                   ' ',.TRUE.,IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 9999
+
+        NPIX8 = NSAM * NROW 
+        NPIX8 = NPIX8 * NSLICE
+
+        FOLD  = .TRUE.
+
+c       swab  = .true.
+
+C       SWAB=.TRUE.  FOLD=.TRUE. IS BEST
+
+        CALL RAW16TOSPI(LUNIN,LUNOUT,NSAM,NPIX8,IHEAD,SWAB,
+     &                   FOLD,LENOPEN,BUFRAW,IRTFLG)
+
+9999    CLOSE(LUNIN)
+        CLOSE(LUNOUT)
+
+        RETURN
+        END
+@
+
+
+1.8
+log
+@SWABTAG
+@
+text
+@d8 4
+a11 3
+C=* This file is part of:                                              * 
+C=* SPIDER - Modular Image Processing System.   Author: J. FRANK       *
+C=* Copyright 1985-2009  Health Research Inc.,                         *
+d22 1
+a22 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a23 1
+C=*                                                                    *
+@
+
+
+1.7
+log
+@npix8
+@
+text
+@d6 1
+d8 5
+a12 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2008  Health Research Inc.                      *
+d14 1
+a14 6
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+C=*                                                                    *
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d19 1
+a19 1
+C=* This program is distributed in the hope that it will be useful,    *
+d25 1
+a25 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+d64 1
+a64 1
+        LOGICAL                       :: SWAB,FOLD
+d83 3
+a85 3
+C           SWAP BYTES FIRST
+C           WRITE(NOUT,*) CTEXT
+
+d102 3
+a104 3
+           CALL ERRT(102,'BAD MAGIC NUMBER',IMAGIC)
+           RETURN
+        ENDIF
+d117 1
+a117 1
+c        iboffset = 799 ! this offset used with Raj's scanner
+d147 15
+a161 2
+           C4(1:2) = CTEXT(IOFF+10:IOFF+11)
+           C4(3:4) = CTEXT(IOFF+8:IOFF+9)
+d165 3
+a167 2
+          WRITE(NOUT,98)ITAG,ITYPE,ICOUNT,IVAL
+98         FORMAT('  TAG: ',I7,' ITYPE:',I3,'  COUNT: ',I6,' ',I10) 
+d175 1
+a175 1
+              WRITE(NOUT,94) NSAM
+d182 1
+a182 1
+              WRITE(NOUT,95) NROW
+d188 1
+a188 1
+              WRITE(NOUT,96) IHEAD
+d197 4
+d202 1
+a202 1
+97      FORMAT('  UNUSED TAGS:          ',I7) 
+d204 3
+a206 2
+        WRITE(NOUT,*) ' '
+        
+d226 1
+a226 1
+        FOLD = .TRUE.
+d228 1
+a228 1
+c        swab = .true.
+@
+
+
+1.6
+log
+@reads tag offset now
+@
+text
+@d3 1
+a3 1
+C COPYFROMNIK                            CREATED JAN 2005 ARDEAN LEITH                                            *
+d5 1
+a5 1
+C                                                                    *
+d8 1
+a8 1
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d64 3
+a66 3
+        INTEGER*2 ITEXT(NLISTMAX/2)
+        INTEGER*2 I2VAL
+        INTEGER*4 I4VAL
+d68 1
+d207 3
+a209 1
+        NPIX = NSAM * NROW * NSLICE
+d216 1
+a216 1
+        CALL RAW16TOSPI(LUNIN,LUNOUT,NSAM,NPIX,IHEAD,SWAB,
+@
+
+
+1.5
+log
+@GPL License fixed
+@
+text
+@d4 2
+a5 1
+C                                                                      *
+d62 1
+a62 1
+        INTEGER, PARAMETER            :: NLISTMAX = 1600
+d118 2
+a125 2
+         iboffset = 799
+
+d136 4
+a139 2
+              CALL ERRT(102,'NLISTMAX OVERFLOW, IBOFFSET',IBOFFSET)
+              RETURN
+@
+
+
+1.4
+log
+@HRI GPL License used
+@
+text
+@a5 1
+C * SPIDER - MODULAR IMAGE PROCESSING SYSTEM.    AUTHOR: J.FRANK       *
+d9 1
+a9 1
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *  
+a28 6
+
+C * COPYRIGHT (C)1985, 2005. HEALTH RESEARCH INCORPORATED (HRI),       *
+C * ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+C * THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO HRI AND ARE NOT   *
+C * TO BE DISCLOSED TO OTHERS OR USED FOR PURPOSES OTHER THAN INTENDED *
+C * WITHOUT WRITTEN APPROVAL OF HRI.                                   *
+@
+
+
+1.3
+log
+@*** empty log message ***
+@
+text
+@d7 24
+@
+
+
+1.2
+log
+@ fixed offset bug?
+@
+text
+@d44 1
+a44 1
+        INTEGER, PARAMETER            :: NLISTMAX = 400
+d63 4
+a66 2
+        SWAB = .FALSE.
+        IF (I2VAL .NE. 42) THEN
+d101 7
+d118 1
+a118 1
+              CALL ERRT(102,'NLISTMAX OVERFLOW',NLISTMAX)
+d134 1
+a134 1
+c          WRITE(NOUT,98)ITAG,ITYPE,ICOUNT,IVAL
+@
+
+
+1.1
+log
+@ new
+@
+text
+@d13 1
+a13 1
+C                                                                      *
+d30 1
+d42 1
+d48 1
+d101 1
+a101 1
+93      FORMAT('  TIFF TAGS:            ',I7) 
+d113 2
+a114 1
+           ITAG = TRANSFER(CTEXT(IOFF:IOFF+1),I2VAL)
+d116 12
+d131 3
+a133 1
+              NSAM = TRANSFER(CTEXT(IREL:IREL+2),I2VAL)
+d138 3
+a140 1
+              NROW = TRANSFER(CTEXT(IREL:IREL+2),I2VAL)
+d145 2
+a146 1
+              IHEAD = TRANSFER(CTEXT(IREL:IREL+2),I2VAL)
+d160 1
+a160 1
+
+@
+

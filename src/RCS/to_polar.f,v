@@ -1,0 +1,727 @@
+head	1.10;
+access;
+symbols
+	pre_getangas:1.8
+	GPL2010:1.8
+	pre_GPL2010:1.7
+	pre_var_equation:1.7
+	pre_fftwrings:1.7
+	pre_opfiles:1.7
+	src:1.7
+	best-code:1.7
+	x-named-regs:1.7
+	x:1.7
+	v13-00:1.7
+	pre_GPL:1.5
+	prec_CA:1.5
+	noindx:1.4;
+locks; strict;
+comment	@c @;
+
+
+1.10
+date	2013.10.15.17.55.28;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2013.01.07.17.39.58;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2010.06.24.13.27.07;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2005.10.18.18.55.25;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2005.10.18.14.51.29;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2003.02.19.21.49.12;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2002.03.11.14.08.47;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2000.10.10.12.43.17;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2000.09.19.18.45.36;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2000.09.19.15.56.52;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.10
+log
+@added call for 'PO R'
+@
+text
+@C **********************************************************************
+C             OPFILEC                              FEB 03 ARDEAN LEITH
+C             COSMETIC & ERROR TRAP REWRITE        DEC 12 ARDEAN LEITH
+C             NUMBER OF RADII BUG                  AUG 13 ARDEAN LEITH
+C
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2013  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C PURPOSE:  CREATE POLAR REPRESENTATION OF IMAGE WITH CIRCUMFERANCE 
+C           (RING) ON THE X DIMENSION
+C
+C **********************************************************************
+
+        SUBROUTINE TO_POLAR
+
+        IMPLICIT NONE
+        INCLUDE 'CMBLOCK.INC'
+        INCLUDE 'CMLIMIT.INC' 
+ 
+        CHARACTER(LEN=MAXNAM) :: FILNAM
+
+        REAL, ALLOCATABLE     :: BUF(:,:)
+        REAL, ALLOCATABLE     :: OUT(:)
+        CHARACTER(LEN=1)      :: ASK
+
+        INTEGER               :: MAXIM,ITYPE,NX,NY,NZ,IRTFLG,IER,NLET
+        INTEGER               :: MR,NR,NOT_USED,ITEMP,NA,NXP,NYP
+        INTEGER               :: IXC,IYC,J,I
+        REAL                  :: PI,DFI,FI,XS,YS
+        real                  :: quadri
+
+        INTEGER, PARAMETER    :: LUNIN  = 20
+        INTEGER, PARAMETER    :: LUNOUT = 21
+
+        CHARACTER(LEN=1)      :: NULL = CHAR(0)
+
+C       OPEN INPUT FILE
+        MAXIM = 0
+        CALL OPFILEC(0,.TRUE.,FILNAM,LUNIN,'O',ITYPE,NX,NY,
+     &              NZ,MAXIM,'INPUT',.FALSE.,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+        IF (NZ > 1)  THEN
+           CALL ERRT(101,'DOES NOT WORK ON VOLUMES',IER)
+           RETURN
+        ENDIF
+
+C       NAME FOR OUTPUT FILE
+        CALL FILERD(FILNAM,NLET,NULL,'OUTPUT',IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 9999
+
+        CALL  RDPRMI(MR,NR,NOT_USED,'INNER and OUTER RADII')
+        IF (IRTFLG .NE. 0) GOTO 9999
+ 
+        ITEMP = MIN(((NX-1)/2),((NY-1)/2))
+
+        IF (MR  < 0 ) THEN
+           CALL ERRT(102,'INVALID INNER RADIUS',MR)
+           GOTO 9999
+        ELSEIF (NR > ITEMP) THEN
+           CALL ERRT(102,'INVALID OUTER RADIUS',NR)
+           GOTO 9999
+        ENDIF
+
+        CALL  RDPRMC(ASK,NA,.TRUE.,
+     &              'FULL OR HALF CIRCLE (F/H)',NULL,IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 9999
+
+
+	PI  = 4*DATAN(1.0D0)
+
+	NXP = INT(2*PI*NR)
+	IF (ASK == 'H')  NXP = NXP / 2
+
+	NYP = NR - MR + 1
+
+C       OPEN OUTPUT FILE
+        MAXIM = 0
+	ITYPE = 1
+        CALL OPFILEC(0,.FALSE.,FILNAM,LUNOUT,'N',ITYPE,NXP,NYP,
+     &               NZ,MAXIM,'POLAR',.FALSE.,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+C       FIND TOTAL NUMBER OF RINGS
+        ALLOCATE (BUF(NX,NY),
+     &            OUT(NXP), 
+     &            STAT=IRTFLG)
+        IF (IRTFLG .NE. 0) THEN 
+           CALL ERRT(46,'TOPOLAR; BUF, OUT',NX*NY + NXP)
+           GOTO 9999
+        ENDIF
+
+C       INPUT IMAGE
+        CALL REDVOL(LUNIN,NX,NY, 1,1, BUF,IRTFLG)
+
+	IXC = NX/2+1         ! CENTER
+	IYC = NY/2+1
+
+        DFI = PI / NXP
+	IF (ASK == 'F')  DFI = 2 * PI/NXP
+
+C       DEPENDENT ON CIRCULAR CLOSURE IN QUADRI!
+	DO J=MR,NR
+	  DO I=1,NXP
+	     FI     = (I-1) * DFI
+	     XS     = COS(FI) * J
+	     YS     = SIN(FI) * J
+	     OUT(I) = QUADRI(XS+IXC,YS+IYC,NX,NY,BUF) * SQRT(REAL(J))
+	  ENDDO
+
+	  CALL WRTLIN(LUNOUT,OUT,NXP,J-MR+1)
+	ENDDO
+
+9999    IF (ALLOCATED(BUF)) DEALLOCATE (BUF)
+        IF (ALLOCATED(OUT)) DEALLOCATE (OUT)
+
+        CLOSE(LUNIN)
+        CLOSE(LUNOUT) 
+ 
+        END
+
+@
+
+
+1.9
+log
+@COSMETIC & ERROR TRAP REWRITE
+@
+text
+@d1 1
+d4 2
+a5 1
+
+d10 1
+a10 1
+C=* Copyright 1985-2012  Health Research Inc.,                         *
+d27 5
+d35 1
+d41 1
+a41 1
+        REAL, ALLOCATABLE     :: X(:,:)
+d43 1
+a43 1
+        CHARACTER(LEN=1)      :: MODE, ASK
+d45 8
+a52 2
+        INTEGER, PARAMETER    :: INPIC  = 20
+        INTEGER, PARAMETER    :: INREF  = 21
+d56 1
+a56 2
+
+C       ASK FOR DATA FILES
+d58 1
+a58 1
+        CALL OPFILEC(0,.TRUE.,FILNAM,INPIC,'O',ITYPE,NX,NY,
+d67 1
+d74 1
+a74 1
+        ITEMP = MIN(((NX-1)/2)*2+1,((NY-1)/2)*2+1)
+d76 1
+a76 1
+        IF (MR  <= 0 ) THEN
+d79 1
+a79 1
+        ELSEIF (NR >= ITEMP) THEN
+a87 5
+        IF (ASK == 'H')  THEN
+           MODE = 'H'
+        ELSE
+           MODE = 'F'
+        ENDIF
+d90 1
+d92 1
+a93 1
+	IF (ASK == 'H')  NXP = NXP / 2
+d99 1
+a99 1
+        CALL OPFILEC(0,.FALSE.,FILNAM,INREF,'N',ITYPE,NXP,NYP,
+d104 1
+a104 1
+        ALLOCATE (X(NX,NY),
+d108 1
+a108 1
+           CALL ERRT(46,'TOPOLAR; X, OUT',NX*NY+NXP)
+d112 2
+a113 3
+	DO J=1,NY
+	  CALL REDLIN(INPIC, X(1,J),NX,J)
+	ENDDO
+d115 1
+a115 1
+	IXC = NX/2+1
+d118 2
+a119 5
+	IF (ASK == 'F')  THEN
+	   DFI = 2 * PI/NXP
+	ELSE
+	   DFI = PI / NXP
+	ENDIF
+d121 2
+a122 1
+	DO  J=MR,NR
+d127 1
+a127 1
+	     OUT(I) = QUADRI(XS+IXC,YS+IYC,NX,NY,X) * SQRT(REAL(J))
+d130 1
+a130 1
+	  CALL WRTLIN(INREF,OUT,NXP,J-MR+1)
+d133 1
+a133 1
+9999    IF (ALLOCATED(X))   DEALLOCATE (X)
+d136 2
+a137 2
+        CLOSE(INPIC)
+        CLOSE(INREF) 
+@
+
+
+1.8
+log
+@GPL_2010
+@
+text
+@d1 2
+d8 1
+a8 1
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+a25 2
+C                  OPFILEC                         FEB  03 ARDEAN LEITH
+
+d31 5
+a35 2
+        CHARACTER(LEN=MAXNAM)   :: FINPIC,FINPAT
+        COMMON  /F_SPEC/  FINPAT,NLET,FINPIC
+d37 2
+a38 3
+        REAL, ALLOCATABLE, DIMENSION(:,:) :: X
+        REAL, ALLOCATABLE, DIMENSION(:)   :: OUT
+        CHARACTER(LEN=1)                  :: MODE,ASK,NULL
+d40 1
+a40 1
+        DATA  INPIC/77/,INREF/76/
+a41 1
+        NULL = CHAR(0)
+d45 2
+a46 2
+        CALL OPFILEC(0,.TRUE.,FINPIC,INPIC,'O',ITYPE,NSAM,NROW,
+     &              NSLICE,MAXIM,'INPUT',.FALSE.,IRTFLG)
+d49 7
+a55 1
+        CALL FILERD(FINPIC,NLET,NULL,'OUTPUT',IRTFLG)
+d57 2
+a58 1
+        CALL  RDPRMI(MR,NR,NOT_USED,'INNER and OUTER RADIUS')
+d60 8
+a67 4
+        ITEMP = MIN0(((NSAM-1)/2)*2+1,((NROW-1)/2)*2+1)
+        IF (MR .LE .0 .OR. NR .GE. ITEMP) THEN
+           CALL ERRT(31,'OR 2',NE)
+           RETURN
+d70 5
+a74 4
+	ISKIP = 1
+        NA    = 1
+        CALL  RDPRMC(ASK,NA,.TRUE.,'(F)ULL OR (H)ALF CIRCLE',NULL,IRT)
+        IF (ASK.EQ.'H')  THEN
+d80 5
+a84 4
+	PI    = 4*DATAN(1.0D0)
+	NSAMP = INT(2*PI*NR)
+	IF (ASK .EQ. 'H')  NSAMP=NSAMP/2
+	NROWP = NR-MR+1
+d89 2
+a90 2
+        CALL OPFILEC(0,.FALSE.,FINPIC,INREF,'N',ITYPE,NSAMP,NROWP,
+     &              NSLICE,MAXIM,'POLAR',.FALSE.,IRTFLG)
+d94 6
+a99 6
+        ALLOCATE (X(NSAM,NROW),OUT(NSAMP), STAT=IRTFLG)
+        IF (IRTFLG.NE.0) THEN 
+           CALL ERRT(46,'ORMD, X, OUT',IER)
+           CLOSE(INPIC)
+           CLOSE(INREF)
+           RETURN
+d102 2
+a103 2
+	DO J=1,NROW
+	  CALL REDLIN(INPIC,X(1,J),NSAM,J)
+d105 6
+a110 4
+	IXC = NSAM/2+1
+	IYC = NROW/2+1
+	IF (ASK.EQ.'F')  THEN
+	   DFI=2*PI/NSAMP
+d112 1
+a112 1
+	   DFI=PI/NSAMP
+d114 1
+d116 5
+a120 5
+	  DO I=1,NSAMP
+	     FI=(I-1)*DFI
+	     XS=COS(FI)*J
+	     YS=SIN(FI)*J
+	     OUT(I)=QUADRI(XS+IXC,YS+IYC,NSAM,NROW,X)*SQRT(REAL(J))
+d122 2
+a123 1
+	  CALL  WRTLIN(INREF,OUT,NSAMP,J-MR+1)
+d126 3
+a131 2
+        DEALLOCATE (OUT)
+        DEALLOCATE (X)
+@
+
+
+1.7
+log
+@GPL
+@
+text
+@a2 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d4 5
+a8 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d10 1
+a10 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d15 1
+a15 1
+C=* This program is distributed in the hope that it will be useful,    *
+d17 1
+a17 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a18 1
+C=*                                                                    *
+d20 1
+a20 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.6
+log
+@GPL License added
+@
+text
+@d1 118
+@
+
+
+1.5
+log
+@opfilec
+@
+text
+@a0 92
+
+C                  OPFILEC                         FEB  03 ARDEAN LEITH
+
+        SUBROUTINE TO_POLAR
+
+        INCLUDE 'CMBLOCK.INC'
+        INCLUDE 'CMLIMIT.INC' 
+ 
+        CHARACTER(LEN=MAXNAM)   :: FINPIC,FINPAT
+        COMMON  /F_SPEC/  FINPAT,NLET,FINPIC
+
+        REAL, ALLOCATABLE, DIMENSION(:,:) :: X
+        REAL, ALLOCATABLE, DIMENSION(:)   :: OUT
+        CHARACTER(LEN=1)                  :: MODE,ASK,NULL
+
+        DATA  INPIC/77/,INREF/76/
+
+        NULL = CHAR(0)
+
+C       ASK FOR DATA FILES
+        MAXIM = 0
+        CALL OPFILEC(0,.TRUE.,FINPIC,INPIC,'O',ITYPE,NSAM,NROW,
+     &              NSLICE,MAXIM,'INPUT',.FALSE.,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+        CALL FILERD(FINPIC,NLET,NULL,'OUTPUT',IRTFLG)
+
+        CALL  RDPRMI(MR,NR,NOT_USED,'INNER and OUTER RADIUS')
+ 
+        ITEMP = MIN0(((NSAM-1)/2)*2+1,((NROW-1)/2)*2+1)
+        IF (MR .LE .0 .OR. NR .GE. ITEMP) THEN
+           CALL ERRT(31,'OR 2',NE)
+           RETURN
+        ENDIF
+
+	ISKIP = 1
+        NA    = 1
+        CALL  RDPRMC(ASK,NA,.TRUE.,'(F)ULL OR (H)ALF CIRCLE',NULL,IRT)
+        IF (ASK.EQ.'H')  THEN
+           MODE = 'H'
+        ELSE
+           MODE = 'F'
+        ENDIF
+
+	PI    = 4*DATAN(1.0D0)
+	NSAMP = INT(2*PI*NR)
+	IF (ASK .EQ. 'H')  NSAMP=NSAMP/2
+	NROWP = NR-MR+1
+
+C       OPEN OUTPUT FILE
+        MAXIM = 0
+	ITYPE = 1
+        CALL OPFILEC(0,.FALSE.,FINPIC,INREF,'N',ITYPE,NSAMP,NROWP,
+     &              NSLICE,MAXIM,'POLAR',.FALSE.,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+C       FIND TOTAL NUMBER OF RINGS
+        ALLOCATE (X(NSAM,NROW),OUT(NSAMP), STAT=IRTFLG)
+        IF (IRTFLG.NE.0) THEN 
+           CALL ERRT(46,'ORMD, X, OUT',IER)
+           CLOSE(INPIC)
+           CLOSE(INREF)
+           RETURN
+        ENDIF
+
+	DO J=1,NROW
+	  CALL REDLIN(INPIC,X(1,J),NSAM,J)
+	ENDDO
+	IXC = NSAM/2+1
+	IYC = NROW/2+1
+	IF (ASK.EQ.'F')  THEN
+	   DFI=2*PI/NSAMP
+	ELSE
+	   DFI=PI/NSAMP
+	ENDIF
+	DO  J=MR,NR
+	  DO I=1,NSAMP
+	     FI=(I-1)*DFI
+	     XS=COS(FI)*J
+	     YS=SIN(FI)*J
+	     OUT(I)=QUADRI(XS+IXC,YS+IYC,NSAM,NROW,X)*SQRT(REAL(J))
+	  ENDDO
+	  CALL  WRTLIN(INREF,OUT,NSAMP,J-MR+1)
+	ENDDO
+
+        CLOSE(INPIC)
+        CLOSE(INREF) 
+ 
+        DEALLOCATE (OUT)
+        DEALLOCATE (X)
+        END
+
+@
+
+
+1.4
+log
+@nloop,iloop_removed
+@
+text
+@d2 2
+d7 3
+a9 2
+
+        CHARACTER(LEN=80)                 :: FINPIC,FINPAT
+d22 1
+a22 1
+        CALL OPFILE(.TRUE.,FINPIC,INPIC,'O',ITYPE,NSAM,NROW,
+d53 1
+a53 1
+        CALL OPFILE(.FALSE.,FINPIC,INREF,'N',ITYPE,NSAMP,NROWP,
+@
+
+
+1.3
+log
+@prompt changed
+@
+text
+@d25 1
+a25 1
+        CALL  RDPRMI(MR,NR,NLOOP,ILOOP,'INNER and OUTER RADIUS')
+@
+
+
+1.2
+log
+@*** empty log message ***
+@
+text
+@d25 1
+a25 1
+        CALL  RDPRMI(MR,NR,NLOOP,ILOOP,'FIRST AND LAST RING')
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@a0 14
+From pawel@@pathmed190.med.uth.tmc.edu Tue Sep 19 10:26 EDT 2000
+Received: from gatekeeper.wadsworth.org (gatekeeper [172.16.1.3])
+	by newton.wadsworth.org (8.9.3/8.9.3) with SMTP id KAA03302
+	for <leith@@wadsworth.org>; Tue, 19 Sep 2000 10:26:07 -0400 (EDT)
+Received: (from pawel@@localhost)
+	by pathmed190.med.uth.tmc.edu (SGI-8.9.3/8.9.3) id JAA74003
+	for leith@@wadsworth.org; Tue, 19 Sep 2000 09:29:03 +0200 (MDT)
+Date: Tue, 19 Sep 2000 09:29:03 +0200 (MDT)
+From: "Pawel A. Penczek" <pawel@@pathmed190.med.uth.tmc.edu>
+Message-Id: <200009190729.JAA74003@@pathmed190.med.uth.tmc.edu>
+To: leith@@wadsworth.org
+Content-Type: text
+Content-Length:  2322
+Status: RO
+a1 1
+
+d5 2
+d8 1
+a8 1
+        CHARACTER*80  FINPIC,FINPAT
+d10 2
+a11 2
+        REAL, ALLOCATABLE, DIMENSION(:) :: OUT
+        CHARACTER*1  MODE,ASK,NULL
+a12 1
+
+d15 1
+a15 1
+        NULL=CHAR(0)
+d17 2
+a18 4
+C  ASK FOR DATA FILES
+
+
+       MAXIM = 0
+d20 2
+a21 5
+     &  NSLICE,MAXIM,'INPUT',.FALSE.,IRTFLG)
+        IF (IRTFLG .NE. 0) THEN
+           CALL ERRT(4,'ORMD ',NE)
+           RETURN
+        ENDIF
+d23 1
+d26 3
+a28 2
+
+        IF(MR.LE.0.OR.NR.GE.MIN0(((NSAM-1)/2)*2+1,((NROW-1)/2)*2+1))THEN
+d33 2
+a34 5
+C        CALL  RDPRMI(ISKIP,NDUMP,NLOOP,ILOOP,'SKIP')
+C        ISKIP=MAX0(1,ISKIP)
+	ISKIP=1
+
+        NA=1
+d36 2
+a37 2
+        IF(ASK.EQ.'H')  THEN
+           MODE='H'
+d39 1
+a39 1
+           MODE='F'
+d41 7
+a47 6
+C
+	PI=4*DATAN(1.0D0)
+	NSAMP=INT(2*PI*NR)
+	IF(ASK.EQ.'H')  NSAMP=NSAMP/2
+	NROWP=NR-MR+1
+C OUTPUT FILE
+d49 5
+a53 9
+	ITYPE=1
+        CALL OPFILE(.TRUE.,FINPIC,INREF,'N',ITYPE,NSAMP,NROWP,
+     &  NSLICE,MAXIM,'POLAR',.FALSE.,IRTFLG)
+       
+        IF (IRTFLG .NE. 0) THEN
+           CALL ERRT(4,'ORMD ',NE)
+           CLOSE (INPIC)
+           RETURN
+        ENDIF
+d55 1
+a55 2
+
+        ALLOCATE (X(NSAM,NROW), STAT=IRTFLG)
+d57 2
+a58 2
+           CALL ERRT(46,'ORMD, X',IER)
+            CLOSE(INPIC)
+d62 1
+a62 8
+        ALLOCATE (OUT(NSAMP), STAT=IRTFLG)
+        IF (IRTFLG.NE.0) THEN 
+           CALL ERRT(46,'ORMD, X',IER)
+	    DEALLOCATE(OUT)
+            CLOSE(INPIC)
+            CLOSE(INREF)
+            RETURN
+        ENDIF
+d66 4
+a69 4
+	IXC=NSAM/2+1
+	IYC=NROW/2+1
+	IF(ASK.EQ.'F')  THEN
+	 DFI=2*PI/NSAMP
+d71 1
+a71 1
+	 DFI=PI/NSAMP
+d75 4
+a78 4
+	   FI=(I-1)*DFI
+	   XS=COS(FI)*J
+	   YS=SIN(FI)*J
+	   OUT(I)=QUADRI(XS+IXC,YS+IYC,NSAM,NROW,X)*SQRT(REAL(J))
+d80 1
+a80 1
+	CALL  WRTLIN(INREF,OUT,NSAMP,J-MR+1)
+d84 2
+a85 1
+        CLOSE(INREF)  
+a88 1
+C
+@

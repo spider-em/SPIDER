@@ -1,0 +1,403 @@
+head	1.5;
+access;
+symbols
+	pre_fftwrings:1.2
+	pre_opfiles:1.2
+	src:1.2
+	best-code:1.2
+	x-named-regs:1.2
+	x:1.2
+	v13-00:1.2
+	pre_GPL:1.1;
+locks; strict;
+comment	@c @;
+
+
+1.5
+date	2011.05.16.14.55.41;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2011.05.16.14.45.04;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2009.05.13.16.10.26;	author leith;	state dead;
+branches;
+next	1.2;
+
+1.2
+date	2005.10.17.16.54.48;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2005.04.21.18.39.52;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.5
+log
+@overlength line
+@
+text
+@C++*********************************************************************
+C
+C  VAR3R.F                                        06/03/02
+C                                         
+C=**********************************************************************
+C=* From: SPIDER - MODULAR IMAGE PROCESSING SYSTEM                     *
+C=* Copyright (C)2002, P. A. Penczek                                   *
+C=* University of Texas - Houston Medical School                       *
+C=* Email:  pawel.a.penczek@@uth.tmc.edu                                *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* This program is distributed in the hope that it will be useful,    *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+C=* General Public License for more details.                           *
+C=*                                                                    *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+C=*                                                                    *
+C=**********************************************************************
+C
+C VAR3R  
+C
+C PURPOSE:  CALCULATE REL VARIANCE FOR A SET OF 3D VOLUMES
+C
+C23456789 123456789 123456789 123456789 123456789 123456789 123456789 12
+C--*********************************************************************
+
+      SUBROUTINE VAR3R
+
+      INCLUDE 'CMBLOCK.INC'
+      INCLUDE 'CMLIMIT.INC'
+
+      CHARACTER (LEN=MAXNAM) :: FILNAM,FILA,FILV,FILPAT
+#ifndef SP_32
+      INTEGER *8             :: NVOX,IOK8
+#else
+      INTEGER *4             :: NVOX,IOK8
+#endif
+      REAL, ALLOCATABLE      :: AVGARAY(:)
+      REAL, ALLOCATABLE      :: VARARAY(:)
+      REAL, ALLOCATABLE      :: RELVAR(:)
+      REAL, ALLOCATABLE      :: INPARAY(:)
+
+      INTEGER, PARAMETER     :: LUN1 = 21
+         
+      CALL FILELIST(.TRUE.,NDOC,FILPAT,NLETP,INUMBR,NIMAX,NUMT,
+     &                 'INPUT FILE TEMPLATE',IRTFLG)
+      IF (IRTFLG .NE. 0) RETURN
+
+C     GET FIRST PICTURE TO DETERMINE DIMS
+      CALL FILGET(FILPAT,FILNAM,NLETP,INUMBR(1),IRTFLG)
+      IF (IRTFLG .NE. 0) RETURN
+
+      MAXIM = 0
+      CALL OPFILEC(0,.FALSE.,FILNAM,LUN1,'O',IFORM,NSAM,NROW,NSLICE,
+     &               MAXIM,' ',.TRUE.,IRTFLG)
+      IF (IRTFLG .NE. 0) RETURN
+      CLOSE(LUN1)
+
+      NVOX = NSAM * NROW * NSLICE
+      CALL BIGALLOC(NVOX,IOK8,.FALSE.,.TRUE.,IRTFLG)
+
+      ALLOCATE(AVGARAY(NVOX),VARARAY(NVOX),
+     &	       RELVAR(NVOX), INPARAY(NSAM),STAT=IRTFLG)
+      IF (IRTFLG .NE. 0) THEN
+          MWANT = 3*NVOX + NSAM
+          CALL ERRT(46,'VAR3R, AVGARAY...',MWANT)
+          RETURN
+      ENDIF
+
+      AVGARAY = 0.0
+      NUMA    = 0
+
+      DO IFIL=1,NUMT
+
+         CALL FILGET(FILPAT,FILNAM,NLETP,INUMBR(IFIL),IRTFLG)
+         IF (IRTFLG .NE. 0) GOTO 997
+
+         CALL OPFILEC(0,.FALSE.,FILNAM,LUN1,'Z',IFORM,
+     &                   NSAM,NROW,NSLICE,MAXIM,' ',.TRUE.,IRTFLG)
+         IF (IRTFLG .EQ. 0) THEN
+            NUMA = NUMA + 1
+	    DO  I=1,NROW*NSLICE
+		CALL  REDLIN(LUN1,INPARAY,NSAM,I)
+	        AVGARAY(1+(I-1)*NSAM:I*NSAM) =
+     &			AVGARAY(1+(I-1)*NSAM:I*NSAM) + INPARAY
+	    ENDDO 
+	    CLOSE(LUN1)
+	 ENDIF
+       ENDDO
+
+C     COMPUTE AVERAGE
+
+      AVGARAY = AVGARAY / NUMA
+C     OPEN NEW AVERAGE OUTPUT FILE
+      CALL OPFILEC(0,.TRUE.,FILA,LUN1,'U',IFORM,NSAM,NROW,NSLICE,
+     &                      MAXIM,'AVERAGE',.TRUE.,IRTFLG)
+      IF (IRTFLG .NE. 0) GOTO 997
+
+      CALL WRITEV(LUN1,AVGARAY,NSAM,NROW,NSAM,NROW,NSLICE)
+      CLOSE(LUN1)
+
+      VARARAY = 0.0
+      RELVAR  = 0.0
+
+      DO IFIL=1,NUMT
+
+          CALL FILGET(FILPAT,FILNAM,NLETP,INUMBR(IFIL),IRTFLG)
+          IF (IRTFLG .NE. 0) THEN
+             CALL ERRT(3,'VA3R',NE)
+             GOTO 997
+          ENDIF
+
+          CALL OPFILEC(0,.FALSE.,FILNAM,LUN1,'Z',IFORM,
+     &                   NSAM,NROW,NSLICE,MAXIM,' ',.TRUE.,IRTFLG)
+          IF (IRTFLG .EQ. 0) THEN
+	     DO  I=1,NROW*NSLICE
+	        CALL  REDLIN(LUN1,INPARAY,NSAM,I)
+
+	        VARARAY(1+(I-1)*NSAM:I*NSAM) =
+     &                VARARAY(1+(I-1)*NSAM:I*NSAM)+
+     &		      (AVGARAY(1+(I-1)*NSAM:I*NSAM)-INPARAY)**2
+
+	        RELVAR(1+(I-1)*NSAM:I*NSAM) =
+     &                RELVAR(1+(I-1)*NSAM:I*NSAM)+
+     &		      (AVGARAY(1+(I-1)*NSAM:I*NSAM)-INPARAY)**4
+	     ENDDO 
+	     CLOSE(LUN1)
+	  ENDIF
+      ENDDO
+
+      VARARAY = VARARAY / NUMA
+
+C     OPEN NEW VARIANCE OUTPUT FILE
+      CALL OPFILEC(0,.TRUE.,FILV,LUN1,'U',IFORM,NSAM,NROW,NSLICE,
+     &                   MAXIM,'VARIANCE',.TRUE.,IRTFLG)
+      IF (IRTFLG .NE. 0) GOTO 997
+      CALL WRITEV(LUN1,VARARAY,NSAM,NROW,NSAM,NROW,NSLICE)
+      CLOSE(LUN1)
+
+      RELVAR = RELVAR/NUMA
+
+      DO  I=1,NSAM*NROW*NSLICE
+	 IF (VARARAY(I) .GT. 0.0)  THEN
+	     RELVAR(I) = 
+     &            (RELVAR(I)/VARARAY(I)**2-(NUMA-3)/REAL(NUMA-1))/NUMA
+	 ELSE
+	     RELVAR(I) = 0.0
+	 ENDIF
+      ENDDO
+
+C     OPEN NEW REL VARIANCE OUTPUT FILE
+      CALL OPFILEC(0,.TRUE.,FILV,LUN1,'U',IFORM,NSAM,NROW,NSLICE,
+     &               MAXIM,'RELVARIANCE',.TRUE.,IRTFLG)
+      IF (IRTFLG .NE. 0) GOTO 997
+
+      CALL WRITEV(LUN1,RELVAR,NSAM,NROW,NSAM,NROW,NSLICE)
+      CLOSE(LUN1)
+
+997   IF (ALLOCATED(INPARAY)) DEALLOCATE(INPARAY)
+      IF (ALLOCATED(RELVAR))  DEALLOCATE(RELVAR)
+      IF (ALLOCATED(VARARAY)) DEALLOCATE(VARARAY)
+      IF (ALLOCATED(AVGARAY)) DEALLOCATE(AVGARAY)
+
+      END
+@
+
+
+1.4
+log
+@cosmetic mainly, error checks, MAXNAM
+@
+text
+@d46 4
+a49 1
+      REAL, ALLOCATABLE      :: AVGARAY(:), VARARAY(:), RELVAR(:), INPARAY(:)
+@
+
+
+1.3
+log
+@does not work
+@
+text
+@a4 2
+C **********************************************************************
+C *  VAR3D
+a7 1
+C=*                                                                    *
+a8 1
+C=*                                                                    *
+a26 1
+C **********************************************************************
+d28 1
+a28 1
+C   VAR3R - Calculate relvariance for a set of 3D volumes
+d30 1
+a30 1
+C IMAGE_PROCESSING_ROUTINE
+a31 1
+C        1         2         3         4         5         6         7
+d34 3
+a36 3
+      SUBROUTINE  VAR3R
+      CHARACTER *81    FILNAM,FILA,FILV,FILPAT
+      COMMON /COMMUN/  FILNAM,FILA,FILV,FILPAT
+d39 2
+d42 1
+a42 1
+      INTEGER *8       NVOX,IOK8
+d44 1
+a44 1
+      INTEGER *4       NVOX,IOK8
+d46 3
+a48 2
+      REAL, ALLOCATABLE, DIMENSION(:) :: AVGARAY,VARARAY,RELVAR,INPARAY
+	DATA  LUN1/81/
+d68 9
+a76 2
+     &		RELVAR(NVOX),INPARAY(NSAM),STAT=IRTFLG)
+      IF (IRTFLG .NE. 0) GOTO 997
+d78 1
+d80 2
+a81 9
+         AVGARAY = 0.0
+         NUMA  = 0
+         DO IFIL=1,NUMT
+
+            CALL FILGET(FILPAT,FILNAM,NLETP,INUMBR(IFIL),IRTFLG)
+            IF (IRTFLG .NE. 0) THEN
+               CALL ERRT(3,'VA3R',NE)
+               GOTO 997
+            ENDIF
+d83 1
+a83 1
+            CALL OPFILEC(0,.FALSE.,FILNAM,LUN1,'Z',IFORM,
+d85 2
+a86 2
+            IF (IRTFLG .EQ. 0) THEN
+            NUMA = NUMA+1
+d89 2
+a90 2
+	        AVGARAY(1+(I-1)*NSAM:I*NSAM)=
+     &			AVGARAY(1+(I-1)*NSAM:I*NSAM)+ INPARAY
+d93 8
+a100 6
+	    ENDIF
+         ENDDO
+C        COMPUTE AVERAGE
+            AVGARAY = AVGARAY / NUMA
+C           OPEN NEW AVERAGE OUTPUT FILE
+        CALL OPFILEC(0,.TRUE.,FILA,LUN1,'U',IFORM,NSAM,NROW,NSLICE,
+d102 15
+a116 13
+        IF (IRTFLG .NE. 0) GOTO 997
+	CALL WRITEV(LUN1,AVGARAY,NSAM,NROW,NSAM,NROW,NSLICE)
+	CLOSE(LUN1)
+C
+        VARARAY = 0.0
+        RELVAR = 0.0
+         DO IFIL=1,NUMT
+
+            CALL FILGET(FILPAT,FILNAM,NLETP,INUMBR(IFIL),IRTFLG)
+            IF (IRTFLG .NE. 0) THEN
+               CALL ERRT(3,'VA3R',NE)
+               GOTO 997
+            ENDIF
+d118 1
+a118 1
+            CALL OPFILEC(0,.FALSE.,FILNAM,LUN1,'Z',IFORM,
+d120 20
+a139 14
+            IF (IRTFLG .EQ. 0) THEN
+	    DO  I=1,NROW*NSLICE
+	     CALL  REDLIN(LUN1,INPARAY,NSAM,I)
+	     VARARAY(1+(I-1)*NSAM:I*NSAM)=VARARAY(1+(I-1)*NSAM:I*NSAM)+
+     &		(AVGARAY(1+(I-1)*NSAM:I*NSAM)-INPARAY)**2
+	     RELVAR(1+(I-1)*NSAM:I*NSAM)=RELVAR(1+(I-1)*NSAM:I*NSAM)+
+     &		(AVGARAY(1+(I-1)*NSAM:I*NSAM)-INPARAY)**4
+	    ENDDO 
+	    CLOSE(LUN1)
+	    ENDIF
+         ENDDO
+         VARARAY = VARARAY/NUMA
+C           OPEN NEW VARIANCE OUTPUT FILE
+            CALL OPFILEC(0,.TRUE.,FILV,LUN1,'U',IFORM,NSAM,NROW,NSLICE,
+d141 27
+a167 22
+            IF (IRTFLG .NE. 0) GOTO 997
+	CALL WRITEV(LUN1,VARARAY,NSAM,NROW,NSAM,NROW,NSLICE)
+	CLOSE(LUN1)
+C
+	RELVAR=RELVAR/NUMA
+	DO  I=1,NSAM*NROW*NSLICE
+	IF(VARARAY(I).GT.0.0)  THEN
+	 RELVAR(I)=(RELVAR(I)/VARARAY(I)**2-(NUMA-3)/REAL(NUMA-1))/NUMA
+	ELSE
+	 RELVAR(I)=0.0
+	ENDIF
+	ENDDO
+C           OPEN NEW RELVARIANCE OUTPUT FILE
+            CALL OPFILEC(0,.TRUE.,FILV,LUN1,'U',IFORM,NSAM,NROW,NSLICE,
+     &                   MAXIM,'RELVARIANCE',.TRUE.,IRTFLG)
+            IF (IRTFLG .NE. 0) GOTO 997
+	CALL WRITEV(LUN1,RELVAR,NSAM,NROW,NSAM,NROW,NSLICE)
+	CLOSE(LUN1)
+997     IF (ALLOCATED(INPARAY)) DEALLOCATE(INPARAY)
+        IF (ALLOCATED(RELVAR))  DEALLOCATE(RELVAR)
+        IF (ALLOCATED(VARARAY)) DEALLOCATE(VARARAY)
+        IF (ALLOCATED(AVGARAY)) DEALLOCATE(AVGARAY)
+d169 1
+a169 1
+        END
+@
+
+
+1.2
+log
+@Pawels GPL License used
+@
+text
+@@
+
+
+1.1
+log
+@pawel
+@
+text
+@d1 1
+a1 1
+C++************************************************************************
+d5 1
+a5 2
+C **************************************************************************
+C *  SPIDER - MODULAR IMAGE PROCESSING SYSTEM.
+d7 25
+a31 6
+C *  COPYRIGHT (C)2002, P.A.Penczek
+C *  University of Texas - Houston Medical School
+C *  pawel.a.penczek@@uth.tmc.edu
+C *    THE CONTENTS OF THIS DOCUMENT CANNOT BE CHANGED WITHOUT WRITTEN
+C *    PERMISSION OF THE AUTHOR                          *
+C **************************************************************************
+@
+

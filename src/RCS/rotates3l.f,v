@@ -1,0 +1,160 @@
+head	1.1;
+access;
+symbols;
+locks; strict;
+comment	@c @;
+
+
+1.1
+date	2011.10.05.13.11.57;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@C++*********************************************************************
+C
+C ROTATES3L.F    FROM ROTS3.F                  OCT 4 2011 ArDean Leith *
+C
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2011  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C  ROTATES3L(LUN2,Q1,KLX,KNX,KLY,KNY,KLZ,KNZ,DRM,BACKC,BACK)
+C 
+C  PURPOSE:        3D ROTATION USING MATRIX DRM. 
+C                  TRI-LINEAR INTERPOLATION
+C                  VOLUME TRUNCATED AT ORIGINAL BORDERS
+C
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C--*********************************************************************
+
+         SUBROUTINE ROTATES3L(LUN2,Q1, KLX,KNX,KLY,KNY,KLZ,KNZ,
+     &                        DRM, BACKC,BACK)
+
+         IMPLICIT NONE
+
+         INTEGER          :: LUN2,KLX,KNX,KLY,KNY,KLZ,KNZ
+         REAL             :: Q1(KLX:KNX,KLY:KNY,KLZ:KNZ)
+         DOUBLE PRECISION :: DRM(3,3)
+         CHARACTER        :: BACKC
+         REAL             :: BACK
+
+
+         INTEGER          :: IM(3)
+         DOUBLE PRECISION :: AV,QR(3),DX,DY,DZ
+         REAL             :: Q2(KLX:KNX)
+
+         INTEGER          :: LEX,IBUF,IZ,IY,IX,IOX,IOY,IOZ
+         REAL             :: A1,A2,A3,A4,A5,A6,A7,A8
+
+C        EQUIVALENCE  (IM(1),IX),(IM(2),IY),(IM(3),IZ)
+
+         LEX = KNX-KLX+1   ! NSAM
+
+         IBUF = 0
+
+         DO IZ=KLZ,KNZ
+
+            DO IY=KLY,KNY
+
+               QR(1) = DRM(1,1)*KLX+DRM(2,1)*IY+DRM(3,1)*IZ
+               QR(2) = DRM(1,2)*KLX+DRM(2,2)*IY+DRM(3,2)*IZ
+               QR(3) = DRM(1,3)*KLX+DRM(2,3)*IY+DRM(3,3)*IZ
+
+               DO IX=KLX,KNX
+
+                  IOX = QR(1) + FLOAT(1-KLX)
+                  DX  = QR(1) + FLOAT(1-KLX)-IOX
+                  DX  = MAX(DX,1.0D-5)
+                  IOX = IOX+KLX-1
+
+                  IOY = QR(2)+FLOAT(1-KLY)
+                  DY  = QR(2)+FLOAT(1-KLY)-IOY
+                  DY  = MAX(DY,1.0D-5)
+                  IOY = IOY+KLY-1
+
+                  IOZ = QR(3) + FLOAT(1-KLZ)
+                  DZ  = QR(3) + FLOAT(1-KLZ)-IOZ
+                  DZ  = MAX(DZ,1.0D-5)
+                  IOZ = IOZ+KLZ-1
+
+                  IF ((IOX.GE.KLX.AND.IOX.LT.KNX) .AND.
+     &                (IOY.GE.KLY.AND.IOY.LT.KNY) .AND.
+     &                (IOZ.GE.KLZ.AND.IOZ.LT.KNZ))  THEN
+C                     ROTATED POSITION IS INSIDE VOLUME, FASTER VERSION
+
+                      A1 = Q1(IOX,IOY,IOZ)
+                      A2 = Q1(IOX+1,IOY,IOZ) - A1
+                      A3 = Q1(IOX,IOY+1,IOZ) - A1
+                      A4 = Q1(IOX,IOY,IOZ+1) - A1
+                      A5 = -A2 - Q1(IOX,IOY+1,IOZ) + Q1(IOX+1,IOY+1,IOZ)
+                      A6 = -A2 - Q1(IOX,IOY,IOZ+1) + Q1(IOX+1,IOY,IOZ+1)
+                      A7 = -A3 - Q1(IOX,IOY,IOZ+1) + Q1(IOX,IOY+1,IOZ+1)
+                      A8 = -A5 + Q1(IOX,IOY,IOZ+1) - Q1(IOX+1,IOY,IOZ+1)
+     &                     - Q1(IOX,IOY+1,IOZ+1) + Q1(IOX+1,IOY+1,IOZ+1)
+
+                      Q2(IX)= A1 + 
+     &                        DZ*(A4 + A6*DX + (A7 + A8*DX)*DY) + 
+     &                        A3*DY +
+     &                        DX*(A2 + A5*DY)
+                   ELSE
+C                     ROTATED POSITION IS OUTSIDE VOLUME
+                      IF (BACKC .EQ. 'U') THEN
+                         Q2(IX) = Q1(IX,IY,IZ)
+                      ELSE
+                         Q2(IX) = BACK  
+                      ENDIF
+                   ENDIF
+
+                   QR(1) = QR(1) + DRM(1,1)
+                   QR(2) = QR(2) + DRM(1,2)
+                   QR(3) = QR(3) + DRM(1,3)
+               ENDDO
+
+               IBUF = IBUF + 1
+
+               CALL WRTLIN(LUN2,Q2,LEX,IBUF)
+            ENDDO
+         ENDDO
+
+         END
+
+C     Q2(IX)=
+C     &  +(1-DX)*(1-DY)*(1-DZ)*Q1(IOX,IOY,IOZ)
+C     &  +   DX *(1-DY)*(1-DZ)*Q1(IOX+1,IOY,IOZ)
+C     &  +(1-DX)*   DY *(1-DZ)*Q1(IOX,IOY+1,IOZ)
+C     &  +(1-DX)*(1-DY)*   DZ *Q1(IOX,IOY,IOZ+1)
+C     &  +   DX *   DY *(1-DZ)*Q1(IOX+1,IOY+1,IOZ)
+C     &  +   DX *(1-DY)*   DZ *Q1(IOX+1,IOY,IOZ+1)
+C     &  +(1-DX)*   DY *   DZ *Q1(IOX,IOY+1,IOZ+1)
+C     &  +   DX *   DY *   DZ *Q1(IOX+1,IOY+1,IOZ+1)
+
+
+@

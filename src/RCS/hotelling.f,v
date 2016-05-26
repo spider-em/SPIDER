@@ -1,0 +1,402 @@
+head	1.4;
+access;
+symbols
+	pre_getangas:1.3
+	pre_GPL2010:1.3
+	pre_var_equation:1.3
+	pre_fftwrings:1.3
+	pre_opfiles:1.3
+	src:1.3
+	best-code:1.3
+	x-named-regs:1.3
+	x:1.3
+	v13-00:1.3
+	pre_GPL:1.2;
+locks; strict;
+comment	@c @;
+
+
+1.4
+date	2014.01.12.19.36.26;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2005.10.17.16.55.50;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2004.05.17.17.30.28;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2004.02.12.15.48.48;	author pawel;	state Exp;
+branches;
+next	;
+
+
+desc
+@EP T2
+@
+
+
+1.4
+log
+@enter
+@
+text
+@C++*********************************************************************
+C
+C HOTELLING
+C
+C **********************************************************************
+C *  PDB
+C=**********************************************************************
+C=* From: SPIDER - MODULAR IMAGE PROCESSING SYSTEM                     *
+C=* Copyright (C)2004, P. A. Penczek                                   *
+C=*                                                                    *
+C=* University of Texas - Houston Medical School                       *
+C=*                                                                    *
+C=* Email:  pawel.a.penczek@@uth.tmc.edu                                *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* This program is distributed in the hope that it will be useful,    *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+C=* General Public License for more details.                           *
+C=*                                                                    *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+C=*                                                                    *
+C=**********************************************************************
+C **********************************************************************
+C
+C  HOTELLING
+C  EP T2
+C
+C  PURPOSE: 2D and 3D HOTELLING'S T^2, test equality of two vectors
+C
+C
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C--*********************************************************************
+
+        SUBROUTINE  HOTELLING
+
+        INCLUDE 'CMBLOCK.INC'
+	INCLUDE 'CMLIMIT.INC'
+
+        COMMON  /F_SPEC/  FINPAT,FILNAM,FINPIC,NLET,NLEP
+        CHARACTER*80      FINPAT,FILNAM,FINPIC
+
+        REAL, ALLOCATABLE, DIMENSION(:,:,:) ::  VIN,MASK
+        DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:,:) ::  D
+        DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:) ::  AV1,AV2
+
+        DOUBLE PRECISION DET,Z,Y,T2,F,ALPHAINT
+	EXTERNAL ALPHAINT
+
+        DATA    INPIC/55/
+
+#if defined (__ia64)
+        write(nout,*) ' can not find necessary routine in lapack lib'
+        write(nout,*) ' will not work on altix'
+        return
+#else
+        NILMAX = NIMAX
+
+        CALL FILELIST(.TRUE.,INPIC,FINPAT,NLET,INUMBR,NILMAX,N1,
+     &              'TEMPLATE FOR THE FIRST INPUT SERIES',IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+        CLOSE(INPIC)
+
+
+C            OPEN MASK TO GET SIZE
+	     MAXIMT=0
+             CALL OPFILEC(0,.TRUE.,FINPIC,INPIC,'O',IFORM,
+     &                 NSAMM,NROWM,NSLICEM,MAXIMT,'MASK',.FALSE.,IRTFLG)
+             IF (IRTFLG .NE. 0) GOTO  9999
+
+          ALLOCATE(MASK(NSAMM,NROWM,NSLICEM),STAT=IRTFLG)
+          IF (IRTFLG .NE. 0) THEN
+             MWANT =NSAMM*NROWM*NSLICEM 
+             CALL ERRT(46,'HOTTELING',MWANT)
+             GOTO 9999
+          ENDIF
+
+C            READ IN MASK IN BUFM
+             NPIX = 0
+             ILOCM = 0
+             DO J=1,NSLICEM
+             DO I=1,NROWM
+                ILOCM = ILOCM + 1
+                CALL REDLIN(INPIC,MASK(1,I,J),NSAMM,ILOCM)
+                DO K = 1,NSAMM
+                   IF (MASK(K,I,J) .GT. 0.5) THEN
+                      MASK(K,I,J) = 1.0
+                      NPIX       = NPIX + 1
+                   ELSE
+                      MASK(K,I,J) = 0.0
+                   ENDIF
+                ENDDO
+             ENDDO
+             ENDDO
+	     CLOSE(INPIC)
+             IF (NPIX .LE. 0) THEN
+                CALL ERRT(101,'NO PIXELS UNDER MASK',IDUM)
+                GOTO 9999
+             ENDIF
+             WRITE(NOUT,*)' NUMBER OF PIXELS UNDER MASK: ',NPIX
+
+
+          ALLOCATE(VIN(NSAMM,NROWM,NSLICEM),STAT=IRTFLG)
+          IF (IRTFLG .NE. 0) THEN
+             MWANT =NSAMM*NROWM*NSLICEM 
+             CALL ERRT(46,'HOTELLING',MWANT)
+             RETURN
+          ENDIF
+
+          ALLOCATE(AV1(NPIX),AV2(NPIX),D(NPIX,NPIX),STAT=IRTFLG)
+          IF (IRTFLG .NE. 0) THEN
+             MWANT =NSAMM*NROWM*NSLICEM 
+             CALL ERRT(46,'HOTELLING',MWANT)
+             RETURN
+          ENDIF
+
+
+	AV1=0.0D0
+	AV2=0.0D0
+	D=0.0D0
+
+        DO  K=1,N1
+
+        CALL FILGET(FINPAT,FINPIC,NLET,INUMBR(K),IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 9999
+        MAXIM = 0
+        CALL OPFILEC(0,.FALSE.,FINPIC,INPIC,'O',IFORM,
+     &               NSAM1,NROW1,NSLICE1,
+     &             MAXIM,'DUMMY',.TRUE.,IRTFLG)
+        IF (IRTFLG.NE.0)  GOTO 9999
+C          VERIFY THE DIMENSIONS
+         IF(NSAMM.NE.NSAM1.OR.NROWM.NE.NROW1.OR.NSLICEM.NE.NSLICE1) THEN
+              CLOSE(INPIC)
+              CALL  ERRT(1,'HOTELLING',NE)
+              GOTO 9999
+         ENDIF
+
+C       READ INPUT FILE
+        DO L=1,NSLICE1
+           DO J=1,NROW1
+              CALL  REDLIN(INPIC,VIN(1,J,L),NSAM1,J+(L-1)*NROW1)
+           ENDDO
+        ENDDO
+        CLOSE(INPIC)
+	IF(NPIX.LT.NSAM1*NROW1*NSLICE1)
+     &    CALL COLLAPSE_IN(VIN,NSAM1,NROW1,NSLICE1,MASK,VIN,NPIX)
+	CALL UPD(AV1,D,VIN,NPIX)
+	ENDDO
+
+        NILMAX = NIMAX
+
+        CALL FILELIST(.TRUE.,INPIC,FINPAT,NLET,INUMBR,NILMAX,N2,
+     &            'TEMPLATE FOR THE SECOND INPUT SERIES',IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+        CLOSE(INPIC)
+
+        DO  K=1,N2
+
+        CALL FILGET(FINPAT,FINPIC,NLET,INUMBR(K),IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 9999
+        MAXIM = 0
+        CALL OPFILEC(0,.FALSE.,FINPIC,INPIC,'O',IFORM,
+     &               NSAM1,NROW1,NSLICE1,
+     &             MAXIM,'DUMMY',.TRUE.,IRTFLG)
+        IF (IRTFLG.NE.0)  GOTO 9999
+C          VERIFY THE DIMENSIONS
+         IF(NSAMM.NE.NSAM1.OR.NROWM.NE.NROW1.OR.NSLICEM.NE.NSLICE1) THEN
+              CLOSE(INPIC)
+              CALL  ERRT(1,'HOTELLING',NE)
+              GOTO 9999
+         ENDIF
+
+C       READ INPUT FILE
+        DO L=1,NSLICE1
+           DO J=1,NROW1
+              CALL  REDLIN(INPIC,VIN(1,J,L),NSAM1,J+(L-1)*NROW1)
+           ENDDO
+        ENDDO
+        CLOSE(INPIC)
+	IF(NPIX.LT.NSAM1*NROW1*NSLICE1)
+     &    CALL COLLAPSE_IN(VIN,NSAM1,NROW1,NSLICE1,MASK,VIN,NPIX)
+	CALL UPD(AV2,D,VIN,NPIX)
+	ENDDO
+
+	DO  J=1,NPIX
+	  DO  I=J,NPIX
+           D(I,J)=(D(I,J)
+     &	    -AV1(J)*DBLE(AV1(I))/N1-AV2(J)*DBLE(AV2(I))/N2)/(N1+N2-2)
+	  ENDDO
+	AV1(J)=AV1(J)/N1
+	AV2(J)=AV2(J)/N2
+	ENDDO
+	DO  J=1,NPIX-1
+	  DO  I=J+1,NPIX
+           D(J,I)=D(I,J)
+	  ENDDO
+	ENDDO
+
+#ifdef  SP_LAPACK
+	CALL  DPOTRF('L',NPIX,D,NPIX,INFO)
+	
+	IF(INFO.NE.0)  THEN
+	  CALL  ERRT(33,' HOTELLING',IE)
+	  GOTO 9999
+	ENDIF
+
+	CALL  DPOTRI('L',NPIX,D,NPIX,INFO)
+	
+	IF(INFO.NE.0)  THEN
+	  CALL  ERRT(33,' HOTELLING',IE)
+	  GOTO 9999
+	ENDIF
+#else
+	CALL MTNVD(D,NPIX,DET)
+	
+	IF(DET.LE.0.0D0)  THEN
+	  CALL  ERRT(33,' HOTELLING',IE)
+	  GOTO 9999
+	ENDIF
+#endif
+        T2=0.0D0
+        DO  K=1,NPIX
+           Y=AV1(K)-AV2(K)
+           DO  L=K,NPIX
+              Z=Y*D(L,K)*(AV1(L)-AV2(L))
+              IF(L.GT.K) Z=Z+Z
+              T2=T2+Z
+           ENDDO
+       	ENDDO
+
+	F=T2*N1*N2/REAL(N1+N2)*(N1+N2-NPIX-1)/REAL(N1+N2-2)/REAL(NPIX)
+	N2=N1+N2-NPIX-1
+	Z=ALPHAINT(F,NPIX,N2)
+	WRITE(NOUT,101)  T2,Z
+101	FORMAT(' MAHALANOBIS DISTANCE=',D10.3,'  SIG=',D10.3)
+
+C       IF (NSEL(1) .NE. 0) PARAM(NSEL(1)) = T2
+	A1=T2
+	A2=Z
+        CALL REG_SET_NSEL(1,2,A1,A2,0.0,0.0 ,0.0 ,IRTFLG)
+
+9999    IF(ALLOCATED(MASK)) DEALLOCATE(MASK)
+        IF(ALLOCATED(VIN)) DEALLOCATE(VIN)
+        IF(ALLOCATED(AV1)) DEALLOCATE(AV1)
+        IF(ALLOCATED(AV2)) DEALLOCATE(AV2)
+        IF(ALLOCATED(D)) DEALLOCATE(D)
+#endif
+
+        END
+
+	SUBROUTINE  COLLAPSE_IN(VIN,NSAM1,NROW1,NSLICE1,MASK,VOU,NPIX)
+	REAL  VIN(NSAM1,NROW1,NSLICE1),MASK(NSAM1,NROW1,NSLICE1)
+	DIMENSION  VOU(NPIX)
+	IKL=0
+        DO L=1,NSLICE1
+           DO J=1,NROW1
+              DO  I=1,NSAM1
+		IF(MASK(I,J,L).EQ.1.0)  THEN
+                   IKL=IKL+1
+                   VOU(IKL)=VIN(I,J,L)
+		ENDIF
+	      ENDDO
+           ENDDO
+        ENDDO
+	END
+
+	SUBROUTINE  UPD(AV,D,VIN,NPIX)
+	DOUBLE PRECISION  AV(NPIX),D(NPIX,NPIX)
+	DIMENSION  VIN(NPIX)
+	DO  J=1,NPIX
+	AV(J)=AV(J)+VIN(J)
+	  DO  I=J,NPIX
+           D(I,J)=D(I,J)+VIN(I)*DBLE(VIN(J))
+	  ENDDO
+	ENDDO
+	END
+
+       SUBROUTINE MTNVD(A,M,DET)
+       DOUBLE PRECISION A(M,M),DET,PVT,T
+
+       DET=1.0D0
+       DO  J=1,M
+          PVT=A(J,J)
+          DET=DET*PVT
+          A(J,J)=1.0
+          A(:,J)=A(:,J)/PVT
+          DO   K=1,M
+             IF(K.NE.J)  THEN
+             T=A(J,K)
+             A(J,K)=0.0
+             A(:,K)=A(:,K)-A(:,J)*T
+	     ENDIF
+	   ENDDO
+	ENDDO
+
+       END
+@
+
+
+1.3
+log
+@Pawels GPL License used
+@
+text
+@d67 1
+a67 1
+     &              'ENTER TEMPLATE FOR THE FIRST INPUT SERIES',IRTFLG)
+d160 1
+a160 1
+     &            'ENTER TEMPLATE FOR THE SECOND INPUT SERIES',IRTFLG)
+@
+
+
+1.2
+log
+@ifdef for ia64 failure
+@
+text
+@d1 1
+a1 1
+C++*************************************************************************
+d5 1
+a5 2
+C **************************************************************************
+C *  SPIDER - MODULAR IMAGE PROCESSING SYSTEM.
+d7 25
+a31 6
+C *  COPYRIGHT (C)2004, P.A.Penczek
+C *  University of Texas - Houston Medical School
+C *  pawel.a.penczek@@uth.tmc.edu
+C *    THE CONTENTS OF THIS DOCUMENT CANNOT BE CHANGED WITHOUT WRITTEN
+C *    PERMISSION OF THE AUTHOR                         
+C **************************************************************************
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d41 5
+a45 1
+
+d236 2
+@

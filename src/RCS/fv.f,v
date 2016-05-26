@@ -1,0 +1,696 @@
+head	1.12;
+access;
+symbols
+	pre_getangas:1.12
+	GPL2010:1.12
+	pre_GPL2010:1.11
+	pre_var_equation:1.11
+	pre_fftwrings:1.11
+	pre_opfiles:1.11
+	src:1.11
+	best-code:1.11
+	x-named-regs:1.11
+	x:1.11
+	v13-00:1.11
+	pre_GPL:1.9
+	prec_CA:1.9
+	noindx:1.8
+	Bproc:1.3;
+locks; strict;
+comment	@c @;
+
+
+1.12
+date	2010.06.24.13.25.47;	author leith;	state Exp;
+branches;
+next	1.11;
+
+1.11
+date	2005.10.17.19.53.33;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2005.10.17.17.50.38;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2003.02.20.21.49.27;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2002.03.11.14.07.40;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2001.09.13.17.58.02;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2001.09.12.20.24.46;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2001.09.12.20.24.04;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2001.09.12.20.22.47;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2000.08.17.15.59.38;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2000.08.10.14.26.08;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	99.12.14.17.54.06;	author pawel;	state Exp;
+branches;
+next	;
+
+
+desc
+@FV
+@
+
+
+1.12
+log
+@GPL_2010
+@
+text
+@C++*********************************************************************
+C
+C FV.F                            AUTHOR: PAWEL PENCZEK
+C                                 USED REG_SET AUG 00 AL                        
+C                                 ENDLESS BUG SEPT 01 PP
+C
+C **********************************************************************
+C=*                                                                    *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C  FV
+C
+C  PURPOSE: FIND A THRESHOLD IN THE VOLUME THE WILL RESULT
+C           IN A SPECIFIED NUMBER OF VOXELS THAT HAVE DENSITIES
+C           HIGHER THAN THIS THRESHOLD
+C  
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C--*********************************************************************
+
+        SUBROUTINE  FV
+
+        INCLUDE 'CMBLOCK.INC'
+        INCLUDE 'CMLIMIT.INC'
+
+	CHARACTER(LEN=MAXNAM) :: FILNAM
+	REAL, ALLOCATABLE, DIMENSION(:,:,:) ::  VOLIN
+
+	DATA	LUN1/76/
+
+	MAXIM = 0
+	CALL OPFILEC(0,.TRUE.,FILNAM,LUN1,'O',IFORM,NSAM,NROW,NSLICE,
+     &		   MAXIM,'INPUT',.FALSE.,IRTFLG)
+	IF (IRTFLG.NE.0)  RETURN
+
+        ALLOCATE(VOLIN(NSAM,NROW,NSLICE),STAT=IRTFLG)
+        IF (IRTFLG .NE. 0) THEN
+           CALL  ERRT(46,'FV, VOLIN',IER)
+           RETURN
+        ENDIF
+
+	CALL  RDPRMI(ILE,IDUM,NOT_USED,'NUMBER OF VOXELS')
+
+	ILE = MIN(NSAM*NROW*NSLICE,(MAX(1,ILE)))
+
+	DO L=1,NSLICE
+	   DO J=1,NROW
+              CALL  REDLIN(LUN1,VOLIN(1,J,L),NSAM,J+(L-1)*NROW)
+	   ENDDO
+	ENDDO
+	CLOSE(LUN1)
+
+	THR1 = MAXVAL(VOLIN)
+	THR3 = MINVAL(VOLIN)
+	THR2 = (THR1-THR3)/2 + THR3
+	CALL FTH(VOLIN,NSAM*NROW*NSLICE,THR1,THR2,THR3,ILE,THR)
+
+	DEALLOCATE(VOLIN)
+	WRITE(NOUT,101)  THR,ILE
+101	FORMAT(' Threshold =',G12.3,'  Number of voxels=',I12)
+
+        CALL REG_SET_NSEL(1,2,THR,FLOAT(ILE),0.0, 0.0,0.0,IRTFLG)
+
+        RETURN
+	END
+
+
+
+	SUBROUTINE  FTH(V,N,AX,BX,CX,ILE,THR)
+
+	DIMENSION  V(N)
+	PARAMETER (R=.61803399,C=1.-R)
+
+	X0 = AX
+	X3 = CX
+	IF (ABS(CX-BX) .GT. ABS(BX-AX))THEN
+           X1 = BX
+           X2 = BX+C*(CX-BX)
+	ELSE
+           X2 = BX
+           X1 = BX-C*(BX-AX)
+	ENDIF
+	LF1 = COUNT(V .GE. X1) - ILE
+        F1  = LF1 * REAL(LF1)
+	LF2 = COUNT(V .GE. X2) - ILE
+        F2  = LF2 * REAL(LF2)
+
+        DO WHILE((.NOT.(LF1.EQ.0.OR.LF2.EQ.0).AND.IABS(LF1-LF2).GE.1) 
+     &          .AND.
+     &         (ABS(X1-X2).GT.1.0E-5 .AND. ABS(X1-X3).GT.1.0E-5 .AND.
+     &         ABS(X2-X3).GT.1.0E-5))
+
+           IF (F2 .LT. F1)THEN
+              X0  = X1
+              X1  = X2
+              X2  = R * X1 + C * X3
+              F1  = F2
+	      LF2 = COUNT(V .GE. X2) - ILE
+	      F2  = LF2 * REAL(LF2)
+           ELSE
+              X3  = X2
+              X2  = X1
+              X1  = R * X2 + C * X0
+              F2  = F1
+	      LF1 = COUNT(V .GE. X1) - ILE
+              F1  = LF1 * REAL(LF1)
+           ENDIF
+	ENDDO
+
+	IF (F1 .LT. F2) THEN
+	   ILE = LF1+ILE
+           THR = X1
+	ELSE
+	   ILE = LF2+ILE
+           THR = X2
+	ENDIF
+
+	END
+@
+
+
+1.11
+log
+@GPL License fixed
+@
+text
+@a7 2
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2005  Health Research Inc.                      *
+d9 5
+a13 2
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+d15 1
+a15 3
+C=* Email:  spider@@wadsworth.org                                       *
+C=*                                                                    *
+C=* This program is free software; you can redistribute it and/or      *
+d20 1
+a20 1
+C=* This program is distributed in the hope that it will be useful,    *
+d22 1
+a22 1
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+a23 1
+C=*                                                                    *
+d25 1
+a25 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+@
+
+
+1.10
+log
+@HRI GPL License used
+@
+text
+@a1 1
+C++*************************************************************************
+a7 1
+C * SPIDER - MODULAR IMAGE PROCESSING SYSTEM.    AUTHOR: J.FRANK       *
+d11 1
+a11 1
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *  
+a30 6
+
+C * COPYRIGHT (C)1985, 2001. HEALTH RESEARCH INCORPORATED (HRI),       *
+C * ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+C * THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO HRI AND ARE NOT   *
+C * TO BE DISCLOSED TO OTHERS OR USED FOR PURPOSES OTHER THAN INTENDED *
+C * WITHOUT WRITTEN APPROVAL OF HRI.                                   *
+@
+
+
+1.9
+log
+@opfilec
+@
+text
+@d1 1
+d10 24
+@
+
+
+1.8
+log
+@nloop,iloop_removed
+@
+text
+@d36 1
+a36 1
+	CALL OPFILE(.TRUE.,FILNAM,LUN1,'O',IFORM,NSAM,NROW,NSLICE,
+@
+
+
+1.7
+log
+@cosmetic
+@
+text
+@d46 1
+a46 1
+	CALL  RDPRMI(ILE,IDUM,NLOOP,ILOOP,'NUMBER OF VOXELS')
+@
+
+
+1.6
+log
+@cosmetic & CMLIMIT
+@
+text
+@d14 1
+a14 1
+C ********************************************************************C **************************************************************************
+@
+
+
+1.5
+log
+@corrected pawels bug fixes
+@
+text
+@d1 1
+a1 1
+++*************************************************************************
+d4 2
+a5 2
+C                                 USED REG_SET AUG 00 ARDEAN LEITH 
+
+d7 8
+a14 9
+C **************************************************************************
+C *  SPIDER - MODULAR IMAGE PROCESSING SYSTEM.  AUTHOR: J.FRANK            *
+C *  COPYRIGHT (C)1981,1987, WADSWORTH CENTER FOR LABORATORIES AND         *
+C *  RESEARCH, NEW YORK STATE DEPARTMENT OF HEALTH, ALBANY, NY 12201.      *
+C *    THE CONTENTS OF THIS DOCUMENT ARE PROPRIETARY TO THE CENTER FOR     *
+C *    LABORATORIES AND RESEARCH AND ARE NOT TO BE DISCLOSED TO OTHERS OR  *
+C *    USED FOR PURPOSES OTHER THAN INTENDED WITHOUT WRITTEN APPROVAL OF   *
+C *    THE CENTER FOR LABORATORIES AND RESEARCH                            *
+C **************************************************************************
+d21 1
+a21 2
+C
+C        1         2         3         4         5         6         7
+d25 1
+a25 1
+         SUBROUTINE  FV
+d27 4
+a30 3
+         INCLUDE 'CMBLOCK.INC'
+	COMMON  /F_SPEC/  FINPIC
+	CHARACTER*80      FINPIC
+d36 2
+a37 2
+	CALL OPFILE(.TRUE.,FINPIC,LUN1,'O',IFORM,NSAM,NROW,NSLICE,
+      &		   MAXIM,'INPUT',.FALSE.,IRTFLG)
+d40 5
+a44 5
+         ALLOCATE(VOLIN(NSAM,NROW,NSLICE),STAT=IRTFLG)
+         IF (IRTFLG.NE.0) THEN
+            CALL  ERRT(46,'FV, VOLIN',IER)
+            RETURN
+         ENDIF
+d47 1
+d49 1
+d52 1
+a52 1
+               CALL  REDLIN(LUN1,VOLIN(1,J,L),NSAM,J+(L-1)*NROW)
+d57 3
+a59 3
+	THR1=MAXVAL(VOLIN)
+	THR3=MINVAL(VOLIN)
+	THR2=(THR1-THR3)/2+THR3
+a60 1
+C       NVOX=COUNT(VOLIN.GE.THR)
+d64 1
+a64 1
+101     FORMAT(' Threshold =',G12.3,'  Number of voxels=',I12)
+d66 1
+a66 3
+c        IF(NSEL(1).NE.0)  PARAM(NSEL(1))=THR
+c        IF(NSEL(2).NE.0)  PARAM(NSEL(2))=ILE
+         CALL REG_SET_NSEL(1,2,THR,FLOAT(ILE),0.0, 0.0,0.0,IRTFLG)
+d68 1
+a68 1
+         RETURN
+d78 5
+a82 5
+	X0=AX
+	X3=CX
+	IF(ABS(CX-BX).GT.ABS(BX-AX))THEN
+            X1=BX
+            X2=BX+C*(CX-BX)
+d84 2
+a85 2
+            X2=BX
+            X1=BX-C*(BX-AX)
+d87 25
+a111 25
+	LF1=COUNT(V.GE.X1)-ILE
+         F1=LF1*REAL(LF1)
+	LF2=COUNT(V.GE.X2)-ILE
+         F2=LF2*REAL(LF2)
+
+	DO WHILE( (.NOT.(LF1.EQ.0.OR.LF2.EQ.0).AND.IABS(LF1-LF2).GE.1)
+      &			.AND.
+      &       (ABS(X1-X2).GT.1.0E-5 .AND. ABS(X1-X3).GT.1.0E-5 .AND.
+      &		ABS(X2-X3).GT.1.0E-5)
+      &		)
+            IF(F2.LT.F1)THEN
+               X0=X1
+               X1=X2
+               X2=R*X1+C*X3
+               F1=F2
+	      LF2=COUNT(V.GE.X2)-ILE
+	      F2=LF2*REAL(LF2)
+            ELSE
+               X3=X2
+               X2=X1
+               X1=R*X2+C*X0
+               F2=F1
+	      LF1=COUNT(V.GE.X1)-ILE
+               F1=LF1*REAL(LF1)
+            ENDIF
+d114 3
+a116 3
+	IF (F1.LT.F2) THEN
+	   ILE=LF1+ILE
+            THR=X1
+d118 2
+a119 2
+	   ILE=LF2+ILE
+            THR=X2
+d121 1
+a122 2
+
+
+@
+
+
+1.4
+log
+@pawels fixes for endless bug
+@
+text
+@d1 1
+a1 30
+From Pawel.A.Penczek@@uth.tmc.edu Wed Sep 12 16:11 EDT 2001
+Received: from gatekeeper.wadsworth.org (gatekeeper [172.16.1.3])
+	by newton.wadsworth.org (8.9.3/8.9.3) with SMTP id QAA16307
+	for <leith@@wadsworth.org>; Wed, 12 Sep 2001 16:11:03 -0400 (EDT)
+Received: from uth.tmc.edu ([129.106.207.57]) by
+          oac40.hsc.uth.tmc.edu (Netscape Messaging Server 4.15 oac40 Jun
+          11 2001 16:23:30) with ESMTP id GJKG2C03.70H for
+          <leith@@wadsworth.org>; Wed, 12 Sep 2001 15:11:00 -0500 
+Message-ID: <3B9FC14F.8020702@@uth.tmc.edu>
+Date: Wed, 12 Sep 2001 15:10:55 -0500
+From: Pawel Penczek <Pawel.A.Penczek@@uth.tmc.edu>
+Organization: UT-Houston Medical School
+User-Agent: Mozilla/5.0 (Windows; U; Windows NT 5.0; en-US; m18) Gecko/20010131 Netscape6/6.01
+X-Accept-Language: en
+MIME-Version: 1.0
+To: Dean Leith <leith@@wadsworth.org>
+Subject: this one works.
+Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset=us-ascii; format=flowed
+Content-Length:  3604
+Status: RO
+
+
+
+-------- Original Message --------
+Date: Wed, 12 Sep 2001 15:11:47 +0200 (MDT)
+From: "Pawel A. Penczek" <pawel@@bmb31.med.uth.tmc.edu>
+To: pawel.a.penczek@@uth.tmc.edu
+
+C++*************************************************************************
+d60 1
+a60 2
+C 
+NVOX=COUNT(VOLIN.GE.THR)
+d64 1
+a64 2
+101 
+FORMAT(' Threshold =',G12.3,'  Number of voxels=',I12)
+d66 2
+a67 4
+c 
+IF(NSEL(1).NE.0)  PARAM(NSEL(1))=THR
+c 
+IF(NSEL(2).NE.0)  PARAM(NSEL(2))=ILE
+@
+
+
+1.3
+log
+@reg_set_nsel params changed
+@
+text
+@d1 29
+d33 2
+a34 1
+C                                 USED REG_SET AUG 00 ARDEAN LEITH                        
+d51 1
+a51 1
+C  
+d56 1
+a56 1
+        SUBROUTINE  FV
+d58 1
+a58 1
+        INCLUDE 'CMBLOCK.INC'
+d67 1
+a67 1
+     &		   MAXIM,'INPUT',.FALSE.,IRTFLG)
+d70 5
+a74 5
+        ALLOCATE(VOLIN(NSAM,NROW,NSLICE),STAT=IRTFLG)
+        IF (IRTFLG.NE.0) THEN
+           CALL  ERRT(46,'FV, VOLIN',IER)
+           RETURN
+        ENDIF
+d80 1
+a80 1
+              CALL  REDLIN(LUN1,VOLIN(1,J,L),NSAM,J+(L-1)*NROW)
+d89 2
+a90 1
+C	NVOX=COUNT(VOLIN.GE.THR)
+d94 2
+a95 1
+101	FORMAT(' Threshold =',G12.3,'  Number of voxels=',I12)
+d97 5
+a101 3
+c	IF(NSEL(1).NE.0)  PARAM(NSEL(1))=THR
+c	IF(NSEL(2).NE.0)  PARAM(NSEL(2))=ILE
+        CALL REG_SET_NSEL(1,2,THR,FLOAT(ILE),0.0, 0.0,0.0,IRTFLG)
+d103 1
+a103 1
+        RETURN
+d116 2
+a117 2
+           X1=BX
+           X2=BX+C*(CX-BX)
+d119 2
+a120 2
+           X2=BX
+           X1=BX-C*(BX-AX)
+d123 1
+a123 1
+        F1=LF1*REAL(LF1)
+d125 1
+a125 1
+        F2=LF2*REAL(LF2)
+d127 10
+a136 6
+	DO WHILE (.NOT.(LF1.EQ.0.OR.LF2.EQ.0).AND.IABS(LF1-LF2).GE.1)
+           IF(F2.LT.F1)THEN
+              X0=X1
+              X1=X2
+              X2=R*X1+C*X3
+              F1=F2
+d139 5
+a143 5
+           ELSE
+              X3=X2
+              X2=X1
+              X1=R*X2+C*X0
+              F2=F1
+d145 2
+a146 2
+              F1=LF1*REAL(LF1)
+           ENDIF
+d151 1
+a151 1
+           THR=X1
+d154 1
+a154 1
+           THR=X2
+d157 2
+@
+
+
+1.2
+log
+@used reg_set
+@
+text
+@d67 1
+a67 1
+        CALL REG_SET_NSEL(1,THR,FLOAT(ILE),0.0, 0.0,0.0,IRTFLG)
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d3 2
+a4 1
+C FV.FOR                        
+d18 3
+a20 3
+C  PURPOSE: Find a threshold in the volume the will result
+C           in a specified number of voxels that have densities
+C           higher than this threshold
+d27 1
+d32 1
+a32 1
+	LOGICAL, ALLOCATABLE, DIMENSION(:,:,:) ::  MASK
+d34 14
+a47 12
+C
+	IDUM=0
+	CALL OPFIL(.TRUE.,FINPIC,LUN1,'O',NSAM,NROW,NSLICE,
+     &		   IDUM,'INPUT',.FALSE.,IRTFLG)
+	IF(IRTFLG.NE.0)  THEN
+          CALL ERRT(4,'FV ',NE)
+          RETURN
+	ENDIF
+	 ALLOCATE(VOLIN(NSAM,NROW,NSLICE),STAT=IRTFLG)
+	 IF(IRTFLG.NE.0) CALL  ERRT(46,'FV, VOLIN',IER)
+	CALL  RDPRMI(ILE,IDUM,NLOOP,ILOOP,'Number of voxels')
+	ILE=MIN(NSAM*NROW*NSLICE,(MAX(1,ILE)))
+d49 3
+a51 3
+	 DO J=1,NROW
+          CALL  REDLIN(LUN1,VOLIN(1,J,L),NSAM,J+(L-1)*NROW)
+	 ENDDO
+d54 1
+a54 1
+C
+d60 1
+a60 1
+C
+d64 6
+a69 2
+	IF(NSEL(1).NE.0)  PARAM(NSEL(1))=THR
+	IF(NSEL(2).NE.0)  PARAM(NSEL(2))=ILE
+d71 5
+a75 2
+C
+	SUBROUTINE  FTH(V,N,ax,bx,cx,ile,THR)
+d78 31
+a108 29
+	x0=ax
+	x3=cx
+	if(abs(cx-bx).gt.abs(bx-ax))then
+         x1=bx
+         x2=bx+C*(cx-bx)
+	else
+         x2=bx
+         x1=bx-C*(bx-ax)
+	endif
+	lf1=COUNT(V.GE.X1)-ILE
+        f1=lf1*real(lf1)
+	lf2=COUNT(V.GE.X2)-ILE
+        f2=lf2*real(lf2)
+	DO WHILE (.not.(lf1.eq.0.or.lf2.eq.0).and.iabs(lf1-lf2).ge.1)
+        if(f2.lt.f1)then
+          x0=x1
+          x1=x2
+          x2=R*x1+C*x3
+          f1=f2
+	  lf2=COUNT(V.GE.X2)-ILE
+	  f2=lf2*real(lf2)
+        else
+          x3=x2
+          x2=x1
+          x1=R*x2+C*x0
+          f2=f1
+	  lf1=COUNT(V.GE.X1)-ILE
+          f1=lf1*real(lf1)
+        endif
+d110 8
+a117 7
+	if(f1.lt.f2)then
+	 ILE=lf1+ILE
+         THR=x1
+	else
+	 ILE=lf2+ILE
+         THR=x2
+	endif
+@

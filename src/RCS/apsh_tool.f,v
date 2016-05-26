@@ -1,0 +1,2276 @@
+head	1.14;
+access;
+symbols
+	pre_getangas:1.10;
+locks; strict;
+comment	@c @;
+
+
+1.14
+date	2011.12.02.13.53.04;	author leith;	state Exp;
+branches;
+next	1.13;
+
+1.13
+date	2011.12.01.19.57.04;	author leith;	state Exp;
+branches;
+next	1.12;
+
+1.12
+date	2011.04.14.13.54.07;	author leith;	state Exp;
+branches;
+next	1.11;
+
+1.11
+date	2011.02.17.13.22.47;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2011.01.25.13.40.01;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2011.01.25.13.36.36;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2010.12.29.19.38.10;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2010.12.23.13.56.24;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2010.11.23.16.15.15;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2010.11.09.16.49.07;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2010.10.21.17.39.50;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2010.10.13.14.49.46;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2010.10.13.14.34.51;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2010.10.13.14.05.43;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@new
+@
+
+
+1.14
+log
+@mpibcast T on getdata
+@
+text
+@C++*********************************************************************
+C                                                                      *
+C    AP_SH_TOOL.F    FROM APSH_PSC                  SEP 10 ARDEAN LEITH *
+C                    APSH_TOOL,GETANGAS             FEB 11 ARDEAN LEITH
+C                                                                      *
+C **********************************************************************
+C=* This file is part of:                                              * 
+C=* SPIDER - Modular Image Processing System.                          *
+C=* Authors: J. Frank & A. Leith                                       *
+C=* Copyright 1985-2011  Health Research Inc.                          *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@wadsworth.org                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+C=* General Public License for more details.                           *
+C=*                                                                    *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *       
+C=*                                                                    *
+C **********************************************************************
+C
+C  APSH_TOOL 
+C  
+C  PURPOSE: FIND ROTATIONAL AND SHIFT PARAMETERS TO ALIGN A SERIES OF
+C           REFERENCE IMAGES WITH SAMPLE IMAGES
+C           USES COEFFICIENTS, TRANSPOSED RINGS, AND
+C           COMPLEX FORTRAN VARIABLES.
+
+C  SOME PARAMETERS:
+C       IREFLIST            LIST OF REF. IMAGE FILE NUMBERS   (INPUT)
+C       NUMREF              NO. OF IMAGES                     (INPUT)
+C       IEXPLIST            LIST OF EXP. IMAGE FILE NUMBERS   (INPUT)
+C       NUMEXP              NO. OF IMAGES                     (INPUT)
+C       NSAM,NROW           ACTUAL (NOT-WINDOWED) IMAGE SIZE  (INPUT)
+C       REFANGDOC           REF. ANGLES FILE NAME             (INPUT)
+C       REFPAT              REF. IMAGE SERIES FILE TEMPLATE   (INPUT)
+C       EXPPAT              EXP. IMAGE SERIES FILE TEMPLATE   (INPUT)
+C
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C--*********************************************************************
+
+cpgi$g opt=3
+
+C     **************** APSH_SAM_INFO **********************************
+
+
+      MODULE APSH_SAM_INFO 
+
+C     PURPOSE: INITIALIZES SAMPLING COUNTERS
+
+         INTEGER,PARAMETER  :: NSIZES = 40
+         INTEGER,PARAMETER  :: NSTEPZ = 8
+         INTEGER,PARAMETER  :: NSKIPZ = 8
+
+         REAL               :: CC_BAD_Z(0:NSIZES,NSTEPZ) ! SUM OF BAD SIZE CC
+         INTEGER            :: NN_GUD_Z(0:NSIZES,NSTEPZ) ! # OF GOOD SIZES
+         INTEGER            :: NN_SAM_Z(0:NSIZES,NSTEPZ) ! # OF SIZE SAMPLES
+         INTEGER            :: NN_BORDR(0:NSIZES,NSTEPZ) ! # OF SIZE SAMPLES
+
+         REAL               :: QSTEP(0:NSIZES,NSTEPZ)   
+         INTEGER            :: IQX(0:NSIZES,NSTEPZ)   
+         INTEGER            :: IQY(0:NSIZES,NSTEPZ)   
+
+
+         INTEGER            :: NN_GUD_R(NSKIPZ)          ! # OF GOOD SKIPS
+         REAL               :: SU_GUD_R(NSKIPZ)          ! SUM OF CC
+
+         REAL               :: CC_SAM_R(NSKIPZ)          ! TOP CC 
+         REAL               :: CC_TOP_R(NSKIPZ)          ! TOP CC's OTHER SKIPS 
+         REAL               :: CM_SAM_R(NSKIPZ)          ! TOP NOSKIP CC
+         INTEGER            :: IR_SAM_R(NSKIPZ)          ! REF #
+         INTEGER            :: IX_SAM_R(NSKIPZ)          ! X SHIFT 
+         INTEGER            :: IY_SAM_R(NSKIPZ)          ! Y SHIFT
+         INTEGER            :: IA_SAM_R(NSKIPZ)          ! ROT #
+ 
+         INTEGER            :: LOCBEST(-NSIZES:NSIZES,-NSIZES:NSIZES)
+         INTEGER            :: LOCBESTA(-NSIZES:NSIZES,-NSIZES:NSIZES)
+
+         INTEGER            :: NN_SAM_R                  ! # (=#EXP)                  
+
+      END MODULE APSH_SAM_INFO
+
+
+C     **************** APSH_TOOL *************************************
+
+        SUBROUTINE APSH_TOOL(IREFLIST,NUMREF,IEXPLIST,NUMEXP, 
+     &               NSAM,NROW,ISHRANGEX,ISHRANGEY,ISTEP,
+     &               NRING,LCIRC,NUMR,CIRCREF,
+     &               REFANGDOC,FFTW_PLANS,
+     &               REFPAT,EXPPAT,CKMIRROR,LUNDOC,SHORRING)
+
+
+        INCLUDE 'CMLIMIT.INC'
+        INCLUDE 'CMBLOCK.INC'
+
+	INTEGER              :: IREFLIST(NUMREF) 
+	INTEGER              :: IEXPLIST(NUMEXP)
+        INTEGER              :: NUMR(3,NRING)
+	REAL                 :: CIRCREF(LCIRC,NUMREF)
+	LOGICAL              :: CIRCREF_IN_CORE
+        LOGICAL              :: CKMIRROR
+	LOGICAL              :: MIRRORNEW
+	LOGICAL              :: GOTREFANG
+        LOGICAL              :: WEIGHT
+        INTEGER *8           :: FFTW_PLANS(*) ! STRUCTURE POINTERS
+
+        CHARACTER (LEN=1)    :: SCRFILE,SHORRING,MODE
+        CHARACTER (LEN=*)    :: REFANGDOC,REFPAT,EXPPAT 
+
+        INTEGER              :: LUNDOC
+        LOGICAL              :: TRANS         ! FLAG FOR REFORMED RINGS
+        LOGICAL              :: CPLX          ! FLAG FOR COMPLEX CROSRNG
+
+C       AUTOMATIC ARRAYS
+	REAL                 :: ANGOUT(3)
+
+C       ALLOCATED ARRAYS
+	REAL,    ALLOCATABLE :: ABUF(:,:)
+	REAL,    ALLOCATABLE :: ANGREF(:,:)
+        REAL,    ALLOCATABLE :: COEFFS(:,:)
+        INTEGER, ALLOCATABLE :: IXY(:,:)
+
+	REAL                 :: ANGEXP(8,1)
+        INTEGER              :: ITMAX
+
+        INTEGER, PARAMETER   :: NLISTMAX = 15
+        REAL                 :: PARLIST(NLISTMAX)
+        REAL                 :: ADUM
+
+        REAL,    PARAMETER   :: QUADPI     = 3.1415926535897932384626
+        REAL,    PARAMETER   :: DGR_TO_RAD = (QUADPI/180)
+
+        INTEGER, PARAMETER   :: LUNT       = 77
+        INTEGER, PARAMETER   :: INANG      = 78
+        INTEGER, PARAMETER   :: LUNRING    = 50
+ 
+        INTEGER              :: NBORDER    = 0    ! # BORDER PIXELS
+        INTEGER              :: NSUBPIX    = 0    ! # SUBPIX PIXELS
+        INTEGER              :: MYPID      = -1   ! NOT FOR MPI
+
+        SCRFILE         = CHAR(0)             ! NO REF. RINGS FILE
+        CIRCREF_IN_CORE = .TRUE.              ! INCORE REF. RINGS
+        MODE            = 'F'                 ! FULL CIRCLE
+
+C       SET TYPE OF OUTPUT DOC FILES WANTED
+        NWANTOUT = 15
+
+        IF (SHORRING .EQ. 'S' .OR. SHORRING .EQ. 'R') THEN
+C          INITIALIZE CCROT SAMPLING COUNTERS
+           CALL APSH_SAM_INIT()
+        ENDIF
+
+C       INITIALIZE CCROT STATISTICS COUNTERS
+        ANGDIFTHR   = 0.0
+        CALL  AP_STAT_ADD(-1,CCROT,ANGDIF,ANGDIFTHR,CCROTLAS,
+     &                   CCROTAVG,IBIGANGDIF,ANGDIFAVG,IMPROVCCROT,
+     &                   CCROTIMPROV,IWORSECCROT,CCROTWORSE)
+
+        NRAYSC      = NUMR(3,NRING) / 2     ! # OF RAYS   (FOURIER)
+        CALL FLUSHRESULTS()
+ 
+	ALLOCATE(ABUF(NSAM,NROW), 
+     &           COEFFS(6,LCIRC),
+     &           IXY(2,LCIRC),      
+     &           STAT=IRTFLG)
+	IF (IRTFLG .NE. 0) THEN
+           MWANT = NSAM*NROW + 6*LCIRC + 2*LCIRC   
+           CALL  ERRT(46,'ABUF...',MWANT)
+           GOTO 9999
+        ENDIF 
+        IXY    = -100      ! FOR HANDLING CIRC PADS
+        COEFFS = 0.0
+        WEIGHT = .TRUE.    ! REF. IMAGES HAVE WEIGHTED FFT'S
+        TRANS  = .FALSE.   ! USE NON-REFORMED RINGS/RAYS
+        CPLX   = .TRUE.    ! USE COMPLEX CROSRNG
+
+C       READ REFERENCE IMAGES INTO REFERENCE RINGS ARRAY (CIRCREF) OR
+C       CREATE REFERENCE RINGS FILE FOR LATER READING
+C       SAVES COEFFS FOR LATER USE 
+        CALL APRINGS_NEW_COEF(IREFLIST,NUMREF,  NSAM,NROW,
+     &                       NRING,LCIRC,NUMR, NDUM,NRAYSC,
+     &                       COEFFS,IXY,
+     &                       MODE,FFTW_PLANS,
+     &                       REFPAT,LUNT, CIRCREF,CIRCREF_IN_CORE,
+     &                       LUNRING,SCRFILE, WEIGHT, TRANS,IRTFLG)
+
+       !call chkring(2,.false., circref,lcirc, numr,nring, ndum,ndum)
+       !call chkray (2,.false., circref,lcirc, numr,nring, ndum,ndum)
+
+C       ALWAYS USES REFANGLES FILE
+        GOTREFANG = .TRUE.
+	ALLOCATE(ANGREF(3,NUMREF), STAT=IRTFLG)
+	IF (IRTFLG .NE. 0) THEN
+            CALL ERRT(46,'ANGREF',3*NUMREF)
+            GOTO 9999
+        ENDIF 
+
+C       READ REF. ANGLES INTO ANGREF
+        CALL AP_GETANGAS(IREFLIST,NUMREF,0,REFANGDOC,REFPAT,
+     &                   LUNT,INANG,3,ANGREF,GOTREFANG,NGOTREF,
+     &                  .FALSE.,FDUM,IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 9999
+
+        IF (VERBOSE .AND. SHORRING .EQ. 'R')  WRITE(6,*) ' '
+
+        NGOTPAR = 0
+
+C       LOOP OVER ALL EXPERIMENTAL (SAMPLE) IMAGES -----------------
+        NUMTH   = 1
+        FRACSAY = FLOAT(NUMEXP) / 20.0  ! PRINT OUT AFTER EVERY 5%
+
+ 	DO IEXP=1,NUMEXP
+
+C          LOAD EXP. IMAGE DATA FOR THIS IMAGE
+	   CALL AP_GETDATA(IEXPLIST,NUMEXP,
+     &                     NSAM,NROW, NSAM,NROW,0.0,
+     &                     NUMTH,EXPPAT,LUNT, IEXP,IEXP,
+     &                     .TRUE.,  ABUF,  
+     &                     .FALSE.,ADUM,ADUM, IRTFLG)
+           IF (IRTFLG .NE. 0) GOTO 9999
+
+
+           IF (VERBOSE .AND. SHORRING .EQ. 'R') THEN
+              WRITE(6,'(A,I5,A)') ' IMAGE:',IEXP,' -----'
+           ENDIF
+
+ 	   CALL APRQ2_SAM(ABUF,CIRCREF,NUMR,
+     &	            NSAM,NROW,ISHRANGEX,ISHRANGEY,ISTEP,
+     &	            LCIRC,NRING,NUMREF,
+     &              IREF,CCROT,
+     &              RANGNEW,XSHNEW,
+     &              YSHNEW,NPROJ,
+     &              CKMIRROR,FFTW_PLANS,SHORRING,
+     &              COEFFS,IXY,NRAYSC,TRANS,CPLX,
+     &              NBORDER,NSUBPIX)
+
+C          CCROT   - NOT-NORMALIZED CORRELATION COEFFICIENT.
+C          RANGNEW - PSI ANGLE. (IN=PLANE ROTATION) RANGNEW
+C          XSHNEW  - SX SHIFT  (NOT FOR ALIGNMENT!!!)
+C          YSHNEW  - SY SHIFT  (NOT FOR ALIGNMENT!!!)
+         
+C          IREF      = # OF MOST SIMILAR REFERENCE PROJECTION.
+C                      (<0 IF MIRRORED, 0 IF NO SIMILAR IMAGE )
+           MIRRORNEW = (IREF .LT. 0)
+           IREF      = ABS(IREF)
+           IMGREF    = IREFLIST(IREF)
+           IMGEXP    = IEXPLIST(IEXP)
+           PEAKV     = 1.0
+
+           CALL AP_END(IEXP,IMGEXP,IMGREF,
+     &                ANGREF(1,IREF),DUMMY,
+     &                ANGEXP(1,IEXP), DUMMY,ISHRANGEX,
+     &                GOTREFANG, NGOTPAR, CCROT,PEAKV,
+     &                RANGNEW,XSHNEW,YSHNEW, MIRRORNEW,REFPAT,
+     &                NPROJ, 'SH', LUNDOC,PARLIST)
+
+           CALL AP_STAT_ADD(NGOTPAR,CCROT,PARLIST(10),
+     &                      ANGDIFTHR,ANGEXP(8,IEXP),
+     &                      CCROTAVG,IBIGANGDIF,ANGDIFAVG,IMPROVCCROT,
+     &                      CCROTIMPROV,IWORSECCROT,CCROTWORSE)
+
+C          PRINT OUT REPORTS EVERY SO OFTEN AND AT END
+           IF (SHORRING .EQ. 'R') THEN
+              IF (IEXP .EQ. NUMEXP) THEN
+                 CALL APSH_SKIP_REPORT(8)
+                 EXIT
+              ELSEIF (VERBOSE .AND. IEXP > FRACSAY) THEN
+                 WRITE(6,'(A,I6)') ' Finished image:',IEXP
+                 FRACSAY = FRACSAY + FLOAT(NUMEXP) / 20.0
+                 CALL APSH_SKIP_REPORT(8)
+              ENDIF
+
+           ELSEIF (SHORRING .EQ. 'S') THEN
+C             SIZE AND STEP REPORT
+              ITMAX = MAX(ISHRANGEX,ISHRANGEY)
+              IF (IEXP .EQ. NUMEXP) THEN
+                 CALL APSH_SAM_REPORT(ITMAX,ISHRANGEX,ISHRANGEY)
+                 EXIT
+              ELSEIF (VERBOSE .AND. IEXP > FRACSAY) THEN
+                 WRITE(6,'(A,I6)') ' Finished image:',IEXP
+                 FRACSAY = FRACSAY + FLOAT(NUMEXP) / 20.0
+                 CALL APSH_SAM_REPORT(ITMAX,ISHRANGEX,ISHRANGEY)
+              ENDIF
+           ENDIF
+ 	ENDDO
+
+        WRITE(6,90) NUMEXP,NUMREF
+90      FORMAT(/,' EXP. IMAGES:',I5,'  REFERENCES:',I5)
+
+
+C      SAVE CCROT & ANGULAR DISPLACEMENT STATISTICS IN DOC FILE
+       CALL AP_STAT(NUMEXP,ANGDIFTHR,IBIGANGDIF,
+     &                 ANGDIFAVG, CCROTAVG,
+     &                 IMPROVCCROT,CCROTIMPROV,
+     &                 IWORSECCROT,CCROTWORSE,
+     &                 NBORDER,NSUBPIX,LUNDOC)
+
+9999    CONTINUE
+
+C       DEALLOCATE  ARRAYS
+	IF (ALLOCATED(ABUF))       DEALLOCATE(ABUF)
+	IF (ALLOCATED(ANGREF))     DEALLOCATE(ANGREF)
+        IF (ALLOCATED(COEFFS))     DEALLOCATE(COEFFS)
+        IF (ALLOCATED(IXY))        DEALLOCATE(IXY)
+
+	END
+
+
+
+C+**********************************************************************
+C
+C APRQ2_SAM.F
+C 
+C  PURPOSE:  compares one exp image vs all ref images to obtain
+c            best cc val for the exp image.  returns alignment
+c            parameters for best match
+c
+C  PARAMETERS:   IDIS    NUMBER OF  MOST SIMILAR REF. PROJ.   (OUTPUT)
+C                            (NEGATIVE IF MIRRORED)
+C                CCROT    CORR COEFF.                         (OUTPUT)
+C                RANGNEW  INPLANE ANGLE                       (OUTPUT)
+C                XSHSUM   SHIFT                               (OUTPUT)
+C                YSHSUM   SHIFT                               (OUTPUT)
+C                NPROJ                                        (OUTPUT)
+C
+C-**********************************************************************
+
+	SUBROUTINE APRQ2_SAM(EXPBUF,CIRCREF,NUMR,
+     &	             NSAM,NROW,ISHRANGEX,ISHRANGEY,ISTEP,
+     &	             LCIRC,NRING,NUMREF,
+     &               IDIS,CCROT,RANGNEW,XSHSUM,YSHSUM,NPROJ,
+     &               CKMIRROR,FFTW_PLANS,SHORRING,
+     &               COEFFS,IXY,NRAYSC, TRANS,CPLX,
+     &               NBORDER,NSUBPIX)
+
+C       NOTE: RUNS WITHIN OMP PARALLEL SECTION OF CODE!
+
+        USE APSH_SAM_INFO
+
+	REAL                   :: EXPBUF(NSAM,NROW)
+        REAL                   :: CIRCREF(LCIRC,NUMREF)
+        INTEGER                :: NUMR(3,NRING) 
+        REAL                   :: COEFFS(6,LCIRC)
+        INTEGER                :: IXY(2,LCIRC)
+
+        CHARACTER (LEN=1)      :: MODE,SHORRING
+        INTEGER *8             :: FFTW_PLANS(*)  ! STRUCTURE POINTERS
+        LOGICAL                :: TRANS          ! TRANSFORMED RAYS
+        LOGICAL                :: CPLX           ! COMPLEX CROSRNG
+
+C       AUTOMATIC ARRAYS
+	REAL                   ::  CC_NOW(-ISHRANGEX:ISHRANGEX,
+     &                                    -ISHRANGEY:ISHRANGEY)
+	REAL                   :: CC_BEST(-ISHRANGEX:ISHRANGEX,
+     &                                    -ISHRANGEY:ISHRANGEY)
+
+	REAL                   :: CC(-ISTEP:ISTEP,-ISTEP:ISTEP)
+	REAL                   :: CCP(-1:1,-1:1)
+        REAL                   :: CIRCEXP(LCIRC),CIRCT(LCIRC)
+        !!REAL                 :: QU(2*NRAYSC),QM(2*NRAYSC)
+
+	REAL                   :: CCROT, CCOA
+        LOGICAL                :: CKMIRROR,MIRRORED
+        LOGICAL                :: ISMIRRORED,USE_UN,USE_MIR
+
+        REAL                   :: WR(1)
+ 	REAL                   :: ROTMP
+
+        INTEGER                :: NSKIP           ! MAXIMUM RING SKIP 1...4
+        INTEGER                :: NASKIP(NSKIPZ)  ! ROTATION
+	REAL                   :: CCSKIP(NSKIPZ)  ! CC VALUE 
+	REAL                   :: CCSKIPA(NSKIPZ) ! CC VALUE 
+
+        REAL, PARAMETER        :: QUADPI     = 3.1415926535
+        REAL, PARAMETER        :: DGR_TO_RAD = (QUADPI/180)
+
+        LOGICAL, PARAMETER     :: USE_OMP    = .FALSE.
+
+
+        WR(1)  = 0.0                ! DUMMY VALUE FLAG FOR APRINGS CALL
+        NRAYS  = NUMR(3,NRING) - 2  ! ACTUAL LENGTH OF LONGEST RING
+
+	QSTEP  = 0                  ! ARRAY INITIALIZED EACH IMG
+	IQX    = -999999            ! ARRAY INITIALIZED EACH IMG
+        IQY    = -999999            ! ARRAY INITIALIZED EACH IMG
+
+        MODE   = 'F'
+        NPROJ  = NUMREF
+	CCROT  = -HUGE(CCROT)
+        NSKIP  = 1
+        IF (SHORRING .EQ. 'R') THEN
+           NSKIP = NSKIPZ
+           CALL APSH_SKIP_INIT()   ! ZERO FOR THIS EXP. IMAGE
+        ENDIF
+
+C       SEARCH BOTH MIRRORED & NON-MIRRORED IF CHKMIR
+        USE_UN  = .TRUE.
+        USE_MIR = CKMIRROR
+
+C       COMPARE EXP. IMAGE WITH ALL REFERENCE IMAGES ------------------
+	DO IR=1,NUMREF
+
+c          GO THROUGH CENTERS FOR SHIFT ALIGNMENT
+	   DO JT= -ISHRANGEY,ISHRANGEY,ISTEP
+	      CNR2 = NROW / 2 + 1 + JT
+
+	      DO IT= -ISHRANGEX,ISHRANGEX,ISTEP
+	         CNS2 = NSAM / 2 + 1 + IT
+
+C                NORMALIZE IMAGE VALUES UNDER THE MASK OVER VARIANCE RANGE
+C                INTERPOLATE TO POLAR COORD., CREATE FOURIER OF RINGS.
+C                NO WEIGHTING OF RINGS        
+
+                 CALL APRINGS_ONE_COEF(EXPBUF, NSAM,NROW, CNS2,CNR2, 
+     &                              NUMR,NRING, NDUM,NRAYSC,
+     &                              COEFFS,IXY,
+     &                              .FALSE., WR, FFTW_PLANS, TRANS,
+     &                              CIRCT,LCIRC, CIRCEXP, IRTFLG)
+
+C                COMPARE EXP. IMAGE WITH REFERENCE IMAGE
+C                USING COEF & COMPLEX VARIABLES
+
+                 IF (SHORRING .EQ. 'S') THEN
+                    CALL CROSRNG_2C(CIRCREF(1,IR),CIRCEXP,LCIRC/2,
+     &                        NRING, NRAYS,NUMR,
+     &                        USE_OMP,FFTW_PLANS(1),
+     &                        USE_UN,USE_MIR,
+     &                        ISMIRRORED,CCOA,POS_MAX,MAXL)
+
+                    CC_NOW(IT,JT) = CCOA    ! SAVE CC FOR THIS REF
+
+                 ELSEIF (SHORRING .EQ. 'R') THEN
+                    
+                    CALL CROSRNG_2C_TOOL(CIRCREF(1,IR),CIRCEXP,LCIRC/2,
+     &                        NRING, NRAYS,NUMR, 
+     &                        USE_OMP,FFTW_PLANS(1),
+     &                        USE_UN,USE_MIR,
+     &                        ISMIRRORED,CCOA,POS_MAX,
+     &                        NASKIP,CCSKIP,CCSKIPA,NSKIP,
+     &                        IR,IT,JT)
+
+                    !write(6,921) ir,it,jt,ccoa,POS_MAX,NASKIP(ISKIP)
+c921                 format(' ir:',i5,' (',i3,',',i3,'):',f12.4,2x,1f8.2,i6)
+
+                 ENDIF                   ! END OF: IF (SHORRING .EQ. 'S')
+
+                 IF (CCOA .GE. CCROT)  THEN
+C                   GOOD MATCH WITH NEW (MIRRORED OR NOT) POSITION 
+	            CCROT   = CCOA
+	            IBE     = IR
+	            ISX     = IT
+	            ISY     = JT
+	            RANGNEW = ANG_N(POS_MAX,MODE,NRAYS)
+	            IDIS    = IR
+                    IF (ISMIRRORED) IDIS = -IR
+	         ENDIF ! END OF: IF (CCOA .GE.....
+
+              ENDDO    ! END OF: DO IT=-ISHRANGEX,ISHRANGEX...
+	   ENDDO       ! END OF: DO JT=-ISHRANGEY,ISHRANGEY...
+
+           IF (SHORRING .EQ. 'S') THEN
+C             SAVES THE CC VALUES FOR SHIFTS FROM EACH REF. IMAGE
+              CALL APSH_SAM_SH(CC_NOW,ISHRANGEX,ISHRANGEY)
+              !write(6,*) 'ccnow:',CC_NOW(-1:1,-1:1)
+           ENDIF
+
+C          IF THIS IS BEST REF SO FAR, SAVE CC MATRIX FOR THIS REF
+           IF (SHORRING .EQ. 'S' .AND. IBE .EQ. IR)  CC_BEST = CC_NOW    
+
+        ENDDO       ! END OF:  DO IR=1,... --------------------- REFS.
+ 
+        IF (SHORRING .EQ. 'S') THEN
+C          SAMPLE BEST CC VALUES FROM CURRENT EXP. IMAGE
+           CALL APSH_SAM_SIZE(CC_BEST,CCROT, ISX,ISY,
+     &                        ISHRANGEX,ISHRANGEY)
+
+        ELSEIF (SHORRING .EQ. 'R') THEN
+C          SAMPLE BEST CC VALUES FROM CURRENT EXP IMAGE
+           CALL APSH_SAM_SKIPS(NSKIP)
+        ENDIF
+
+        SX    = -ISX              ! BEST X SHIFT, CHANGE SIGN
+        SY    = -ISY              ! BEST Y SHIFT, CHANGE SIGN
+ 
+        IF (ABS(ISX).EQ.ISHRANGEX .OR. ABS(ISY).EQ.ISHRANGEY)THEN
+C          THIS IS A BORDER PIXEL
+           NBORDER = NBORDER + 1
+        ENDIF
+
+C       DID NOT CHANGE ORDER OF SHIFT & ROTATION. (UNLIKE AP SH!!!!!)
+C       DO NOT USE THESE FOR ALIGNMENT
+
+	XSHSUM = SX
+	YSHSUM = SY
+
+9999    CONTINUE
+
+	END
+
+C************************ APSH_SKIP_INIT ******************************
+
+        SUBROUTINE APSH_SKIP_INIT()
+
+        USE APSH_SAM_INFO
+
+        IMPLICIT NONE
+
+        CC_SAM_R = 0.0           ! ZERO CC ARRAY
+
+        END
+
+C************************* APSH_SAM_SKIP ******************************
+
+
+        SUBROUTINE APSH_SAM_SKIP(CCSKIP,NASKIP,CCSKIPA,NSKIP, 
+     &                           IR,ISX,ISY, QQ,NRAYS)
+
+C       PURPOSE: CHECKS RING SKIPS FOR THIS REF. IMAGE TO RECORD 
+C                PARAMETERS FOR HIGHER CC'S, CALLED IN CROSNG FOR EACH
+C                EACH SHIFTED EXP - REF IMAGE COMPARISON.
+
+        USE APSH_SAM_INFO
+
+        IMPLICIT NONE
+
+	REAL, INTENT(IN)      :: CCSKIP(NSKIP)  ! SAMPLED TOP CC VALUE
+	INTEGER, INTENT(IN)   :: NASKIP(NSKIP)  ! SAMPLED TOP ROTATION
+	REAL, INTENT(IN)      :: CCSKIPA(NSKIP) ! SAMPLED TOP NO-SKIP CC VALUE
+
+        INTEGER, INTENT(IN)   :: NSKIP,IR,ISX,ISY
+
+	REAL, INTENT(IN)      :: QQ(*)          ! unused FFT'D CCROT RETURN FOR NO SKIP
+        INTEGER, INTENT(IN)   :: NRAYS
+
+        REAL                  :: CCONE,CCNOW,CCTOP,CCOLD,tmp 
+        INTEGER               :: ISKIP,IROT,IROTSAV
+        LOGICAL               :: SAVEALL
+
+        REAL                  :: CCSET           ! FUNCTION
+
+        SAVEALL = .FALSE.
+
+        DO ISKIP = 1,NSKIP             ! LOOP OVER SKIPS
+
+           CCONE = CCSKIPA(ISKIP)       ! CURRENT 1-SKIP CC OF BEST CC FOR THIS SKIP
+           CCNOW = CCSKIP(ISKIP)        ! CURRENT BEST CC FOR THIS SKIP
+           CCTOP = CC_SAM_R(ISKIP)      ! TOP CC FOR THIS SKIP 
+           IROT  = NASKIP(ISKIP)        ! CURRENT ROTATION # FOR THIS SKIP
+           CCOLD = CM_SAM_R(ISKIP)      ! TOP 1-SKIP CC
+
+           IF (CCNOW > CCTOP) THEN
+C             HIGHEST CC SO FAR FOR THIS SKIP, RECORD IT
+
+              CM_SAM_R(ISKIP) = CCONE  ! TOP NO-SKIP CC
+              CC_SAM_R(ISKIP) = CCNOW  ! TOP CC
+
+              IR_SAM_R(ISKIP) = IR     ! REF #
+              IX_SAM_R(ISKIP) = ISX    ! X SHIFT
+              IY_SAM_R(ISKIP) = ISY    ! Y SHIFT
+              IA_SAM_R(ISKIP) = IROT   ! ROTATION
+
+              IF (ISKIP .EQ. 1) THEN
+                 CC_TOP_R(1:NSKIP) = CCSKIPA(1:NSKIP)   ! TOP CC's OTHER SKIPS 
+              ENDIF
+
+c             write(6,98)iskip,ccnow,cctop, ccone,ccold,
+c     &                  irot,isx,isy,ccskipa(1:4)
+c98           format(i5,f8.1,' >> ',f8.1,2x,f8.1,' >> ',f8.1,
+c     &              3i5,2x,4f9.1) 
+ 
+           ENDIF
+        ENDDO                          ! END OF: DO ISKIP =1..
+       
+        END
+!     &     iskip, tmp, cc_top_r(iskip),irotsav,naskip(1:4),ccskipa(1:4)
+!99            format(i5,f10.1,' --> ',f10.1, i5,':',4i5,':',4f9.1) 
+
+#ifdef NEVER
+ 
+ 
+#endif
+
+C*************************** RINGS  ***********************************
+C************************ APSH_SAM_SKIPS ******************************
+
+
+        SUBROUTINE APSH_SAM_SKIPS(NSKIP)
+
+C       PURPOSE: CHECKS CURRENT RING SKIPS TO RECORD SUCCESS AT 
+C                FINDING HIGHEST CC'S & SUM THE CC'S THAT WERE FOUND.
+C                CALLED AFTER EACH EXP. IMAGE
+
+        USE APSH_SAM_INFO
+
+        IMPLICIT NONE
+        INTEGER, INTENT(IN) :: NSKIP
+
+        INTEGER             :: ISKIP, IAT,IRT,IXT,IYT,I
+
+        DO ISKIP = 1,NSKIP         ! LOOP OVER SKIPS
+
+           IRT = IR_SAM_R(ISKIP)   ! REFERENCE #
+           IXT = IX_SAM_R(ISKIP)   ! X SHIFT
+           IYT = IY_SAM_R(ISKIP)   ! Y SHIFT
+           IAT = IA_SAM_R(ISKIP)   ! ROTATION #
+
+c           IF (ISKIP .EQ. 1) THEN
+c              write(6,90)iskip,irt,iat,ixt,iyt,cm_sam_r(iskip),
+c     &                   (cc_top_r(i),i=2,5)
+c           ELSE
+c              write(6,90)iskip,irt,iat,ixt,iyt,cm_sam_r(iskip)
+c           ENDIF
+90         FORMAT(' Skip:',i2,'  Ref:',i5,
+     &            '  Rot:',i5,' (',i3,',',i3,'):',10(f8.2,2x))
+
+           IF (IAT .EQ. IA_SAM_R(1)  .AND.
+     &         IRT .EQ. IR_SAM_R(1)  .AND.
+     &         IXT .EQ. IX_SAM_R(1)  .AND.
+     &         IYT .EQ. IY_SAM_R(1) ) THEN
+
+C             IS SAME REF, ROTATION, & SHIFT AS THE BEST MATCH!
+              NN_GUD_R(ISKIP) = NN_GUD_R(ISKIP)+1 !  # OF BEST SKIPS
+
+           ENDIF 
+
+C          UPDATE CUMULATIVE SUM OF NO-SKIP CC'S                           
+           SU_GUD_R(ISKIP) = SU_GUD_R(ISKIP) + CM_SAM_R(ISKIP) 
+
+        ENDDO                         ! END OF: DO ISKIP =1..
+
+        NN_SAM_R = NN_SAM_R + 1       ! # OF CC'S
+        
+        END
+
+C*********************** APSH_SKIP_REPORT ******************************
+
+        SUBROUTINE APSH_SKIP_REPORT(NSKIP)
+
+C       PURPOSE: REPORTS SAMPLING COUNTERS FOR RING SKIPS
+
+        USE APSH_SAM_INFO
+
+        IMPLICIT NONE
+
+        INCLUDE 'CMLIMIT.INC'
+        INCLUDE 'CMBLOCK.INC'
+
+        INTEGER,INTENT(IN) :: NSKIP
+
+        INTEGER            :: ISKIP,NTOT,NGUD,ITIME
+        REAL               :: PERGUD,PERBEST
+        REAL               :: SUMCC
+
+        WRITE(6,*)    ' '
+        WRITE(6,*)    '    SKIP   #BEST   %BEST    %BEST RELATIVE'
+        WRITE(6,*)    '     AMT   FOUND   FOUND      CC     TIME'
+        WRITE(NOUT,*) ' '
+        WRITE(NOUT,*) '    SKIP   #BEST   %BEST    %BEST RELATIVE'
+        WRITE(NOUT,*) '     AMT   FOUND   FOUND      CC     TIME'
+
+        NTOT   = NN_SAM_R
+
+        DO ISKIP = 1,NSKIP     ! LOOP OVER ALL SKIPS
+
+           SUMCC  = SU_GUD_R(ISKIP)
+
+C          NUMBER OF TOP CC'S FOUND
+           NGUD   = NN_GUD_R(ISKIP)
+           PERGUD = 0.0
+           IF (NTOT .GT. 0) THEN
+              PERGUD = (FLOAT(NGUD) / FLOAT(NTOT)) * 100.0
+           ENDIF
+
+C          PERCENT OF THE TOP CC 
+           PERBEST = 0.0
+           IF (NTOT .GT. 0) THEN
+              PERBEST = SU_GUD_R(ISKIP) / SU_GUD_R(1) * 100.0 
+           ENDIF
+
+C          RELATIVE TIME FOR RUNNING
+           ITIME = ANINT((FLOAT(NSKIP) / FLOAT(ISKIP)) * 100.0)    
+                 
+           WRITE(6,90)   ISKIP,NGUD,PERGUD,PERBEST,ITIME
+           WRITE(NOUT,90)ISKIP,NGUD,PERGUD,PERBEST,ITIME
+90         FORMAT('  ',I6,3X, I5,3X, F5.1,'%',3X,F5.1,'%', 3X,I3)
+
+        ENDDO          ! END OF: DO ISKIP = 2,NSKIP
+
+        END 
+
+C*************************** SHIFTS  **********************************
+C*************************** APSH_SAM_SH ******************************
+
+        SUBROUTINE APSH_SAM_SH(CC_NOW,ISHRANGEX,ISHRANGEY)
+
+C       PURPOSE: CHECKS SIZE & SHIFT STEPS TO SEE WHAT HIGHER CC'S 
+C                WERE MISSED, RUNS FOR EACH REF IMAGE vs EXP IMAGE.
+C                CC_NOW CONTAINS THE CURRENT CC's FOR ALL SHIFTS OF
+C                THIS PAIR OF IMAGES
+    
+        USE APSH_SAM_INFO
+
+        IMPLICIT NONE
+	REAL, INTENT(IN)                :: CC_NOW(-ISHRANGEX:ISHRANGEX,
+     &                                            -ISHRANGEY:ISHRANGEY)
+        INTEGER, INTENT(IN)             :: ISHRANGEX,ISHRANGEY
+
+        REAL                            :: QST,QHI   
+        INTEGER                         :: ISZ,ISTEP,IDX,J,I,NSTEPMAX
+        INTEGER                         :: IHI,JHI,itmax
+        INTEGER                         :: MAXL_ARRAY(2)
+
+        QST = CC_NOW(0,0)
+
+        IF (QST > QSTEP(0,1)) THEN
+C          CENTRAL LOCATION IS MORE THAN CURRENT HIGH CC FOR STEP: 1
+           QSTEP(0,1) = QST                ! HIGHEST CC 
+           IQX(0,1)   = 0                  ! X LOCATION OF HIGHEST
+           IQY(0,1)   = 0                  ! Y LOCATION OF HIGHEST
+        ENDIF
+
+        DO ISZ = 1,ISHRANGEX               ! LOOP TILL MAX SIZE
+          NSTEPMAX = MIN(ISZ,NSTEPZ)
+          DO ISTEP = 1,NSTEPMAX            ! LOOP OVER STEPS WITHIN SIZE
+
+              IDX = MOD(ISZ,ISTEP)         ! STEPS THAT COVER THIS SIZE
+              IF (IDX .NE. 0) CYCLE        ! NOT A VALID STEP
+
+              DO J = -ISZ,ISZ,ISTEP        ! LOOP OVER SHIFTS IN Y
+                 DO I = -ISZ,ISZ,ISTEP     ! LOOP OVER SHIFTS IN X
+
+                    QST = CC_NOW(I,J)
+
+                    IF (QST > QSTEP(ISZ,ISTEP)) THEN
+C                      LOCATION IS MORE THAN CURRENT HIGH CC
+                       QSTEP(ISZ,ISTEP) = QST  ! HIGHEST CC 
+                       IQX(ISZ,ISTEP)   = I    ! X LOCATION OF HIGHEST
+                       IQY(ISZ,ISTEP)   = J    ! Y LOCATION OF HIGHEST
+                    ENDIF
+                 ENDDO                     ! END OF : DO I = -ISZ
+              ENDDO                        ! END OF : DO J = -ISZ
+           ENDDO                           ! END OF : DO ISTEP = 1,NSTEPMAX
+        ENDDO                              ! END OF : DO ISZ = 1,ISHRANGEX
+
+C       FILL IN LOCATION OF BEST MATCH ARRAY
+        MAXL_ARRAY = MAXLOC(CC_NOW)  ! RETURNS ARRAY OF LENGTH: 2 
+        IHI        = MAXL_ARRAY(1) - ISHRANGEX - 1
+        JHI        = MAXL_ARRAY(2) - ISHRANGEY - 1 
+        !write(6,*) ' ihi,jhi:',ihi,jhi,cc_now(ihi,jhi)
+        LOCBESTA(IHI,JHI) = LOCBESTA(IHI,JHI) + 1
+
+        !write(6,*) ' qstep(2):',qstep(2,1:2),iqx(2,1:2),iqy(2,1:2)
+        itmax = max(ishrangex,ishrangey)
+        !call apsh_sam_report(itmax,ishrangex,ishrangey)
+        !stop
+
+        END
+
+C************************** APSH_SAM_SIZE ******************************
+
+
+        SUBROUTINE APSH_SAM_SIZE(CC_BEST,QMAX,ISX,ISY,
+     &                           ISHRANGEX,ISHRANGEY)
+
+C       PURPOSE: CHECKS SIZE & SHIFT STEPS TO SEE WHAT HIGHER CC'S 
+C                WERE MISSED.  RUNS ONCE FOR EACH EXP IMAGE.
+C                FINDS STATS FOR THIS EXP IMAGE VS ALL REF IMAGES.
+
+        USE APSH_SAM_INFO
+
+        IMPLICIT NONE
+
+	REAL, INTENT(IN)           :: CC_BEST(-ISHRANGEX:ISHRANGEX,
+     &                                        -ISHRANGEY:ISHRANGEY)
+        REAL, INTENT(IN)           :: QMAX   
+        INTEGER, INTENT(IN)        :: ISX,ISY
+        INTEGER, INTENT(IN)        :: ISHRANGEX,ISHRANGEY
+
+C       AUTOMATIC
+        REAL                       :: QST   
+        
+        INTEGER                    :: ISZ,ISTEP,IDX,J,I
+        INTEGER                    :: IHI_X,IHI_Y,NSTEPMAX
+
+C       SPECIAL CHECK FOR A 1 ELEMENT SIZE
+        QST           = CC_BEST(0,0)
+        NN_SAM_Z(0,1) = NN_SAM_Z(0,1) + 1 ! # OF SHIFTS SAMPLED
+
+        IF (QST >= QMAX) THEN
+C          FOUND BEST  CC AT THE CENTER 
+           NN_GUD_Z(0,1) = NN_GUD_Z(0,1) + 1  ! # OF BESTS
+        ELSE
+           CC_BAD_Z(0,1) = CC_BAD_Z(0,1) + QST / QMAX
+        ENDIF
+
+C       CHECK > 1 ELEMENT SIZES
+
+        DO ISZ = 1,ISHRANGEX           ! LOOP TILL MAX SIZE
+           NSTEPMAX = MIN(ISZ,NSTEPZ)
+
+           DO ISTEP = 1,NSTEPMAX       ! LOOP OVER STEPS WITHIN SIZE
+
+              IDX = MOD(ISZ,ISTEP)     ! WHiCH STEPS COVER THIS SIZE
+              IF (IDX .NE. 0) CYCLE    ! NOT A VALID STEP
+
+              QST   = QSTEP(ISZ,ISTEP) ! TOP CC FOR THIS SIZE & SHIFT
+              IHI_X = IQX(ISZ,ISTEP)   ! X LOCATION FOR THIS TOP CC
+              IHI_Y = IQY(ISZ,ISTEP)   ! Y LOCATION FOR THIS TOP CC
+
+              NN_SAM_Z(ISZ,ISTEP) = NN_SAM_Z(ISZ,ISTEP) + 1 !   # OF  SAMPLES
+
+              IF (ABS(IHI_X) .EQ. ISZ .OR.  ABS(IHI_Y) .EQ. ISZ) THEN
+C                 ON BORDER. INCREMENT # OF BORDER PIXELS
+                  NN_BORDR(ISZ,ISTEP)  = NN_BORDR(ISZ,ISTEP) + 1
+              ENDIF 
+
+#ifdef NEVER  
+              if (isz.eq.4 .and. istep.eq.2) THEN
+                 write(6,'(a,3i5,2x,2f8.1,2x,4i5)') 
+     &                 '  :',isz,istep,nn_sam_z(isz,istep),qst,qmax,
+     &                      isx,isy,  ihi_x,ihi_y
+                 write(6,*) ' a:',abs(ihi_x - isx),'<=',istep
+                 write(6,*) ' b:',abs(ihi_y - isy),'<=',istep
+                 write(6,*) ' c:',ihi_x,'>', -ishrangex
+                 write(6,*) ' d:',ihi_x,'<',  ishrangex
+                 write(6,*) ' e:',ihi_y,'>', -ishrangey
+                 write(6,*) ' f:',ihi_y,'<',  ishrangey
+              endif 
+#endif 
+              IF (QST >= QMAX) THEN
+C                LANDED DIRECTLY ON HIGHEST CC 
+
+                 NN_GUD_Z(ISZ,ISTEP) = NN_GUD_Z(ISZ,ISTEP) + 1  ! # OF FINDS
+
+              ELSEIF (ABS(IHI_X - ISX) <= ISTEP .AND.
+     &                ABS(IHI_Y - ISY) <= ISTEP .AND.
+     &                   (IHI_X > -ISZ )  .AND.
+     &                   (IHI_X <  ISZ  ) .AND.
+     &                   (IHI_Y > -ISZ)   .AND.
+     &                   (IHI_Y <  ISZ )) THEN
+C                WITHIN ISTEP OF HIGHEST CC, WILL BE FOUND IN CALLER
+                 !write(6,91)isz,istep,isx,isy,ihi_x,ihi_y
+ 91              format(' For size:',i2,' Step:',i2, 
+     &                  '   Will find: (',i2,',',i2,
+     &                  ')  From: (',i2,',',i2,')')
+       
+                 NN_GUD_Z(ISZ,ISTEP) = NN_GUD_Z(ISZ,ISTEP) + 1  ! # OF FINDS
+
+              ELSE
+C                FOUND A POORER CC
+                 CC_BAD_Z(ISZ,ISTEP) = CC_BAD_Z(ISZ,ISTEP) + QST / QMAX
+               ENDIF
+           ENDDO                          ! END OF : DO ISTEP = 1,NSKIPS
+        ENDDO                             ! END OF : DO ISZ = 1,ISHRANGEX
+
+C       FILL IN ARRAY LOCATION OF BEST MATCH 
+        IHI_X                = IQX(ISHRANGEX,1)   ! X LOC. FOR TOP CC
+        IHI_Y                = IQY(ISHRANGEX,1)   ! Y LOC. FOR TOP CC
+        LOCBEST(IHI_X,IHI_Y) = LOCBEST(IHI_X,IHI_Y) + 1
+
+        END
+
+C************************* APSH_SAM_INIT ******************************
+
+        SUBROUTINE APSH_SAM_INIT()
+
+        USE APSH_SAM_INFO
+
+        IMPLICIT NONE
+
+        CC_BAD_Z = 0.0   ! TOTAL CC FOR EACH SIZE         (ARRAY)
+        NN_GUD_Z = 0     ! # OF BEST VALUES FOR EACH SKIP (ARRAY)
+        NN_SAM_Z = 0     ! # OF SHIFTS IN SAMPLE          (ARRAY)
+        NN_BORDR = 0     ! # OF BORDER PIXELS             (ARRAY)
+
+        NN_SAM_R = 0     ! # OF SKIP SAMPLES (SHOULD = NUMEXP)
+        LOCBESTA = 0     ! # OF BEST AT THIS LOCATION (ALL PAIRS)
+        LOCBEST  = 0     ! # OF BEST AT THIS LOCATION (BEST PAIRS)
+        END
+
+
+C*********************** APSH_SAM_REPORT ******************************
+
+        SUBROUTINE APSH_SAM_REPORT(ISIZES,ISHRANGEX,ISHRANGEY)
+
+C       PURPOSE: REPORTS SAMPLING COUNTERS
+
+        USE APSH_SAM_INFO
+
+        IMPLICIT NONE
+
+        INCLUDE 'CMLIMIT.INC'
+        INCLUDE 'CMBLOCK.INC'
+
+        INTEGER            :: ISIZES,ISHRANGEX,ISHRANGEY
+
+        INTEGER            :: NSTEPMAX
+        INTEGER            :: ISIZ,ISTEP,IT,ITIME,NSIZ,I,NBAD,NTOT,NGUD
+        INTEGER            :: NBORD,J,ISHS,NLETS
+        REAL               :: PERGUD,AVGCC,PERBORD
+
+C                                   123456789012
+        CHARACTER (LEN=12) :: FMT = '(041(I3,1X))'
+
+        WRITE(6,*) ' '
+        WRITE(6,*) '  ' //
+     &       'SHIFT  STEP  #BEST  %BEST         %CC      %ON    TIME'
+        WRITE(6,*) '  ' //
+     &       'RANGE  AMT   FOUND  FOUND         MAX     BORDER'
+        WRITE(NOUT,*)    ' '
+        WRITE(NOUT,*) '  ' //
+     &       'SHIFT  STEP  #BEST  %BEST         %CC      %ON    TIME'
+        WRITE(NOUT,*) '  ' //
+     &       'RANGE  AMT   FOUND  FOUND         MAX     BORDER'
+
+        DO ISIZ = 0,ISIZES     ! LOOP OVER ALL SIZES
+
+           IF (ISIZ .EQ. 0) THEN
+              ITIME  = 1
+              ISTEP  = 0
+              NTOT   = NN_SAM_Z(0,1)
+              NGUD   = NN_GUD_Z(0,1)
+
+              NBAD   = NN_SAM_Z(0,1) - NGUD
+              PERGUD = FLOAT(NGUD) / FLOAT(NBAD) * 100.0
+              AVGCC  = 0.0
+              IF (NBAD > 0) AVGCC  = CC_BAD_Z(0,1) / NBAD * 100.0
+              PERBORD = 100.0
+
+              WRITE(6,90)ISIZ,ISTEP,NGUD,PERGUD,AVGCC,PERBORD,ITIME
+              WRITE(6,*)' '
+              WRITE(NOUT,90)ISIZ,ISTEP,NGUD,PERGUD,AVGCC,PERBORD,ITIME
+              WRITE(NOUT,*)' '
+
+              CYCLE
+           ENDIF
+
+           NSTEPMAX = MIN(ISIZ,NSTEPZ)
+           DO ISTEP = 1,NSTEPMAX           ! LOOP OVER STEPS WITHIN SIZE
+
+              IT = MOD(ISIZ,ISTEP) 
+              IF (IT > 0) CYCLE   ! NOT A VALID SKIP
+ 
+              NTOT = NN_SAM_Z(ISIZ,ISTEP)
+              NGUD = NN_GUD_Z(ISIZ,ISTEP)
+              NBAD = NTOT - NGUD
+
+              PERGUD =  0.0
+              IF (NTOT .GT. 0) THEN
+                  PERGUD = (FLOAT(NGUD) / FLOAT(NTOT)) * 100.0
+              ENDIF
+
+              AVGCC =  100.0
+              IF (NBAD .GT. 0) THEN
+                 AVGCC = CC_BAD_Z(ISIZ,ISTEP) / FLOAT(NBAD) * 100.0
+              ENDIF
+
+              PERBORD =  0.0
+              NBORD   = NN_BORDR(ISIZ,ISTEP)
+              IF (NTOT .GT. 0) THEN
+                 PERBORD = (FLOAT(NBORD) / FLOAT(NTOT)) * 100.0
+              ENDIF
+
+              ITIME = (2*(ISIZ/ISTEP) + 1) **2 ! + (ISTEP*2+1) **2
+              NSIZ  =  2*ISIZ + 1              ! UNUSED
+                 
+              WRITE(6,90)ISIZ,ISTEP,NGUD,PERGUD,AVGCC,PERBORD,ITIME
+              WRITE(NOUT,90)ISIZ,ISTEP,NGUD,PERGUD,AVGCC,PERBORD,ITIME
+90            FORMAT(' ',I6,I5,I7,3X,F5.1,'%',2X,F10.1,'%',3X,
+     &               ' ',F5.1,'%',2X,I4)
+
+           ENDDO       ! END OF: DO ISTEP = 1,ISIZ
+           WRITE(6,*) ' '
+           WRITE(NOUT,*) ' '
+        ENDDO          ! END OF: DO ISIZ = 1,ISIZES
+
+        ISHS = 2 * ISHRANGEX + 1
+        CALL INTTOCHAR(ISHS,FMT(3:5),NLETS,3)
+
+#ifdef NEVER
+        WRITE(6,*)' '
+        WRITE(6,*)  "' LOCATION OF MAX CC'S, FOR ALL REFS"
+        WRITE(6,*)' '
+        WRITE(NOUT,*)' '
+        WRITE(NOUT,*)" LOCATION OF MAX CC'S, FOR ALL REFS"
+        WRITE(NOUT,*)' '
+
+        DO J=-ISHRANGEY,ISHRANGEY   ! NEED RUNTIME FORMATTING
+           WRITE(6,FMT)    (LOCBESTA(I,J),I=-ISHRANGEX,ISHRANGEX)
+           WRITE(NOUT,FMT) (LOCBESTA(I,J),I=-ISHRANGEX,ISHRANGEX)
+        ENDDO 
+#endif
+
+        WRITE(6,*)' '
+        WRITE(6,*)   " LOCATION OF MAX CC'S, FOR BEST REFS"
+        WRITE(6,*)' '
+        WRITE(NOUT,*)' '
+        WRITE(NOUT,*)" LOCATION OF MAX CC'S, FOR BEST REFS"
+        WRITE(NOUT,*)' '
+
+
+        DO J=-ISHRANGEY,ISHRANGEY   ! NEED RUNTIME FORMATTING
+           WRITE(6,FMT)    (LOCBEST(I,J),I=-ISHRANGEX,ISHRANGEX)
+           WRITE(NOUT,FMT) (LOCBEST(I,J),I=-ISHRANGEX,ISHRANGEX)
+        ENDDO 
+        WRITE(6,*)    ' '
+        WRITE(NOUT,*) ' '
+
+        END
+
+
+
+C++*********************************************************************
+C
+C  CROSRNG_2C_TOOL.F   
+C              TRAP FOR COMPILER ERROR ON ALTIX   FEB 2005 ARDEAN LEITH
+C              REWRITE USING CROSRNG_COM          FEB 2008 ARDEAN LEITH
+C              REWRITE USING FFTW3 RINGS          FEB 2008 ARDEAN LEITH
+C              REMOVED TT                         JUN 2010 ARDEAN LEITH
+C              CONSOLIDATES CROSRNG_E & _M        JUN 2010 ARDEAN LEITH
+C
+C **********************************************************************
+C
+C CROSRNG_2C_TOOL(CIRCR,CIRCE,LCIRC, NRING,NRAYS,NUMR,
+C           USE_OMP,FFTW3PLAN,   USE_UN,USE_MIR,                         
+C           ISMIRRORED,QMAX,POS_MAX)
+C
+C PURPOSE: CROSS CORRELATION OF RADIAL RINGS FOR USE IN ROTATIONAL
+C          ALIGNMENT.  CHECKS BOTH STRAIGHT & MIRRORED POSITIONS
+C          USES NUMR TABLE FOR MAPPING INTO Q ARRAY 
+C          USES SIMPLIFIED LOGIC FOR BOUNDARY VALUES, FLOATING PT. ARITH.
+C
+C PARAMETERS:
+C    CIRCR      - FT OF RINGS MULTIPLIED BY WEIGHTS           (SENT)
+C    CIRCE      - FT OF RINGS MULTIPLIED BY WEIGHTS           (SENT)
+C    LCIRC      - SIZE OF CIRCS ARRAYS                        (SENT)
+C    NRING      - NUMBER OF RINGS                             (SENT)
+C    NRAYS     - LONGEST RING                                (SENT)
+C    NUMR       - RING LOCATION POINTERS                      (SENT)
+C    USE_OMP    - USE || OMP                                  (SENT)
+C    FFTW3PLAN  - PLAN FOR REVERSE FFT OF RING                (SENT)
+C    USE_UN     - USE UN MIRRORED                             (SENT)
+C    USE_MIR    - USE MIRRORED                                (SENT)
+C    ISMIRRORED -                                             (RETURNED)
+C    QMAX       - CC MAX                                      (RETURNED)
+C    POS_MAX    - POSITION OF CC MAX                          (RETURNED)
+C
+C  NOTES: AUG 04 ATTEMPTED SPEEDUP USING 
+C       PREMULTIPLY  ARRAYS ie( CIRC12 = CIRC1 * CIRC2) much slower
+C       VARIOUS  OTHER ATTEMPTS  FAILED TO YIELD IMPROVEMENT
+C       THIS IS A VERY IMPORTANT COMPUTE DEMAND IN ALIGNMENT & REFINE.
+C       OPTIONAL LIMIT ON ANGULAR SEARCH SHOULD BE ADDED.
+C       COMPLEX ARRAY ARE USUALLY SLOWER in 2010
+C
+C       THE UNEVEN POLAR SAMPLING IN THE FOURIER DOMAIN, IS DUE TO THE 
+C       INNER RINGS HAVING HAD DENSER SAMPLING, THE VALUES AT THE 
+C       HIGHER FREQUENCIES WOULD HAVE BEEN ZERO ANYWAYS, SO THERE IS 
+C       NO NEED TO "INCLUDE" THEM. 
+
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C--*********************************************************************
+
+cpgi$g opt=3
+
+C       USES COMPLEX VARIABLES INTERNALLY
+
+        SUBROUTINE CROSRNG_2C_TOOL(CIRCR,CIRCE,LCIRCD2, 
+     &                        NRING,NRAYS,NUMR, 
+     &                        USE_OMP,FFTW3PLAN,
+     &                        USE_UN,USE_MIR,                         
+     &                        ISMIRRORED,QMAX,POS_MAX,
+     &                        NASKIP,CCSKIP,CCSKIPA,NSKIP,
+     &                        IR,IT,JT)
+        IMPLICIT NONE
+
+        COMPLEX,       INTENT(IN)  :: CIRCE(LCIRCD2), CIRCR(LCIRCD2)
+        INTEGER,       INTENT(IN)  :: LCIRCD2
+        INTEGER,       INTENT(IN)  :: NUMR(3,NRING)
+        INTEGER,       INTENT(IN)  :: NRING,NRAYS,NSKIP
+        INTEGER,       INTENT(OUT) :: NASKIP(NSKIP)
+        REAL,          INTENT(OUT) :: CCSKIP(NSKIP)
+        REAL,          INTENT(OUT) :: CCSKIPA(NSKIP)
+        LOGICAL,       INTENT(IN)  :: USE_OMP
+        INTEGER*8,     INTENT(IN)  :: FFTW3PLAN  ! STRUCTURE POINTER
+        LOGICAL,       INTENT(IN)  :: USE_UN,USE_MIR
+        LOGICAL,       INTENT(OUT) :: ISMIRRORED
+        REAL,          INTENT(OUT) :: QMAX
+        REAL,          INTENT(OUT) :: POS_MAX
+        INTEGER,       INTENT(IN)  :: IR,IT,JT
+
+C       AUTOMATIC ARRAYS
+        COMPLEX                    :: QU(NRAYS/2+1),QM(NRAYS/2+1)
+
+        REAL                       :: QMAXU,QMAXM
+        REAL                       :: POS_MAXU,POS_MAXM
+        INTEGER                    :: ISKIP,I,IGOM1,NVAL,J,JC
+        INTEGER                    :: MAXLU,MAXLM,MAXT
+
+        REAL                       :: CCSET  ! FUNCTION
+
+
+        DO ISKIP = NSKIP,1,-1      ! LOOP OVER ALL RING SKIP AMOUNTS
+
+           IF (USE_UN) THEN
+C             ZERO WHOLE QU ARRAY, STRAIGHT  = CIRCR * CONJG(CIRCE)
+	      QU = 0.0D0
+           ENDIF
+
+           IF (USE_MIR) THEN
+C             ZERO QM ARRAY,  QM - MIRRORED  = CONJG(CIRCR) * CONJG(CIRCE)
+	      QM = 0.0D0
+           ENDIF
+
+           DO I=1,NRING,ISKIP   ! LOOP OVER RINGS WITH SKIPPING
+
+	      IGOM1 = NUMR(2,I) / 2  
+              NVAL  = NUMR(3,I) / 2     
+
+	      IF (USE_UN .AND. USE_MIR)  THEN
+	         DO J=1,NVAL
+	            JC    = J + IGOM1
+
+C                   NON MIRRORED RING SET 
+                    QU(J) = QU(J) +       CIRCR(JC)  * CONJG(CIRCE(JC))
+
+C                   MIRRORED RING SET 
+                    QM(J) = QM(J) + CONJG(CIRCR(JC)) * CONJG(CIRCE(JC))
+ 	         ENDDO
+
+              ELSEIF (USE_UN) THEN
+	         DO J=1,NVAL
+	            JC    = J + IGOM1
+                    QU(J) = QU(J) +        CIRCR(JC) * CONJG(CIRCE(JC))
+	         ENDDO
+
+              ELSEIF (USE_MIR) THEN
+	         DO J=1,NVAL
+	            JC    = J + IGOM1
+                    QM(J) = QM(J) + CONJG(CIRCR(JC)) * CONJG(CIRCE(JC))
+	         ENDDO
+              ENDIF
+	   ENDDO    ! END OF: DO I=1,NRING
+
+           QMAXU = 0.0
+           QMAXM = 0.0
+
+           IF (USE_UN) THEN
+C             FOR UN-MIRRORED
+              CALL CROSRNG_COM_R(QU,NRAYS,FFTW3PLAN,
+     &                           QMAXU,POS_MAXU,MAXLU)
+           ENDIF
+
+           IF (USE_MIR) THEN
+C             FOR MIRRORED
+              CALL CROSRNG_COM_R(QM,NRAYS,FFTW3PLAN,
+     &                           QMAXM,POS_MAXM,MAXLM)
+           ENDIF
+
+           IF (QMAXM .GT. QMAXU) THEN
+              ISMIRRORED  = .TRUE.
+              QMAX        = QMAXM
+              POS_MAX     = POS_MAXM
+              MAXT        = MAXLM
+           ELSE
+              ISMIRRORED  = .FALSE.
+              QMAX        = QMAXU
+              POS_MAX     = POS_MAXU
+              MAXT        = MAXLU
+           ENDIF
+
+           NASKIP(ISKIP)  = MAXT      ! LOCATION OF MAX CC
+           CCSKIP(ISKIP)  = QMAX      ! VALUE OF MAX CC FOR THIS SKIP
+
+        ENDDO                         ! END OF: DO ISKIP 
+
+C       SAVE THE CORRESPONDING MAX NO-SKIP CC
+        DO ISKIP = 1,NSKIP
+           IF (ISMIRRORED) THEN
+              CCSKIPA(ISKIP) = CCSET(QM,NASKIP(ISKIP),NRAYS) 
+           ELSE
+              CCSKIPA(ISKIP) = CCSET(QU,NASKIP(ISKIP),NRAYS) 
+           ENDIF
+        ENDDO
+
+C       SAVE STATS IF THIS IS BEST CC SO FAR 
+        IF (ISMIRRORED) THEN
+           CALL APSH_SAM_SKIP(CCSKIP,NASKIP,CCSKIPA,NSKIP,
+     &                     IR,IT,JT, QM,NRAYS)
+        ELSE
+           CALL APSH_SAM_SKIP(CCSKIP,NASKIP,CCSKIPA,NSKIP,
+     &                     IR,IT,JT, QU,NRAYS)
+        ENDIF
+
+        END
+
+C************************** CCSET ************************************
+
+C       KLUDGE TO USE REAL VARIABLE ARRAY
+
+        REAL FUNCTION CCSET(QQ,NTSKIP,NRAYS)
+        IMPLICIT NONE
+
+        REAL,     INTENT(IN)  :: QQ(*)
+        INTEGER,  INTENT(IN)  :: NTSKIP,NRAYS  
+
+C       SAVE THE EQUIVALENT TOP NO-SKIP CC
+        CCSET  = 1.00048 *  QQ(NTSKIP) / (NRAYS) ! HACK TO = PRE FFTW3
+
+        END
+
+
+
+
+@
+
+
+1.13
+log
+@AP_GETDATA instead of AP_GETDAT
+@
+text
+@d225 1
+a225 1
+     &                     .FALSE.,  ABUF,  
+@
+
+
+1.12
+log
+@IXY(2,LCIRC)
+@
+text
+@d125 2
+a126 2
+	REAL, ALLOCATABLE    :: ABUF(:,:)
+	REAL, ALLOCATABLE    :: ANGREF(:,:)
+d135 1
+d137 2
+a138 2
+        REAL, PARAMETER      :: QUADPI     = 3.1415926535897932384626
+        REAL, PARAMETER      :: DGR_TO_RAD = (QUADPI/180)
+d222 5
+a226 3
+	   CALL AP_GETDAT(IEXPLIST,NUMEXP,NSAM,NROW,NSAM,NROW,
+     &                    NUMTH,EXPPAT,LUNT, IEXP,IEXP,
+     &                    1,NROW,1,NSAM, ABUF,  IRTFLG)
+@
+
+
+1.11
+log
+@renamed, used getangas
+@
+text
+@d348 1
+a348 1
+        INTEGER                :: IXY(2,CIRC)
+@
+
+
+1.10
+log
+@renamed from: apsh_tool.f
+@
+text
+@d4 1
+d29 1
+a29 1
+C  AP_SH_TOOL 
+d93 1
+a93 1
+      SUBROUTINE AP_SH_TOOL(IREFLIST,NUMREF,IEXPLIST,NUMEXP, 
+d205 3
+a207 2
+        CALL AP_GETANGA(IREFLIST,NUMREF,0,REFANGDOC,REFPAT,
+     &                  LUNT,INANG,3,ANGREF,NGOTREF,IRTFLG)
+@
+
+
+1.9
+log
+@rename from mrqli_tool,  DID NOT CHANGE ORDER OF SHIFT & ROTATION. (UNLIKE AP SH
+@
+text
+@d3 1
+a3 1
+C    APSH_TOOL.F    FROM APSH_PSC                  SEP 10 ARDEAN LEITH *
+d28 1
+a28 1
+C  APSH_TOOL 
+d92 1
+a92 1
+      SUBROUTINE APSH_TOOL(IREFLIST,NUMREF,IEXPLIST,NUMEXP, 
+@
+
+
+1.8
+log
+@locbest calc for top matches only
+@
+text
+@d3 1
+a3 1
+C    MRQLI_TOOL.F    FROM MRQLI_PSC                SEP 10 ARDEAN LEITH *
+d9 1
+a9 1
+C=* Copyright 1985-2010  Health Research Inc.                          *
+d28 1
+a28 1
+C  MRQLI_TOOL 
+d90 1
+a90 1
+C     **************** MRQLI_TOOL *************************************
+d92 1
+a92 1
+      SUBROUTINE MRQLI_TOOL(IREFLIST,NUMREF,IEXPLIST,NUMEXP, 
+d241 2
+a242 2
+C          XSHNEW  - SX SHIFT
+C          YSHNEW  - SY SHIFT
+d492 5
+a496 8
+C       HAVE TO CHANGE ORDER OF SHIFT & ROTATION.
+C       IN THIS PROGRAM IMAGE IS SHIFTED FIRST, ROTATED SECOND.
+C       IN 'RT SQ' IT IS ROTATED FIRST, SHIFTED SECOND.
+C       THIS CODE CORRESPONDS TO OPERATION: 'SA P'.
+	CO     =  COS(RANGNEW * DGR_TO_RAD)
+	SO     = -SIN(RANGNEW * DGR_TO_RAD)
+	XSHSUM = SX*CO - SY*SO
+	YSHSUM = SX*SO + SY*CO
+@
+
+
+1.7
+log
+@output improvements
+@
+text
+@a821 3
+C             FILL IN LOCATION OF BEST MATCH ARRAY
+              LOCBEST(IHI_X,IHI_Y) = LOCBEST(IHI_X,IHI_Y) + 1
+
+d861 5
+d982 3
+d987 1
+a987 1
+        WRITE(6,*)' LOCATION OF BEST MATCHES, FOR ALL PAIRS'
+d990 1
+a990 1
+        WRITE(NOUT,*)' LOCATION OF BEST MATCHES, FOR ALL PAIRS'
+a992 3
+        ISHS = 2 * ISHRANGEX + 1
+        CALL INTTOCHAR(ISHS,FMT(3:5),NLETS,3)
+
+a995 1
+!91        FORMAT(41(I3,' '))
+d1000 1
+a1000 1
+        WRITE(6,*)' LOCATION OF BEST MATCHES, FOR BEST REFERENCES'
+d1003 1
+a1003 1
+        WRITE(NOUT,*)' LOCATION OF BEST MATCHES, FOR BEST REFERENCES'
+@
+
+
+1.6
+log
+@changed
+@
+text
+@d2 3
+a4 3
+C
+C    MRQLI_TOOL.F    FROM MRQLI_PSC                  SEP 10 ARDEAN LEITH
+C
+d82 3
+a85 1
+         REAL               :: SU_CC_R                   ! SUM TOP CC'S                  
+d90 1
+a90 1
+C     **************** MRQLI_TOOL ******************************
+d214 1
+a214 1
+        FRACSAY = FLOAT(NUMEXP) / 10.0  ! PRINT OUT AFTER EVERY 10%
+d226 1
+a226 1
+              WRITE(6,'A,I5,A') ' IMAGE:',IEXP,' -----'
+d264 1
+d270 2
+a271 2
+                 WRITE(6,'A,I6') ' Finished image:',IEXP
+                 FRACSAY = FRACSAY + FLOAT(NUMEXP) / 10.0
+d274 12
+d287 1
+a287 1
+	ENDDO
+a291 6
+C       PRINT OUT REPORTS
+        IF (SHORRING .EQ. 'S') THEN
+C          SIZE AND STEP REPORT
+           ITMAX = MAX(ISHRANGEX,ISHRANGEY)
+           CALL APSH_SAM_REPORT(SHORRING,ITMAX,NBORDER)
+       ENDIF
+d316 5
+a320 2
+C  PARAMETERS:
+C                IDIS    NUMBER OF  MOST SIMILAR REF. PROJ.  (OUTPUT)
+d386 2
+a387 2
+	IQX    = -1
+        IQY    = -1
+a513 1
+        SU_CC_R  = 0.0           ! ZERO THE SUM OF TOP CC'S
+d524 1
+a524 1
+C                PARAMETERS FOR HIGHER CC'S, CALLED FOR EACH
+d531 3
+a533 3
+	REAL, INTENT(IN)      :: CCSKIP(NSKIP)  ! TOP CC VALUE
+	INTEGER, INTENT(IN)   :: NASKIP(NSKIP)  ! TOP ROTATION
+	REAL, INTENT(IN)      :: CCSKIPA(NSKIP) ! TOP NO-SKIP CC VALUE
+d537 1
+a537 1
+	REAL, INTENT(IN)      :: QQ(*)          ! FFT'D CCROT RETURN
+d540 2
+a541 2
+        REAL                  :: CCT,CCM  
+        INTEGER               :: ISKIP,IROT
+d550 5
+a554 6
+           CCT  = CCSKIP(ISKIP)        ! TOP CC FOR THIS SKIP
+           CCM  = CCSKIPA(ISKIP)       ! TOP NOSKIP CC FOR THIS SKIP
+           IROT = NASKIP(ISKIP)        ! ROTATION # FOR THIS SKIP
+
+           IF (CCT > CC_SAM_R(ISKIP)) THEN
+C             HIGHEST CC SO FAR, RECORD IT
+d556 2
+a557 2
+              !write(6,"i5,f15.1,' >> ',f15.1,2x,3i5") 
+!     &        iskip,cct,cc_sam_r(iskip),irot,isx,isy
+d559 2
+a560 2
+              CC_SAM_R(ISKIP) = CCT    ! TOP CC
+              CM_SAM_R(ISKIP) = CCM    ! TOP NO-SKIP CC
+d567 3
+a569 1
+              IF (ISKIP .EQ. 1) SAVEALL = .TRUE.
+d571 6
+a576 4
+              IF (SAVEALL) THEN        ! SAVE OTHER SKIPS'S CC VALUES
+                 CC_TOP_R(ISKIP) = CCSET(QQ,IROT,NRAYS)
+              ENDIF
+           ENDIF                            
+d580 2
+d583 4
+d588 1
+a588 1
+
+d612 6
+a617 6
+           IF (ISKIP .EQ. 1) THEN
+              write(6,90)iskip,irt,iat,ixt,iyt,CM_SAM_R(ISKIP),
+     &                   (CC_TOP_R(I),I=2,5)
+           ELSE
+              write(6,90)iskip,irt,iat,ixt,iyt,CM_SAM_R(ISKIP)
+           ENDIF
+d634 1
+a634 1
+        ENDDO                         ! END OF: DO ISKIP =2..
+d636 1
+a636 2
+        NN_SAM_R = NN_SAM_R + 1          ! # OF CC'S
+        SU_CC_R  = SU_CC_R + CM_SAM_R(1) ! SUM OF TOP CC'S
+a637 1
+
+d644 1
+a644 1
+C       PURPOSE: REPORTS SAMPLING COUNTERS FOR SKIPS
+d659 6
+a664 3
+        WRITE(6,*) ' '
+        WRITE(6,*) '    SKIP   #BEST   %BEST    %BEST RELATIVE'
+        WRITE(6,*) '     AMT   FOUND   FOUND      CC     TIME'
+a679 1
+           SUMCC   = SU_GUD_R(ISKIP)
+d682 1
+a682 2
+              PERBEST = (SUMCC / FLOAT(NTOT)) 
+              PERBEST = PERBEST / SU_CC_R * 100.0
+d686 1
+a686 1
+           ITIME = ANINT((FLOAT(NSKIP -ISKIP+1) / FLOAT(NSKIP)) * 100.0)    
+d688 2
+a689 1
+           WRITE(6,90)ISKIP,NGUD,PERGUD,PERBEST,ITIME
+d696 1
+d702 4
+a705 2
+C                WERE MISSED
+
+d715 2
+d721 1
+a721 1
+C          LOCATION IS MORE THAN CURRENT HIGH CC
+d723 2
+a724 2
+           IQX(0,1)   = I                  ! LOCATION OF HIGHEST
+           IQY(0,1)   = J                  ! LOCATION OF HIGHEST
+d742 2
+a743 2
+                       IQX(ISZ,ISTEP)   = I    ! LOCATION OF HIGHEST
+                       IQY(ISZ,ISTEP)   = J    ! LOCATION OF HIGHEST
+d745 11
+a755 5
+
+                 ENDDO                     ! END OF : DO I = -ISHRANGEX
+              ENDDO                        ! END OF : DO J = -ISHRANGEY
+           ENDDO                           ! END OF : DO ISTEP = 1,NSKIPS
+        ENDDO                              ! END OF : DO ISZ = 1,
+d758 3
+d771 2
+a772 1
+C                WERE MISSED
+d778 5
+a782 5
+	REAL, INTENT(IN)              :: CC_BEST(-ISHRANGEX:ISHRANGEX,
+     &                                           -ISHRANGEY:ISHRANGEY)
+        REAL, INTENT(IN)              :: QMAX   
+        INTEGER, INTENT(IN)           :: ISX,ISY
+        INTEGER, INTENT(IN)           :: ISHRANGEX,ISHRANGEY
+d785 1
+a785 1
+        REAL                          :: QST   
+d787 2
+a788 2
+        INTEGER                       :: ISZ,ISTEP,IDX,J,I
+        INTEGER                       :: IHI_X,IHI_Y,NSTEPMAX
+d796 1
+a796 1
+           NN_GUD_Z(0,1) = NN_GUD_Z(0,1) + 1  ! # OF BAD SHIFTS
+d817 8
+d827 1
+a827 1
+                 write(6,'a,3i5,2x,2f8.1,2x,4i5') 
+a842 6
+                 IF (ABS(IHI_X) .EQ. ISZ .OR.
+     &               ABS(IHI_Y) .EQ. ISZ) THEN
+C                    ON BORDER. INCREMENT # OF BORDER PIXELS
+                     NN_BORDR(ISZ,ISTEP)  = NN_BORDR(ISZ,ISTEP) + 1
+                 ENDIF 
+
+d880 2
+a881 1
+
+d887 1
+a887 1
+        SUBROUTINE APSH_SAM_REPORT(SHORRING,ISIZES)
+d898 1
+a898 2
+        INTEGER          :: ISIZES,NSTEPMAX
+        CHARACTER(LEN=1) :: SHORRING
+d900 4
+a903 3
+        INTEGER          :: ISIZ,ISTEP,IT,ITIME,NSIZ,I,NBAD,NTOT,NGUD
+        INTEGER          :: NBORD
+        REAL             :: PERGUD,AVGCC,PERBORD
+d905 2
+a906 2
+        IF (SHORRING .EQ. 'S') THEN ! FOR SIZES --------------------
+           WRITE(6,*)    ' '
+d908 2
+a909 1
+           WRITE(6,*) '  ' //
+d911 6
+a916 1
+           WRITE(6,*) '  ' //
+d919 1
+a919 1
+           DO ISIZ = 0,ISIZES     ! LOOP OVER ALL SIZES
+d921 16
+a936 10
+              IF (ISIZ .EQ. 0) THEN
+                 ITIME  = 1
+                 ISTEP  = 0
+                 NTOT   = NN_SAM_Z(0,1)
+                 NGUD   = NN_GUD_Z(0,1)
+                 NBAD   = NN_SAM_Z(0,1) - NGUD
+                 PERGUD = FLOAT(NGUD) / FLOAT(NBAD) * 100.0
+                 AVGCC  = 0.0
+                 IF (NBAD > 0) AVGCC  = CC_BAD_Z(0,1) / NBAD * 100.0
+                 PERBORD = 100.0
+d938 2
+a939 2
+                 WRITE(6,90)ISIZ,ISTEP,NGUD,PERGUD,AVGCC,PERBORD,ITIME
+                 WRITE(6,*)' '
+d941 13
+a953 1
+                 CYCLE
+d956 4
+a959 2
+              NSTEPMAX = MIN(ISIZ,NSTEPZ)
+              DO ISTEP = 1,NSTEPMAX           ! LOOP OVER STEPS WITHIN SIZE
+d961 5
+a965 22
+                 IT = MOD(ISIZ,ISTEP) 
+                 IF (IT > 0) CYCLE   ! NOT A VALID SKIP
+ 
+                 NTOT = NN_SAM_Z(ISIZ,ISTEP)
+                 NGUD = NN_GUD_Z(ISIZ,ISTEP)
+                 NBAD = NTOT - NGUD
+
+                 PERGUD =  0.0
+                 IF (NTOT .GT. 0) THEN
+                     PERGUD = (FLOAT(NGUD) / FLOAT(NTOT)) * 100.0
+                 ENDIF
+
+                 AVGCC =  100.0
+                 IF (NBAD .GT. 0) THEN
+                    AVGCC = CC_BAD_Z(ISIZ,ISTEP) / FLOAT(NBAD) * 100.0
+                 ENDIF
+
+                 PERBORD =  0.0
+                 NBORD   = NN_BORDR(ISIZ,ISTEP)
+                 IF (NTOT .GT. 0) THEN
+                    PERBORD = (FLOAT(NBORD) / FLOAT(NTOT)) * 100.0
+                 ENDIF
+d967 2
+a968 2
+                 ITIME = (2*(ISIZ/ISTEP) + 1) **2 ! + (ISTEP*2+1) **2
+                 NSIZ  =  2*ISIZ + 1              ! UNUSED
+d970 44
+a1013 8
+                 WRITE(6,90)ISIZ,ISTEP,NGUD,PERGUD,AVGCC,PERBORD,ITIME
+90               FORMAT(' ',I6,I5,I7,3X,F5.1,'%',2X,F10.1,'%',3X,
+     &                  ' ',F5.1,'%',2X,I4)
+
+              ENDDO       ! END OF: DO ISTEP = 1,ISIZ
+              WRITE(6,*) ' '
+           ENDDO          ! END OF: DO ISIZ = 1,ISIZES
+        ENDIF
+a1014 1
+        END 
+@
+
+
+1.5
+log
+@NSKIPZ = 8, FRACSAY
+@
+text
+@d50 1
+a50 1
+C     **************** APSH_SAM_INFO ******************************
+a64 1
+         INTEGER            :: NN_GUD_R(NSTEPZ)          ! # OF GOOD SKIPS
+d70 14
+a83 6
+         REAL               :: CC_SAM_R(NSKIPZ) 
+         INTEGER            :: IR_SAM_R(NSKIPZ)
+         INTEGER            :: IX_SAM_R(NSKIPZ) 
+         INTEGER            :: IY_SAM_R(NSKIPZ) 
+         INTEGER            :: IA_SAM_R(NSKIPZ) 
+         INTEGER            :: NN_SAM_R
+d206 2
+d212 1
+a212 1
+        FRACSAY = FLOAT(NUMEXP) / 10.0
+d222 5
+a249 5
+           IF (VERBOSE .AND. IEXP > FRACSAY ) THEN
+              WRITE(6,'A,I6') ' Finished image:',IEXP
+              FRACSAY = FRACSAY + FLOAT(NUMEXP) / 10.0
+           ENDIF
+
+d261 11
+d282 1
+a282 5
+
+        ELSEIF (SHORRING .EQ. 'R') THEN
+C          RING SKIP REPORT
+           CALL APSH_SKIP_REPORT(8)
+        ENDIF
+d359 4
+a362 3
+        INTEGER                :: NSKIP          ! MAXIMUM RING SKIP 1...4
+        INTEGER                :: NASKIP(NSKIPZ) ! ROTATION
+	REAL                   :: CCSKIP(NSKIPZ) ! CC VALUE 
+d381 4
+a384 1
+        IF (SHORRING .EQ. 'R') NSKIP = NSKIPZ
+a392 2
+           CALL APSH_SKIP_INIT()   ! ZERO FOR THIS REF. IMAGE
+
+d413 1
+a413 1
+                 DO ISKIP = 1,NSKIP
+d418 1
+a418 6
+     &                        ISMIRRORED,CCOA,POS_MAX,NASKIP(ISKIP))
+                    CCSKIP(ISKIP) = CCOA
+         !write(6,921) ir,it,jt,ccoa,POS_MAX,NASKIP(ISKIP)
+921      format(' ir:',i5,' (',i3,',',i3,'):',f12.4,2x,1f8.2,i6)
+
+                    IF (ISKIP > 1) CYCLE   ! ONLY RECORD MAX
+d422 25
+a446 16
+                    IF (CCOA .GE. CCROT)  THEN
+C                      GOOD MATCH WITH NEW (MIRRORED OR NOT) POSITION 
+	               CCROT   = CCOA
+	               IBE     = IR
+	               ISX     = IT
+	               ISY     = JT
+	               RANGNEW = ANG_N(POS_MAX,MODE,NRAYS)
+	               IDIS    = IR
+                       IF (ISMIRRORED) IDIS = -IR
+	            ENDIF
+                 ENDDO
+
+                 IF (SHORRING .EQ. 'R') THEN
+C                   GET CC FOR DIFFERENT SKIP SETTINGS
+                    CALL APSH_SAM_SKIP(CCSKIP,NASKIP,NSKIP, IR,IT,JT)
+                 ENDIF
+d448 2
+a449 2
+             ENDDO  ! END OF:  DO IT=-ISHRANGEX,ISHRANGEX,ISTEP
+	   ENDDO    ! END OF:  DO JT=-ISHRANGEY,ISHRANGEY,ISTEP
+d458 1
+a458 1
+           IF (IBE .EQ. IR)  CC_BEST = CC_NOW    
+d468 1
+a468 1
+C          SAMPLE BEST CC VALUES FROM CURRENT SKIP SET
+a469 1
+
+d501 2
+a502 1
+        CC_SAM_R = 0.0           ! CC ARRAY
+d509 2
+a510 1
+        SUBROUTINE APSH_SAM_SKIP(CCSKIP,NASKIP,NSKIP, IR,ISX,ISY)
+d513 2
+a514 1
+C                PARAMETERS FOR HIGHER CC'S
+d520 8
+a527 2
+	REAL, INTENT(IN)              :: CCSKIP(NSKIP) ! CC VALUE
+	INTEGER, INTENT(IN)           :: NASKIP(NSKIP) ! ROTATION
+d529 3
+a531 1
+        INTEGER, INTENT(IN)           :: NSKIP,IR,ISX,ISY
+d533 3
+a535 2
+        REAL                          :: CCT   
+        INTEGER                       :: ISKIP,IROT
+d540 1
+d547 4
+a550 1
+!     &              iskip,cct,cc_sam_r(iskip),irot,isx,isy
+d552 1
+a552 3
+              IA_SAM_R(ISKIP) = IROT   ! ROTATION
+              CC_SAM_R(ISKIP) = CCT    ! CC
+              IR_SAM_R(ISKIP) = IR     ! REFERENCE #
+d555 7
+d563 2
+a564 2
+        ENDDO                          ! END OF: DO ISKIP =
+
+d574 3
+a576 1
+C       PURPOSE: CHECKS CURRENT RING SKIPS TO RECORD HIGHEST CC'S
+d583 1
+a583 1
+        INTEGER             :: ISKIP, IAT,IRT,IXT,IYT
+a587 1
+           IAT = IA_SAM_R(ISKIP)   ! ROTATION #
+d590 1
+d592 8
+a599 4
+          write(6,"' Skip:',i2,'  Ref:',i5,
+     &             '  Rot:',i4,' (',i3,',',i3,'):',f8.1")
+     &           iskip,irt,iat,ixt,iyt,CC_SAM_R(ISKIP)
+
+d606 7
+a612 2
+C             IS SAME REF, ROTATION, & SHIFT
+              NN_GUD_R(ISKIP) = NN_GUD_R(ISKIP)+1 !  # OF GOOD SKIPS
+a613 1
+           ENDIF                            
+d616 3
+a618 1
+        NN_SAM_R = NN_SAM_R + 1       ! COUNTER
+d638 2
+a639 1
+        REAL               :: PERGUD
+d642 2
+a643 2
+        WRITE(6,*) '    STEP   #BEST   %BEST  RELATIVE'
+        WRITE(6,*) '     AMT   FOUND   FOUND   TIME'
+d649 3
+a652 1
+
+d658 9
+d669 2
+a670 2
+           WRITE(6,90)ISKIP,NGUD,PERGUD,ITIME
+90         FORMAT('  ',I6,3X, I5,3X, F5.1,'%', 3X,I3)
+d680 1
+a680 1
+C       PURPOSE: CHECKS SIZE & SHIFT SKIPS TO SEE WHAT HIGHER CC'S 
+d933 199
+@
+
+
+1.4
+log
+@rewrite
+@
+text
+@d59 1
+a59 1
+         INTEGER,PARAMETER  :: NSKIPZ = 4
+d202 2
+a203 1
+        NUMTH = 1
+d236 5
+d265 1
+a265 1
+           CALL APSH_SKIP_REPORT(4)
+@
+
+
+1.3
+log
+@MODULE APSH_SAM_INFO must come first
+@
+text
+@d35 1
+a35 1
+C  PARAMETERS:
+d52 1
+d55 1
+a55 1
+C       PURPOSE: INITIALIZES SAMPLING COUNTERS
+d57 20
+a76 10
+           INTEGER,PARAMETER  :: NSIZES = 40
+           INTEGER,PARAMETER  :: NSTEPZ = 8
+
+           REAL               :: CC_BAD_Z(0:NSIZES,NSTEPZ) ! SUM OF BAD SIZE CC
+           INTEGER            :: NN_GUD_Z(0:NSIZES,NSTEPZ)! # OF BAD SIZES
+           INTEGER            :: NN_SAM_Z(0:NSIZES,NSTEPZ)! # OF SIZE SAMPLES
+
+           DOUBLE PRECISION   :: QSTEP(0:NSIZES,NSTEPZ)   
+           INTEGER            :: IQX(0:NSIZES,NSTEPZ)   
+           INTEGER            :: IQY(0:NSIZES,NSTEPZ)   
+d81 1
+a81 1
+C     **************** MRQLI_TOOL  ******************************
+d102 1
+a102 1
+        INTEGER *8           :: FFTW_PLANS(*)   ! STRUCTURE POINTERS
+d108 2
+a109 2
+        LOGICAL              :: TRANS        ! FLAG FOR REFORMED RINGS
+        LOGICAL              :: CPLX         ! FLAG FOR COMPLEX CROSRNG
+a118 1
+        INTEGER, ALLOCATABLE :: NLOCS(:,:)
+d129 3
+a131 3
+        INTEGER, PARAMETER   :: LUNT     = 77
+        INTEGER, PARAMETER   :: INANG    = 78
+        INTEGER, PARAMETER   :: LUNRING  = 50
+d133 7
+a139 7
+        INTEGER              :: NBORDER  = 0    ! # BORDER PIXELS
+        INTEGER              :: NSUBPIX  = 0    ! # SUBPIX PIXELS
+        INTEGER              :: MYPID    = -1   ! NOT FOR MPI
+
+        SCRFILE         = CHAR(0)               ! NO REF. RINGS FILE
+        CIRCREF_IN_CORE = .TRUE.                ! INCORE REF. RINGS
+        MODE            = 'F'                   ! FULL CIRCLE
+a160 1
+     &           NLOCS(2,NRAYSC+1),
+d163 1
+a163 1
+           MWANT = NSAM*NROW + 6*LCIRC + 2*LCIRC + 2*NRAYSC+2  
+d167 2
+a168 6
+        IXY     = -100       ! FOR HANDLING CIRC PADS
+        COEFFS  = 0.0
+
+C       SET # OF POINTS ON EACH RAY AND RAY STARTING INDEX IN CIRC
+        CALL APRINGS_TRANS_LOCS(NUMR,NRING, NLOCS,NRAYSC)
+
+d170 1
+a170 1
+        TRANS  = .TRUE.    ! USE REFORMED RINGS/RAYS
+d177 1
+a177 1
+     &                       NRING,LCIRC,NUMR, NLOCS,NRAYSC,
+d219 1
+a219 1
+     &              COEFFS,IXY,NLOCS,NRAYSC,TRANS,CPLX,
+a247 1
+C       PRINT OUT REPORT
+a249 2
+        ITMAX = MAX(ISHRANGEX,ISHRANGEY)
+        CALL APSH_SAM_REPORT(SHORRING,ITMAX)
+d251 13
+a263 3
+        IF (LUNDOC .GT. 0) THEN
+C         SAVE CCROT & ANGULAR DISPLACEMENT STATISTICS IN DOC FILE
+          CALL AP_STAT(NUMEXP,ANGDIFTHR,IBIGANGDIF,
+a267 1
+        ENDIF
+a273 2
+
+        IF (ALLOCATED(NLOCS))      DEALLOCATE(NLOCS)
+d301 1
+a301 1
+     &               COEFFS,IXY,NLOCS,NRAYSC, TRANS,CPLX,
+a312 1
+        INTEGER                :: NLOCS(2,*)
+d320 1
+a320 1
+	DOUBLE PRECISION       ::  CC_NOW(-ISHRANGEX:ISHRANGEX,
+d322 1
+a322 1
+	DOUBLE PRECISION       :: CC_BEST(-ISHRANGEX:ISHRANGEX,
+d325 2
+a326 2
+	DOUBLE PRECISION       :: CC(-ISTEP:ISTEP,-ISTEP:ISTEP)
+	DOUBLE PRECISION       :: CCP(-1:1,-1:1)
+d328 1
+d330 1
+a330 1
+	DOUBLE PRECISION       :: CCROTD,CCROTD_INTERP, CCOA
+d337 4
+d344 1
+a344 1
+        LOGICAL, PARAMETER     :: USE_OMP = .FALSE.
+d347 2
+a348 2
+        WR(1)   = 0.0               ! DUMMY VALUE FLAG FOR APRINGS CALL
+        MAXRIN  = NUMR(3,NRING) - 2 ! ACTUAL LENGTH OF LONGEST RING
+d356 3
+a358 1
+	CCROTD = -HUGE(CCROTD)
+d367 2
+d381 1
+a381 1
+     &                              NUMR,NRING, NLOCS,NRAYSC,
+d387 33
+a419 21
+                 CALL CROSRNG_TRANS(CIRCREF(1,IR),CIRCEXP,LCIRC/2,
+     &                              NLOCS,NRAYSC,
+     &                              USE_OMP,FFTW_PLANS(1),
+     &                              USE_UN,USE_MIR,
+     &                              ISMIRRORED,CCOA,POS_MAX)
+
+        !write(6,921) ir,it,jt,ccoa,POS_MAX
+921     format(' ir:',i5,' (',i3,',',i3,'): ',f12.4,' ',2f8.2,f6.1)
+
+                 CC_NOW(IT,JT) = CCOA    ! SAVE CC FOR THIS REF
+
+                 IF (CCOA .GE. CCROTD)  THEN
+C                   GOOD MATCH WITH NEW (MIRRORED OR NOT) POSITION 
+	            CCROTD  = CCOA
+	            IBE     = IR
+	            ISX     = IT
+	            ISY     = JT
+	            RANGNEW = ANG_N(POS_MAX,MODE,MAXRIN)
+	            IDIS    = IR
+                    IF (ISMIRRORED) IDIS = -IR
+	         ENDIF
+d429 2
+a430 4
+           IF (IBE .EQ. IR) THEN
+C             THIS IS BEST REF SO FAR
+              CC_BEST = CC_NOW        ! SAVE CC MATRIX FOR THIS REF
+           ENDIF
+d436 1
+a436 1
+           CALL APSH_SAM_SIZE(CC_BEST,CCROTD, ISX,ISY,
+d438 5
+d445 7
+a452 6
+        SX       = ISX              ! BEST X SHIFT
+        SY       = ISY              ! BEST Y SHIFT
+        CCROT    = CCROTD           ! BEST ROTATION
+	SX       = -SX
+	SY       = -SY
+ 
+d466 139
+a604 1
+C       **************** APSH_SAM_SH ******************************
+d614 1
+a614 1
+	DOUBLE PRECISION, INTENT(IN)    :: CC_NOW(-ISHRANGEX:ISHRANGEX,
+d618 1
+a618 1
+        DOUBLE PRECISION                :: QST,QHI   
+d658 1
+a658 1
+C       **************** APSH_SAM_SIZE ******************************
+d664 1
+a664 1
+C       PURPOSE: CHECKS SIZE & SHIFT SKIPS TO SEE WHAT HIGHER CC'S 
+d671 1
+a671 1
+	DOUBLE PRECISION, INTENT(IN)  :: CC_BEST(-ISHRANGEX:ISHRANGEX,
+d673 1
+a673 1
+        DOUBLE PRECISION, INTENT(IN)  :: QMAX   
+d678 1
+a678 1
+        DOUBLE PRECISION              :: QST   
+d698 1
+d705 2
+a706 2
+              IHI_X = IQX(ISZ,ISTEP)   ! LOCATION FOR THIS TOP CC
+              IHI_Y = IQY(ISZ,ISTEP)
+d725 1
+d728 6
+d752 2
+a753 2
+           ENDDO                              ! END OF : DO ISTEP = 1,NSKIPS
+        ENDDO
+d757 1
+a757 1
+C       **************** APSH_SAM_INIT ******************************
+d765 6
+a770 3
+        CC_BAD_Z = 0.0   ! TOTAL CC FOR EACH SIZE 
+        NN_GUD_Z = 0     ! # OF BEST VALUES FOR EACH SKIP
+        NN_SAM_Z = 0     ! # OF SHIFTS IN SAMPLE
+d774 1
+d792 2
+a793 1
+        REAL             :: PERGUD,AVGCC
+a796 2
+          !WRITE(NOUT,*) '  SHIFT  SKIP #BEST  %BEST        %CC   TIME'
+          !WRITE(NOUT,*) '  RANGE  AMT  FOUND  FOUND        MAX'
+d798 4
+a801 2
+           WRITE(6,*)'  SHIFT  STEP  #BEST  %BEST         %CC     TIME'
+           WRITE(6,*)'  RANGE  AMT   FOUND  FOUND         MAX'
+d808 1
+a808 1
+                 NTOT  = NN_SAM_Z(0,1)
+d814 1
+d816 1
+a816 1
+                 WRITE(6,90)ISIZ,ISTEP,NGUD,PERGUD,AVGCC,ITIME,NTOT
+d842 6
+d851 3
+a853 2
+                 WRITE(6,90)ISIZ,ISTEP,NGUD,PERGUD,AVGCC,ITIME
+90               FORMAT(' ',I6,I5,I7,'   ',F5.1,'%  ',F10.1,'%  ',2I4)
+d856 1
+a856 1
+              WRITE(6,*)    ' '
+a861 59
+
+#ifdef NEVER
+ EXP. IMAGES:   50  REFERENCES:  551
+
+   SHIFT  STEP  #BEST  %BEST         %CC     TIME
+   RANGE  AMT   FOUND  FOUND         MAX
+      0    0      0     0.0%        85.4%     1  50
+
+      1    1      1     2.0%        91.0%     9
+
+      2    1      2     4.0%        92.1%    25
+      2    2      0     0.0%        92.1%     9
+
+      3    1      2     4.0%        93.3%    49
+      3    3      0     0.0%        93.0%     9
+
+      4    1      4     8.0%        93.8%    81
+      4    2      3     6.0%        93.6%    25
+      4    4      3     6.0%        93.1%     9
+
+      5    1      4     8.0%        94.6%   121
+      5    5      1     2.0%        93.8%     9
+
+      6    1      5    10.0%        95.2%   169
+      6    2      4     8.0%        95.0%    49
+      6    3      4     8.0%        94.6%    25
+      6    6      2     4.0%        94.1%     9
+
+      7    1      6    12.0%        95.8%   225
+      7    7      2     4.0%        94.7%     9
+
+      8    1      7    14.0%        96.6%   289
+      8    2      5    10.0%        96.4%    81
+      8    4      3     6.0%        95.9%    25
+      8    8      2     4.0%        95.5%     9
+
+      9    1     10    20.0%        97.3%   361
+      9    3      3     6.0%        97.0%    49
+
+     10    1     15    30.0%        97.8%   441
+     10    2     10    20.0%        97.6%   121
+     10    5      7    14.0%        96.8%    25
+
+     11    1     20    40.0%        98.1%   529
+
+     12    1     26    52.0%        98.3%   625
+     12    2     15    30.0%        98.3%   169
+     12    3     12    24.0%        97.9%    81
+     12    4      7    14.0%        97.6%    49
+     12    6      6    12.0%        97.0%    25
+
+     13    1     33    66.0%        98.7%   729
+
+     14    1     50   100.0%       100.0%   841
+     14    2     27    54.0%        99.2%   225
+     14    7     12    24.0%        97.8%    25
+#endif
+
+ 
+@
+
+
+1.2
+log
+@used CROSRNG_TRANS without qm & qu passing
+@
+text
+@d50 22
+a431 19
+
+C       **************** APSH_SAM_INFO ******************************
+
+        MODULE APSH_SAM_INFO 
+
+C       PURPOSE: INITIALIZES SAMPLING COUNTERS
+
+           INTEGER,PARAMETER  :: NSIZES = 40
+           INTEGER,PARAMETER  :: NSTEPZ = 8
+
+           REAL               :: CC_BAD_Z(0:NSIZES,NSTEPZ) ! SUM OF BAD SIZE CC
+           INTEGER            :: NN_GUD_Z(0:NSIZES,NSTEPZ)! # OF BAD SIZES
+           INTEGER            :: NN_SAM_Z(0:NSIZES,NSTEPZ)! # OF SIZE SAMPLES
+
+           DOUBLE PRECISION   :: QSTEP(0:NSIZES,NSTEPZ)   
+           INTEGER            :: IQX(0:NSIZES,NSTEPZ)   
+           INTEGER            :: IQY(0:NSIZES,NSTEPZ)   
+
+        END MODULE APSH_SAM_INFO
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d97 3
+a99 3
+        INTEGER, PARAMETER   :: LUNT    = 77
+        INTEGER, PARAMETER   :: INANG   = 78
+        INTEGER, PARAMETER   :: LUNRING = 50
+d101 7
+a107 7
+        INTEGER              :: NBORDER  = 0     ! # BORDER PIXELS
+        INTEGER              :: NSUBPIX  = 0     ! # SUBPIX PIXELS
+        INTEGER              :: MYPID    = -1    ! NOT FOR MPI
+
+        SCRFILE         = CHAR(0)             ! NO REF. RINGS FILE
+        CIRCREF_IN_CORE = .TRUE.              ! INCORE REF. RINGS
+        MODE            = 'F'                 ! FULL CIRCLE
+a297 1
+        REAL                   :: QU(2*NRAYSC),QM(2*NRAYSC)
+d352 1
+a352 1
+     &                              ISMIRRORED,CCOA,POS_MAX,QU,QM)
+@
