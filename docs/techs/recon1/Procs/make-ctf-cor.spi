@@ -20,7 +20,7 @@
 
  [parameter_doc]  = '../params'                  ; Parameter doc file                (one)
 
- [defocus_doc]    = 'defocus'                    ; Defocus doc file lists defocus    (one/micrograph)
+ [defocus_doc]    = 'defocus'                    ; Defocus doc file lists defocus    (one)
 
  [calc_power]     = 'power/roo_doc_****'         ; 1D calculated power spectrum      (one/micrograph)
                                                  ; Only need if plotting             (one/micrograph)
@@ -31,7 +31,7 @@
 
  [ctf_cor]        = '[ctf_dir]/flipctf_****'     ; Phase-flipped CTF correction file (one/micrograph)
 
- [ctf_cor_doc]    = '[ctf_dir]/flipctf_doc****'  ; Phase-flipped CTF doc file        (one/micrograph, if wantplots)
+ [ctf_cor_doc]    = '[ctf_dir]/flipctf_doc_****' ; Phase-flipped CTF doc file        (one/micrograph, if wantplots)
 
  [gnuplot_script] = 'viewtrap.gnu'               ; Gnuplot script                    (one, if wantplots)
 
@@ -40,6 +40,7 @@
  ; Set temporary filenames
  [temp_defocus_renumbered] = 'tmpdocdefocus-renum'
  [temp_defocus_sorted]     = 'tmpdocdefocus-sort'
+ [temp_ctf_nohead]         = 'tmpdocctf-nohead'
 
  ; Get parameters
  UD IC  5,[sp_pixsiz]
@@ -112,7 +113,7 @@
       [sp_acr]                           ; ACR  
       -1                                 ; Sign
 
-    IF (want_plots == 0) CYCLE           ; Skip plot file creation
+    IF ([wantplots-yn] == 0) CYCLE       ; Skip plot file creation
 
     ; Generate phase flipping CTF doc file for this micrograph
     ; For plot only.  Do not use with 'FD' for phase flipping 
@@ -127,11 +128,11 @@
 
  ENDDO                                   ; End micrograph-loop
 
- IF (want_plots == 0) THEN               ; Skip plot file creation
+ IF ([wantplots-yn] == 0) THEN           ; Skip plot file creation
     RE
  ENDIF
 
- ; Sort defocus docs
+ ; Sort defocus docs file columns
  DOC SORT                                ; Sort 
    [defocus_doc]                         ; Defocus doc file            (input)
    [temp_defocus_sorted]                 ; Sorted defocus doc file     (output)
@@ -145,6 +146,17 @@
     UD E
  ENDIF
 
+ ; Find scaling constant for graphing power spectrum
+ DOC STAT [nval],[min],[max] 
+   [calc_power][mic2plot]
+   1                                     ; Column 
+
+ [maxstr] = ' {%f9.4%[max]}'                ; Scaling for power spectrum
+ [constr] = '(\00443 / [maxstr])'           ; Scaling for power spectrum
+
+ !sys
+ !  echo " Max: {%f9.3%[max]}   constr: [constr] "
+
  SYS 
    echo ; echo " Generating Gnuplot script for micrograph: {%I0%[mic2plot]}" 
 
@@ -152,22 +164,30 @@
  DE   
    [temp_defocus_sorted]
  SYS 
-   rm -f [gnuplot_script]
+   rm -f [gnuplot_script] [temp_ctf_nohead]
+
+ ; Remove header comments of doc file
+ SYS                                       
+   tail +10 [ctf_cor_doc][mic2plot].$DATEXT > [temp_ctf_nohead] 
 
  SYS 
    echo 'set xzeroaxis' > [gnuplot_script]
  SYS 
-   echo 'set xlabel "Resolution, Angstroms^-1"'     >> [gnuplot_script]
+   echo 'set xlabel "Resolution (1/Pixels)"'  >> [gnuplot_script]
  SYS 
-   echo 'plot [0:{%f6.4%[sp_max_spfreq]}][-1.1:1.75] \' >> [gnuplot_script]
+   echo 'plot  \' >> [gnuplot_script]
+  
  SYS 
-   echo '"[calc_power][mic2plot].$DATEXT"      using  5:3 title "[calc_power][mic2plot].$DATEXT" with lines, \' >> [gnuplot_script]
+   echo -ne '"[calc_power][mic2plot].$DATEXT"  using  5:[constr] ' >> [gnuplot_script]  
  SYS 
-   echo '"[ctf_cor_doc][mic2plot].$DATEXT" using  5:5 title "Straight CTF" with lines, \' >> [gnuplot_script]
+   echo 'title "[calc_power][mic2plot].$DATEXT" with lines, \'     >> [gnuplot_script] 
+
  SYS 
-   echo '"[ctf_cor_doc][mic2plot].$DATEXT" using  5:6 title "Flipped CTF"  with lines, \' >> [gnuplot_script]
+   echo '"[temp_ctf_nohead]" using  3:6 title "-Straight CTF" with lines, \' >> [gnuplot_script]
  SYS 
-   echo '"[ctf_cor_doc][mic2plot].$DATEXT" using  5:7 title "Trapped CTF"  with lines'    >> [gnuplot_script]
+   echo '"[temp_ctf_nohead]" using  3:7 title "Flipped CTF"  with lines, \' >> [gnuplot_script]
+ SYS 
+   echo '"[temp_ctf_nohead]" using  3:8 title "Trapped CTF"  with lines'    >> [gnuplot_script]
 
  ; If requested, open Gnuplot
  IF ( [viewplot-yn] .NE. 0 ) THEN
@@ -182,7 +202,8 @@
 
  EN
 
- ; Modified 2015-11-16
+ ; Modified 2016-06-29
+ ;     2016-06-29 (agl) -- Fixed plot
  ;     2015-11-16 (agl) -- Use operation 'TF CT' for phase flipping!!
  ;     2013-10-16 (agl) -- Modernized syntax, changed filenames, cosmetic
  ;     2012-05-09 (trs) -- Optionally spawns gnuplot, plotting by default highest-defocus micrograph

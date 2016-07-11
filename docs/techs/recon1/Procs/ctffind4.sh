@@ -34,7 +34,6 @@
 #               dFMax: End defocus value for grid search in Angstrom.
 #               FStep: Step width for grid search in Angstrom.
 #
-# Albany ctffind3.exe location = "/usr8/repository/bin/ctffind3.exe"
 #
 # EDIT FOLLOWING LINE FOR LOCATION OF: ctffind4.exe ON YOUR SYSTEM
 # IF IT IS NOT ALREADY IN YOUR PATH
