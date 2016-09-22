@@ -4,22 +4,21 @@
 #
 # PURPOSE: Copy fftw3 files to distribution without duplicating a lot of stuff
 
-#du -ak | grep '\.a' | grep -v '\.am'
+# du -ak | grep '\.a' | grep -v '\.am'
 
 # Source of fftw3 files
 fftw_src="/usr8/spider/fftw"
 
-# distribution destination
+# Distribution destination
 fftw_dest="/usr8/send/spider/fftw"
 
 # FFTW3 targets included in copy
-fftw_sources="fftw3-intel fftw3-32 fftw3-opt64 fftw3-intel64 fftw3-osx-32 fftw3-osx-64  fftw3-osx-32-pgi fftw3-osx-64-pgi " 
+#fftw_sources="fftw3-intel fftw3-32 fftw3-opt64 fftw3-intel64 fftw3-osx-32 fftw3-osx-64  fftw3-osx-32-pgi fftw3-osx-64-pgi " apr15
+fftw_sources="fftw3-intel fftw3-32 fftw3-opt64 fftw3-intel64" 
 
 # Name of FFTW3 distribution directory in distribution destination
 build_dir="${fftw_dest}/FFTW3_dist"
- 
-
-  
+   
 # Copy the target FFTW3 object library files
 echo Copying: config, howto, AUTHORS COPY, .libs lib files   
 for i in ${fftw_sources}

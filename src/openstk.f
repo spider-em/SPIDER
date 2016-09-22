@@ -1,22 +1,23 @@
 
 C++*********************************************************************
 C
-C OPENSTK.F -- CREATED                       DEC 96 -- ArDean Leith
-C              USED LUNHDR                   FEB 99 -- ArDean Leith
-C              INDEXED STACKS                JAN 03 -- ArDean Leith
-C              HEADER COPY                   FEB 03 -- ArDean Leith
-C              OPENFIL PARAMETERS            APR 04 -- ArDean Leith
-C              BAD IRTFLG RETURN             AUG 04 -- ArDean Leith
-C              ERROR MSG                     DEC 10 -- ArDean Leith
-C              MPI ERROR MSG                 MAR 11 -- ArDean Leith
-C              MSG                           FEB 12 -- ArDean Leith
-C              'ST' MISSING STACKED IMAGE    AUG 14 -- ArDean Leith
+C OPENSTK.F -- CREATED                         DEC 96 -- ArDean Leith
+C              USED LUNHDR                     FEB 99 -- ArDean Leith
+C              INDEXED STACKS                  JAN 03 -- ArDean Leith
+C              HEADER COPY                     FEB 03 -- ArDean Leith
+C              OPENFIL PARAMETERS              APR 04 -- ArDean Leith
+C              BAD IRTFLG RETURN               AUG 04 -- ArDean Leith
+C              ERROR MSG                       DEC 10 -- ArDean Leith
+C              MPI ERROR MSG                   MAR 11 -- ArDean Leith
+C              MSG                             FEB 12 -- ArDean Leith
+C              'ST' MISSING STACKED IMAGE      AUG 14 -- ArDean Leith
+C              'FS' ON MISSING STACKED IMAGE   SEP 16 -- ArDean Leith
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2014  Health Research Inc.,                         *
+C=* Copyright 1985-2016  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -149,12 +150,12 @@ C -------------------------------- NEW --------------------------------
            IF (.NOT. EX .OR. IMGNUM  ==  0) THEN
 C             STACK FILE DOES NOT EXIST YET, OR MUST BE REPLACED
 
-             IF (NSTACKIN .LT. 0) THEN
+             IF (NSTACKIN < 0) THEN
 C                FLAG FOR INDEXED STACK
                  CALL RDPRI1S(NSTACK,NOT_USED,
      &           'HIGHEST IMAGE/VOLUME NUMBER ALLOWED IN STACK',IRTFLGT)
                  IF (IRTFLGT .NE. 0) RETURN
-                 IF (NSTACK .LT. 1) THEN
+                 IF (NSTACK < 1) THEN
                      CALL ERRT(101,'HIGHEST NUMBER MUST BE > 0',NE)
                      RETURN                        
                   ENDIF
@@ -169,7 +170,7 @@ C             CREATE NEW STACK FILE, OPENFIL WILL RETURN NSTACK = 0
      &                     ITYPE,DISP,.FALSE.,IRTFLG)
               IF (IRTFLG .NE. 0) RETURN
 
-              IF (NSTACKIN .LT. 0) THEN
+              IF (NSTACKIN < 0) THEN
 C                 CLEAR STACK INDEX IN NEW FILE
                   CALL LUNCLRINDX(LUN,NX,IRTFLGT)
               ENDIF
@@ -223,13 +224,13 @@ C             UPDATE OVERALL HEADER WITH MAXIMUM IMAGE NUMBER IN USE NOW
               CALL LUNSETMAXALL(LUN,IMGNUM,IRTFLGT)
            ENDIF
 
-           IF (ISTACK .LT. 0) THEN
+           IF (ISTACK < 0) THEN
 C             NEW INDEXED STACKED FILE, UPDATE INDX LOCATION
               CALL LUNWRTINDX(LUN,IMGNUM,NX,IRTFLGT)
               IF (IRTFLGT .NE. 0) RETURN
            ENDIF
 
-           IF (IMGNUM > MAXIM .OR. ISTACK .LT. 0) THEN
+           IF (IMGNUM > MAXIM .OR. ISTACK < 0) THEN
 C             SAVE OVERALL HEADER NOW TO PRESERVE MAXIM & LASTINDX
               CALL LUNWRTHED(LUN,NX,0,IRTFLGT)
            ENDIF
@@ -255,9 +256,9 @@ C          RETURNS NSTACK = -1 TO SIGNIFY THIS IS STACKED IMAGE
 
 C -------------------------------- OLD --------------------------------
            
-	ELSEIF (DISP(1:1)  ==  'O' .OR. DISP(1:1)  ==  'K' .OR.
-     &          DISP(1:1)  ==  'Z' .OR. 
-     &          DISP(1:1)  ==  'E' .OR. DISP(1:1)  ==  'M') THEN
+	ELSEIF (DISP(1:1) == 'O' .OR. DISP(1:1) ==  'K' .OR.
+     &          DISP(1:1) == 'Z' .OR. 
+     &          DISP(1:1) == 'E' .OR. DISP(1:1) ==  'M') THEN
 C          WANT AN EXISTING IMAGE FROM EXISTING STACK OR AN
 C          EXISTING BARE STACK HEADER
 
@@ -307,8 +308,12 @@ C          RECOVER IMAGE PARAMETERS FROM SPECIFIC IMAGE HEADER
 C          GET IMUSED FOR THIS CURRENT IMAGE
            CALL LUNGETINUSE(LUN,IMUSED,IRTFLGT)
 
+
+           !write(6,*) '  in openstk, imgnum,imused:',imgnum,imused
+
            IF (IMUSED .NE. IMGNUM) THEN
 C             NO EXISTING IMAGE WITHIN STACK??
+
               IF (IMUSED == 0) THEN
 C                SOME VERY OLD STACKS DID NOT HAVE IMGNUM IN THEM
                  CALL LUNGET25(LUN,IVAL,IRTFLGT)
@@ -318,30 +323,34 @@ C                   STACK MAY LACK IMAGE OR HAS BAD EM2EM HEADER
 
 C                   GET RECORD INFO (CAN BE FROM OVERALL HEADER)
                     CALL LUNGETLAB(LUN,NDUM1,NDUM2,NRECS,
-     &                                NDUM3,NDUM4,IRTFLGT)
+     &                                 NDUM3,NDUM4,IRTFLGT)
 
-                    IF (IMGNUM > 0 .AND. NRECS <= 0) THEN
-C                      BAD IREC IN STACKS CREATED WITH EM2EM!)
-                          WRITE(NOUT,'(/,A,A,/,A,A)')
-     &                 ' *** IMAGE (PROBABLY FROM EM2EM) HAS NONSENSE',
-     &                      ' IN SOME HEADER LOCATIONS.',
-     &                 ' *** USE OPERATION: <ST EM2> TO FIX HEADER.'
+                    !write(6,*) '  imgnum,nrecs:',imgnum,nrecs,disp
 
-                       IF (DISP == 'Z') THEN
-                          IRTFLG = 5 
-                          CALL LUNSETINUSE(LUN,IMGNUM,IRTFLGT)
+                    IF (IMGNUM > 0 .AND. NRECS <= 0 .AND.
+     &                   DISP == 'Z') THEN
+C                      MAY BE BAD IREC IN STACKS CREATED WITH EM2EM!
+c                      WRITE(NOUT,'(/,A,A)')
+c    &                 ' *** IF IMAGE FROM EM2EM',
+c    &                 ' USE OPERATION: <ST EM2> TO FIX HEADER.'
 
-                       ELSE
-                          IRTFLG = 1 
-                          CALL ERRT(102,'BAD HEADER IN STACKED IMAGE',
-     &                             IMGNUM)
-                       ENDIF
+                       CALL LUNSETINUSE(LUN,IMGNUM,IRTFLGT)
+                       IRTFLG = 5 
+                       RETURN
+
+                    ELSEIF (DISP == 'Z') THEN
+C                      DO NOT STOP ON ERROR
+                       WRITE(NOUT,'(A,I0)') ' *** MISSING IMAGE',IMGNUM
+                       IRTFLG = 5 
+                       RETURN
+
                     ELSE
-C                      STACK LACKS IMAGE
-                       CALL ERRT(102,'STACK LACKS IMAGE',IMGNUM)
+                       CALL ERRT(102,'MISSING IMAGE',IMGNUM)
                        IRTFLG = 1
+                       RETURN 
                    ENDIF
                    GOTO 999
+
                  ENDIF
 
                  IMUSED = IMGNUM

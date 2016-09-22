@@ -10,10 +10,11 @@
 
 # CHANGES: new                                ArDean Leith  May 94
 #          python tools                       ArDean Leith  Apr 14
+#          tmpdir                             ArDean Leith  Jul 15
 
 # Root location for our local source files
 set spider_root  = /usr8/spider    
-set tmpdir       = $spider_root/utils/tmp        
+set tmpdir       = $spider_root/utils/jnk_raw_www_docs        
 set spider_send  = /usr8/send/
 
 set spiredir     = /usr8/spider/spire/    

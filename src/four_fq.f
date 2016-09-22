@@ -264,7 +264,7 @@ C             RADIUS INPUT FOR PARM2
 C       IPADTYPE: 0 == NONE,  1== ZEROPAD, 2==BORDERPAD, 3==AVG PAD
         IPADTYPE = 2    ! PAD WITH ZEROES
 
-        IF (FCHAR(4:5) == 'NP' .OR. FCHAR(5:6) == 'NP')  THEN
+        IF ( INDEX(FCHAR,'NP') > 0)  THEN
 C          NO PADDING
            IPADTYPE = 0    ! NO PADDING
            N2X      = NX

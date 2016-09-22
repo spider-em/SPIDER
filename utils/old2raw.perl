@@ -399,17 +399,27 @@ sub usagescan  # ---------------- usagescan -----------------------
 
 sub addexample # ---------------- addexample -----------------------
    {
-   #print  ("addexample $exa_dir/$fn.html  \n");
+   #print  qq(fn: $fn.\n);
    
-   #   print  qq(fn: $fn.\n);
-   if ($fn=~/^IQ|^iq/) 
-      {   # Inquiry Example page needed 
-      #print  qq(fn: $fn.\n);
-      print TOO qq(&nbsp; <a href="../exa/inquiry.$htmlext">Example</a>.\n);
+   if ($fn=~/^iq/)
+      {
+      if (-T "$exa_dir/$fn.html")
+         {   # Specific IQ example page needed 
+         print TOO qq(&nbsp; <a href="../exa/$fn.$htmlext">Example</a>.\n);
+         return;
+         }
+      else
+         {   # General IQ Example page needed 
+         #print  qq(fn: $fn.\n);
+         print TOO qq(&nbsp; <a href="../exa/inquiry.$htmlext">Example</a>.\n);
+         return;
+         }
       }
+      
    if ($fn=~/^sdic|^udic/) 
       {   # 'SD IC' Example page needed 
       print TOO qq(&nbsp; <a href="../exa/sdic.$htmlext">Example</a>.\n);
+      return;
       }
    if ($fn=~/^udfind/) 
       {   # 'UD FIND' Example page needed 
@@ -418,10 +428,12 @@ sub addexample # ---------------- addexample -----------------------
    if ($fn=~/^udnext/) 
       {   # 'UD NEXT' Example page needed 
       print TOO qq(&nbsp; <a href="../exa/udnext.$htmlext">Example</a>.\n);
+      return;
       }
    if ($fn=~/^hit|^hir/) 
       {   # 'HI' Example page needed 
       print TOO qq(&nbsp; <a href="../exa/hi.$htmlext">Example</a>.\n);
+      return;
       }
    if ($fn=~/^hidr/) 
       {   # 'HID' Example page needed 
@@ -430,6 +442,7 @@ sub addexample # ---------------- addexample -----------------------
    if ($fn=~/^ec/) 
       {   # 'EC' Example page needed 
       print TOO qq(&nbsp; <a href="../exa/ec.$htmlext">Example</a>.\n);
+      return;
       }
    if ($fn=~/^ro$|^roi|^rosd/) 
       {   # 'RO' Example page needed 

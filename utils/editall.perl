@@ -2,13 +2,13 @@
 #
 # SOURCE: /usr8/spider/utils/editall.perl
 #
-# PURPOSE:  Edit all files 
+# PURPOSE:  Edit all files in a directory 
 #
 # CHANGES:         Author:    ArDean Leith June 2013
 # USAGE:   /usr8/spider/utils/editall.perl 
 
-$edit_dir = qq(/usr8/spider/rawdocs/exa/images);  # Files to be editted 
-$new_dir  = qq($edit_dir/jnk);                    # Dir for editted files
+$edit_dir = qq(/usr8/spider/rawdocs/exa/images);  # Files to be edited 
+$new_dir  = qq($edit_dir/jnk);                    # Dir for edited files
 
 	
 # Actual program begins here xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
@@ -29,7 +29,8 @@ foreach $file (@files)
   $newfile = "$new_dir/$file";
  
   #print " File: $file \n";
-  if ($file !~ /$\.spi/ )
+  # Check for .spi files, do not edit them
+  if ($file !~ /$\.spi/ )    
      { 
      #print  " Not spi: $file\n";
      next;

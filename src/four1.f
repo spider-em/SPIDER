@@ -71,13 +71,9 @@ C       OPERATION NOT IN FOUR1, RETURN TO SPIDER
         RETURN
 
 C       ---------------- QUICK FILTERING ------------------------- 'FQ'
-1       IF (FCHAR(4:4) == 'Q')  THEN
-C          NEW INCORE FQ OPERATION
-           CALL FOUR_FQ
-        ELSE
-           CALL FOUR1A
-        ENDIF
 
+C       NEW INCORE FQ OPERATION
+1       CALL FOUR_FQ
         RETURN
 
 C       ---------------- FOURIER TRANSFORM ----------------------- 'FT'

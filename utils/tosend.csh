@@ -61,7 +61,7 @@ mkdir -p $destroot $jwebdest
 #             preserve executability, preserve time, follow Symlinks
 set sendit  = 'rsync -zuEtL --out-format="%n%L"  '
 
-set excludes = "--exclude="RCS" --exclude="old" --exclude="rejects" --exclude="res" --exclude="rep" --exclude="Attic" "  
+set excludes = "--exclude="RCS" --exclude="old"  --exclude="Attic" "  
 
 
 # ------------------ Copy source files --------------------------------
@@ -79,39 +79,39 @@ $sendit $srcdir/Makebody.inc.send $srcdest/Makebody.inc
 
 $sendit $srcdir/Makefile_samples/* $srcdest/Makefile_samples
  
-# --------------------- Copy man files ---------------------------
+# --------------------- Copy man files -------------------------------
 
 echo 'Copying man files. xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
 
-
 $sendit   $mandir/*.man    \
-          $mandir/*.also   \
-          $mandir/*.gif    \
-          $mandir/*spi     \
-          $mandir/convert* \
-          $mandir/Nextresults   $mandest
+          $mandir/*.also   $mandest
 
-# For Nextresults
-$sendit   $mandir/Nextresults   $bindest
+# --------------------- Copy bin files -------------------------------
 
-# Copy external tip files -------------------------------------------
+echo 'Copying bin/Nextresults  file. xxxxxxxxxxxxxxxxxxxxxx'
+
+$sendit   $bindir/Nextresults   $bindest
+
+# ------------------- Copy external tip files ------------------------
+
 echo "Copying external docs/tips files xxxxxxxxxxxxxxxxxxxx" 
+
 $sendit -d $tipsdir                    $docdest
 $sendit    $tipsdir/index_send.html    $docdest/tips/index.html 
 $sendit    $tipsdir/utilities.html      \
            $tipsdir/spiprogramming.html \
            $tipsdir/timebprp.spi        \
            $tipsdir/timing.html        $docdest/tips            
-##$sendit $excludes -r  $tipsdir/batch  $docdest/tips  removed feb 2013
  
 # --------------------- Copy PubSub* files ---------------------------
+
 echo 'Copying pubsub files. xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
 
 $sendit $excludes  $pubsubdir/*   $pubsubdest
 
 # --------------------- Copy proc files ---------------------------
-echo 'Copying proc files. xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
 
+echo 'Copying proc files. xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
 $sendit  $excludes       \
          $procdir/*.dat  \
          $procdir/*.bat  \
@@ -123,23 +123,25 @@ $sendit  $excludes       \
 
 # --------------------- Copy Python tools files ----------------------
 
-echo 'Copying Python tools files  xxxxxxxxxxxxxxxxxxx'
+echo 'Copying Python tools files  xxxxxxxxxxxxxxxxxxxxxxxxx'
 $sendit -r $excludes \
            $toolsdir/readme*      \
            $toolsdir/install.html \
-           $toolsdir/docs         \
-           $toolsdir/tools.tar       $toolsdest
+           $toolsdir/tools.tar.gz \
+           $toolsdir/docs  $toolsdest
 
 # --------------------- Copy Spire files ---------------------------
 
 echo 'Copying Spire distribution files. xxxxxxxxxxxxxxxxxxx'
+
 $sendit -r $spiredir/readme*                      $spiredest
-$sendit -r $spiredir/doc                          $spiredest
+$sendit -r $excludes $spiredir/doc                $spiredest
 $sendit -r $spiredir/tosend/spire_linux-1.5.5.tar $spiredest
 
 # --------------------- Copy JWeb files ---------------------------
 
 echo 'Copying JWeb Linux, & Windows files. xxxxxxxxxxxxxxxx'
+
 $sendit -r  $excludes       \
             $jwebdir/linux  \
             $jwebdir/win    \
@@ -148,29 +150,33 @@ $sendit -r  $excludes       \
 # --------------------- Copy  html doc files --------------------------
 
 echo 'Copying html doc & tech files. xxxxxxxxxxxxxxxxxxxxxx'
-$sendit $excludes -r --exclude="res" --exclude="rep"  --exclude="tips"   \
-           --exclude="/noupdate"     --exclude="/tmp"                    \
-           --exclude="/batcharch"    --exclude="bzvol.dat"               \
-           --exclude="oldzidoc.html" --exclude="techs/lgstr/tomo/data"   \
-           --exclude="techs/lgstr/tomo/output"                           \
-           $docdir/* $docdest
+
+$sendit $excludes -r    --exclude="tips"                  \
+           --exclude="techs/lgstr/tomo/data"              \
+           --exclude="bzvol.dat"                          \
+           --exclude="techs/lgstr/tomo/output"            \
+           --exclude="exa/images/bp3fpart*dat"            \
+           --exclude="techs/recon1/natproc_data_mics.tar" \
+           $docdir/*   $docdest
 
 # ----------------------------------------------------------------
 
 echo ' '
-echo "GREAT: SPIDER copied successfully to: distribution dir"
+echo 'SPIDER successfully copied to: distribution dir '
 echo ' '
-echo "Update FFTW files with: send-fftw.sh "
-echo "Update executables with make in src dir."
-echo "Update executables from OSX spider" 
-echo "Update Web  with:       /usr8/web/tosend/tosend.sh "
-echo "touch /usr8/send/spider/bin/CONTAINS_SPIDER_RELEASE_22.00"
-echo "Archive and compress the distribution in: /usr8/send "  
-echo "set wwwdir = spider-stage:/export/apache/vhosts/spider.wadsworth.org/htdocs/spider_doc/spider "   
-echo "scp -p /usr8/send/spiderweb.22.00.tar.gz  $wwwdir/download"
-echo "Edit: /usr8/spider/docs/spi-download.html"
-echo "scp -p /usr8/spider/docs/spi-download.html  $wwwdir/docs"
-echo "Update external web pages using: /usr8/spider/utils/wwwupdate.sh"
+echo 'Check for extra  tar archives '
+echo 'Update FFTW files with: send-fftw.sh '
+echo 'Update executables with make in src dir '
+echo 'Update Web  with:       /usr8/web/utils/tosend.sh '
+echo 'touch /usr8/send/spider/bin/CONTAINS_SPIDER_RELEASE_23.02 '
+echo 'Archive and compress the distribution in: /usr8/send '
+echo 'set wwwdir = spider-stage:/export/apache/vhosts/spider.wadsworth.org/htdocs/spider_doc/spider '
+echo 'scp -p /usr8/send/spiderweb.23.02.tar.gz  $wwwdir/download '
+echo 'Edit: /usr8/spider/docs/spi-download.html '
+echo 'scp -p /usr8/spider/docs/spi-download.html  $wwwdir/docs '
+echo 'Update external web pages using: /usr8/spider/utils/wwwupdate.sh '
+echo ' '
 
-echo ' '
+#echo 'Update executables from OSX spider '
+
 exit 0

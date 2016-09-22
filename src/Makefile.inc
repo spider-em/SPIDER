@@ -318,15 +318,12 @@ ELEMENTS =  \
  $(LIB)(fmrs_3dr.o) \
  $(LIB)(fnrm.o) \
  $(LIB)(four1.o) \
- $(LIB)(four1a.o) \
  $(LIB)(four1a_fp.o) \
  $(LIB)(four1b.o) \
  $(LIB)(four1c.o) \
  $(LIB)(fouring.o) \
  $(LIB)(fouring_q.o) \
  $(LIB)(four_fq.o) \
- $(LIB)(fq3_p.o) \
- $(LIB)(fq_q.o) \
  $(LIB)(frng.o) \
  $(LIB)(framealign_mlr.o) \
  $(LIB)(frngs.o) \

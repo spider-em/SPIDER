@@ -70,7 +70,10 @@ C 22    DMEAN           MEAN    DENSITY VALUE
 C 23    ISPG            SPACE GROUP NUMBER  (IMAGES == 0, VOL. == 1 )
 C 24    NSYMBT          NUMBER OF BYTES USED FOR SYMMETRY DATA (0 OR 80)
 C                       PLUS ANY EXTRA HEADER BYTES
-C 25-49 EXTRA           EXTRA, USER DEFINED STORAGE SPACE. 29 WORDS MAX.
+C 25-26 EXTRA           EXTRA, USER DEFINED STORAGE SPACE. 29 WORDS MAX.
+C 27    ?               CURRENTLY: 'MRCO'
+C 28    IVERSION        VERSION NUMBER (CURRENTLY: 20140)
+C 29-49 EXTRA           EXTRA, USER DEFINED STORAGE SPACE. 29 WORDS MAX.
 C 50-52 ORIGIN          ORIGIN IN X,Y,Z USED FOR TRANSFORMS             
 C 53    MAP             CHARACTER STRING 'MAP ' TO IDENTIFY FILE TYPE   
 C 54    MACHST          MACHINE STAMP                                   
@@ -85,8 +88,8 @@ C 80-CHARACTER 'LINES' AND THE 'LINES' DO NOT TERMINATE IN A *).
 C 
 C DATA RECORDS FOLLOW.
 C
-C NOTES:
-C        DMAX   < DMIN                       MAX & MIN UNDETERMINED
+C NOTES IN VERSION 20140++ :
+C        DMAX  < DMIN                        MAX & MIN UNDETERMINED
 C        DMEAN < (SMALLER OF DMIN and DMAX)  DMEAN     UNDETERMINED
 C        RMS   < 0.0                         RMS       UNDETERMINED
 C
@@ -108,7 +111,7 @@ CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
         INTEGER               :: MACHST,ISPG,MZ,IRTFLG
 
         CHARACTER(LEN=800)    :: CLABLS
-        CHARACTER(LEN=4)      :: MAP
+        CHARACTER(LEN=4)      :: MAP,CVAL
         LOGICAL               :: BIGENDARCH,BIGENDED
         LOGICAL               :: BIGENDFILE,SAMEENDFILE
 
@@ -117,7 +120,7 @@ CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
         REAL                  :: CELLAX,CELLAY,CELLAZ
         REAL                  :: CELLBX,CELLBY,CELLBZ
         REAL                  :: ORX,ORY,ORZ
-        INTEGER               :: NLABL,INOW,I,IEND
+        INTEGER               :: NLABL,INOW,I,IEND,IVERSION
 
         INTEGER               :: LENMAP
         CHARACTER(LEN=1)      :: LXYZ(3)
@@ -210,6 +213,12 @@ C           OLD STYLE, MRC MAP OR UNKNOWN FILE TYPE
         DMAX    = HEADBUF(21)
         DMEAN   = HEADBUF(22)
 
+C       GET EXTTYP (NOW 'MRCO')
+        CALL MVNREV(HEADBUF(27),CVAL,ISSWABT)
+
+C       GET VERSION NUMBER 
+        CALL MVNFLIP(HEADBUF(28),IVERSION,     FLIP)
+
         CALL MVNFLIP(HEADBUF(23), ISPG,  FLIP)
         CALL MVNFLIP(HEADBUF(24), NSYMBT,FLIP)
 
@@ -262,9 +271,8 @@ C          WRITE OUT HEADER INFORMATION
            WRITE(NOUT,1000) NX,NY,NZ,IMODE,
      &       NXSTART,NYSTART,NZSTART, MX,MY,MZ,
      &       CELLAX,CELLAY,CELLAZ, CELLBX,CELLBY,CELLBZ,
-     &       LXYZ(MAPC),LXYZ(MAPR),LXYZ(MAPS),
      &       DMIN,DMAX,DMEAN,RMS,ORX,ORY,ORZ,ISPG,NSYMBT,
-     &       MACHST,MAP,NLABL
+     &       MACHST,MAP,IVERSION, CVAL,NLABL
 
 1000       FORMAT(
      &     2X,'Columns, rows, sections .................. ',3(I7,1X)/
@@ -273,7 +281,6 @@ C          WRITE OUT HEADER INFORMATION
      &     2X,'Grid sampling on x, y, z ................. ',3I7/
      &     2X,'Cell axes ................................ ',3F10.2/
      &     2X,'Cell angles .............................. ',3F10.2/
-     &     2X,'Fast, medium, slow axes .................. ',3(4X,A)/
      &     2X,'Minimum density .......................... ',F25.12/
      &     2X,'Maximum density .......................... ',F25.12/
      &     2X,'Mean density ............................. ',F25.12/
@@ -282,6 +289,8 @@ C          WRITE OUT HEADER INFORMATION
      &     2X,'Space group, # bytes symmetry ............ ',2I7/
      &     2X,'Machine stamp ............................ ',I12/
      &     2X,'Map ......................................      ',A/
+     &     2X,'Version ..................................    ',I7/
+     &     2X,'ExtType .....................................   ',A/
 
      &     2X,'Number of labels ......................... ',I7)
 

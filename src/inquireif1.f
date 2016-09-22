@@ -9,12 +9,13 @@ C                  NLET = 0 BUG                     FEB 05 ARDEAN LEITH
 C                  OPENINLN KIND                    OCT 10 ARDEAN LEITH
 C                  _4@2 NON  BUG                    JAN 11 ARDEAN LEITH
 C                  TYPET ifort                      MAY 12 ARDEAN LEITH
+C                  ==, nsam                         SEP 16 ARDEAN LEITH
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2012  Health Research Inc.,                         *
+C=* Copyright 1985-2016  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -76,7 +77,7 @@ C       USE INLINE BUFFER COMMON AREA
         FIRSTC  = FILNAM(1:1)
         ILOCAT  = INDEX(FILNAM,'@')
         NAMEND  = NLET
-        IF (ILOCAT .GT. 1) NAMEND = ILOCAT - 1
+        IF (ILOCAT > 1) NAMEND = ILOCAT - 1
         EX      = .FALSE.
         ISOPEN  = .FALSE.
         INLNED  = 0
@@ -84,9 +85,9 @@ C       USE INLINE BUFFER COMMON AREA
         IRTFLG  = 0
 
 C       CHECK FOR ANONMOLOUS INPUT
-        IF (NLET .LE. 0 .OR. NAMEND .LE. 0) RETURN
+        IF (NLET <= 0 .OR. NAMEND <= 0) RETURN
 
-        IF (FIRSTC .NE. '_' .AND. ILOCAT .LE. 0) THEN
+        IF (FIRSTC .NE. '_' .AND. ILOCAT <= 0) THEN
 C          NO LEADING '_' AND NO '@' MEANS THAT IT IS A REGULAR 
 C          FILE_BASED NON-STACK IMAGE OR OTHER FILE (SUCH AS A
 C          DOCUMENT FILE)
@@ -113,13 +114,14 @@ C          NO LEADING '_' MEANS THIS IS FILE_BASED STACK OR BARE STACK
            IFOUND = -4   ! SET IFOUND TO DECREASE OPENING OUTPUT INFO
            MAXIM  =  1   ! A BARE STACK FILE IS OK
 
-           CALL OPFILEC(0,.FALSE.,FILNAM,LUN,'Z',IFORM,NSAM,NROW,NSLICE,
+           CALL OPFILEC(0,.FALSE.,FILNAM,LUN,'Z',IFORM,NX,NY,NZ,
      &              MAXIM,' ',.TRUE.,IRTFLG)
            IFOUND = 0    ! RESET NEEDED, THIS IS IN COMMON /UNITS/
 
-           EX     = (IRTFLG .EQ. 0)
+           EX     = (IRTFLG == 0)
+           !write(6,*) ' in inquirif1,  irtflg,ex:',irtflg,ex
 
-        ELSEIF (FIRSTC .EQ. '_') THEN
+        ELSEIF (FIRSTC == '_') THEN
 C          INLINE IMAGE FILE OR OVERALL INLINE STACK ACCESS WANTED
 
 C          RETRIVE INLINE BUFFER NUMBER FROM FILE NAME
@@ -127,10 +129,10 @@ C          RETRIVE INLINE BUFFER NUMBER FROM FILE NAME
            IF (IRTFLG .NE. 0)  RETURN
 
 C          SEE IF INLINE STACK EXISTS NOW
-           STACKOPN = (NSAMBUF(INLNED) .GT. 0)
+           STACKOPN = (NSAMBUF(INLNED) > 0)
            IF (.NOT. STACKOPN) RETURN
 
-           IF (ILOCAT .EQ. 0) THEN
+           IF (ILOCAT == 0) THEN
 C              SIMPLE INLINE IMAGE OR OVERALL INLINE STACK
                EX = .TRUE.
                RETURN
@@ -147,11 +149,11 @@ C          READ(FILNAM(ILOCAT+1:),*,IOSTAT=IER) IMGNUM -changed for osf-liy
            IFOUND = -4   ! SET IFOUND TO DECREASE OPENING OUTPUT INFO
            MAXIM  =  1   ! A BARE STACK FILE IS OK
 
-           CALL OPFILEC(0,.FALSE.,FILNAM,LUN,'Z',IFORM,NSAM,NROW,NSLICE,
+           CALL OPFILEC(0,.FALSE.,FILNAM,LUN,'Z',IFORM,NX,NY,NZ,
      &              MAXIM,' ',.TRUE.,IRTFLG)
            IFOUND = 0    ! RESET NEEDED, THIS IS IN COMMON /UNITS/
 
-           EX     = (IRTFLG .EQ. 0)
+           EX     = (IRTFLG == 0)
 
         ENDIF
 

@@ -153,7 +153,7 @@ C          OPEN INPUT IMAGE(S), (NOT FOURIER)
 
            LOCAT   = INDEX(FILOLD,'@')
            LOCAST  = INDEX(FILOLD,'*')
-           ISSTACK = (MAXIM > 0)                    ! USING A STACK
+           ISSTACK = (MAXIM > 0)                      ! USING A STACK
            BARE    = (LOCAT > 0 .AND. LOCAT == NLET)  ! BARESTACK
 
 
@@ -184,7 +184,7 @@ C             FROM SPIDER IMAGE FILE INTO MRC FORMAT ------- 'CP TO MRC'
               IF (ISSTACK) THEN 
 C                COPYING WHOLE STACK
                  CALL COPYTOCCP4_STK(LUN1,LUN2,FILOLD, 
-     &                             ILIST,NIMG,MAXIM,
+     &                             ILIST,NIMG,MAXIM,IMGNUM,
      &                             NX,NY,NZ)
              ELSE
 C                COPYING IMAGE/VOLUME

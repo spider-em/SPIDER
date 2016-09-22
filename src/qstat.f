@@ -1,14 +1,15 @@
 
 C++*********************************************************************
 C
-C    QSTAT.F                       LONG FILE NAMES JAN 89 ArDean Leith
-C                                  MODIFIED FOR STACKS 98 ArDean Leith
+C    QSTAT.F           LONG FILE NAMES JAN             89 ArDean Leith
+C                      MODIFIED FOR STACKS             98 ArDean Leith
+C                      ==,NSAM,IMPLICIT                16 ArDean Leith
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Copyright 1985-2016  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -30,13 +31,15 @@ C    QSTAT(LUN1,LUNM,LUNDOC,LUNXM1)
 C
 C    PARAMETERS:   LUN????      LOGICAL UNIT NUMBERS
 C                  LUNM         LOGICAL UNIT NUMBER OF MASK
-C                  NSAM,NROW    X & Y DIMENSIONS OF IMAGE
-C                  NSLICE       Z DIMENSION  OF IMAGE
+C                  NX,NY        X & Y DIMENSIONS OF IMAGE
+C                  NZ           Z DIMENSION  OF IMAGE
 C                  NSTACK       STACK/MAXIM INDICATOR
 C
 C--*******************************************************************
 
       SUBROUTINE QSTAT(LUN1,LUNM,LUNDOC,LUNXM1)
+
+      IMPLICIT NONE
 
       INCLUDE 'CMBLOCK.INC'
       INCLUDE 'CMLIMIT.INC'
@@ -47,9 +50,14 @@ C--*******************************************************************
 
       LOGICAL               :: ISFIRST,FOUROK
       INTEGER               :: ILIST1(NIMAX)
-      INTEGER               :: NILMAX,NLET1,IFORM1,NSAM1,NROW1,NSLICE1
+      INTEGER               :: NILMAX,NLET1,IFORM1,NX1,NY1,NZ1
       INTEGER               :: NDUM,NGOT1,IMG1,IRTFLG
-      INTEGER               :: NSAMM,NROWM,NSLICEM,MAXIMM,ninndx1,npoint
+      INTEGER               :: NXM,NYM,NZM,MAXIMM,ninndx1,npoint
+
+      INTEGER               :: ICOMM, MYPID, MPIERR
+      INTEGER               :: NSTACK1, IMAMI1, IFORMM, NINDX1, NLET 
+      INTEGER               :: lnblnk 
+
 
       REAL                  :: unused
       CHARACTER (LEN=1)     :: NULL = CHAR(0)
@@ -61,25 +69,27 @@ C     OPEN INPUT FILE
       FOUROK = .TRUE.
       CALL OPFILES(0,LUN1,LUNDOC,LUNXM1,  
      &             .TRUE.,FILNAM1,NLET1, 'O',
-     &             IFORM1,NSAM1,NROW1,NSLICE1,NSTACK1,
+     &             IFORM1,NX1,NY1,NZ1,NSTACK1,
      &             NULL,
      &             FOUROK, ILIST1,NILMAX, 
-     &             NDUM,NGOT1,IMG1, IRTFLG) 
+     &             NDUM,NGOT1,IMG1, IRTFLG)
+ 
+      !write(6,'(a,8i5)')' nstack1,ngot1,img1:',nstack1,ngot1,img1,irtflg
       IF (IRTFLG .NE. 0) RETURN
-      !write(6,'(a,8i5)')' In  nstack1,ngot1,img1:',nstack1,ngot1,img1
+      
 
       IMAMI1 = IMAMI   ! FROM CMBLOCK
 
-      IF (FCHAR(4:4) .EQ. 'M') THEN
+      IF (FCHAR(4:4) == 'M') THEN
 C        FIND STATISTICS UNDER A MASKED AREA
 
 C        OPEN MASK INPUT FILE
          CALL OPFILEC(0,.TRUE.,FILNAMM,LUNM,'O',IFORMM,
-     &             NSAMM,NROWM,NSLICEM,MAXIMM,'MASK',.FALSE.,IRTFLG)
+     &             NXM,NYM,NZM,MAXIMM,'MASK',.FALSE.,IRTFLG)
          IF (IRTFLG .NE. 0) RETURN
 
-         CALL SIZCHK(UNUSED,NSAM1,NROW1,NSLICE1,IFORM1,
-     &                      NSAMM,NROWM,NSLICEM,IFORMM,IRTFLG)
+         CALL SIZCHK(UNUSED,NX1,NY1,NZ1,IFORM1,
+     &                      NXM,NYM,NZM,IFORMM,IRTFLG)
          IF (IRTFLG .NE. 0) GOTO 9999
 
       ENDIF
@@ -89,8 +99,8 @@ C        OPEN MASK INPUT FILE
       NINDX1  = 1
       DO                ! LOOP OVER ALL IMAGES/STACKS
 
-        IF (FCHAR(4:4) .EQ. 'M') THEN
-           CALL NORMM(LUN1,LUNM,NSAM1,NROW1,NSLICE1,
+        IF (FCHAR(4:4) == 'M') THEN
+           CALL NORMM(LUN1,LUNM,NX1,NY1,NZ1,
      &                 FMAX,FMIN,AV,NPOINT)
  
            IF (MYPID <= 0 .AND. ISFIRST) THEN
@@ -104,18 +114,18 @@ C        OPEN MASK INPUT FILE
            ISFIRST = .FALSE.
 
         ELSEIF (IMAMI1 .NE. 1) THEN    ! IMAMI IS FROM CMBLOCK
-           CALL NORM3(LUN1,NSAM1,NROW1,NSLICE1,FMAX,FMIN,AV)
+           CALL NORM3(LUN1,NX1,NY1,NZ1,FMAX,FMIN,AV)
         ENDIF
 
         CALL REPORTSTAT(FMIN,FMAX,AV,SIG)
 
 C       OPEN NEXT INPUT FILE, UPDATE NINDX1 
         CALL NEXTFILE(NINDX1,   ILIST1, 
-     &                 FOUROK,  LUNXM1,
-     &                 NGOT1,   NSTACK1,  
-     &                 LUN1,    0,  
-     &                 FILNAM1, 'O',
-     &                 IMG1,    IRTFLG)
+     &                FOUROK,  LUNXM1,
+     &                NGOT1,   NSTACK1,  
+     &                LUN1,    0,  
+     &                FILNAM1, 'O',
+     &                IMG1,    IRTFLG)
         IF (IRTFLG .NE. 0) EXIT      ! ERROR / END OF INPUT STACK
         IMAMI1 = IMAMI
 

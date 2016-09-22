@@ -1,4 +1,4 @@
-head	1.19;
+head	1.20;
 access;
 symbols
 	pre_getangas:1.14
@@ -17,6 +17,11 @@ symbols
 locks; strict;
 comment	@c @;
 
+
+1.20
+date	2016.06.13.15.39.06;	author leith;	state Exp;
+branches;
+next	1.19;
 
 1.19
 date	2016.01.22.14.52.07;	author leith;	state Exp;
@@ -118,20 +123,22 @@ desc
 @@
 
 
-1.19
+1.20
 log
-@ISSWAB RENAMED ISSWABT  if used as local variable
+@SETHEDCCP4_NEW ADDED
 @
 text
 @
 C **********************************************************************
 c
-C SETHEDCCP4    ISSWAB ADDED                     JUL  02 ARDEAN LEITH
-C               ANGSTROMS/PIXEL                  JAN  05 ARDEAN LEITH 
-C               STARTING                         FEB  06 ARDEAN LEITH 
-C               MRC PROMPTS                      MAY  12 ARDEAN LEITH 
-C               NSYMBYT,ISPG                     JUN  15 ARDEAN LEITH 
-C               ISSWAB RENAMED ISSWABT           JAN  16 ARDEAN LEITH
+C SETHEDCCP4    ISSWAB ADDED                      JUL  02 ARDEAN LEITH
+C               ANGSTROMS/PIXEL                   JAN  05 ARDEAN LEITH 
+C               STARTING                          FEB  06 ARDEAN LEITH 
+C               MRC PROMPTS                       MAY  12 ARDEAN LEITH 
+C               NSYMBYT,ISPG                      JUN  15 ARDEAN LEITH 
+C               ISSWAB RENAMED ISSWABT            JAN  16 ARDEAN LEITH
+C               SETHEDCCP4_NEW ADDED              JUN  16 ARDEAN LEITH
+C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
@@ -153,8 +160,10 @@ C=* You should have received a copy of the GNU General Public License  *
 C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
 C **********************************************************************
+C
 C SETHEDCCP4(HEADBUF, NX, NY, NZ,
-C            DMIN,DMAX,DMEAN,DSIG, IMODE,ISSWABT,NSYMBYT,ISPG,IRTFLG)
+C           DMIN,DMAX,DMEAN,DSIG, SCALEX,SCALEY,SCALEZ,
+C           IMODE,ISSWABT,NSYMBYT,NIMG,MZ,IRTFLG)
 C
 C PURPOSE: CREATE NEW CCP4 HEADER. ALL OF THE STANDARD IMAGE 
 C          DEFAULTS ARE SET UP GIVEN THE REQUESTED INFORMATION. 
@@ -190,6 +199,202 @@ C        RMS   < 0.0                         RMS       UNDETERMINED
 C
 C23456789012345678901234567890123456789012345678901234567890123456789012
 C***********************************************************************
+
+        SUBROUTINE SETHEDCCP4_NEW(HEADBUF, 
+     &                        NX, NY, NZ, NIMG, IMODE,IVERSION,
+     &                        ISTARTX,ISTARTY,ISTARTZ, 
+     &                        ORIGX,ORIGY,ORIGZ, 
+     &                        SCALEX,SCALEY,SCALEZ, 
+     &                        DMIN,DMAX,DMEAN,DSIG, 
+     &                        ISSWABT,NSYMBYT, IRTFLG)
+
+        IMPLICIT NONE
+
+        INCLUDE 'CMBLOCK.INC'
+
+        REAL               :: HEADBUF(*)
+        INTEGER            :: NX,NY,NZ, IMODE,IVERSION
+        INTEGER            :: ISTARTX,ISTARTY,ISTARTZ
+        REAL               :: SCALEX,SCALEY,SCALEZ
+        REAL               :: ORIGX,ORIGY,ORIGZ
+        REAL               :: DMIN,DMAX,DMEAN,DSIG,SCALE
+        LOGICAL            :: ISSWABT
+        INTEGER            :: NSYMBYT,NIMG,ISPG,MZ,IRTFLG
+
+        INTEGER            :: MX,MY,MACHST,NZMRC 
+        INTEGER            :: NLABEL,I,INOW,NOT_USED
+        CHARACTER(LEN=44)  :: LABEL1 
+        CHARACTER(LEN=4)   :: CVAL
+        CHARACTER(LEN=1)   :: BLANK = CHAR(32)
+        real               :: cellax,cellay,cellaz
+
+C       NOTE: COPY IMAGE DATA IN REAL*4 FORMAT. 
+
+        WRITE(NOUT,*)' '
+        
+
+        NZMRC = NZ
+        IF (IVERSION < 20140) THEN
+           NZMRC = NIMG
+        ENDIF
+
+        CALL CCPMVI(HEADBUF(1),NX,1)
+        CALL CCPMVI(HEADBUF(2),NY,1)
+        CALL CCPMVI(HEADBUF(3),NZMRC,1)
+
+        CALL CCPMVI(HEADBUF(4),IMODE,1)
+
+C       SET START POINTS ON COLUMNS, ROWS, SECTIONS 
+        CALL CCPMVI(HEADBUF(5),ISTARTX,1)
+        CALL CCPMVI(HEADBUF(6),ISTARTY,1)
+        CALL CCPMVI(HEADBUF(7),ISTARTZ,1)
+
+C       GRID SAMPLING ON X, Y, Z (MX & MY ) 
+C       FOR EM, NUMBER OF SECTIONS ALONG Z IN A VOLUME STACK
+C       SO: MZ = NZ / NUMBER OF VOLUMES 
+
+        MX = NX
+        MY = NY
+        IF (NZ == 1 .AND. NIMG == 1) THEN
+C          IMAGE
+           ISPG  = 0    
+           MZ    = 1
+           NZMRC = 1            
+        ELSEIF (NZ == 1 .AND. NIMG > 1 ) THEN
+C          IMAGE STACK
+           ISPG  = 0    
+           MZ    = NIMG
+           NZMRC = NIMG        ! NUMBER OF IMAGES 
+        ELSEIF (NZ > 1 .AND. NIMG == 1 ) THEN
+C          VOLUME
+           ISPG  = 1    
+           MZ    = NZ
+           NZMRC = NZ          ! NUMBER OF VOLUMES 
+        ELSEIF (NZ > 1 .AND. NIMG > 1 ) THEN
+C          STACK OF EM VOLUMES
+           ISPG  = 401    
+           MZ    = NZ * NIMG
+           NZMRC = NIMG       ! NUMBER OF VOLUMES
+        ELSE 
+           CALL ERRT(102,'BAD STACK OR VOLUME PARAMETERS',NIMG)
+           IRTFLG = 1
+           RETURN
+        ENDIF
+
+        CALL CCPMVI(HEADBUF(8), MX,1)
+        CALL CCPMVI(HEADBUF(9), MY,1)
+        CALL CCPMVI(HEADBUF(10),MZ,1)
+
+C       CELL SIZE (ANGSTROMS) (CELLAX..) 
+        CELLAX      = SCALEX * NX
+        CELLAY      = SCALEX * NX
+        CELLAZ      = SCALEX * NX
+        HEADBUF(11) = CELLAX
+        HEADBUF(12) = CELLAY
+        HEADBUF(13) = CELLAZ  
+
+C       CELL ANGLES (DEGREES)  (CELLBX..) 
+        HEADBUF(14) = 90.0
+        HEADBUF(15) = 90.0
+        HEADBUF(16) = 90.0
+
+C       STORAGE: FAST, MEDIUM, SLOW AXES 
+        CALL CCPMVI(HEADBUF(17),1,1)
+        CALL CCPMVI(HEADBUF(18),2,1)
+        CALL CCPMVI(HEADBUF(19),3,1)
+ 
+C       MIN, MAX. & MEAN DENSITY 
+        HEADBUF(20) = DMIN
+        HEADBUF(21) = DMAX
+        HEADBUF(22) = DMEAN
+
+C       SPACE GROUP, # BYTES SYMMETRY 
+        CALL CCPMVI(HEADBUF(23), ISPG,  1)
+        CALL CCPMVI(HEADBUF(24), NSYMBYT,1)
+
+C       ZERO THE EXTRA POSITIONS
+        DO I = 25,49
+           CALL CCPMVI(HEADBUF(I), 0,1)
+        ENDDO
+
+C       PUT IN EXTTYP : 'MRCO'
+        CVAL = 'MRCO'
+        CALL CCPMVC(HEADBUF(27),CVAL,ISSWABT)
+
+C       VERSION NUMBER 
+        CALL CCPMVI(HEADBUF(28), IVERSION,1)
+                
+        HEADBUF(50) = ORIGX
+        HEADBUF(51) = ORIGY
+        HEADBUF(52) = ORIGZ
+
+C       PUT IN 'MAP'
+        CVAL = 'MAP '
+        CALL CCPMVC(HEADBUF(53),CVAL,ISSWABT)
+
+C       SET MACHINE STAMP
+        CALL SETSTAMP(MACHST,ISSWABT)
+        CALL CCPMVI(HEADBUF(54),MACHST,1)
+
+c        write(nout,*) ' map:',cval,headbuf(53)
+c        write(nout,*) ' machst:',machst,headbuf(54)
+
+C       SET RMS (ASSUMING THIS DEFINED SAME AS SIG IN SPIDER??)
+        HEADBUF(55) = DSIG
+
+C       SET NUMBER OF LABELS
+        NLABEL = 1  
+        CALL CCPMVI(HEADBUF(56), NLABEL,1)
+
+C       ZERO ALL LABELS WITH BLANKS
+        CVAL = BLANK // BLANK // BLANK // BLANK
+        DO I = 57,256
+           CALL CCPMVC(HEADBUF(I),CVAL,ISSWABT)
+        ENDDO
+
+C       ADD ONE LABEL
+        LABEL1 = 'Converted from SPIDER to MRC using SPIDER '
+        INOW   = 56
+        DO I = 1,44,4
+           CVAL = LABEL1(I:I+3)
+           INOW = INOW + 1
+           CALL CCPMVC(HEADBUF(INOW),CVAL,ISSWABT)
+        ENDDO
+        
+        IRTFLG = 0
+        END
+
+#ifdef NEVER
+C          WRITE OUT HEADER INFORMATION
+           WRITE(6,1000) NX,NY,NZ,IMODE,
+     &       ISTARTX,ISTARTY,ISTARTZ, MX,MY,MZ,
+     &       CELLAX,CELLAY,CELLAZ, 
+     &       DMIN,DMAX,DMEAN,DSIG,ORIGX,ORIGY,ORIGZ,ISPG,NSYMBYT,
+     &       MACHST,IVERSION, CVAL
+
+1000       FORMAT(
+     &     2X,'Columns, rows, sections .................. ',3(I7,1X)/
+     &     2X,'Mode ..................................... ',I6/
+     &     2X,'Start points on columns, rows, sections .. ',3I7/
+     &     2X,'Grid sampling on x, y, z ................. ',3I7/
+     &     2X,'Cell axes ................................ ',3F10.2/
+     &     2X,'Minimum density .......................... ',F25.12/
+     &     2X,'Maximum density .......................... ',F25.12/
+     &     2X,'Mean density ............................. ',F25.12/
+     &     2X,'RMS deviation ............................ ',F25.12/
+     &     2X,'Origins .................................. ',3F10.2/
+     &     2X,'Space group, # bytes symmetry ............ ',2I7/
+     &     2X,'Machine stamp ............................ ',I12/
+     &     2X,'Version ..................................    ',I7/
+     &     2X,'ExtType .....................................   ',A)
+
+#endif
+
+
+
+
+C ******************************** SETHEDCCP4 *****************************
+
 
         SUBROUTINE SETHEDCCP4(HEADBUF, NX, NY, NZ,
      &                        DMIN,DMAX,DMEAN,DSIG, 
@@ -418,6 +623,10 @@ C       NOW GO BACK AND ADD IN ONE LABEL
 
         END
 
+
+
+
+
 C ------------------------- CCPMVC --------------------------
 
 C     PURPOSE:     PACK 4 CHAR INTO A INTEGER OR FLOAT
@@ -547,6 +756,28 @@ C     THIS ROUTINE ASSIGNS  ARR2 TO ARR1
       END
 
  
+@
+
+
+1.19
+log
+@ISSWAB RENAMED ISSWABT  if used as local variable
+@
+text
+@d4 8
+a11 6
+C SETHEDCCP4    ISSWAB ADDED                     JUL  02 ARDEAN LEITH
+C               ANGSTROMS/PIXEL                  JAN  05 ARDEAN LEITH 
+C               STARTING                         FEB  06 ARDEAN LEITH 
+C               MRC PROMPTS                      MAY  12 ARDEAN LEITH 
+C               NSYMBYT,ISPG                     JUN  15 ARDEAN LEITH 
+C               ISSWAB RENAMED ISSWABT           JAN  16 ARDEAN LEITH
+d33 1
+d35 2
+a36 1
+C            DMIN,DMAX,DMEAN,DSIG, IMODE,ISSWABT,NSYMBYT,ISPG,IRTFLG)
+d73 196
+d495 4
 @
 
 

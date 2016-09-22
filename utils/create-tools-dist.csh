@@ -4,7 +4,7 @@
 
 # ORIGINAL SOURCE: /usr8/spider/spire/spire_linux-1.5.5
 
-# CURRENT SOURCE:  /usr8/spider/tools-src/-create-dist.csh
+# CURRENT SOURCE:  /usr8/spider/tools-src/tools-create-dist.csh
 
 # Set some variables for input locations
 set spiroot = /usr8/spider    
@@ -14,7 +14,7 @@ set srcdir  = $spiroot/tools-src
 set destdir  = $spiroot/tools-dist
 
 # Set rsync  = verbose, compressed, update, 
-#             preserve executability, preserve time, follow Symlinks
+#              preserve executability, preserve time, follow Symlinks
 
 set sendit   = 'rsync -zuEtL --out-format="%n%L"  '
 
@@ -33,23 +33,54 @@ $sendit -r $excludes --exclude="*.pyc" --exclude="orig" --exclude="tst" $srcdir/
 
 #cd $destdir/bin/
 
-\rm $destdir/bin/binarytree           $destdir/bin/ctfmatch   $destdir/bin/montage-spi 
-\rm $destdir/bin/verifybyview         $destdir/bin/classavg   $destdir/bin/scatter
-\rm $destdir/bin/emancoords2spiderdoc $destdir/bin/pyplot     $destdir/bin/viewstack   
-\rm $destdir/bin/xmippsel2spiderdoc   $destdir/bin/ctfdemo    $destdir/bin/montage        
-\rm $destdir/bin/montagefromdoc       $destdir/bin/xplor      $destdir/bin/ctfgroup    
-\rm $destdir/bin/spiconvert           $destdir/bin/qview    
-\rm $destdir/bin/ctfcircle            $destdir/bin/mkfilenums          
+# montage-spi is to overcome montage name collision
+
+\rm $destdir/bin/montage-spi
+ 
+\rm $destdir/bin/binarytree
+\rm $destdir/bin/classavg
+\rm $destdir/bin/ctfcircle
+\rm $destdir/bin/ctfdemo
+\rm $destdir/bin/ctfgroup
+\rm $destdir/bin/ctfmatch
+\rm $destdir/bin/emancoords2spiderdoc
+\rm $destdir/bin/emanrctcoords2spiderdoc
+\rm $destdir/bin/mkapps
+\rm $destdir/bin/mkfilenums
+\rm $destdir/bin/montagefromdoc
+\rm $destdir/bin/montage
+\rm $destdir/bin/pyplot
+\rm $destdir/bin/qview
+\rm $destdir/bin/scatter
+\rm $destdir/bin/spiconvert
+\rm $destdir/bin/verifybyview
+\rm $destdir/bin/viewstack
+\rm $destdir/bin/xmippsel2spiderdoc
+\rm $destdir/bin/xplor
 
 \rm $destdir/bin-python/python 
 
 
 # ------------------ Create tar archive --------------------------------
 cd $destdir
+\rm -f tools.tar tools.tar.gz
 tar cvf tools.tar *
+tar --delete -vf  tools.tar use-spider-utils-create-tools-dist-to-update
 gzip tools.tar  
 
 echo ' 'Use:  /usr8/spider/utils/tosend.csh  to update distribution release
 
 exit
+
+
+# ------------------------------ File notes  ---------------------
+
+# Master copy
+#/usr8/spider/tools-src    79Mb    Has: Attic,RCS     Lacks: *.pyc
+
+# Distribution copy created using: /usr8/spider/utils/create-tools-dist.csh
+#/usr8/spider/tools-dist  105Mb    Has: tar=51Mb      Lacks: tst, *.pyc, RCS 
+
+# Local execution copy
+#/usr8/spider/tools        91Mb    Has tar.gz=21Mb
 

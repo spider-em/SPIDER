@@ -67,7 +67,7 @@ C--*********************************************************************
         INCLUDE 'CMLIMIT.INC'
 
         REAL       :: VOLBUF(1)
-        INTEGER    :: LUNIN,ITYPE,NX,NY,NZ
+        INTEGER    :: LUNIN,ITYPE,NX,NY,NZ 
         REAL       :: SIGN
 
         REAL       :: SIGT
