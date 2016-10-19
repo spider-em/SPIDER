@@ -8,52 +8,79 @@
  ;    refine-settings      <a href="refine-settings.spi"> refine-settings.spi</a>
  ;
  ; INPUT FILES: ('##' denotes iteration)
- ;    [params]     ../params'                Parameter doc file     (one -- optional)  
- ;    [m_fsc]      [out_dir]/fscdoc_m_##'    Iteration FSC curves   (one / iteration)
+ ;    [params]     ../params'                Parameter doc file             (one -- optional)  
+ ;    [m_fsc]      [out_dir]/fscdoc_m_##'    Iteration FSC curves           (one / iteration)
  ;
  ; OUTPUT FILES:  
  ;    [fscplots]   fsc_iter.gnu              Text file of gnuplot commands 
  ;
  ; <b> ------------ Parameters ----------------------------------------
 
- [cut]     = 0.143                  ; Resolution cutoff (Usually: 0.5 or 0.143) 
+ [cut]       = 0.143                  ; Resolution cutoff (Usually: 0.5 or 0.143) 
 
- [niter]   = 20                     ; Highest iteration to be plotted
+ [niter]     = -1                     ; Highest iteration to be plotted (<0 == last)
 
  ; -------------- END BATCH HEADER ---------------------------------- </b>
 
  ; Input file names and pixsiz
  @refine-settings([pixsiz],[r2],[alignsh],[prj-radius],[iter1],[iter-end],[sphdecon],[smallang-yn],[qsub],[incore-yn],[gold-std],[bp-type])
 
- [maxspfreq] = 0.5 / [pixsiz]
+ [maxspfreq] = 0.5 /[pixsiz]
  ![t]         = 0.25 / [maxspfreq]
  ! echo "f(x) = (x{*{%f5.1%[t]}) notitle" 
  
  SYS 
    echo "  Pixel Size: {%f6.1%[pixsiz]}  Max Spatial Freq: {%f6.2%[maxspfreq]}"
 
+ IF ( [niter] .LE. 0) THEN
+   UD N [niter]                     ; Find last iteration number
+     [iter_resol]                   ; Resolution file   (input)
+ ENDIF
+ 
  SYS                                ; Remove gnuplot text file
    \rm -f [fscplots]            
  
  SYS 
-   echo set title \"$DATEXT FSC  for Iterations \" >> [fscplots]
+   echo set title \"Fourier Shell Correlation, Refinement \"          >> [fscplots]
+!  echo set title \"$DATEXT FSC  for Iterations \"    >> [fscplots]
 
  SYS 
-   echo set xlabel \"Frequency\" >> [fscplots]
+   echo 'set xzeroaxis'                            >> [fscplots]
+ 
+ ; Allow Angstroms symbol
+ SYS 
+   echo 'set encoding iso_8859_1'                      >> [fscplots]
+ SYS
+   echo 'set ylabel "FSC"'    >> [fscplots]
+ SYS 
+   echo 'set xtics nomirror'                       >> [fscplots]
+ x22=2
+ SYS
+   echo ''set x{%i1%x22}tics \(\"20\" 0.05, \"10\" 0.10, \"7\" 0.143, \"5\" 0.2, \"4\" 0.25, \"3\" 0.333\, \"2\" 0.5\) >> [fscplots]
+ ; (SPIDER otherwise substitutes lowercase 'x2' for uppercase 'X2'.)
+ SYS
+   echo 'set x{%i1%x22}label "Resolution, \305ngstroms"'   >> [fscplots]
+ SYS 
+   echo set xlabel \"Frequency, 1/\\305\" >> [fscplots]
 
  SYS 
-   echo set style data lines     >> [fscplots]
+   echo set style data lines >> [fscplots]
 
  ; Use a black line (color = -1) for the final curve
  SYS 
-   echo set style line 32 lt -1  >> [fscplots]
+   echo set style line 32 lt -1 >> [fscplots]
 
- ; Define line at resolution cut-off 
+ ; Place key outside of plot (otherwise it might lie on top of curves)
  SYS 
-   echo "f(x) = {%f4.3%[cut]}"   >> [fscplots]
+   echo set key outside spacing .95 font \",8\" width -5 >> [fscplots]
+
+ ; Put line at resolution cut-off 
+ SYS 
+   echo "f(x) = {%f4.3%[cut]}" >> [fscplots]
 
  SYS 
-   echo plot \\                  >> [fscplots]
+   echo plot \\ >> [fscplots]
+!  echo 'plot [0:{%f6.4%[maxspfreq]}][-0.1:1.75] \' >> [fscplots]
 
  DO [iter] = 1,[niter]
 
@@ -63,28 +90,27 @@
 
    IF ( [iter] == [niter] ) THEN   ; Last curve gets a thick black line (ls 32)
       SYS
-        echo \"[m_fsc].$DATEXT\" using 3:5 title \"[m_fsc]\" ls 32, \\ >> [fscplots]
+        echo ' '\'[m_fsc].$DATEXT\' using \(1/column\(4\)\):5 title \'[m_fsc]\' ls 32 lw 2, \\ >> [fscplots]
    ELSE
       SYS
-        echo \"[m_fsc].$DATEXT\" using 3:5 title \"[m_fsc]\" , \\      >> [fscplots]
+        echo ' '\'[m_fsc].$DATEXT\' using \(1/column\(4\)\):5 title \'[m_fsc]\' , \\ >> [fscplots]
    ENDIF
  ENDDO
 
- ; Put line at resolution cut-off 
  SYS
-   echo "f(x) notitle"            >> [fscplots]
-
+   echo "f(x) notitle ls 32 lw 0.25" >> [fscplots]
 
  SYS                                 
-   echo  '  'Displaying plot using: gnuplot -persist [fscplots]; echo   
+   echo  ' 'Displaying plot using: gnuplot -persist [fscplots]; echo   
  SYS                          ; Plot the file                       
    gnuplot -persist [fscplots]  
 
- EN
+ EN 
  
- ; Modified 2016-03-21
- ;    TO DO: change/add Angstroms to horizontal axis
+ ; Modified 2016-10-13
  ;    2016-03-21 (agl) -- Plots all fsc files up to niter
+ ;    2016-03-11 (trs) -- Resized key and moved outside of plot, and encoded proper Angstroms symbol
+ ;    2016-03-02 (trs) -- Added Angstroms to horizontal axis
  ;    2016-01-14 (agl) -- Gold standard file names
  ;    2014-05-14 (agl) -- No longer has group plots
  ;    2013-12-03 (trs) -- Updated deprecated Gnuplot syntax

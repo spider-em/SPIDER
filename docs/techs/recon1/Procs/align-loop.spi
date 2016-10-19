@@ -10,20 +10,23 @@
  ; PURPOSE: Runs alignment for specified group     
  ;
  ; INPUT REGISTERS (Set on command line or globally):
+ 
+ [numCPUs] = 10      ; Number of processors to use (0 == All)
+                     ; Can be overridden from the command line with [numProcs]
+ 
  ;   [grp]               Current group number 
  ;   [alignsh]           Alignment shift distance
  ;   [r2]                Alignment outer radius
  ;   [incore-yn]         Incore images used
  ;
- ; INPUT FILES: ([win_dir] denotes input directory, '***' denotes group,  '%' denotes subset)
- ;   [sel_parts]         [win_dir]/sel_part_***  Group particle selection files (one/group)
- ;   [unaligned_images]  [win_dir]/data_***      Unaligned image stacks         (one/group)
- ;   [ref_projs]         [rec_dir]/projs_00      Reference projections          (one)
+ ; INPUT FILES: ([win] denotes input directory, '***' denotes group,  '%' denotes subset)
+ ;   [sel_parts]         [win]/sel_part_***   Group particle selection files (one/group)
+ ;   [unaligned_images]  [win]/data_***       Unaligned image stacks         (one/group)
  ;
- ; OUTPUT FILES: ([rec_dir] denotes output directory, '$$$$' denotes sync number, and '***' denotes group)
- ;   [next_group_align]  [rec_dir]/align_01_***  Alignment parameter doc files     (one/group)
- ;   [aligned_images]    [rec_dir]/dala_***@     Rotationally aligned particle images (one/group)
- ;   [finished_file]     jnk_sync_$$$$_***       Created when this task is finished   (one)
+ ; OUTPUT FILES: ([out] denotes output directory, '$$$$' denotes sync number, and '***' denotes group)
+ ;   [next_group_align]  [rec]/align_01_***   Alignment parameter doc files     (one/group)
+ ;   [aligned_images]    [rec]/dala_***@      Rotationally aligned particle images (one/group)
+ ;   [finished_file]     jnk_sync_$$$$_***    Created when this task is finished   (one)
  ;
  ; -------------------- END BATCH HEADER ----------------------------------------
 
@@ -31,17 +34,13 @@
    TR OFF                   ; Loop info turned off
  MD
    VB OFF                   ; File info turned off
- MD                          
-   SET MP                   ; Set OMP processors 
-   10                       ; Edit this
 
  [iter]      = 0
  [next-iter] = 1
 
  IF ( [grp] > 0 ) THEN
    ; Get reconstruction parameters & file names
-   [steptype] = 0           ; Alignment step
-   @recon-settings([steptype],[num-grps],[pixsiz],[ang-step],[r2],[alignsh],[prj-radius],[winsiz],[incore-yn],[bp-type],[qsub])
+   @recon-settings([steptype],[pixsiz],[ang-step],[r2],[alignsh],[prj-radius],[winsiz],[incore-yn],[bp-type],[qsub])
 
  ELSE
    ; Reconstruction file names already available 
@@ -52,17 +51,28 @@
    [qsub] = -1              ; For single group
  ENDIF
  
- IQ DIR [has-scratch]       ; See if there is a local scratch dir.
-   [temp_local_dir]         ; Dir name
-
- IF ( [has-scratch] > 0 ) THEN
-   ; Copy files to local compute node disk  
-   @pub-ref-loop-clone([iter],[grp])
-
+ IF ( [numProcs] > 0 ) THEN
+   MD                          
+     SET MP                   ; Set OMP processors 
+     [numProcs]
  ELSE
-   ; Redefine [temp_local_dir] to work directory 
-   GLO [temp_local_dir] = '[temp_work_dir]'
+   MD                          
+     SET MP                   ; Set OMP processors 
+     [numCPUs]
  ENDIF
+ 
+; IQ DIR [has-scratch]       ; See if there is a local scratch dir.
+;   [temp_local_dir]         ; Dir name
+;
+; IF ( [has-scratch] > 0 ) THEN
+;   ; Copy files to local compute node disk  
+;   @pub-ref-loop-clone([iter],[grp])
+;
+; ELSE
+;   ; Redefine [temp_local_dir] to work directory 
+;   GLO [temp_local_dir] = '[temp_work_dir]'
+; ENDIF
+; ; (NOT USED)
 
  SYS
    echo -n "  Starting: align-loop for group: {%I3%[grp]} --- " ; date '+ %x %X'
@@ -151,5 +161,9 @@
  ENDIF
 
  RE                            ; Return to caller
+ 
+ ; Modified 2016-05-25
+ ;    2016-05-25 (trs) -- made #CPUs user-defined
+
  ; </pre></body></html>
 

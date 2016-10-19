@@ -1,68 +1,477 @@
- ; <html><head><title>CTF corrects selected images using CTF correction doc file</title></head><body><pre>
+ ; <html><head><title>CTF corrects micrographs</title></head><body><pre>
  ;
- ; SOURCE:  spider/docs/techs/recon1/Procs/apply-ctfcor-mic.spi
+ ; PURPOSE:  CTF-corrects micrographs 
  ;
- ; PURPOSE: CTF corrects selected micrographs using CTF correction doc file
- ;          Alternative to correcting images using:  restack-n-ctf
+ ; REQUIRES:
+ ;   load-mic.spi          SPIDER procedure
+ ;   xmipp_image_convert   XMIPP's conversion program (if MRC format) 
  ;
- ; USAGE:   clean ; spider spi/dat @apply-ctfcor-mic
+ ; SOURCE:   spider/techs/recon1/Procs/apply-ctfcor-mic.spi
+ ;
+ ; USAGE:    clean ; spider spi/dat @apply-ctfcor-mic
 
- ; ------------------ Parameters ------------------
+ ; --------------- Parameters ---------------
+
+ [convertYN]        = 0      ; Convert micrographs to SPIDER format? (0 == No)
+ [revContrastYN]    = 1      ; Reverse contrast? (0==no)
+                             ; (Some operations expect protein to be white on a dark background)
+ [paddedMicDim]     = 4096   ; Padded micrograph dimension (if image is bigger, will use the larger value)
+ [viewPlotYN]       = 1      ; Open Gnuplot automatically? (0 == No)
+ [mic2plot]         = -1     ; Micrograph # to plot (-1 == highest defocus)
+ [progress]         = 50     ; Prints progress message to screen every Nth micrograph
+ [numProcs]         = 0      ; Number of processors to use (0 == All)
+ [paddingFactor]    = 2      ; Oversampling factor for CTF doc files
+ [useEnvelopeYN]    = 0      ; Use envelope function? (0==no, 1==get source size from parameter file)
+
+ ; ----------------- Inputs -----------------
+
+ [parameter_doc] = '../params'                                        ; Parameter doc file                   (one)
+ [defocus_doc]   = 'defocus'                                          ; Defocus doc file lists defocus       (one/micrograph)
+ [micgr]         = '../Micrographs/raw****'                           ; Micrograph images
+ [calc_power]    = 'power/ctf_****'                                   ; Background-subtracted power spectrum (one/micrograph)
+;       Sp.freq.       Back.noise   Back.subtr.PS
  
- [progress-n]  = 1           ; Print progress message every Nth micrograph
+ GLO [xic]       = '/home/tapu/local/xmipp/bin/xmipp_image_convert'   ; Path for XMIPP's image conversion program (if converting from MRC format) 
 
- ; -------------------- Inputs --------------------
+ ; ----------------- Outputs -----------------
 
- [mic_dir]    = '../Micrographs'            ; Output directory           (one)
+ [flipped_mic]      = '../Micrographs/flip****'    ; CTF-corrected micrographs            (one/micrograph)
+ [ctf_dir]          = 'power'                      ; Output directory                     (one)
+ [flipped_ctf_doc]  = '[ctf_dir]/flipctf_****'     ; Phase-flipped CTF profile doc file   (one/micrograph)
+ [straight_ctf_doc] = '[ctf_dir]/straightctf_****' ; Straight CTF profile doc file        (one/micrograph)
+;;; [trapped_ctf_doc]  = '[ctf_dir]/trapctf_****'     ; Low-frequency preserving CTF profile doc file (one/micrograph)
+ [first_min_doc]    = '[ctf_dir]/firstmin'         ; Doc file listing first extremum and first zero (one)
+ [gnuplot_script]   = 'plotpw.gnu'                 ; Gnuplot script                         (one)
 
- [params]     = '../params'                 ; Parameter doc file         (one)
+ ; ------------- END BATCH HEADER -------------
 
- [sel_mic]    = '../sel_micrograph'         ; Micrograph selection file  (one)
+ ; Set temporary filenames
+ [temp_defocus_renumbered] = 'tmpdocdefocus-renum'
+ [temp_spider_mic]         = 'tmpmic'                 ; SPIDER temp file from conversion 
+ [temp_ctf_fourier]        = '_1'
+ [temp_padded_mic]         = '_2'
+ [temp_mic_ctf]            = '_3'
+ [temp_unlabeled_ctf_doc]  = 'tmpdocctf_unlabeled'
+ [temp_defocus_sorted]     = 'tmpdocdefocus_sort'
+ [temp_mic_unflipped]      = '_4'
 
- [micgr]      = '[mic_dir]/raw****'         ; Raw micrograph images      (one / micrograph)
+ ; Get parameters
+ UD IC 1,[sp_zflag]           ; Get zip flag
+   [params]
+ UD IC 2,[sp_fflag]           ; Get tif flag
+   [params]
+ UD IC 3,[sp_nx]              ; X dimension 
+   [params]
+ UD IC 4,[sp_ny]              ; Y dimension        
+   [params]
+ UD IC 5,[pixelSize]
+   [parameter_doc]
+ UD IC 6,[voltage]
+   [parameter_doc]
+ UD IC 7,[spherAberration]    
+   [parameter_doc]
+ UD IC 8,[sourceSize]         ; Might be overridden below
+   [parameter_doc]
+ UD IC 9,[defocusSpread]
+   [parameter_doc]
+ UD IC 12,[ampContrast]
+   [parameter_doc]
+ UD IC 13,[envHalfwidth]
+   [parameter_doc]
+ UD IC 14,[wavelengthLambda]
+   [parameter_doc]
+ UD IC 15,[maxSpFreq]
+   [parameter_doc]
+ UD IC 17,[imgDim]
+   [parameter_doc]
+ UD ICE        ; Close document
+   [parameter_doc]
+ 
+ ; Check whether to use envelope function
+ IF ([useEnvelopeYN] == 0) [sourceSize] = 0
 
- [ctf_cor]    = 'power/flipctf_****'        ; CTF correction files       (one / micrograph)
+ [paddedDim] = [imgDim]*[paddingFactor]  ; For filtering, we'll pad into a larger box
 
- ; -------------------- Outputs --------------------
+ SYS 
+   mkdir -p [ctf_dir]
 
- [ctfd_micgr] = '[mic_dir]/flipd_mic_****' ; CTF-corrected micrographs (one / micrograph)
+ ; Prepare list of first minima
+ DE
+   [first_min_doc]
+ SD /     MICROGRAPH    DEFOCUS     FIRSTMIN,A  FIRST_ZERO,A
+   [first_min_doc]
 
- ; --------------- END BATCH HEADER ---------------
+ IF ([convertYN] .GE. 1) THEN
+   SYS
+     echo " Will convert micrographs according to [parameter_doc]" ; echo
+ ENDIF
+   
+ SYS 
+   echo " Generating CTF profiles" ;  echo ' '
+
+ DOC REN                         ; Renumber in case keys are not-consecutive
+   [defocus_doc]                 ; Lists defocus for micrographs  (input)
+   [temp_defocus_renumbered]     ; Renumbered: [defocus_doc]      (output) 
+
+ [keepspi]   = 1         ; Keep on-disk temp spider file (0 = discard) 
+ [decimate]  = 1
 
  MD
    SET MP
-   0
- MD
-   VB OFF
+   [numProcs]
 
  ; Get number of micrographs
- UD N [num-micgr]
-   [sel_mic]
+ UD N [numMics]                 ; Get number
+   [temp_defocus_renumbered]     ; Renumbered: [defocus_doc]      (input)
 
- DO                                 ; Loop over all micrographs ---------------
+ ; (If we have to convert, checking the dimensions will be too slow.)
+ IF ([convertYN] .LE. 0) THEN
+   SYS
+     echo " Checking micrograph dimensions"
+    
+   [maxDim] = -1   ; Initialize
+    
+   ; Loop through micrographs
+   DO LB2 [micKey] = 1,[numMics]
+     ; Get micrograph#, defocus value
+     UD IC [micKey], [micNum]
+       [temp_defocus_renumbered]   ; Renumbered: [defocus_doc]      (input)
 
-   UD NEXT [mic-key], [mic]         ; Get micrograph number
-     [sel_mic]                      ;  Micrograph selection file (input)
-     IF ( [mic-key] <= 0 ) EXIT
+     FI H [xdim],[ydim]
+       [micgr][micNum]
+       NX,NY
 
-    IF (int([mic-key]/[progress-n]) == [mic-key]/[progress-n]) THEN
-      SYS
-        echo " Processing Micrograph: {%I4%[mic]}, {%I4%[mic-key]} out of: {%I4%[num-micgr]}"
+     IF ([xdim] .GT. [maxDim]) [maxDim]=[xdim]
+     IF ([ydim] .GT. [maxDim]) [maxDim]=[ydim]
+   LB2   ; End micrograph-loop
+
+   SYS
+     echo " Maximum micrograph dimension: {%i0%[maxDim]} px"
+   SYS
+     echo " Specified padded dimension:   {%i0%[paddedMicDim]} px"
+   SYS
+     echo " (Procedure will use the larger of the two)" ; echo
+ ENDIF
+
+ ; Loop through micrographs
+ DO LB1 [micKey] = 1,[numMics]
+    ; Get micrograph#, defocus value
+    UD IC [micKey], [micNum],[defocusAngs],[astig],[angle]
+      [temp_defocus_renumbered]   ; Renumbered: [defocus_doc]      (input)
+
+    IF ([convertYN] .GE. 1) THEN
+      @load-mic([micNum],[sp_zflag],[sp_fflag],[decimate],[sp_nx],[sp_ny],[keepspi])
+        [micgr][micNum]             ; Micrograph template     (input)
+        [temp_spider_mic]           ; SPIDER file             (output)
+        _4                          ; Hiscan & Nikon scratch  (output)
+        
+;      @convert_p([decimate])
+;        [parameter_doc]             ; Parameter file
+;        [micgr][micNum]             ; Micrograph                  (input)
+;        [temp_spider_mic]           ; SPIDER file                 (output)
+    ELSE
+        [temp_spider_mic] = '[micgr][micNum]'
     ENDIF
+    
+    FI H [xdim],[ydim]
+      [temp_spider_mic]   ; WAS [micgr][micNum]
+      NX,NY
 
-    ; Check if micrograph file exists
-    IQ FI [exists-yn]
-      [micgr][mic]                 ; Micrograph selection file (input)
-    IF ([exists-yn] == 0) CYCLE    ; Skip non-existing micrographs
+    IF ([xdim] .GT. [maxDim]) [maxDim]=[xdim]
+    IF ([ydim] .GT. [maxDim]) [maxDim]=[ydim]
+    
+    IF ([xdim] .LT. [paddedMicDim]) THEN
+        [paddedXDim] = [paddedMicDim]
+    ELSE
+        [paddedXDim] = [xdim]
+    ENDIF
+    
+    IF ([ydim] .LT. [paddedMicDim]) THEN
+        [paddedYDim] = [paddedMicDim]
+    ELSE
+        [paddedYDim] = [ydim]
+    ENDIF
+    
+    SYS M
+    echo " Micrograph {%I4%[micNum]}, ({%I4%[micKey]}th out of {%I4%[numMics]}) " ;
+    echo " Orig. dimensions: {%i0%[xdim]}x{%i0%[ydim]}" ;
+    echo " Padded to       : {%i0%[paddedXDim]}x{%i0%[paddedYDim]}"
+.    
+    PD
+    [temp_spider_mic]   ; WAS [micgr][micNum]     ; INPUT
+    [temp_padded_mic]   ; OUTPUT
+    [paddedXDim],[paddedYDim]
+    B                   ; background set to _B_order
+    (1,1)               ; top-left coordinates
+    
+    MY FL
+    
+    ; Clean old files
+    DE
+      [straight_ctf_doc][micNum]
+;;    DE
+;;      [trapped_ctf_doc][micNum]
+    DE
+      [flipped_ctf_doc][micNum]
 
-    ; Filter micrograph using CTF correction file
+    ; Generate phase flipping CTF file for this micrograph
+    TF CT                                ; Generate phase flipping transfer function
+      [temp_ctf_fourier]                 ; CTF correction file           (output)
+      [spherAberration]                  ; Spherical abberation (MM)
+      [defocusAngs],[wavelengthLambda]   ; Defocus(A), Lambda(A)
+      [paddedXDim],[paddedYDim]          ; Number of spatial freq. points
+      [maxSpFreq]                        ; Maximum spatial frequency(1/A)
+      [sourceSize],[defocusSpread]       ; Source size(unused), Defocus spread
+      [astig],[angle]                    ; Astigmatism(A), Astigmatism azimuth(DEG)
+      [ampContrast]                      ; ACR  
+      -1                                 ; Sign
+
+    IF ([micKey] .LE. 2) THEN
+        SYS
+        echo " CTF-correcting micrograph# {%i0%[micNum]}" ; date
+    ENDIF
+    
     TF COR
-      [micgr][mic]                 ; Raw micrograph file  (input)
-      [ctf_cor][mic]               ; CTF correction file       (input)
-      [ctfd_micgr][mic]            ; CTR corrected micrograph (output)
+    [temp_padded_mic]       ; INPUT: micrograph
+    [temp_ctf_fourier]      ; INPUT: CTF Fourier file
+    [temp_mic_ctf]          ; OUTPUT: phase-flipped micrographs
+    
+    IF ([micKey] .LE. 2) THEN
+        SYS
+        echo " Finished CTF-correcting micrograph# {%i0%[micNum]}" ; date ; echo
+    ELSE
+        SYS
+        echo
+    ENDIF
+    
+    IF ([revContrastYN] .LE. 0) THEN
+        WI
+        [temp_mic_ctf]          ; INPUT: padded, CTF-corrected micrograph
+        [flipped_mic][micNum]   ; OUTPUT: original-sized micrograph
+        [xdim],[ydim]
+        1,1
+    
+    ELSE                       ; Reverse contrast
+        WI
+        [temp_mic_ctf]         ; INPUT: padded, CTF-corrected micrograph
+        [temp_mic_unflipped]   ; OUTPUT: original-sized micrograph
+        [xdim],[ydim]
+        (1,1)
+        
+        NEG A
+        [temp_mic_unflipped]
+        [flipped_mic][micNum]
+    ENDIF
+    
+    ; Generate straight-CTF doc file
+    TF L
+      [spherAberration]
+      [defocusAngs],[wavelengthLambda]
+      [paddedDim]
+      [maxSpFreq]
+      [sourceSize],[defocusSpread]
+      [ampContrast],[envHalfwidth]
+      S                                      ;  Straight CTF
+      [temp_unlabeled_ctf_doc]
 
- ENDDO                             ; End micrograph loop  -----------------
+    ; Get number of Fourier bins
+    UD N [numBins]
+      [temp_unlabeled_ctf_doc]               ; Doc file   (input)
+
+    ; Initialize first min., abs. min.
+    UD IC 1,[prevCtf]
+      [temp_unlabeled_ctf_doc]               ; CTF     (input)
+
+    [firstMin]        = 1                    ; Radius for first min.
+    [firstminRadius]  = -1                   ; Initialize first-min. Radius
+    [firstzeroRadius] = -1                   ; First-zero Radius
+
+    ; Loop through Fourier radii to find first minimum, first zero,
+    DO LB6 [radiusKey6] = 2,[numBins]        ; Loop through Fourier radii -----
+        UD IC [radiusKey6],[currCtf],[radiusPx]
+          [temp_unlabeled_ctf_doc]                     ; Doc file (input)
+
+        ; Check for first local min
+        IF ([firstminRadius] < 0) THEN
+            IF([currCtf] > [prevCtf]) THEN
+                [firstMin]       = [radiusKey6]-1    ; Radius to end trap (used later)
+                [firstminRadius] = [pixelSize]/[radiusPx]
+            ENDIF
+        ENDIF
+
+        ; Find first zero
+        IF ([firstzeroRadius] < 0) THEN
+            ; look for when CTF crosses origin
+            IF([currCtf]*[prevCtf].LE.0) [firstzeroRadius] = [pixelSize]/[radiusPx]
+        ENDIF
+
+        [prevCtf] = [currCtf]  ; New, previous CTF value==current CTF value
+
+    LB6                                 ; End radius-loop
+
+    ; Write Radii (in Angstroms) to doc file
+    ; NOTE: it would be more accurate to interpolate, bi-linearly perhaps, 
+    ;       so these values will be on average 1/2 Fourier pixel off
+
+    SD [micKey],[micNum],[defocusAngs],[firstminRadius],[firstzeroRadius]
+      [first_min_doc]                   ; Doc file   (output)
+
+    ; Loop through Fourier radii
+    DO LB7 [radiusKey7] = 1,[numBins]   ; Loop through Fourier radii --------
+
+        ; Get original values
+        UD IC [radiusKey7],[ctfValue],[radiusPx]
+          [temp_unlabeled_ctf_doc]      ; WAS [straight_ctf_doc]tmp   (input)
+
+        ; Flip sign
+;;;        [trappedCtf] = -[ctfValue]    ; For trapped CTF
+        [straghtCtf] = -[ctfValue]    ; For untrapped CTF
+
+;;        ; Trap for low resolution
+;;        IF ([radiusKey7].LT.[firstMin]) [trappedCtf] = 1
+
+        [radiusAngs] = [radiusPx]/[pixelSize]
+
+        ; Write to straight-CTF doc
+        SD [radiusKey7],[straghtCtf],[radiusPx],[radiusAngs]
+          [straight_ctf_doc][micNum]           ; Doc file   (output)
+
+;        ; Write to trapped-CTF doc
+;        SD [radiusKey7],[trappedCtf],[radiusPx],[radiusAngs],[straghtCtf]
+;          [trapped_ctf_doc][micNum]           ; Doc file   (output)
+
+        ; Write phase-corrected doc
+        IF ([straghtCtf] == 0) [flipped-ctf] = 0
+        IF ([straghtCtf].NE.0) [flipped-ctf] = ABS([straghtCtf])/[straghtCtf]
+
+        SD [radiusKey7],[flipped-ctf],[radiusPx],[radiusAngs],[straghtCtf]
+          [flipped_ctf_doc][micNum]           ; Doc file   (output)
+
+    LB7                                       ; End radius-loop
+
+    ; Close docs
+;    SD /      TRANSFER      R,PX^-1      R,A**-1
+;      [trapped_ctf_doc][micNum]               ; Doc file   (output)
+;    SD E
+;      [trapped_ctf_doc][micNum]               ; Doc file   (closed)
+    SD /     TRANSFER      R,PX^-1      R,A**-1
+      [flipped_ctf_doc][micNum]               ; Doc file   (output)
+    SD E
+      [flipped_ctf_doc][micNum]               ; Doc file   (closed)
+    SD /      TRANSFER      R,PX^-1      R,A**-1
+      [straight_ctf_doc][micNum]              ; Doc file   (output)
+    SD E
+      [straight_ctf_doc][micNum]              ; Doc file   (closed)
+    UD ICE
+      [temp_unlabeled_ctf_doc]  ;              ; Doc file   (closed)
+    DE
+      [temp_unlabeled_ctf_doc]  ;              ; Doc file   (deleted) 
+
+ LB1                            ; End micrograph-loop
+
+ ; Close docs
+ UD ICE
+   [temp_defocus_renumbered]
+ DE
+   [temp_defocus_renumbered]
+ SD E
+   [first_min_doc]
+ IF ([convertYN] .GE. 1) THEN
+   DE
+     [temp_spider_mic]
+ ENDIF
+
+ 
+ ; GENERATE GNUPLOT SCRIPT
+
+ ; Get highest defocus if micrograph # not specified
+ IF ( [mic2plot] <= 0 ) THEN
+   ; Sort defocus doc
+   DOC SORT
+     [defocus_doc]
+     [temp_defocus_sorted]
+     2                        ; Column# to sort: defocus
+     Y                        ; Renumber?
+
+    ; Get number of micrographs
+    UD N [numMics]            ; Get number
+      [temp_defocus_sorted]
+   
+    UD [numMics], [mic2plot]
+      [temp_defocus_sorted]
+    UD E
+    
+    ; Clean up
+    DE   
+      [temp_defocus_sorted]
+ ENDIF
+
+ SYS 
+   echo ; echo " Generating Gnuplot script for micrograph: {%I0%[mic2plot]}" 
+
+ SYS 
+   \rm -f [gnuplot_script]
+   
+ ; Get maximum of experimental profile
+ DOC STAT x91,x92,[rooMax]
+   [calc_power][mic2plot]
+   3   ; column# to analyze: background-subtracted amplitude
+ 
+ [rooMax]
+
+ SYS 
+   echo 'set xzeroaxis'                                                                                      > [gnuplot_script]
+   
+ ; Encode Angstroms symbol
+ SYS 
+   echo 'set encoding iso_8859_1'                                                                           >> [gnuplot_script]
+ SYS
+   echo 'set xlabel "Resolution, \305ngstroms^-1"'                                                          >> [gnuplot_script]
+ SYS 
+   echo 'set xtics nomirror'                                                                                >> [gnuplot_script]
+ x22=2
+ SYS
+   echo ' 'set x{%i1%x22}tics \(\"20\" 0.05, \"10\" 0.10, \"7\" 0.143, \"5\" 0.2, \"4\" 0.25, \"3\" 0.333\) >> [gnuplot_script]
+ ; (SPIDER substitutes lowercase 'x2' for uppercase 'X2'.)
+ SYS
+   echo 'set x{%i1%x22}label "Resolution, \305ngstroms"'                                                       >> [gnuplot_script]
+ SYS
+   echo 'set key box'                                                                                       >> [gnuplot_script]
+ SYS 
+   echo 'plot [0:{%f6.4%[maxSpFreq]}][-1.1:1.75] \'                                                         >> [gnuplot_script]
+ SYS M
+   echo ' '\'[calc_power][mic2plot].$DATEXT\' using 3:\(column\(5\)/{%f8.3%[rooMax]}\) 
+        title \'Mic. {%i0%[mic2plot]}\' with lines, \\                                                      >> [gnuplot_script]
+.
+ SYS 
+   echo '"[straight_ctf_doc][mic2plot].$DATEXT" using 5:3 title "straight CTF" with lines, \'               >> [gnuplot_script]
+ SYS 
+   echo '"[flipped_ctf_doc][mic2plot].$DATEXT"  using 5:3 title "flipped CTF" with lines'                   >> [gnuplot_script]
+;; SYS 
+;;   echo '"[trapped_ctf_doc][mic2plot].$DATEXT"  using 5:3 title "trapped CTF" with points pt 3 ps 1'        >> [gnuplot_script]
+
+  SYS 
+    echo " Gnuplot usage: gnuplot -persist [gnuplot_script]" ; echo
+
+ ; If requested, open Gnuplot
+ IF ( [viewPlotYN] .NE. 0 ) THEN
+    SYS 
+      gnuplot -persist [gnuplot_script]
+ ENDIF
 
  EN
 
+ ; Modified 2016-10-18
+ ;    2016-03-11 (trs) -- added Angstroms symbol encoding in Gnuplot script
+ ;    2016-02-03 (trs) -- initially reports maximum image dimensions, but only if already in SPIDER format
+ ;    2016-01-27 (trs) -- asks whether to convert micrographs (were probably converted previously)
+ ;    2016-01-25 (trs) -- added option to reverse contrast
+ ;    2016-01-24 (trs) -- using background-subtracted experimental amplitude doc file for plot
+ ;    2016-01-22 (trs) -- uses astigmatism angle
+ ;    2016-01-22 (trs) -- converts micrographs using convert_p.spi
+ ;    2015-11-16 (agl) -- uses operation 'TF CT' for phase flipping
+ ;    2015-10-12 (trs) -- scales Gnuplot output better
+ ;    2013-10-16 (agl) -- modernized syntax, changed filenames, cosmetic
+ ;    2012-05-09 (trs) -- Optionally spawns gnuplot, plotting by default highest-defocus micrograph
+ ;    2004-02-24 (trs) -- Added padding factor to allow for oversampled FT's
  ; </body></pre></html>

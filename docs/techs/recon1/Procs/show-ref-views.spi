@@ -14,15 +14,18 @@
 
  ;  ------------ Parameters -------------------------------------
 
- [want-good-yn] = 0    ; Set to one if you want to plot 'good' ref views (not 'all')
+ [wantGoodYN]   = 0    ; Use 0 for all particles, 1 for verified particles
+                       ; If outputs for verified particles don't exist, then all particles will be used
  
  [scale]        = 1    ; Scale factor, if circles get too big or too small (default == 1)
+ 
+ [autoOpen]     = 2    ; Automatically open plot? (0 == No, 1 == ImageMagick display, 2 == qview)
 
  [disp-type]    = 1    ;  1 = put projection numbers in display
                        ;  0 = don't put in numbers
                        ; -1 = numbers only, no circles!
 
- [backgd]       = 1    ;  1 = white background, 0 = black background
+ [backgd]       = 1    ; 1 = white background, 0 = black background
 
  [disp-dim]     = 640  ; Display dimension
  [outer-diam]   = 600  ; Diameter of outer circle
@@ -33,7 +36,7 @@
  ;  ------------ Input files ---------------------------------------
 
  ; KEY=VIEW# /     TOTPARTS
- [how_many_prefix]  = 'views/parts_vsview'      ; Number of particles per view
+ [how_many_prefix]  = 'views/parts_vsview'                    ; Number of particles per view
 
  ; --------------- Output files  -----------------------------------
 
@@ -48,7 +51,17 @@
  IQ FI [goodexist]           ; See if this should access 'all' or 'good'
    [how_many_prefix]_good
 
- IF ( [goodexist] == 1 ) THEN
+ ; Will only use the verified ('_good') data if it exists *and* if [wantGoodYN] = 1
+ IF ( [wantGoodYN] == 1 ) THEN
+   IF ( [goodexist] == 1 ) THEN
+     [useGood] = 1
+   ELSE
+     SYS
+       echo ' Verified particle list [how_many_prefix]_good.$DATEXT not found.  Trying all particles...' ; echo
+   ENDIF
+ ENDIF
+ 
+ IF ( [useGood] == 1 ) THEN
    [allvsgood] = '_good'
  ELSE
    [allvsgood] = '_all'
@@ -59,7 +72,7 @@
  [how_many] = '[how_many_prefix][allvsgood]'
 
  SYS
-   echo "  Computing image of reference view usage" ; echo ' '
+   echo " Computing image of reference view usage" ; echo ' '
 
  [height-digit]  = INT(13/2)
  [width-1digit]  = INT(10/2)
@@ -234,18 +247,29 @@
  UD ICE
    [how_many]
 
- SYS
-   echo "  Use Web to show reference view usage:  [display].$DATEXT" ; echo ' '
- 
- DIS
+ CP TO TIF    ; was JPG
    [display]              ; SPIDER  file       (input)
-                          ; Options
+   [display].tif          ; JPG     file       (output)
+;(CP TO JPG was giving an error in Ubuntu.)
+ 
+ IF ([autoOpen] .EQ. 1) THEN
+   SYS                      ; Display image using display (from ImageMagick)
+     display [display].tif &
+ ELSEIF ([autoOpen] .EQ. 2) THEN
+   SYS                      ; Display image using qview (from SPIRE)
+     qview [display].$DATEXT &
+ ELSE
+   SYS
+     echo ; echo " Use Web to show reference view usage:  [display].$DATEXT" ; echo ' '
+ ENDIF
 
  EN D
 
- ; Modified 2016-7-7
+ ; Modified 2016-10-19
  ;    TO DO: intelligent scaling factor
- ;    2016-07-07 (agl) -- Autodisplay
+ ;    2016-05-04 (trs) -- added option to open plot automatically, using ImageMagick or qview
+ ;    2016-04-27 (trs) -- was previously ignoring [wantGoodYN]
+ ;    2016-04-27 (trs) -- writing output as TIFF (CP TO JPG gives an error in Ubuntu)
  ;    2013-11-27 (trs) -- user-defined dimensions
  ;    2013-10-23 (agl) -- New file names, modernized syntax & cosmetic
  ;    2011-11-23 (trs) -- added user-defined scale factor for radii

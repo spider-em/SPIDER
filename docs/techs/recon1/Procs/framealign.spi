@@ -1,99 +1,140 @@
  ; SOURCE:   framealign.spi
  ; PURPOSE:  Remove drift among a series of frames
- ; USAGE:    clean ; spider spi/dat @framealign
+ ; REQUIRES: settings-framealign.spi
+ ; USAGE:    spider spi/dat @framealign
 
- ;  ----------------- Parameters -----------------------------------------
+;   ----------------- Parameters -----------------------------------------
+; 
+; [useScratchYN]    ; Use scratch directory? (0 == No, 1 == Yes)
+; [inCoreYN]        ; Store stacks in memory (0 == No, 1 == Yes)
+;                   ; (In RAM will require 2X the size of one stack of frames.)
+; [verboseLevel]    ; Verbosity level (3 == Maximum)
+; [origFrame]       ; Shift relative to this frame
+; [maxim]           ; Maximum number of frames to average
+; [skip]            ; Exclude frames within this distance when finding refined image shifts
+; [epsZero]         ; Default shifts to zero if <  this value
+; [searchRange]     ; Search range
+; [numProcs]        ; Number of processors to use (0 == All)
+; [revContrastYN]   ; Reverse contrast? (0==no)
 
- [useScratchYN] = 1     ; Use scratch directory? (0 == No)
- [verboseLevel] = 1     ; Verbosity level (2 == Maximum)
- [origFrame]    = 1     ; Shift relative to this frame
- [maxim]        = 20    ; Maximum number of frames to average
- [skip]         = 4     ; Exclude frames within this distance when finding refined image shifts
- [epsZero]      = .07   ; Default shifts to zero if <  this value
- [searchRange]  = 150   ; Search range
- [numProcs]     = 0     ; Number of processors to use (0 == All)
+;   ----------------- Input files ----------------------------------------
+; 
+; [file_list]               ; List of frame set file names (without extensions)
+; [in_mrc]                  ; MRC file pattern ([entry] == entry in FILE_LIST)
+; [scratch_dir]             ; Temporary scratch directory (OPTIONAL)
+; 
+;   ----------------- Output files ----------------------------------------
+; 
+; [shift_doc_stem]        ; Alignment doc file prefix
+; [mlr_doc_stem]          ; Refined alignment doc file prefix
+; [aligned]               ; Summed aligned image
+; 
+;  ----------------- END BATCH HEADER ------------------------------------
 
- ;  ----------------- Input files ----------------------------------------
-
- [file_list]      = 'filenames'           ; List of frame set file names (without extensions)
-;;; [in_mrc_exts] = '.mrcs'               ; Current frame image stack mrc     
- [in_mrc]         = 'Brno8/[in].mrcs'     ; MRC file pattern ([in] == Entry in 'file_list')
-
- ;  ----------------- Output files ----------------------------------------
-
- [scratch_dir]    = '/var/tmp/tmpframes'   ; Temporary scratch directory (OPTIONAL)
- [shift_doc_stem] = 'doc_shift_'           ; Alignment doc file prefix
- [mlr_doc_stem]   = 'doc_mlr_shift_'       ; Refined alignment doc file prefix
- [aligned_stem]   = 'mic'                  ; Summed aligned image prefix
-
- ; ----------------- END BATCH HEADER ------------------------------------
-
- IF ( [useScratchYN] >= 1 ) THEN
-   SYS
-     mkdir -pv [scratch_dir]
+ @settings-framealign([useScratchYN],[inCoreYN],[verboseLevel],[origFrame],[maxim],[skip],[epsZero],[searchRange],[numProcs],[revContrastYN])
+ 
+ IF ([useScratchYN] .GE. 1) THEN
+    SYS
+    mkdir -p [scratch_dir]
+    ; (Intentionally, will not overwrite an existing file/link.)
  ELSE
-   SYS
-     [scratch_dir] = '.'
+    [scratch_dir] = '.'
  ENDIF
 
  ; Temporary files
- [temp_spi]            = '[scratch_dir]/jnk_stkspider'     ; SPIDER stack
- [temp_filt_stack]     = '[scratch_dir]/jnk_stkfilt'       ; Filtered stack  
+ [temp_spi_disk]       = '[scratch_dir]/jnk_stkspider'     ; SPIDER stack on disk
+ [temp_spi_core]       = '_11'                             ; SPIDER stack in memory (OPTIONAL)
  [temp_apscc_doc]      = '[scratch_dir]/jnk_doc_apscc'     ; unused 'AP SCC' Alignment doc file
- [temp_ali_stack]      = '[scratch_dir]/jnk_stkaligned'    ; Aligned frame image stack 
-
+ [temp_unreversed]     = '_14'                             ; before optional contrast reversal
+ 
+ ; Can pass optional #CPUs from command-line call
+ IF ([ncpus] .NE. 0) [numProcs]=[ncpus]
  MD
    TR OFF
- MD                                    ; Use [numProcs] processors
+ MD
    SET MP
-     [numProcs]
-
- DO                                    ; Endless loop to read input sets
+   [numProcs]
+ 
+ IF ([verboseLevel] .GE. 1) THEN
+    SYS M
+    rm -f [stdout_text] ; 
+    echo "Using {%i0%[numProcs]} CPUs (0==All)" ; echo ;
+    echo "Using {%i0%[numProcs]} CPUs (0==All)" >> [stdout_text] ;
+.
+ ENDIF
+ 
+ SYS
+   mkdir -p [outdir]
+ 
+ [imgCounter] = 0
+ 
+ DO                                    ; Endless loop to read input sets of micrographs
    FR N [fails]                        ; Read next input file name
      [file_list]                       ; List of file names  (input)
-     [in]
-   IF ( [fails] .NE. 0 ) EXIT          ; End of input
-
-   ; Construct I/O filenames   
-;;;[in_mrc]    = [in][in_mrc_exts]     ; Current frame image stack mrc     
-;;;[temp_spi]  = [in]                  ; SPIDER image stack   
-;;;[temp_filt_stack] = [filt_stem][in] ; Filtered stack  
-   [shift_doc] = [shift_doc_stem][in]  ; Alignment doc file
-   [mlr_doc]   = [mlr_doc_stem][in]    ; Refined alignment doc file
-;;;[temp_ali_stack] = [sh_stem][in]    ; Aligned image stack   
-   [aligned]   = [aligned_stem][in]    ; Summed aligned image  
+     [entry]
+   IF ([fails] .NE. 0) EXIT            ; End of input
 
 
+   ; Construct i/o filenames   
+   [shift_doc] = [shift_doc_stem][entry]  ; Alignment doc file
+   [mlr_doc]   = [mlr_doc_stem][entry]    ; Refined alignment doc file
+;;;   [aligned]   = [aligned_stem][entry]    ; Summed aligned image  
+   
+   [imgCounter] = [imgCounter] + 1
+   
+   IF ([verboseLevel] .GE. 1) THEN
+        SYS M
+        echo "Working on micrograph [in_mrc], {%i0%[imgCounter]}th micrograph" ; date ; 
+        echo "Working on micrograph [in_mrc], {%i0%[imgCounter]}th micrograph" >> [stdout_text] ;
+        date  >> [stdout_text] ;
+.
+   ENDIF
+   
    ; Convert images from MRC stack format to SPIDER stacks -------------------
-   IF ( [verboseLevel] >= 1 ) THEN
-      SYS
+   IF ([verboseLevel] .GE. 2) THEN
+        SYS
         echo "  xxxxx 'CP FROM MRC'  Convert images from MRC to SPIDER format xxxxxxxxxxxxxxxx "
    ENDIF
 
    CP FROM MRC             ; Convert MRC to: SPIDER
      [in_mrc]              ; Existing 16 bit stack MRC file (input)
-     [temp_spi]@*          ; SPIDER stack file              (output)
+     [temp_spi_disk]@*     ; SPIDER stack file              (output)
      1                     ; Stacked image number           
      NO,YES                ; No byte flip, Flip top
 
    ; Convert images from MRC stack format to SPIDER stacks -------------------
-   IF ( [verboseLevel] >= 1 ) THEN
-      SYS  
-        echo "  xxxxx 'FS' ixxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx "
+   IF ([verboseLevel] .GE. 3) THEN
+        SYS  
+        echo "  xxxxx 'FS' ixxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx " >> [stdout_text]
    ENDIF
 
    FI H [numFrames],[nx],[ny]   ; Find number of images 
-     [temp_spi]@               ; Image stack               (input)
-     MAXIM,NX,NY               ; Images & size
+     [temp_spi_disk]@           ; Image stack               (input)
+     MAXIM,NX,NY                ; Images & size
  
+   IF ([inCoreYN] .GE. 1) THEN
+        MS
+        [temp_spi_core]@
+        [nx],[ny]
+        [numFrames]
+        
+        CP
+        [temp_spi_disk]@
+        [temp_spi_core]@
+        
+        [temp_spi] = [temp_spi_core]
+   ELSE
+        [temp_spi] = [temp_spi_disk]
+   ENDIF
+   
    DO [frame] = 1,[numFrames]
      FS [max],[min],[avg],[std]
        [temp_spi]@{**[frame]}   ; SPIDER file               (input)
        
      ; Convert images from MRC stack format to SPIDER stacks -------------------
-     IF ([verboseLevel] >= 1) THEN
+     IF ([verboseLevel] .GE. 3) THEN
         SYS
-        echo '  Range ({%I2%[frame]}): ({%f10.2%[min]} ... {%f8.2%[max]})'
+        echo '  Range ({%I2%[frame]}): ({%f10.2%[min]} ... {%f8.2%[max]})' >> [stdout_text]
      ENDIF
    ENDDO
 
@@ -101,41 +142,57 @@
    ; Filter frame images to minimize central peak --------------------------
    ; Convert images from MRC stack format to SPIDER stacks -------------------
 
-   IF ([verboseLevel] >= 2) THEN
+   IF ([verboseLevel] .GE. 3) THEN
         SYS  
-        echo "  xxxxx 'DN MED' Filter {%I0%[numFrames]} frame images. Size: {%I0%[nx]} x {%I0%[ny]}"
+        echo "  xxxxx 'DN MED' Filter {%I0%[numFrames]} frame images. Size: {%I0%[nx]} x {%I0%[ny]}" >> [stdout_text]
+   ENDIF
+   
+   IF ([inCoreYN] .GE. 1) THEN
+        [temp_filt_stack]     = '_12'       ; Filtered stack  
+
+        MS
+        [temp_filt_stack]@
+        [nx],[ny]
+        [numFrames]
+        
+;        CP
+;        [temp_spi_core]@
+;        [temp_filt_stack]@
+;        ;(If in-core stack doesn't yet exist, later steps will ask additional question about #images.)
+   
+   ELSE
+        [temp_filt_stack]     = '[scratch_dir]/jnk_stkfilt'       ; Filtered stack  
    ENDIF
 
    DO [frame] = 1,[numFrames]
 
      DN MED
-       [temp_spi]@{**[frame]}          ; SPIDER file                (input)
+       [temp_spi]@{**[frame]}     ; SPIDER file                (input)
        [temp_filt_stack]@{**[frame]}   ; Image                      (output)
        3                               ; Filter length
        Cross                           ; Filter shape
-
      FS [max],[min],[avg],[std]
        [temp_filt_stack]@{**[frame]}   ; SPIDER file               (input)
        
      ; Convert images from MRC stack format to SPIDER stacks -------------------
-     IF ( [verboseLevel] >= 2 ) THEN
+     IF ([verboseLevel] .GE. 3) THEN
         SYS
-        echo '  Range ({%I2%[frame]}): ({%f10.2%[min]} ... {%f8.2%[max]})'
+        echo '  Range ({%I2%[frame]}): ({%f10.2%[min]} ... {%f8.2%[max]})' >> [stdout_text]
      ENDIF
    ENDDO
 
 ;   FI H [numFrames],[nx],[ny]  ; Find number of images 
 ;     [temp_filt_stack]@        ; Image stack                (input)
 ;     MAXIM,NX,NY               ; Images & size
-;     (FILTERED STACK WILL ALWAYS (?) HAVE THE SAME DIMENSIONS AS THE UNFILTRED STACK.) 
+;     (FILTERED STACK WILL ALWAYS (?) HAVE THE SAME DIMENSIONS AS THE UNFILTERED STACK.) 
  
    ;  Find pair-wise frame shifts ------------------------------------------
    ;  If the parameter [skip] is for example 4, the 4 frames after the current one will not be aligned
    
    ; Convert images from MRC stack format to SPIDER stacks -------------------
-   IF ( [verboseLevel] >= 1 ) THEN
-     SYS  
-        echo "  xxxxx 'AP SCC' Find pair-wise alignment shifts for images xxxxxxxxxxx "
+   IF ([verboseLevel] .GE. 2) THEN
+        SYS  
+        echo "  xxxxx 'AP SCC' Find pair-wise alignment shifts for images xxxxxxxxxxx " >> [stdout_text]
    ENDIF
 
    [n2end]   = [numFrames]
@@ -146,7 +203,7 @@
    DE
      [shift_doc]              ; Shift doc file         (removed)
 
-   [counter] = 0
+   [frameCounter] = 0
    DO [refFrame] = 1,[n2endm1]
      [jgo] = [refFrame] + [skip]
      IF ([jgo] >= [numFrames]) EXIT
@@ -162,28 +219,31 @@
          [temp_apscc_doc]                   ; Doc file               (output)
 
        ; Convert images from MRC stack format to SPIDER stacks -------------------
-       IF ( [verboseLevel] >= 1 ) THEN
-         SYS
-            echo "  #{%I2%[refFrame]}..{%I2%[samFrame]}  Shift: {%f8.2%[xo]}, {%f8.2%[yo]}  Peak: {%f6.4%[pk]}"
+       IF ([verboseLevel] .GE. 2) THEN
+            SYS
+            echo "  #{%I2%[refFrame]}..{%I2%[samFrame]}  Shift: {%f8.2%[xo]}, {%f8.2%[yo]}  Peak: {%f6.4%[pk]}" >> [stdout_text]
        ENDIF
   
        ; Default shifts to zero if <  [epsZero]
        IF ( ABS([xo]) < [epsZero] ) [xo] = 0.0 
        IF ( ABS([yo]) < [epsZero] ) [yo] = 0.0 
 
-       [counter] = [counter] + 1
-       SD [counter], [refFrame],[samFrame], [xo],[yo]
+       [frameCounter] = [frameCounter] + 1
+       SD [frameCounter], [refFrame],[samFrame], [xo],[yo]
          [shift_doc]          ; Shift doc file         (output)
-     ENDDO    
-   ENDDO
+     ENDDO                    ; End sample-frame loop
+   ENDDO                      ; End reference-frame loop
 
+   DE
+   [temp_filt_stack]@
+   
    
    ; Refine alignment shifts ---------------------------------------------
    
    ; Convert images from MRC stack format to SPIDER stacks -------------------
-   IF ( [verboseLevel] >= 2 ) THEN
-     SYS  
-       echo "  xxxxx 'ML'   Refine alignment shifts xxxxxxxxxxxxxxxxxxxxxx "
+   IF ([verboseLevel] .GE. 3) THEN
+        SYS  
+        echo "  xxxxx 'ML'   Refine alignment shifts xxxxxxxxxxxxxxxxxxxxxx " >> [stdout_text]
    ENDIF
 
    DE
@@ -193,26 +253,40 @@
      [shift_doc]             ; Shift doc file           (input)
      [mlr_doc]               ; Refined shift doc file   (output)
 
-   !SYS
-   !  cat [mlr_doc]*
-
 
    ; Shift align frame images ---------------------------------------------
    
-   IF ( [verboseLevel] >= 2 ) THEN
-     SYS  
-       echo "  xxxxx 'SH F' Shift align frame images xxxxxxxxxxxxxxxxxxxxx"
+   IF ([verboseLevel] .GE. 3) THEN
+        SYS  
+        echo "  xxxxx 'SH F' Shift align frame images xxxxxxxxxxxxxxxxxxxxx" >> [stdout_text]
    ENDIF
  
+   IF ([inCoreYN] .GE. 1) THEN
+        [temp_ali_stack]     = '_13'       ; Filtered stack  
+
+        MS
+        [temp_ali_stack]@
+        [nx],[ny]
+        [numFrames]
+        
+;        CP
+;        [temp_spi_core]@
+;        [temp_ali_stack]@
+;        ;(If in-core stack doesn't yet exist, later steps will ask additional question about #images.)
+   
+   ELSE
+        [temp_ali_stack]      = '[scratch_dir]/jnk_stkaligned'    ; Aligned frame image stack 
+   ENDIF
+
    DO                         ; Loop over images in sum
 
      UD NEXT [key], [frame],[xs],[ys] 
        [mlr_doc]              ; Refined shift doc file (input)
      IF ([key] <= 0)  EXIT    ; End of file 
 
-     IF ([verboseLevel] >= 2) THEN
+     IF ([verboseLevel] .GE. 3) THEN
         SYS
-        echo '  Image: {**[frame]}    Shift: {%f6.2%[xs]}, {%f6.2%[ys]}'
+        echo '  Image: {**[frame]}    Shift: {%f6.2%[xs]}, {%f6.2%[ys]}' >> [stdout_text]
      ENDIF
      
      IF ([frame] == [origFrame]) CYCLE   ; No shift
@@ -223,52 +297,75 @@
        [temp_ali_stack]@{**[frame]}   ; Aligned stack          (output)
        [xs],[ys]                      ; Shifts
 
-   ENDDO
+   ENDDO                              ; End image-loop
 
    UD NEXT E
-     [mlr_doc]
+   [mlr_doc]
 
    ; Copy the unshifted image into shifted stack
    CP                                   ; Copy
      [temp_spi]@{**[origFrame]}         ; Original stacked image  (input)
      [temp_ali_stack]@{**[origFrame]}   ; Aligned image stack     (output)
 
+;   [maxim] = 20
+;   ; (?WHY IS THERE A MAXIMUM NUMBER OF FRAMES TO AVERAGE?)
+
    ; Sum the aligned frame images ---------------------------------------------
    
-   IF ( [verboseLevel] >= 1 ) THEN
-     SYS  
-       echo "  xxxxx 'AD S' Sum aligned frame images xxxxxxxxxxxxxxxxxxxx"
+   IF ([verboseLevel] .GE. 2) THEN
+        SYS  
+        echo "  xxxxx 'AD S' Sum aligned frame images xxxxxxxxxxxxxxxxxxxx" >> [stdout_text]
    ENDIF
 
    AD S
      [temp_ali_stack]@**     ; Aligned images        (input)
      1-[maxim]               ; Image numbers
-     [aligned]               ; Aligned sum image     (output)
+     [temp_unreversed]   ; WAS [aligned]               ; Aligned sum image     (output)
 
-    FS [max],[min]
+   ; Reverse contrast if necessary
+   IF ([revContrastYN] .LE. 0) THEN
+     CP
+     [temp_unreversed]
+     [aligned]               ; Aligned sum image     (output)
+   ELSE
+     NEG A
+     [temp_unreversed]
+     [aligned]               ; Aligned sum image     (output)
+   ENDIF
+    
+   FS [max],[min]
       [aligned]              ; Aligned sum image     (output)
 
-   IF ( [verboseLevel] >= 1 ) THEN
-     SYS
-       echo '  Sum image range: ({%f10.2%[min]} ... {%f8.2%[max]})'
+   SYS M
+     mv [aligned].$DATEXT [outdir] ;
+     mv [shift_doc].$DATEXT [outdir] ;
+     mv [mlr_doc].$DATEXT [outdir]
+.   
+   IF ([verboseLevel] .GE. 2) THEN
+        SYS
+        echo '  Sum image range: ({%f10.2%[min]} ... {%f8.2%[max]})' >> [stdout_text]
    ENDIF
 
+   ; Clean up
    DE
-     [temp_spi]@
+   [temp_spi_disk]@
    DE
-     [temp_filt_stack]@
+   [temp_spi]@
    DE
-     [temp_apscc_doc]
+   [temp_apscc_doc]
    DE
-     [temp_ali_stack]@
+   [temp_ali_stack]@
    
- ENDDO
+ ENDDO   ; End image loop
 
- IF ( [useScratchYN] >= 1 ) THEN
-   SYS
-     rmdir -v [scratch_dir]
+ IF ([useScratchYN] .GE. 1) THEN
+    SYS
+    rm -vf [scratch_dir]
  ENDIF
  
  EN 
 
- 
+; Modified 2016-03-11
+;    2016-01-26 (trs) -- added option to invert contrast
+;    2016-01-13 (trs) -- added option to store intermediates in RAM
+;    2016-01-12 (trs) -- adapted from framealign.spi (agl)

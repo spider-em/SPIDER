@@ -12,8 +12,8 @@
  
  ; Following values may be converted to interactive mode
 
- ;? Spherical aberration constant, mm ?
- [sp_sph_abb]    = 2.00
+ ; Default values for ribosomes (only used if zero is input for query below)
+ [diam]         = 276             ; Angstroms, default actual ribosome particle diameter
 
  ;? Source size, 1/A )?
  [sp_sourcesiz] = 0.000           ; Usually OK. This value = no effect on phase flipping CTF
@@ -48,47 +48,59 @@
    ? Do the micrographs need to be unzipped (1 = yes, 0 = no)?
 
  RR [sp_format]
-   ? File format (0 = SPIDER, 1 = TIF, 2 = PerkinElmer, 3 = ZI, 4 = Nikon)?
+   ?File format (0 = SPIDER, 1 = TIF, 2 = PerkinElmer, 3 = ZI, 4 = Nikon, 5 = MRC)?
 
- [sp_xm] = 0                     ; These values are left blank for SPIDER & ZI formats
- [sp_ym] = 0                     ;
+ [sp_xm] = 0  ; These values are left blank for SPIDER & ZI formats
+ [sp_ym] = 0  ;
 
- IF ([sp_format] .NE. 0) THEN
-   IF ( [sp_format] .NE. 3 ) THEN
-      RR [sp_xm]
-         ? Micrograph width,  pixels ?
-      RR [sp_ym]
-         ? Micrograph height, pixels?
+ IF ([sp_format].NE.0) THEN
+   IF ([sp_format].NE.3) THEN
+      IF ([sp_format].NE.5) THEN
+         RR [sp_xm]
+            ?X dimension (width) in pixels?
+         RR [sp_ym]
+            ?Y dimension (height) in pixels?
+      ENDIF
    ENDIF
  ENDIF
 
- ; For ZI files, pixel size refers to overview sampling, not original sampling
+ ; For ZI files, pixelsize refers to overview sampling, not original sampling
  RR [sp_pixsiz]
-   ? Pixel size, A ?
+   ?Pixel size (in Angstroms)?
 
  RR [sp_kev]
    ? Electron energy, keV ?
 
- RR [sp_winsiz]
-   ? Particle window size, pixels ?
+ RR [sp_sph_abb]
+   ?Spherical aberration constant (mm)?
+ 
+ RR [sp_partsiz]
+   ?Particle size, pixels (0 for ribosome default)?
 
- IF ( [sp_winsiz] <= 0 ) THEN             
-   ; Use default window size 
+ IF ([sp_partsiz].EQ.0) THEN      ; Use default particle size
+   [sp_partsiz] = INT([diam]/[sp_pixsiz])     ; Compute particle size (pixels)
+   
    SYS
-      echo '  *** Must specify value > 0 for window size' 
-   EN
+   echo "Using particle size of {%i0%[sp_partsiz]} pixels" ; echo
  ENDIF
 
- RR [sp_partsiz]
-   ? Particle size, pixels ?
+ RR [sp_winsiz]
+   ?Window size, pixels (0 for default)?
 
- IF ( [sp_partsiz] <= 0 ) THEN              
-    SYS
-      echo '  *** Must specify value > 0 for particle size (pixels) used in alignment' 
+ IF ([sp_winsiz].EQ.0) THEN      ; Use default window size 
+   [sp_winsiz]   = INT([sp_partsiz]*4/3)       ; Compute window size (pixels)
+   
+   ; Ensure window size is even
+   [xwt] = INT([sp_winsiz]/2.0)
+   [v90] = [sp_winsiz] - (2*[xwt])
+   IF ([v90] .NE. 0) [sp_winsiz] = [sp_winsiz] + 1
+   
+   SYS
+   echo "Using window size of {%i0%[sp_winsiz]} pixels" ; echo
  ENDIF
 
  RR [sp_mag]
-   ? Magnification ?
+   ?Magnification?
 
  RR [sp_scanres]               ; Scanning resolution = DetectorPixelSize, um (Usually: 7 or 14)
    ? Detector pixel size, um (7, 14, ...)?
@@ -114,7 +126,7 @@
    echo    ' ; Parameters for single particle reconstruction'   >> [lisfile].$DATEXT              
  SYS
    echo -n ' ; $PRJEXT/$DATEXT    ' >> [lisfile].$DATEXT                
- SYSc
+ SYS
    date >> [lisfile].$DATEXT                
  SYS
    echo ' ' >> [lisfile].$DATEXT  
@@ -302,3 +314,6 @@
  112000
  14
  1
+ 
+; Modified 2016-05-24
+;    2016-01-14 (trs) -- added option for MRC format

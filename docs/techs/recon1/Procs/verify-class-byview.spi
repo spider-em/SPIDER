@@ -5,14 +5,20 @@
  ; PURPOSE:  Classify particles assigned to each reference view
  ;
  ; USAGE:    clean ; ./spider spi/dat @verify-class-byview
+ ; OPTIONAL: clean ; ./spider spi/dat @verify-class-byview RESULTS=4 FIRST=63 LAST=83
  ;
  ; REQUIRES:     spider/docs/techs/recon1/Procs/verify-settings.spi
  ;
  ; INPUTS:  (Where *** denotes group,  ### denotes view,   ??? denotes class)
- ;  [params]           ../params                             Parameter document            (one)
- ;  [ref_view_list]    [rec_dir]/sel_proj                    List of projection views      (one)
- ;  [view_list]        [view_dir]/prj###/sel_part_byv        Particle selection by view doc files  (one/view) 
- ;  [filtered_stack]   [view_dir]/prj###/filtavg             Filtered particle image stacks        (one/view 
+ ;  [params]           ../params                        Parameter document            (one)
+ ;  [ref_view_list]    [rec_dir]/sel_proj               List of projection views      (one)
+ ;  [view_list]        [view_dir]/prj###/sel_part_byv   Particle selection by view doc files  (one/view) 
+ ;  [filtered_stack]   [view_dir]/prj###/stkfilt        Filtered particle image stacks        (one/view)
+ ;
+ ;  If using defocus groups: 
+ ;    [df_group_list]  ../Power_Spectra/order_defgrps   Defocus group list            (one)
+ ;    [ref_proj]       [in_dir]/ref_proj_***            Reference-projection prefix   (one/defocus-group)
+ ;    [ref_proj_nodef] [in_dir]/ref_proj_01             Reference-projection prefix   (only one)
  ;
  ; OUTPUTS:  
  ;  [class_doc]       [view_dir]/prj###/sel_part_byclass_??? Particle selection by class (one/class/view) 
@@ -23,24 +29,24 @@
  ;  [eigenvalue_doc]  [view_dir]/prj###/listeigenvalues      List of eigenvalues            (one/view)
  ;  [class_stats_doc] [view_dir]/prj###/listclasses          CCC for each class-average     (one/view)
  ;  [summary_doc]     summary_classify                       Summary doc file               (one)
+ ;  [class_log]       log.classify                           Log file for screen output     (one)
  ;
  ; ------------------- Parameters -------------------
 
- [first-view]      = 1    ; First reference-view
- [last-view]       = -1   ; Last reference-view (<1 == all)
- [ca-pca]          = 1    ; Correspondence analysis == 1, PCA == 2 , IPCA == 3
- [parts-per-class] = 75   ; Particle-to-class ratio
- [min-2classes]    = 40   ; Minimum number of particles for 2 classes
- [num-factors]     = 9    ; Number of eigenvalues to use
- [save-eigenimg]   = 0    ; Flag to save eigenimages (1 == save) (reconstituted images commented out) 
- [reduction]       = 2    ; Reduction factor applied to input particles
- [label-dim]       = 115  ; Window size (temporary) for labeling
-                          ; (Class number and size unlikely to fit in label after size-reduction.)
-                          ; Suggestions: 115 for 3-digit class# + 3-digit class-size, 128 for 3+4 or 4+3
- [user-constant]   = 0    ; Additive constant for correspondence analysis (0 == automatic)
-                          ; (CorAn only works on non-negative pixel values.)
-                          ; If unsure, check the range of a few particles or the noise-reference for positivity
- [save-variance]   = 0    ; Flag to save variance (1 == save)
+ [firstView]       = 1     ; First reference-view
+ [lastView]       = -1     ; Last reference-view (<1 == all)
+ [ca-pca]          = 3     ; Correspondence analysis == 1, PCA == 2 , IPCA == 3
+ [parts-per-class] = 75    ; Particle-to-class ratio
+ [min-2classes]    = 40    ; Minimum number of particles for 2 classes
+ [num-factors]     = 9     ; Number of eigenvalues to use
+ [save-eigenimg]   = 0     ; Flag to save eigenimages (1 == save) (reconstituted images commented out) 
+ [label-dim]       = 115   ; Window size (temporary) for labeling
+                           ; (Class number and size unlikely to fit in label after size-reduction.)
+                           ; Suggestions: 115 for 3-digit class# + 3-digit class-size, 128 for 3+4 or 4+3
+ [user-constant]   = 0     ; Additive constant for correspondence analysis (0 == automatic)
+                           ; (CorAn only works on non-negative pixel values.)
+                           ; If unsure, check the range of a few particles or the noise-reference for positivity
+ [save-variance]   = 0     ; Flag to save variance (1 == save)
 
  ; --------------- END BATCH HEADER ---------------
 
@@ -48,70 +54,180 @@
    TR OFF                               ; Decrease results file output
  MD
    VB OFF                               ; Decrease results file output
+ MD
+   SET MP
+   1
 
  ; Set common filenames & parameters
  @verify-settings
  [iter] = 0
-
+ 
  ; Temporary filenames
- [temp_class_map]   = 'tmpclassmap'     ; Temp list of particles by assigned class
+ [temp_class_map]   = 'tmpclassmap'                   ; Temp list of particles by assigned class
+ [temp_mask]        = '_6'                            ; Mask
+ [temp_ref_proj]    = '_5'                            ; Reduced reference-projection
+ [temp_rec_pos]     = '_91'                           ; Positive reconstituted image
+ [temp_rec_neg]     = '_93'                           ; Negative reconstituted image
+ [temp_class_avg]   = '_4'                            ; Class average
+ [temp_class_var]   = '_7'                            ; Class variance
+ [temp_exp_avg]     = '_2'                            ; Expanded average (to dimension LABEL-DIM)
+ [temp_labeled_avg] = '_3'                            ; Expanded, labeled average
 
- [temp_mask]        = '_6'              ; Mask
- [temp_ref_proj]    = '_5'              ; Reduced reference-projection
- [temp_rec_pos]     = '_91'             ; Positive reconstituted image
- [temp_rec_neg]     = '_93'             ; Negative reconstituted image
- [temp_class_avg]   = '_4'              ; Class average
- [temp_class_var]   = '_7'              ; Class variance
- [temp_exp_avg]     = '_2'              ; Expanded average (to dimension LABEL-DIM)
- [temp_labeled_avg] = '_3'              ; Expanded, labeled average
+ MY FL
+ 
+ ; Check if defocus-group list exists
+ IQ FI [dfgrps-exist]
+   [df_group_list]
 
+ ; If using defocus groups, then
+ IF ( [dfgrps-exist] == 1 ) THEN
+   ; Get # of defocus-groups
+   UD N  [num-grps]
+     [df_group_list]
+
+   ; Get last defocus-group #
+   UD [num-grps], [last-grp]
+     [df_group_list]
+   
+   [ref_proj] = '[ref_proj_dfgrp][last-grp]'   ; UNTESTED
+ ELSE
+   [ref_proj] = [ref_proj_nodef]    ; Reference-projection prefix
+ ENDIF
+
+ ; Check for (optional) command-line ranges
+ IF ([FIRST] .NE. 0) [firstView] = [FIRST]
+ IF ([LAST]  .NE. 0) [lastView]  = [LAST]
+ 
+ IF ( [lastView] < 1 ) THEN
+   ; Get number of views
+   FI X [lastView]
+     [ref_proj]
+     MAXIM
+;   UD N [lastView]
+;     [ref_view_list]
+;   ; (An 84th projection is listed in refangles.)
+ ENDIF
+
+ ; Diagnostic for results file
+ [firstView]   ; first view
+ [lastView]    ; last view
+ 
+ [temp_summary]     = 'tmpsummary_{%i0%[lastView]}'   ; Temporary summary doc
+ 
  SYS
-   echo "  Using projections from: [ref_projs] for CCC" ; echo
+   echo " Will duplicate screen output to [class_log] for remote monitoring" ; echo
+ SYS
+   date 
+ SYS
+   date >> [class_log]
+ SYS
+   echo " Using particles in [view_list].$DATEXT"
+ SYS
+   echo " Using particles in [view_list].$DATEXT" >> [class_log]
 
- ; Get original image dimension
- UD 17, [sp_winsiz]
-   [params]
- UD E                                 ; Close doc
 
- [winsiz] = [sp_winsiz]/[reduction]   ; Reduced image dimension
+ ; GET PARTICLE DIMENSION
+
+ ; get first view + particle#
+ [one] = 1
+ UD IC [one], [view]
+  [ref_view_list]
+ UD IC [one], [firstPart]
+   [view_list][view]
+
+ ; get size of first image
+ FI H [idimInput]
+  [filtered_stack][view]@{%i0%[firstPart]}   ; WAS [particle_imgs][firstPart]
+  NX
+
+ [label-ydim] = ([label-dim]+36)*[idimInput]/[label-dim]     ; Label is 36 pixels tall
+
 
  ; Calculate mask radius
- [mask-radius] = int([winsiz]/2)
+ [mask-radius] = int([idimInput]/2)
 
  ; Make circular mask
  MO  
    [temp_mask]
-   [winsiz],[winsiz]
+   [idimInput],[idimInput]
    C                    ; _C_ircle
    [mask-radius]
 
- IF ( [last-view] < 1 ) THEN
-   ; Get number of views
-   UD N [last-view]
-     [ref_view_list]
+
+ ; CHECK IF REFERENCES HAVE SAME DIMENSION AS EXPERIMENTAL IMAGES
+
+ SYS
+   echo " Using projections from: [ref_proj] for CCC"
+ SYS
+   echo " Using projections from: [ref_proj] for CCC" >> [class_log]
+
+ ; Get image-dimension from first reference
+ [view] = 1
+
+ FI H [idimRefs]
+   [ref_proj]@{*[view]}
+   NX
+
+ ; Compare image-dimensions from params and header, check if downsampled
+ IF ([idimRefs] .NE. [idimInput]) THEN
+   ; compute ratio
+   [ref-ratio] = [idimRefs]/[idimInput]
+
+   ; If ratio is an integer, images are probably shrunk
+   IF ([ref-ratio] .EQ. int([ref-ratio])) THEN
+     SYS
+       echo "Will (internally) shrink references by factor of {%i0%[ref-ratio]} (={%i0%[idimRefs]}/{%i0%[idimInput]})"
+     SYS
+       echo "Will (internally) shrink references by factor of {%i0%[ref-ratio]} (={%i0%[idimRefs]}/{%i0%[idimInput]})" >> [class_log]
+
+     [shrinkrefs-yn] = 1
+     
+   ; If ratio is not an integer
+   ELSE
+     ; don't know what to do
+     SYS
+       echo "ERROR:"
+     SYS
+       echo "Image dimension from particle [particle_imgs][firstPart], {***[idimInput]}, different from [ref_proj], {***[idimRefs]}"
+     SYS
+       echo "Fix and re-start"
+
+     EN
+   ENDIF
+ ELSE
+   [ref-ratio] = 1
  ENDIF
 
+ 
  ; Initialize particle-counter
  [total-particles] = 0
 
+ ; Initialize
+ SYS
+   touch [summary_doc].$DATEXT
+ 
  ; Clean up pre-existing file
  DE
-   [summary_doc]
-   
+   [temp_summary]   ; WAS [summary_doc]
+ 
  ; Label summary file
  SD /       VIEWNUM      NUM_PARTS   MAX_CLASSSIZE  NUM_CLASSES  DAVIESBOULDIN
-   [summary_doc]
+   [temp_summary]   ; WAS [summary_doc]
 
  SYS
-   echo -n "  Beginning classification    "; date ;    echo
+   echo -n " Beginning classification" 
+ SYS
+   echo -n " Beginning classification" >> [class_log]
 
  IF ( [save-eigenimg]==1 ) THEN
    SYS
-     echo "  Will generate eigenimages" ;    echo
+     echo " Will generate eigenimages"
+   SYS
+     echo " Will generate eigenimages" >> [class_log]
  ENDIF
 
  ; Loop through reference views
- DO [view-key] = [first-view],[last-view] ; Loop through ref views ---------------
+ DO [view-key] = [firstView],[lastView] ; Loop through ref views ---------------
 
     ; Get reference-view #
     UD IC [view-key], [view]
@@ -155,10 +271,10 @@
       [eigenvalue_doc][view]
 
     ; Shrink reference-projection
-    DC S
-      [ref_projs]@{****[view]}        ; Normalized reference-projection file   (input)
+    IP
+      [ref_proj]@{****[view]}        ; Normalized reference-projection file   (input)
       [temp_ref_proj]                ; Reduced reference-projection file     (output)
-      [reduction],[reduction]
+      [idimInput],[idimInput]   ; WAS [reduction],[reduction]
 
     ; Determine number of classes to use
     [num-classes] = int(([view-parts]/[parts-per-class]) + 0.5)
@@ -176,10 +292,11 @@
         DOC REN  
           [view_list][view]                ; Selection doc file (unsorted)    (input)
           [class_doc][view][class]_noccc   ; Class doc file, sorted by CCC   (output)
-;;          [class_doc][view][class]_unsort  ; Class doc file, sorted by CCC   (output)
 
         SYS
-          echo "  View: {%I4%[view]}  Has: {%I3%[num-classes]} class  "
+          echo " View: {%I4%[view]}  Has: {%I3%[num-classes]} class  "
+        SYS
+          echo " View: {%I4%[view]}  Has: {%I3%[num-classes]} class  " >> [class_log]
 
         [class-parts] = [view-parts]
 
@@ -225,9 +342,13 @@
         ENDIF
 
         SYS
-          echo "  View: {%i4%[view]}, Minimum: {%f10.3%[overall-min]} at image: {******[min-img]}, Add constant: {%f11.4%[add-constant]}"
-.
+          echo " View: {%i4%[view]}, Minimum: {%f10.3%[overall-min]} at image: {******[min-img]}, Add constant: {%f11.4%[add-constant]}"
+        SYS
+          echo " View: {%i4%[view]}, Minimum: {%f10.3%[overall-min]} at image: {******[min-img]}, Add constant: {%f11.4%[add-constant]}" >> [class_log]
+
     ENDIF
+
+    MY FL
 
     ; RUN MULTIVARIATE STATISICAL ANALYSIS
 
@@ -282,8 +403,8 @@
       ; GENERATE EIGENIMAGES (OPTIONALLY)
 
  ;     ; Calculate dimensions for reconstituted images
- ;     [double-idim] = [winsiz]*2  ; Double image-dimension
- ;     [idim-plus1]  = [winsiz]+1  ; Image-dimension + 1
+ ;     [double-idim] = [idimInput]*2  ; Double image-dimension
+ ;     [idim-plus1]  = [idimInput]+1  ; Image-dimension + 1
 
       ; Loop through eigenvalues
       DO [factor-num] = 1,[num-factors]  ; Loop through eigenvalues ----------
@@ -315,7 +436,7 @@
  ;      PD
  ;        [temp_rec_pos]           ; Positive reconstituted image (input)
  ;        [recon_img][factor-num]
- ;        [winsiz],[double-idim]
+ ;        [idimInput],[double-idim]
  ;        B                        ; Set background to Border
  ;        1,1                      ; Top-left coordinates
  ;
@@ -354,8 +475,6 @@
         [class_doc][view][class]_noccc
         [class_doc][view][class]_unsort
         1                        ; Column # to intersect: view-slice #
-
-;;      LB3                        ; Skip to here if only one class
 
       ; Sort individual particles by CCC
       DOC SORT
@@ -432,13 +551,11 @@
         [temp_labeled_avg]         ; Expanded, labeled class-average file  (output)
         {***[class]},n={***[class-size]}
 
-      [label-ydim] = ([label-dim]+36)*[winsiz]/[label-dim]     ; Label is 36 pixels tall
-
       ; Shrink back down
       IP
         [temp_labeled_avg]         ; Expanded, labeled class-average file  (input)
         [class_avg][view][class]   ; File              (output)
-        [winsiz],[label-ydim]
+        [idimInput],[label-ydim]
 
       ; Delete variance if not needed
       IF ( [save-variance] == 1 ) THEN
@@ -472,7 +589,9 @@
 
 
     SYS
-      echo "  View: {%I4%[view]}  Classes: {%I3%[num-classes]}  Max class size: {%I3%[max-class-size]}"     
+      echo " View: {%I4%[view]}  Classes: {%I3%[num-classes]}  Max class size: {%I3%[max-class-size]}"
+    SYS
+      echo " View: {%I4%[view]}  Classes: {%I3%[num-classes]}  Max class size: {%I3%[max-class-size]}" >> [class_log]
 
     ; Close document
     SD E
@@ -508,29 +627,50 @@
     LB19  ; Skip to here if view unpopulated
 
     SD [view-key], [view],[view-parts],[max-class-size],[num-classes],[km-db]
-      [summary_doc]
+      [temp_summary]   ; WAS [summary_doc]
  ENDDO                         ; End reference-view loop --------------------
 
- SD / TOTAL_PARTS
-   [summary_doc]               ; File   (output)
- [dummy] = -[last-view]
- SD [dummy], [total-particles]
-   [summary_doc]               ; File   (output)
+; SD / TOTAL_PARTS
+;   [summary_doc]               ; File   (output)
+; [dummy] = -[lastView]
+; SD [dummy], [total-particles]
+;   [summary_doc]               ; File   (output)
 
  ; Close docs
  UD ICE
    [ref_view_list]             ; File   (closed)
  SD E
-   [summary_doc]               ; File   (closed)
+ [temp_summary]   ; WAS    [summary_doc]               ; File   (closed)
 
  SYS
-   echo ; echo -n "  Done -- classified: {%I0%[total-particles]} particles    "; date;    echo 
+   cat [temp_summary].$DATEXT >> [summary_doc].$DATEXT
+ 
+ ; If submitted via qsub, then signal completion
+ IF ([LAST] .NE. 0) THEN
+   SYS
+     \cp -f [temp_summary].$DATEXT [finished_class][LAST].$DATEXT
+ ELSE
+   DE
+     [temp_summary]
+ ENDIF
+ 
+ SYS
+   echo " Done -- classified through view {%i0%[lastView]}"
+ SYS
+   echo " Done -- classified through view {%i0%[lastView]}" >> [class_log]
+ SYS
+   date
+ SYS
+   date >> [class_log]
 
  EN
 
- ; Modified 2016-03-23
+ ; Modified 2016-10-19
  ;   TO DO: write unsorted class doc in core
+ ;   TO DO: label averages in separate loop, while automatically setting LABELDIM
+ ;   2016-06-03 (trs & hn)  -- Duplicates STDOUT to log file instead of screen (useful for remote monitoring)
  ;   2016-03-23 (agl)       -- Filenames altered, echo formatting altered
+ ;   2016-02-09 (trs)       -- Checks reduction factor automatically
  ;   2013-11-27 (trs)       -- Bug fix with new syntax when view has single class
  ;   2013-10-23 (agl)       -- New file names, modernized syntax & cosmetic
  ;   2012-03-01 (trs)       -- Added #classes and Davies-Bouldin# to summary doc
@@ -546,24 +686,22 @@
  ;   2008-11-12 (trs)       -- Now a parameter to specify CA, PCA, or IPCA
  ;   2007-11-27 (trs)       -- Calculates averaged CCC instead of CCC of class-average
  ;   2007-11-27 (trs)       -- Can force poorly-populated views into two classes
- ;   2007-10-11 (trs)       -- Last reference-view now an input parameter
+ ;   2007-10-11 (trs)       -- Last reference-view now user-defined
  ;   2007-10-01 (trs)       -- Defocus-group list now optional
- ;   2007-09-06 (trs)       -- Input particles are now in stacks
- ;   2007-09-06 (trs)       -- Uses iterative PCA instead of CorAn
+ ;   2007-09-06 (trs)       -- Lnput particles are now in stacks
  ;   2006-08-29 (trs)       -- Gets last defocus-group number automatically
  ;   2006-07-27 (trs)       -- Bug fix in reference-projection file-pattern
- ;   2006-04-05 (trs)       -- Uses last defocus group projections for CCC
+ ;   2006-04-05 (trs)       -- Uses highest-defocus group projections for CCC
  ;   2006-02-06 (trs & pp)  -- Updated for changes in projection-matching
  ;   2005-03-27 (trs)       -- No longer needs how_many file
  ;   2005-01-27 (trs & gra) -- Deals with variances of single-image classes
  ;   2005-01-24 (trs & js)  -- Bug fix in loop that checks for low intensities
  ;   2004-12-22 (trs)       -- Checks for images with low intensities
- ;   2004-12-22 (trs & jl)  -- Prints standard deviation of the class-variance to stats document
- ;   2004-12-22 (trs)       -- First reference-view is a parameter, in case you need to resume
+ ;   2004-12-22 (trs & jsl) -- Prints standard deviation of the class-variance to stats document
+ ;   2004-12-22 (trs)       -- Hirst reference-view is user-defined, in case you need to resume
  ;   2004-05-11 (trs)       -- Handles poorly-populated classes differently
- ;   2004-05-04 (trs)       -- Adds option to save/delete variance
+ ;   2004-05-04 (trs)       -- Added option to save/delete variance
  ;   2004-04-22 (trs)       -- Sorts individual images by CCC (worst to best)
- ;   2004-04-16 (trs)       -- Uses CorAn instead of PCA
  ;   2004-04-14 (trs)       -- Deletes unused 'CA S' output (all except _IMC)
 
  ; </pre></body></html>
