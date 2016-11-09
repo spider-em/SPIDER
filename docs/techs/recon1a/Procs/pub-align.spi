@@ -1,0 +1,73 @@
+  ; <html><head><title>Controls parallel alignment </title></head><body><pre>
+ ;
+ ; SOURCE: spider/docs/techs/recon1/Procs/pub-align.spi   
+ ;
+ ; PURPOSE: Multi-reference alignment of an image series. 
+ ;          Experimental images are aligned with reference projections via
+ ;          shifts (translations) and rotations.  
+ ;          FOR PROJECTS WITH MORE THAN ONE GROUP 
+ ;
+ ; USAGE:   clean ; ./spider spi/dat @pub-align 0
+ ;
+ ; I/O Registers & files are set in: <a href="recon-settings.spi">recon-settings.spi</a>
+ ;
+ ; INPUT FILES: ([win_dir] denotes input directory, '***' denotes group,  '%' denotes subset)
+ ;   [sel_group]           [win_dir]/sel_group        Group selection file           (one)
+ ;   [sel_parts]           [win_dir]/sel_part_***     Group particle selection files (one/group)
+ ;   [unaligned_images]    [win_dir]/data_***         Unaligned image stacks         (one/group)
+ ;   [ref_projs]           [rec_dir]/projs_00         Reference projections          (one)
+ ;
+ ; OUTPUT FILES: ('[rec_dir] denotes reconstruction output directory)
+ ;   [next_group_align_s]  [rec_dir]/align_01_***_s%  Alignment parameter doc files         (two/group)
+ ;   [aligned_images]      [rec_dir]/dala_***@        Rotationally aligned particle stacks  (two/group)
+ ;   [finished_file]       jnk_sync_$$$$_***          Created when this parallel task is finished (one)
+ ;
+ ; PROCEDURES CALLED:
+ ;   recon-settings        <a href="recon-settings.spi"> recon-settings.spi</a>
+ ;   memforqsub (optional) <a href="memforqsub.spi">     memforqsub.spi</a>
+ ;   pub_submit            <a href="pub_submit.spi">     pub_submit.spi</a>
+ ;   .. qsub/publish       <a href="qsub.pbs">           qsub.pbs</a>
+ ;   .... align-loop       <a href="pub-align-loop.spi"> align-loop</a>          
+ ;   ...... recon-settings <a href="recon-settings.spi"> recon-settings.spi</a>            
+ ;
+ ; -------------------------------- END BATCH HEADER ----------------------------
+
+ MD
+   TR OFF              ; Loop info turned off
+ MD
+   VB OFF              ; File info turned off
+ MD
+   SET MP              ; Use only a few processors on master node!!
+   1 
+ SYS
+   echo
+
+ ; Get reconstruction parameters & file names
+ [steptype] = 0        ; Alignment step
+ @recon-settings([steptype],[num-grps],[pixsiz],[ang-step],[r2],[alignsh],[prj-radius],[winsiz],[incore-yn],[bp-type],[qsub])
+ [iter] = 0
+
+ ; Create directories for output and scratch files
+ SYS                          
+   mkdir -p  [rec_dir] [work_dir]
+ 
+ ; Processes experimental images in parallel by groups of images.
+ ; Find alignment parameters ('AP SHC') which best align experimental images with 
+ ; projection images. 
+ ; Rotate ('RT SF') original particle images using these rotational alignment parameters.
+
+ [task]   = 4           ; Starts: spider @align-loop for each group
+ [script] = './spider $PRJEXT/$DATEXT @align-loop '
+
+ @pub-submit([iter],[num-grps],[task],[qsub])
+    [script]            ; Script that runs alignment parallel job
+
+ SYS
+   echo -en '  Alignment completed' ; date '+ TIME: %x  %X' ; echo
+
+ EN
+
+; </pre></body></html>
+
+ 
+

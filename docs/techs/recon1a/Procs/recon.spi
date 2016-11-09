@@ -1,0 +1,79 @@
+ ; <html><head><title>Reconstructs a volume by back-projection of an image series</title></head><body><pre>
+ ;
+ ; SOURCE:  spider/docs/techs/recon1/Procs/recon.spi
+ ;          For gold standard reconstruction from bp-inseries    ArDean Leith  Mar 2016
+ ; 
+ ; PURPOSE: Runs on master node to control parallel reconstruction. 
+ ;          Reconstructs a volume by back-projection of an image series.
+ ;          Calculate two half-set reconstructions for each group
+ ;          Merge half-set reconstructions into overall reconstruction
+ ;          Create output volume by backprojection
+ ;          Apply matched filter to output volume
+ ;
+ ; I/O Registers & files are set in: <a href="recon-settings.spi">recon-settings.spi</a>
+ ;
+ ; INPUT FILES: ([win_dir] denotes input directory, '***' denotes group,  '%' denotes subset)
+ ;              ([rec_dir] denotes alignment/reconstruction output directory)
+ ;   [sel_group]        [win_dir]/sel_group      Group selection file           (one)
+ ;   [sel_parts]        [win_dir]/sel_part_***   Group particle selection files (one/group)
+ ;   [unaligned_images] [win_dir]/data_***       Unaligned image stacks         (one/group)
+ ;   [group_align]      [rec_dir]/align_01_***   Alignment parameter files      (one/group)
+ ;
+ ; PROCEDURES CALLED:
+ ;   recon-settings     <a href="recon-settings.spi"> recon-settings.spi</a>
+ ;   recon-loop         <a href="recon-loop.spi">     recon-loop</a>          
+ ;   merge-fsc-filt     <a href="merge-fsc-filt.spi"> merge-fsc-filt.spi</a>
+ ;
+ ; -------------------------------- END BATCH HEADER ----------------------------
+ 
+ MD
+   TR OFF                    ; Loop info turned off
+ MD
+   VB OFF                    ; File info turned off
+ MD
+   SET MP                    ; Use only a few processors if using master node!!
+   4 
+
+ ; Get reconstruction parameters & file names
+ [steptype] = 1              ; Reconstruction step
+ @recon-settings([steptype],[num-grps],[pixsiz],[ang-step],[r2],[alignsh],[prj-radius],[winsiz],[incore-yn],[bp-type],[qsub])
+ [ampenhance]    = 0         ;
+ [sphdecon]      = 0         ;
+ [gold-std]      = 1         ;
+
+ GLO [iter]      = 0         ; For filenames
+ GLO [next-iter] = 1         ; For filenames
+ GLO [qsub]      = -1        ; Ensure it is non parallel
+ GLO [rn]        = 0
+ GLO [bp-type]   = 2         ; Always use 'BP 3F'
+
+ SYS
+   echo '  Projection radius: {%I0%[prj-radius]}' ; echo
+
+ SD /     ITERATION     MASKED-RES    RESOLUTION
+   [iter_resol]             ; Resolution doc file     (output)
+ SD E     
+   [iter_resol]             ; Resolution doc file     (closed)
+
+ ; Backproject ('BP 3F') aligned experimental images by groups of images
+ ; to create two subset volumes. 
+
+ DO [grp] = 1,[num-grps]    ; Loop over all  groups  -----------------
+
+   @recon-loop              ; Back projection loop
+     [grp]
+
+ ENDDO                      ; End of: Loop over all  groups  ---------
+
+ ; Merge ('AS S') the group volumes into two subset output volumes,
+ ; find resolution ('FSC') by comparing FSC of the two subsets,
+ ; filter ('FD C')  the combined volumes using FSC curve to limit resolution, 
+ ; merge ('AS S') the two subset output volumes into single overall output volume.
+
+ @merge-fsc-filt([pixsiz],[iter],[ampenhance],[r2],[sphdecon],[gold-std],[qsub])
+ 
+ SYS                       ; Echo current time 
+   echo -n '  Reconstruction finished' ; date '+ TIME: %x  %X' ; echo  
+
+ EN
+ ; </pre></body></html>

@@ -1,0 +1,168 @@
+ ; <html><head><title>Controls parallel refinement</title></head><body><pre>
+ ;
+ ; SOURCE: spider/docs/techs/recon1/Procs/pub-refine.spi
+ ;
+ ;         New                                  ArDean Leith  Nov 2000
+ ;         [rn] for endmerge                    ArDean Leith  May 2005
+ ;         [] from publish                      ArDean Leith  Feb 2006
+ ;         Ampenhance                           ArDean Leith  May 2006
+ ;         More stacks                          ArDean Leith  Dec 2006
+ ;         Existing iter_refangs bug            ArDean Leith  Aug 2010
+ ;         COG centering                        ArDean Leith  Sep 2010
+ ;         Dala files removed                   ArDean Leith  Jan 2012
+ ;         pixsiz, resol headers,...            ArDean Leith  Aug 2012
+ ;         For CTF corrected images             ArDean Leith  Oct 2013
+ ;         For gold standard reconstruction     ArDean Leith  May 2014
+ ;         Reference projections parallelized   ArDean Leith  Oct 2015
+ ;         PBS support                          ArDean Leith  Feb 2016
+ ;
+ ; PURPOSE: Runs on master node to control parallel refinement using cluster. 
+ ;          Each data group creates one parallel process.
+ ;
+ ; I/O Registers & files are set in: <a href="refine-settings.spi">refine-settings.spi</a>
+ ;
+ ; INPUT FILES: ('***' denotes group here)
+ ;   [vol_orig]              ../Reconstruction/vol_01              Initial reference volume       (one)
+ ;   [sel_group_orig]        ../Reconstruction/input/sel_group     Group selection file           (one)
+ ;   [sel_parts_orig]        ../Reconstruction/input/sel_part_***  Group particle selection files (one/group)
+ ;   [unaligned_images_orig] ../Reconstruction/input/data_ctfd_*** Unaligned image stacks         (one/group)
+ ;
+ ; PROCEDURES CALLED:
+ ;    refine-settings         <a href="refine-settings.spi">  refine-settings.spi</a>
+ ;    show-r2                 <a href="show-r2.spi">          show-r2.spi</a>
+ ;    pub-prjrefs             <a href="pub-prjrefs.spi">      pub-prjrefs.spi</a>            
+ ;    .. pub-submit           <a href="pub-submit.spi">       pub-submit.spi</a>
+ ;    .. memforqsub (optional)<a href="memforqsub.spi">       memforqsub.spi</a>
+ ;    .. publish/qsub         <a href="publish.perl">         publish.perl</a>
+ ;    .... pub-refine-start   <a href="pub-refine-start.spi"> pub-refine-start</a>          
+ ;    ...... refine-settings  <a href="refine-settings.spi">  refine-settings.spi</a>            
+ ;    ...... refine-prjloop   <a href="refine-prjloop.spi">   refine-prjloop.spi</a>            
+ ;    pub-submit              <a href="pub-submit.spi">       pub-submit.spi</a>
+ ;    .. memforqsub (optional)<a href="memforqsub.spi">       memforqsub.spi</a>
+ ;    .. publish/qsub         <a href="publish.perl">         publish.perl</a>
+ ;    .. pub-refine-start     <a href="pub-refine-start.spi"> pub-refine-start</a>          
+ ;    .... refine-settings    <a href="refine-settings.spi">  refine-settings.spi</a>            
+ ;    .... refine-loop OR     <a href="refine-loop.spi">      refine-loop.spi</a>            
+ ;    .... refine-smangloop   <a href="refine-smangloop.spi"> refine-smangloop.spi</a>            
+ ;    ...... refine-bp        <a href="refine-bp.spi">        refine-bp.spi</a>            
+ ;    merge-fsc-filt          <a href="merge-fsc-filt.spi">   merge-fsc-filt.spi</a>
+ ;    .. pub-submit (optional)<a href="pub-submit.spi">       pub-submit.spi</a>
+ ;    .. memforqsub (optional)<a href="memforqsub.spi">       memforqsub.spi</a>
+ ;    .. publish/qsub         <a href="publish.perl">         publish.perl</a>
+ ;    .... pub-refine-start   <a href="pub-refine-start.spi"> pub-refine-start</a>          
+ ;    ...... refine-settings  <a href="refine-settings.spi">  refine-settings.spi</a>            
+ ;    ...... sphdecon         <a href="sphdecon.spi">         sphdecon.spi</a>            
+ ;    .. enhance (optional)   <a href="enhance.spi">          enhance.spi</a>
+ ;
+ ; -------------------------------- END BATCH HEADER ----------------------------
+
+ MD
+   TR OFF                    ; Loop info turned off
+ MD
+   VB OFF                    ; File info turned off
+ MD
+   SET MP                    ; Use only one or two processors if using master node!!
+   1 
+
+ ; Input initial parameters & file names but not angular steps
+ @refine-settings([pixsiz],[r2],[alignsh],[prj-radius],[iter1],[iter-end],[sphdecon],[smallang-yn],[qsub],[incore-yn],[gold-std],[bp-type])
+
+ SYS
+   echo ; echo -e "  Alignment shift:   {%I0%[alignsh]}   Alignment radius: {%I0%[r2]}"
+ SYS
+   echo    "  Projection radius: {%I0%[prj-radius]}" 
+
+ SYS                         ; Create output directories if not present
+   mkdir -p [out_dir] [work_dir]
+
+ SD /     ITERATION     MASKED-RES    RESOLUTION
+   [iter_resol]              ; Resolution doc file              (output)
+ SD E     
+   [iter_resol]              ; Resolution doc file              (finished)
+
+ UD N [num-grps]             ; Find number of groups
+   [sel_group]               ; Group selection file      (input)
+
+ IF ( [iter1] == 1 ) THEN
+   ; Ensure that starting input files exist
+   [iter] = 1
+
+   DO [s] = 1,2
+     ; Create subset volumes from initial model 
+     CP 
+       [vol_orig]            ; Starting initial model == reference volume
+       [vol_s]               ; Starting subset reference volume  
+   ENDDO
+ 
+   DO [grp] = 1,[num-grps]
+     ; Must create odd and even particle selection lists for all groups
+     DE
+       [sel_parts]_s1        ; Odd  particle selection doc file    (removed)         
+     DE
+       [sel_parts]_s2        ; Even particle selection doc file    (removed)         
+
+     DOC SPLIT
+       [sel_parts]           ; Particle selection doc file         (input)
+       [sel_parts]_s1        ; Odd  particle selection doc file    (output)         
+       [sel_parts]_s2        ; Even particle selection doc file    (output)         
+   ENDDO
+ ENDIF
+
+ ; Show alignment and projection radii on center slice of a reference volume
+ [s] = 1
+ @show-r2([r2],[alignsh],[prj-radius])
+   [vol_orig]                ; Starting initial model == reference volume
+
+
+ IF ( [smallang-yn] == 1 ) THEN
+   ; List desired offset angles for reference projections in a doc file.
+   @refine-setrefangles([iter],[smallang-yn],[ampenhance],[ang-step],[ang-limit],[num-angs])      
+ ENDIF
+
+ DO [iter]=[iter1],[iter-end] ; Loop over all iterations ----------------------------------
+
+   IF ( [smallang-yn] == 0 ) THEN
+     ; List desired angles ('VO EA') for reference projections in a doc file.
+     @refine-setrefangles([iter],[smallang-yn],[ampenhance],[ang-step],[ang-limit],[num-angs])      
+
+     ; Create reference projection ('PJ 3F') stacks from both subset reference volumes 
+     ; in parallel. Waits for all nodes to finish their projections. 
+
+     @pub-prjrefs([iter],[num-grps],[prj-radius],[qsub])
+
+   ENDIF
+
+   ; Process experimental images in parallel by groups of images using Pubsub.
+   ; Find alignment parameters ('AP SHC' or 'AP REF') which align experimental images  
+   ; with the most similar projection image. This is done for the two subsets of images. 
+   ; Then align ('RT SF') the images and backproject ('BP 3F') to create two subset volumes.
+
+   [task]   = [smallang-yn]   ; pub-refine-start starts: refine-loop or refine-loop-smang
+   [script] = './spider $PRJEXT/$DATEXT @pub-refine-start '  ; Script that runs refinement
+   @pub-submit([iter],[num-grps],[task],[qsub])
+      [script]                ; Script that runs refinement
+
+   ; Consolidate ('AS S') all parallel group volumes for both subsets into two subset
+   ; output volumes, find resolution ('FSC') by comparing FSC of the two subsets, and
+   ; filter ('FD C') the combined volumes to limit resolution. 
+
+   @merge-fsc-filt([pixsiz],[iter],[ampenhance],[r2],[sphdecon],[gold-std],[qsub])
+ 
+ ; Show center slice of current volume
+   [next-iter] = [iter] + 1;
+   @show-r2([r2],[alignsh],[prj-radius])
+     [next_vol]               ; Filtered volume           (output)
+
+   SYS
+     echo "  Iteration: {%I0%[iter]} Finished" ; echo
+   MY FL                      ; Flush results
+ ENDDO                        ; End of loop over all iterations ----------------------------
+
+ SYS                          ; Echo current time 
+   echo -n "  Refinement finished after iteration: {**[iter]}   " ; date '+ Time: %x  %X' ; echo  
+
+ EN
+ ; </pre></body></html>
+
+
+ 

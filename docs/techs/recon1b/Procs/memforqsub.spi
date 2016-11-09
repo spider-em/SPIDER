@@ -1,0 +1,126 @@
+([task],[grp],[num-angs],[incore-yn],[local-yn],[memMb])
+
+ ; <html><head><title>Estimates memory for parallel job.
+ ;                    Creates memory request line for PBS </title></head><body><pre>
+ ;
+ ; SOURCE: spider/docs/techs/recon1/Procs/memforqsub.spi    Jun 2016
+ ;
+ ; PURPOSE:  Estimates memory for parallel job. 
+
+ ; I/O Registers & files are set in: <a href="refine-settings.spi">refine-settings.spi</a>
+ ;
+ ; INPUT REGISTERS:
+ ;   [grp]                    Current group
+ ;   [num-angs]               Current num-angs
+ ;   [incore-yn]              Load input images into incore stack (>0 == yes)
+ ;   [local-yn]               Load input images into local disk   (>0 == yes)
+ ;
+ ; OUTPUT REGISTERS:
+ ;   [memMb]                  Memory in Mb
+ ;
+ ; INPUT FILES: (##' denotes iteration,  '%' denotes subset, and '***' denotes group)
+ ;   [unaligned_images]  [in_dir]/data_{***[grp]}    Original unaligned images stack  (one/group)
+ 
+ 
+ [userGb] = 0      ; Reconstruction memory to request for each node, in gigabytes (0 == Automatic)
+
+ ; -------------------------------- END BATCH HEADER ---------------------------------
+
+ ; Find window size and number of experimental images in group
+ FI H [winsiz],[maxim]          ; Find header values 
+   [unaligned_images]@          ; File             (input)
+   NX, MAXIM                    ; Header positions
+
+ IF ( [task] < 2 ) THEN      
+   ; Estimate memory requirements for refine loop  -----------------------------------
+
+   IF ( [userGb] > 0 ) THEN
+     ; Use user supplied memory estimate instead of calculated estimate       
+     [memMb]  = [userGb] * 1000
+     SYS
+       echo "  Group: {%I3%[grp]}, user has requested:  {%i0%[memMb]} Mb"
+ 
+   ELSE
+
+     [stackMb] = int(4*([winsiz]*[winsiz]*[maxim]) /1e+6) + 1
+     [volMb]   = int(4*([winsiz]*[winsiz]*[winsiz])/1e+6) + 1
+     [memMb]   = [stackMb] + 6*[volMb]
+
+     ; Unused estimate from: bp-qsub.spi 
+     ;[memMb]  = 1.1*[stackMb] + 3*4.0*[volMb]  ; Fudge factors come from ???
+
+     SYS
+       echo "  Group: {%I3%[grp]}, estimated memory requirements: {%i0%[memMb]} Mb"
+   ENDIF 
+
+
+ ELSEIF ( [task] == 1 ) THEN    
+   ; Estimate memory requirements for small angle refine loop  ------------------------
+   ; Handled above
+
+ ELSEIF ( [task] == 2 ) THEN        
+   ; Estimate memory requirements for reference projection ----------------------------
+
+   IF ( [num-angs] > 0) THEN
+     [memMb] = int(4*[winsiz]*[winsiz]*[num-angs]/1e+6) + 1
+   ENDIF
+
+ ELSEIF ( [task] == 3 ) THEN     
+   ; Estimate memory requirements for spherical deconvolution  ------------------------ 
+
+   ; !!!!!!!!  UNIMPLEMENTED 
+
+ ELSEIF ( [task] == 4 ) THEN     
+   ; Estimate memory requirements for pub-align alignment  ---------------------------- 
+
+   IF ( [incore-yn] > 0) THEN
+   
+       ; Stack + reference projections (4 bytes per pixel)
+       [memMb]   = 4*[winsiz]*[winsiz]*([maxim] + [num-angs]*2)/1e+6
+       
+       ; Add overhead for SPIDER
+       [memMb] = int([memMb]*1.2)
+       ; (May need to tweak this -- qsub will give an error/warning if limits are exceeded)
+
+       SYS
+         echo " Group: {%I3%[grp]}, estimated memory requirements:  {%i0%[memMb]} Mb"
+            
+   ELSE
+     
+     ; If copying to scratch
+     IF ( [local-yn] > 0) THEN
+     
+       [memMb] = 4*[winsiz]*[winsiz]*[maxim]/1e+6
+       [memMb] = int([memMb] + 1)
+       
+       SYS
+         echo " Group: {%I3%[grp]}, estimated scratch requirements: {%i0%[memMb]} Mb"
+            
+     ELSE
+   
+        ; Not specifying RAM or scratch. Default allocation == 400MB, should be plenty for ref projs(?).
+        [memMb]   = 400
+     ENDIF
+   ENDIF
+
+   
+ ELSEIF ( [task] == 6 ) THEN
+  
+   ; Estimate memory requirements for merging volumes -------------------------------- UNIMPLEMENTED
+
+   [volMem] = 4*[winsiz]**3
+   [memMb]  = [volMem]*[num-grps]/1e+6
+   [memMb]  = int([memMb]) + 1
+ 
+ ELSEIF ( [task] == 7 ) THEN
+   ; Estimate memory requirements for creating and applying matched filter -------------- UNIMPLEMENTED
+
+
+   [volMem] = 4*[winsiz]**3
+   [memMb]  = int(3*[volMem]/1e+6) + 1
+
+ ENDIF
+
+ RE
+ 
+; </pre></body></html>

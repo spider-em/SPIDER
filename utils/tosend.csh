@@ -17,9 +17,10 @@
 #          Rewrite for /usr8           Jul 2010
 
 echo 
-echo "Did you run: /usr8/spider/docs/techs/recon/spr2tar.csh         first?"
-echo "Did you run: /usr8/spider/docs/techs/recon1/Utils/spr2tar.csh  first?"
-echo "Did you run: /usr8/spider/utils/create-tools-dist.csh          first?"
+echo "Did you run: /usr8/spider/docs/techs/recon/spr2tar.csh          first?"
+echo "Did you run: /usr8/spider/docs/techs/recon1a/Utils/spr2tar.csh  first?"
+echo "Did you run: /usr8/spider/docs/techs/recon1b/Utils/spr2tar.csh  first?"
+echo "Did you run: /usr8/spider/utils/create-tools-dist.csh           first?"
 echo 
 
 # Set some variables for input locations
@@ -156,7 +157,8 @@ $sendit $excludes -r    --exclude="tips"                  \
            --exclude="bzvol.dat"                          \
            --exclude="techs/lgstr/tomo/output"            \
            --exclude="exa/images/bp3fpart*dat"            \
-           --exclude="techs/recon1/natproc_data_mics.tar" \
+           --exclude="techs/recon1a/natproc_data_mics.tar" \
+           --exclude="techs/recon1b/natproc_data_mics.tar" \
            $docdir/*   $docdest
 
 # ----------------------------------------------------------------

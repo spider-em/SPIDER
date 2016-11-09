@@ -1,0 +1,168 @@
+ ; <html><head><title>Repicks particles from micrographs</title></head><body><pre>
+ ;
+ ; SOURCE:   spider/docs/techs/recon1/Procs/rewindow.spi
+ ;
+ ; ORIGIN:   Adapted from lfc_pick.spi, pickparticle.spi    
+ ;
+ ; PURPOSE:  Repicks particles from micrographs
+ ;
+ ; REQUIRES: convert-p.spi
+ ;
+ ; USAGE:    clean ; spider spi/mrf @rewindow
+
+ ; ----------- Parameters --------------
+
+ [deci] = 0  ; Decimation factor (0 = get value from  param file)
+
+ ; [deci] = Decimation factor for 'DC S' operation
+ ;      0 = Get value from param file
+ ;      1 = full sized image
+ ;      2 = 1/2 size
+ ;      4 = 1/4 size
+
+ ; ----------- Input files --------------
+
+ [params]  = '../params'                     ; Parameter file                 (one)
+
+ [sel_mic] = '../sel_micrograph'             ; Micrograph selection doc file  (one)    
+
+ [micgr]   = '../Micrographs/mic{****[mic]}' ; Micrograph images
+
+![sndc]    = 'coords/sndc_{****[mic]}'       ; Window center coordinates doc file
+ [sndc]    = 'coords/pkcoor_{****[mic]}'     ; Window center coordinates doc file
+
+ [noise]   = '../Particles/noise'            ; Noise file                    (one)
+
+ ; ----------- Output files --------------
+
+ [win_dir] = 'win'                               ; Output directory for particle images
+
+![ser]     = '[win_dir]/winser_{****[mic]}@'     ; Particle image stacks
+ [ser]     = '[win_dir]/data_bymic_{****[mic]}@' ; Particle image stacks
+
+ ; ----------- END BATCH HEADER -----------
+
+
+ [temp_circle_mask]    = '_26'
+
+ [temp_inverted_mask]  = '_28'
+
+ [temp_noise_incore]   = '_27'
+
+ [temp_windowed]       = '_29'
+
+ [temp_ramp_corrected] = '_22'
+
+ MD                        ; Use all available processors
+   SET MP
+   0 
+ MD                        ; Skip unnecessary output 
+   VB OFF
+ MD                        ; Skip unnecessary output 
+   TR OFF
+ MY FL
+
+ [out] = 'out{****[mic]}'  ; Temp. SPIDER file for conversions
+
+
+ ; Get window size from parameter file
+ UD 17, [sp_winsiz]          ; Get window size
+   [params]
+
+ ; Calculate center-to-top-left distance
+ [half-xdim]   = INT([sp_winsiz]/2)+1
+ [half-ydim]   = INT([sp_winsiz]/2)+1
+ [mask-radius] = INT([sp_winsiz]/2)-1
+
+ ; Initialize particle-counter
+ [part] = 0  
+
+ ; Create directory if necessary
+ SYS
+    echo mkdir -p [win_dir]
+ 
+
+ MY FL
+
+ ; Loop over all micrographs ----------------------------------------------------
+ DO  
+   UD NEXT [key],[mic] ; Get micrograph number
+     [sel_mic]
+   IF ( [key] <= 0 ) EXIT
+
+   @convert-p([deci])
+     [params]          ; Parameter file
+     [micgr]           ; Input micrograph
+     [out]             ; Template for output SPIDER file
+
+   UD N  [n]           ; Get number of particles in this micrograph
+     [sndc]
+   
+   ; Make a mask file
+   MO
+     [temp_circle_mask]
+     [sp_winsiz],[sp_winsiz]
+     C
+     [mask-radius]
+   
+   ; Pixels those are part of the particle are excluded from normalization
+   AR
+     [temp_circle_mask]
+     [temp_inverted_mask]
+     (P1-1)*(-1)
+   
+   ; Copy noise file to memory
+   CP
+     [noise]
+     [temp_noise_incore]
+   
+   ; Loop through particles
+   DO  [part-key] = 1,[n]
+      ; read x-coord, y-coord
+      UD IC [part-key], [xcenter],[ycenter]   ; [mic-slice],[peak-height]   ; (last 2 not used)
+        [sndc]
+      
+      [x-topleft] = [xcenter] - [half-xdim]
+      [y-topleft] = [ycenter] - [half-ydim]
+      
+      WI
+        [out]
+        [temp_windowed]
+        [sp_winsiz],[sp_winsiz]
+        [x-topleft],[y-topleft]  ; Top-left coordinates
+      
+      RA
+        [temp_windowed]
+        [temp_ramp_corrected]
+      
+      ; Normalize as per histogram
+      CE FIT
+        [temp_noise_incore]      ; (input)
+        [temp_ramp_corrected]    ; (input)
+        [temp_inverted_mask]     ; (input)
+        [ser]{******[part-key]}
+   ENDDO
+   
+   UD ICE
+     [sndc]
+
+   [part] = [part]+[n]  ; Increment the particle counter
+
+   DE                 ; Delete the temporary SPIDER file
+     [out]
+
+   SYS
+     echo ' 'Picked:  {%I5%[n]} images from micrograph: {%I5%[mic]}
+ ENDDO
+
+ SYS
+   echo ' 'Total picked particles:  {%I0%[part]}; echo ' '
+
+ EN D
+
+ ; Modified 2013-10-16
+ ;    2013-10-16 (agl) -- modernized
+ ;    2012-07-19 (trs) -- creates output directory if needed
+ ;    2012-05-03 (trs) -- convert-p no longer uses micrograph# as an input
+
+ ; </pre></body></html>

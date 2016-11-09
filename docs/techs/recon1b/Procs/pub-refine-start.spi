@@ -1,0 +1,135 @@
+ ; <html><head><title>Runs group loops in parallel</title></head><body><pre>
+ ;
+ ; SOURCE: spider/docs/techs/recon1/Procs/pub-refine-start.spi 
+ ;         New                                   Feb 2002 ArDean Leith
+ ;         [rn]                                  Feb 2005 ArDean Leith
+ ;         []                                    Dec 2005 ArDean Leith
+ ;         Clone                                 Jan 2009 ArDean Leith
+ ;         Removed cpang, has_scratch            Jan 2010 Ardean Leith
+ ;         [pixsiz],[r2]                         Aug 2012 Ardean Leith
+ ;         For CTF corrected images              Oct 2013 ArDean Leith
+ ;         For gold standard reconstruction      May 2014 ArDean Leith
+ ;         Added refine-prjloop                  Jan 2016 ArDean Leith
+ ;         Inlined cloning, changed dirs         Mar 2016 ArDean Leith
+ ;
+ ; PURPOSE: Runs projection loop, main loop, or deconvolution loop on this parallel node   
+ ;
+ ; INPUT REGISTERS (Set On command line for this SPIDER run):
+ ;          [task]     Task selector
+ ;          [iter]     Current iteration 
+ ;          [grp]      Current group number 
+ ;          [rn]       Random number for unique DOC_SYNC files
+ ;
+ ; OUTPUT FILES:
+ ;   [finished_file]   jnk_sync_{****[rn]}_  Created when this parallel job is finished
+ ;
+ ; -------------------- END BATCH HEADER ----------------------------------------
+
+ MD
+   TR OFF                   ; Loop info turned off
+ MD
+   VB OFF                   ; File info turned off
+ MD
+   PARALLEL ON              ; Flag for running parallel jobs (cosmetic effects only)
+
+ IF ([numProcs] .NE. 0) THEN
+   MD                          
+     SET MP                ; Set OMP processors to number defined in qsub.pbs ('ppn=')
+     [numProcs]
+ ELSE
+   MD                          
+     SET MP                ; Set OMP processors to all available non hyperthreaded
+     0
+ ENDIF
+ 
+ ; Input initial parameters & file names but not angular steps
+ @refine-settings([pixsiz],[r2],[alignsh],[prj-radius],[iter1],[iter-end],[sphdecon],[smallang-yn],[qsub],[incore-yn],[gold-std],[bp-type])
+ 
+ [next-iter] = [iter] + 1   ; Needed for file names
+
+ IQ DIR [has-scratch]       ; See if there is a local scratch dir.
+   [local_work_dir]         ; Dir name
+
+ IF ( [task] == 2 ) THEN    ; Runs projection task ------------------------------------
+
+   ; For volume projection in parallel. 
+   @refine-prjloop([prj-radius],[iter],[grp])
+
+ ELSEIF ( [task] == 3 ) THEN ; Runs spherical deconvolution  task ---------------------
+
+   ; For spherical deconvolution in parallel
+   @sphdecon([iter],[sphdecon],[grp])
+
+ ELSEIF ( [task] < 2 ) THEN  ; Runs a main alignment loop task ------------------------
+
+  IQ DIR [has-scratch]       ; See if there is a local scratch dir.
+   [local_work_dir]          ; Dir name
+
+  IF ( [has-scratch] > 0 ) THEN
+      ; Copy files to local compute node disk  
+ 
+      ; Save current output file locations for declone (Saves current value of variable)
+      GLO [master_work_dir] = [work_dir] 
+      GLO [master_in_dir]   = [in_dir]
+
+      SYS
+        \cp [unaligned_images].$DATEXT   [local_work_dir] 
+
+      SYS                                 ; So anyone can delete temp files
+        chmod 777 [local_work_dir]/* >& /dev/null
+
+      ; Redefine current file locations for [unaligned_images] & [next_group_vol]
+
+      [in_dir] = [local_work_dir]
+      FR LS
+        [tmp1][unaligned_images]
+      [in_dir] = [master_in_dir]
+      GLO [unaligned_images] = [tmp1] 
+
+      [work_dir] = [local_work_dir]
+      FR LS
+        [tmp2][next_group_vol]
+      [work_dir] = [master_work_dir]
+      GLO [next_group_vol] = [tmp2] 
+
+   ENDIF
+
+   IF ( [task] == 0 ) THEN
+     ; For regular angle alignment
+     RR S [ang-limit]       ; Restriction on angular search (varies with iteration)
+       [ang-limits]         ; Input string
+       [iter]               ; Current iteration
+
+     RR S [ang-step]        ; Angular step (varies with iteration)
+       [ang-steps]          ; Input string
+       [iter]               ; Current iteration
+
+     @refine-loop([ang-step],[ang-limit],[r2],[alignsh],[prj-radius],[iter],[grp],[pixsiz],[incore-yn],[bp-type],[iter-end])
+
+   ELSE
+     ; For small angle alignment around a determined position
+     @refine-smangloop([ang-step-sm],[r2],[alignsh],[prj-radius],[iter],[grp]],[pixsiz],[bp-type],[iter-end])
+   ENDIF
+
+
+   IF ( [has-scratch] > 0 ) THEN
+      ; Copy local scratch disk files back to master directory  
+
+      SYS
+        \cp -p [next_group_vol]_s1.$DATEXT [next_group_vol]_s2.$DATEXT  [master_work_dir] 
+
+      ; Delete no longer needed files in local scratch directory on compute node
+      SYS               ! use >& /dev/null to avoid msg
+        \rm -f [next_group_vol]_s1.$DATEXT [next_group_vol]_s2.$DATEXT [unaligned_images].$DATEXT 
+   ENDIF
+ ENDIF
+
+ ; Signal controlling  SPIDER run that this task is finished
+ SD 1, [task]                 ; Set sync file output
+   [finished_file]{***[grp]}  ; Sync file          (output)
+ SD E                         ; Close sync file
+   [finished_file]{***[grp]}  ; Sync file          (closed)
+
+ EN                           ; This SPIDER ends now
+ ; </pre></body></html>
+

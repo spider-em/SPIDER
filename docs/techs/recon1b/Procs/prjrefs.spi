@@ -1,0 +1,80 @@
+; <html><head><title>Creates projections from a reference volume</title></head><body><pre>
+ ;
+ ; SOURCE:  spider/docs/techs/recon1/Procs/prjrefs.spi   
+ ;
+ ; PURPOSE: Creates reference projections from a reference volume.
+ ;
+ ; USAGE:   clean ; ./spider spi/dat @prjrefs 0
+ ;
+ ; I/O Registers & files are set in: <a href="recon-settings.spi">recon-settings.spi</a>
+ ;
+ ; VARIABLE REGISTERS:
+ ;   [iter]               Current iteration
+ ;   [num-ang]            Number of reference projection angles
+ ;   [ang-step]           Theta angular step              
+ ;
+ ; INPUT FILES:           ('%' denotes subset, and '***' denotes group)
+ ;   [params]             ../params                 Parameter file                 (one)
+ ;   [sel_group]          [win_dir]/sel_group       Group selection file           (one)
+ ;
+ ; OUTPUT FILES:
+ ;   [iter_refangs]       work/ref_angs_01          Reference angles doc file      (one)
+ ;   [ref_projs_s]        work/ref_projs_01_s1      Reference projections stack    (one)
+ ;   [ref_projs_s]        work/ref_projs_01_s2      Reference projections stack    (one)
+ ;   temp_ref_projs       temp_ref_projs            Reference projection stack     (temporary) 
+ ;
+ ; -------------------------------- END BATCH HEADER ----------------------------
+
+ MD
+   TR OFF                   ; Loop info turned off
+ MD
+   VB OFF                   ; File info turned off
+ MD
+   SET MP                   ; Use only a few processors if using master node!!
+   4 
+
+ ; Input initial parameters & file names
+ @recon-settings([pixsiz],[ang-step],[r2],[alignsh],[prj-radius],[winsiz],[incore-yn],[bp-type],[qsub])
+
+ [iter] = 0
+
+ DE                         ; Delete 
+   [iter_refangs]           ; Reference projection angles doc file     (deleted)
+
+ ; List desired angles for reference projections in doc file.
+ VO EA [num-angs]           ; Sets [num-ang] to number of reference projections
+   [ang-step]               ; Theta angular step          (varies with iteration)
+   0, 90                    ; Theta range, 90 is for use with 'Check Mirrored Positions'
+   0, 359.9                 ; Phi range
+   [iter_refangs]           ; Reference projection angles doc file     (output)
+ 
+ ![num-angs] = [num-angs] -1 ; Skip duplicated angle
+ [num-angs]  
+
+ ; Create 'PJ 3F' stack holding reference projections from both subset reference volumes. 
+
+ SYS
+   echo  '  Creating: {%I0%[num-angs]} reference projections.  Projection radius: {%I0%[prj-radius]}' ; echo
+
+ [s] = 1                    ; Subset
+ PJ 3F                      ; Projection operation
+   [vol_s]                  ; Current reference volume             (input) 
+   [prj-radius]             ; Radius of projection
+   1-[num-angs]             ; Reference angles used    
+   [iter_refangs]           ; Reference angles doc file            (input)
+   temp_ref_projs@*****     ; Reference projection stack template  (output) 
+
+ SYS                        ; Reference projection file (output) 
+   cp temp_ref_projs.$DATEXT [ref_projs_s].$DATEXT   
+ [s] = 2                    ; Subset
+ SYS                        ; Reference projection file (output) 
+   mv temp_ref_projs.$DATEXT [ref_projs_s].$DATEXT  
+
+ SYS
+   echo ' '   
+
+ EN 
+ ; </pre></body></html>
+
+rsync -n -vat --existing /usr8/spider/docs/techs/recon1/Procs/*spi /usr8/spider/docs/techs/recon1/Procs/qsub*  .
+rsync -vat /usr8/spider/docs/techs/recon1/Procs/prjrefs* .

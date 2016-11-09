@@ -8,12 +8,13 @@ C              NREGSTAR = MIN(NVARSTARNAME BUG   MAY 2014 ARDEAN LEITH
 C              MAXLENVAR = 40 --> 120            OCT 2015 ARDEAN LEITH
 C              NVARSTAR BUG                      OCT 2015 ARDEAN LEITH
 C              INTEGER OVERFOW HACK              NOV 2015 ARDEAN LEITH
+C              _ NOT _rln                        SEP 2016 ARDEAN LEITH
 C                                                                 
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2015  Health Research Inc.,                         *
+C=* Copyright 1985-2016  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -86,7 +87,7 @@ C--*********************************************************************
        
       CHARACTER(LEN=1)         :: NULL = CHAR(0)  
       CHARACTER(LEN=1)         :: CDUM  
-      INTEGER                  :: LUNDOCT,ILOC,IT,NLIST,ILAST
+      INTEGER                  :: LUNDOCT,ILOC,IT,NLIST,ILAST,NDUM
       INTEGER                  :: IHI,I,IKEY,IRTFLG,LENREC,IVAR,ITOK
 
       LOGICAL                  :: ISOPEN,EX,CALLERRT,ASKNAM
@@ -106,6 +107,7 @@ C     OPEN STAR FILE
      &               'O', 'STAR',CALLERRT,IRTFLG)
       IF (IRTFLG .NE. 0) RETURN
 
+      IKEY     = 0
       NVARHEAD = 0
       WRITE(NOUT,*) ' STAR HEADER VARIABLES -------------'
 
@@ -123,7 +125,7 @@ C        PARSE STAR FILE HEADER LINE INTO TOKENS
      &                   VARTMP, NGOT, IRTFLG)
          IF (IRTFLG .NE. 0 .OR. NGOT < 1) EXIT
 
-         IF (VARTMP(1)(1:4) == '_rln') THEN
+         IF (VARTMP(1)(1:1) == '_') THEN
 C           GOT A STAR REGISTER VARIABLE NAME
             NVARHEAD          = NVARHEAD + 1
             NCHAR             = lnblnkn(VARTMP(1))
@@ -139,6 +141,15 @@ C           GOT A STAR REGISTER VARIABLE NAME
          ENDIF              
       ENDDO
       WRITE(NOUT,*) ' '
+
+      IF (NVARHEAD <= 0) THEN
+         CALL ERRT(101, 
+     &      'NO STAR VARIABLES FOUND IN FILE (I.E. NO _*** VARIABLES)',
+     &      NDUM)
+         RETURN
+      ENDIF
+
+
 
 C     GET LIST OF STAR VARIABLES WANTED --------------------------
       IRTFLG = -999   ! DO NOT UPPERCASE RECLIN

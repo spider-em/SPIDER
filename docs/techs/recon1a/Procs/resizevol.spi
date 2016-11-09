@@ -1,0 +1,118 @@
+ ; <html><head><title>Resize a reference volume</title></head><body><pre>
+ ;
+ ; SOURCE:  /usr8/spider/docs/techs/recon1/Procs/resizevol.spi
+ ;                                          
+ ; PURPOSE: Resize a reference volume to the current window size.
+ ;          This procedure is run in the top-level project directory.
+ ; 
+ ; USAGE:   spider spi/dat @resizevol 
+ ;
+ ; I/O PARAMETERS AND FILES ARE SET HERE:
+ ;
+ ; <b> -------------- Parameters  -------------------------------------
+
+ [old-pxsz] = 1.77              ; Pixel size of input reference volume (Angstroms/pixel)
+ [new-pxsz] = -1                ; Target output pixel size (<=0 -> Get from PARAMS)
+ [new-dim]  = -1                ; Output volume dimension  (<=0 -> Get from PARAMS)
+
+ ; ------------------ Input files -------------------------------------
+
+ [params] = 'params'                 ; Parameter file - required if parameters not specified above
+
+ [input]  = 'orig_reference_volume'  ; Reference volume
+
+ ; --------------- Output file  -------------------------------------
+
+ [output] = 'ref_vol'                ; Resized reference volume
+
+ ; -------------- END BATCH HEADER ------------------------------</b>
+
+ ; Set temporary in-core filename
+ [temp_ip_vol] = '_1'
+
+ ; Get target pixel size
+ IF ( [new-pxsz] <= 0 ) THEN
+    UD 5, [new-pxsz]
+      [params]
+ ENDIF
+
+ ; Calculate interpolation factor
+ [ip-factor] = [old-pxsz] / [new-pxsz]
+ [ip-factor]            ; Diagnostic for results file
+
+ ; Get dimension of input volume
+ FI H [old-dim]
+   [input]
+   NZ
+
+ ; Calculate interpolated volume dimension
+ [ip-dim] = [old-dim]*[ip-factor]
+ [ip-dim]               ; Diagnostic for results file
+
+ ; Get final volume dimension
+ IF ([new-dim] <= 0) THEN
+    UD 17, [new-dim]
+      [params]
+ ENDIF
+
+ UD E                   ; Close doc
+
+ ; Make sure dimension goes from even->even or odd->odd
+ ; (otherwise, the center of gravity will have moved relative to the box)
+ [diff-dim] = [new-dim] - [ip-dim]
+ [diff-dim]              ; Diagnostic for results file
+
+ ; Round off difference to even#
+ [round-diff] = int([diff-dim]/2 + 0.5) * 2
+ [round-diff]            ; Diagnostic for results file
+
+ [round-dim] = [new-dim] - [round-diff]
+ [round-dim]             ; Diagnostic for results file
+
+ ; Interpolate input volume
+ IP
+   [input]
+   [temp_ip_vol]
+   [round-dim],[round-dim],[round-dim]
+
+ ; Compute actual new pixel size
+ [actual-pxsz] = [old-dim]*[old-pxsz]/[round-dim]
+
+ ; Either pad or window interpolated volume
+ IF ( [round-dim] < [new-dim] ) THEN
+    ; Calculate top-left-front coordinate
+    [top-left] = ([new-dim] - [round-dim])/2 + 1
+
+    ; Pad
+    PD
+      [temp_ip_vol]
+      [output]
+      [new-dim],[new-dim],[new-dim]
+      B                    ; Pad with border average
+      [top-left],[top-left],[top-left]
+ ELSE
+    ; Calculate top-left-front coordinate
+    [top-left] = ([round-dim] - [new-dim])/2 + 1
+
+    ; Window
+    WI                        ; Window
+      [temp_ip_vol]
+      [output]
+      [new-dim],[new-dim],[new-dim]
+      [top-left],[top-left],[top-left]
+ ENDIF
+
+ DE
+   [temp_ip_vol]
+
+ SYS M
+   echo "  Original volume: {****[old-dim]}px @ {%f5.2%[old-pxsz]} A/px" ; 
+   echo "  Interpolated to: {****[round-dim]}px @ {%f5.2%[actual-pxsz]} A/px (Target: {%f5.2%[new-pxsz]})" ; 
+   echo "  Resized to:      {****[new-dim]}px" ; echo
+.
+ EN 
+
+ ; Modified    2012-03-30
+ ; Reformatted 2015-10-01
+
+ ; </pre></body></html>

@@ -1,0 +1,129 @@
+([totParts],[numViews])
+
+RR [combineYN]
+? Combine alignment parameters ?
+
+; INPUT FILES: ([win_dir] denotes input directory, 
+;               [rec_dir] denotes reconstruction output directory and '***' denotes group)
+;   [sel_group]        [win_dir]/sel_group               Group selection doc file      (one)
+;   [sel_part]         [win_dir]/sel_part_***'           Particle selection doc file   (one/group)
+;   [align_doc]        [rec_dir]/align_01_***            Particle alignment doc files  (one/group)
+;   [ref_view_list]    [rec_dir]/sel_proj                List of reference views    (one)
+;
+; OUTPUTS:   (Where ### denotes projection view)
+;   [combined_align_doc] align_01_all                    Combined alignment doc file   (one)
+;   [temp_view_sel]      views/tmpsel###                 Temporary by-view particle list (one/view)
+;
+; -- END BATCH HEADER --
+
+MD
+  SET MP
+  1
+
+; Temporary files
+[temp_how_many]        = 'tmphowmany'
+[temp_align_incore]    = 'tmpalign'
+
+UD N [numViews]
+  [ref_view_list]                ; Reference list (input)
+UD N [numGrps]
+  [sel_group]
+
+[totParts] = 0
+
+; Loop through groups
+DO LB41 [gkey] = 1,[numGrps]
+
+    UD IC [gkey], [grp]
+      [sel_group]                   ; Group selection file (input)
+    
+    ; Get #particles
+    UD N [numGrpParts]
+      [sel_part][grp]
+
+    [totParts] = [totParts] + [numGrpParts]
+
+LB41
+; End group-loop
+
+UD ICE
+  [sel_group]                   ; Group selection file (input)
+
+
+; Merge alignment parameter doc files into overall file, if requested
+
+IF ( [combineYN] .GE. 0.5) THEN
+  SYS
+    echo " Combining alignment parameters for: {%I0%[numGrps]} groups" ; date; echo
+
+  SD IC NEW
+    [temp_align_incore]
+    15,[totParts]   ; #registers, #particles
+
+  [globalCounter] = 0
+
+  MD
+    VB OFF
+    
+  ; Loop through groups
+  DO LB42 [gkey] = 1,[numGrps]
+
+      UD IC [gkey], [grp]
+        [sel_group]                   ; Group selection file (input)
+
+      ; Get #particles
+      UD N [numGrpParts]
+        [sel_part][grp]
+
+      ; Loop through particles
+      DO LB5 [pkey] = 1,[numGrpParts]
+
+          UD IC [pkey],[grpWin], [mic],[micWin],[gloNum] 
+            [sel_part][grp]             ; Particle selection file     (input)
+
+          UD IC [grpWin], [r1],[r2],[r3],[ref],[exp],[r6],[r7],[r8],[r9],[r10],[r11],[ccrot],[r13],[r14],[mir]
+            [align_doc][grp]            ; Particle alignment doc files  (input)
+
+          [globalCounter] = [globalCounter] + 1
+
+          SD IC [globalCounter], [r1],[r2],[r3],[ref],[gloNum],[r6],[r7],[r8],[r9],[r10],[r11],[ccrot],[r13],[r14],[mir]
+            [temp_align_incore]
+
+      LB5
+      ; End particle-loop
+
+      ;Close docs
+      UD ICE
+        [sel_part][grp]             ; Particle selection file     (input)
+      UD ICE
+        [align_doc][grp]            ; Particle alignment doc files  (input)
+      
+  LB42
+  ; End group-loop
+
+  UD ICE
+    [sel_group]                   ; Group selection file (input)
+  SD IC COPY
+    [temp_align_incore]
+    [combined_align_doc]
+  SD ICE
+    [temp_align_incore]
+
+  SYS
+    echo " Combined alignment parameters for: {%i0%[globalCounter]} particles" ; date ; echo
+  SYS
+    echo " Separating particles into {%i0%[numViews]} views"
+
+  VO MQ
+    0                     ; CC threshold
+    [combined_align_doc]  ; INPUT
+    [numViews]
+    [temp_view_sel]       ; OUTPUT
+    [temp_how_many]       ; OUTPUT (temporary)
+
+  DE
+    [temp_how_many]
+    
+ENDIF
+
+RE

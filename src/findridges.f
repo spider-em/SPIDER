@@ -1,7 +1,7 @@
 C **********************************************************************
 C
-C  FINDRIDGES     NEW                              AUG 13 ARDEAN LEITH
-C
+C  FINDRIDGES     NEW                              AUG 13 ArDean Leith
+C                 ADDED RIDGE SEPERATION           OCT 16 ArDean Leith
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
@@ -35,7 +35,6 @@ C                            RAY HAVING GREATEST FIRST RIDGE DISTANCE
 C
 C OPERATIONS: 'RI R'  & 'RI RV'
 C
-C
 C **********************************************************************
 
         SUBROUTINE FINDRIDGES(RIDGESONLY)
@@ -47,21 +46,22 @@ C **********************************************************************
         LOGICAL               :: RIDGESONLY
 
         CHARACTER(LEN=MAXNAM) :: FILNAM,DOCNAM
-        CHARACTER(LEN=72)     :: FORMOUT
+        CHARACTER(LEN=84)     :: FORMOUT
         CHARACTER(LEN=96)     :: COMMENT
 
         REAL, ALLOCATABLE     :: BUF(:,:)
         REAL, ALLOCATABLE     :: CURVE(:)
 
-        REAL                  :: DLIST(8)
+        REAL                  :: DLIST(9)
         INTEGER               :: IRAY_SHORT,IRAY_LONG
         INTEGER               :: MAXIM,ITYPE,NX,NY,NZ,IRTFLG,IER,NLET
         INTEGER               :: NA,NR,IROW,ISEL,NSUM,N1,N2,J,I,MIND
         REAL                  :: ANGLE_L,ANGLE_S
         INTEGER               :: IRADRIDGESHORT,IRADRIDGELONG
-        INTEGER               :: IASTIG,NMIN,NMAX,NSEPER
+        INTEGER               :: IASTIG,NMIN,NMAX,NSEPER,ISEP
         INTEGER               :: IRADRIDGEMAX,IRADRIDGEMIN,IRADRIDGE
         INTEGER               :: IRADRIDGEMAX2,IRADRIDGE2,NOT_USED
+        INTEGER               :: IRADRIDGEMAX3,IRADRIDGE3
         REAL                  :: VALRIDG 
 
         LOGICAL               :: ADDEXT,GETNAME,ISOLD
@@ -129,7 +129,8 @@ C       LOAD INPUT IMAGE
 
         IF (RIDGESONLY) THEN
 C                    123456789 123456789 123456789 123456789 123456789 123456789
-           COMMENT= '  NUM,     Y,     ANG,   R1,    R2,   ASTIG'
+         COMMENT= 
+     &   '  NUM,     Y,     ANG,   R1,    R2,    R3,    ASTIG   SEP'
 
         ELSE
 C                   123456789 123456789 123456789 123456789 123456789 123456789
@@ -180,6 +181,7 @@ C       FIND RIDGES & VALLEY LOCATIONS ALONG ALL RAYS -------------
 C             FIND LONGEST AXIS OF CIRCLE RAY ---------------------------
               IRADRIDGE  = LOCRIDGE(I)   ! RADIUS AT FIRST  RIDGE
               IRADRIDGE2 = LOCRIDGE(I+1) ! RADIUS AT SECOND RIDGE
+              IRADRIDGE3 = LOCRIDGE(I+2) ! RADIUS AT THIRD  RIDGE
               VALRIDG    = VALRIDGE(I)   ! VALUE  AT FIRST  RIDGE 
 
               IF ( IRADRIDGE >= MIND ) EXIT
@@ -190,6 +192,7 @@ C          FIND LONGEST DISTANCE TO RIDGE ---------------------------
               IRAY_LONG     = IROW
               IRADRIDGEMAX  = IRADRIDGE
               IRADRIDGEMAX2 = IRADRIDGE2
+              IRADRIDGEMAX3 = IRADRIDGE3
            ENDIF
    
 C          FIND SHORTEST DISTANCE TO RIDGE ---------------------------
@@ -201,7 +204,8 @@ C          FIND SHORTEST DISTANCE TO RIDGE ---------------------------
 
         ANGLE_S = 180.0 * FLOAT(IRAY_SHORT) / FLOAT(NY)
         ANGLE_L = 180.0 * FLOAT(IRAY_LONG)  / FLOAT(NY)
-        IASTIG  = IRADRIDGEMAX - IRADRIDGEMIN 
+        IASTIG  = IRADRIDGEMAX  - IRADRIDGEMIN 
+        ISEP    = IRADRIDGEMAX2 - IRADRIDGEMAX
 
         IF (RIDGESONLY) THEN
 
@@ -209,8 +213,10 @@ C          FIND SHORTEST DISTANCE TO RIDGE ---------------------------
      &                 '  ANG:',          ANGLE_L,
      &                 '  R1: ',          IRADRIDGEMAX,
      &                 '  R2: ',          IRADRIDGEMAX2,
-     &                 '  ASTIG: ',       IASTIG
-92         FORMAT(1X, A,I6, A,F7.2, A,I5, A,I5, A,I5) 
+     &                 '  R3: ',          IRADRIDGEMAX3,
+     &                 '  ASTIG: ',       IASTIG,
+     &                 '  SEP: ',         ISEP
+92         FORMAT(1X, A,I6, A,F7.2, A,I5, A,I5, A,I5, A,I5, A,I5) 
 
         ELSE
            WRITE(6,90) ' SHORT RIDGE Y:',IRAY_SHORT,
@@ -238,13 +244,15 @@ C       SAVE PARAMETERS
            DLIST(2) = ANGLE_L
            DLIST(3) = IRADRIDGEMAX
            DLIST(4) = IRADRIDGEMAX2
+           DLIST(5) = IRADRIDGEMAX3
 
-           DLIST(5) = IASTIG
-           ISEL     = 5
+           DLIST(6) = IASTIG
+           DLIST(7) = ISEP
+           ISEL     = 7
 
 C            123456789 123456789 123456789 123456789 123456789 123456789 
            FORMOUT  = 
-     &      '(I7,1X,I2,1X,F5.0,2X,F6.2,1X,F6.0,1X,F6.0,3X,F6.2,1X)'
+     &     '(I7,1X,I2,1X,F5.0,2X,F6.2,3(1X,F6.0),3X,F6.0,1X,F6.0,)'
          ELSE
            DLIST(1) = IRAY_SHORT 
            DLIST(2) = ANGLE_S

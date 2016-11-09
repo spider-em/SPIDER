@@ -1,0 +1,94 @@
+ ([pixsiz],[m-rad])
+
+ ; <html><head><title>Generate and apply FSC matched filter</title></head><body><pre>
+ ;
+ ; SOURCE: spider/docs/techs/recon1/Procs/matched-filt.spi   
+ ;
+ ; PURPOSE:  Generate and apply FSC matched filter
+ ;           FSC-masking adapted from JSL's makegauss.bat
+ ;
+ ; INPUT REGISTERS:
+ ;   [pixsiz]                Pixel size        
+ ;   [m-rad]                 Mask radius        
+ ;
+ ; '##' denotes iteration, '***' denotes group,  '@' denotes subset
+ ; INPUT FILES:
+ ;   [vol_1]                 vol_01_one            Reconstructed subset vol      (one)
+ ;   [vol_2]                 vol_01_two            Reconstructed subset vol      (one)
+ ;
+ ; OUTPUT FILES:
+ ;   [fscdoc_u]              fscdoc_u_01           Unmasked FSC curve doc file   (one)
+ ;   [fscdoc_m]              fscdoc_m_01           Masked   FSC curve doc file   (one)
+ ;   [resol_doc]             resolution'           Summary doc file              (one)
+
+
+ [odd_half_volume]   = '[recon_dir]/vol_01_one'   ; First half-set volume
+
+ [even_half_volume]  = '[recon_dir]/vol_01_two'   ; Second half-set volume
+
+ [unfilt_volume]     = '[recon_dir]/vol_01'       ; Unfiltered volume 
+
+ ; -------------------- Output --------------------
+
+ [m_fscdoc]          = '[recon_dir]/fscdoc_m_01'  ; FSC matched-filter doc file
+
+ [filt_volume]       = '[recon_dir]/vol_01_filt'  ; Filtered volume
+
+ ; ---------------- END BATCH HEADER ----------------
+
+ SYS
+   echo -n " Generating FSC matched filter doc file: [m_fscdoc] " ; date '+ TIME: %x  %X' ; echo
+ 
+ ; Determine unmasked reconstruction FSC and resolution
+ FSC [u-half],[u-spfr],[u-res]  ; Find FSC curve 
+   [vol_1]                      ; Volume - subset 1         (input)
+   [vol_2]                      ; Volume - subset 2         (input)
+   0.5,0                        ; Shell width, mask radius
+   [sp_pixsiz], 0.5             ; Voxel size, resolution cutoff
+   [fscdoc_u]                   ; FSC doc file    (output)
+   *                            ; No Gnuplot file wanted
+
+ ; Determine masked reconstruction FSC and resolution
+ FSC [m-half],[m-spfr],[m-res]  ; Find FSC curve 
+   [vol_1]                      ; Volume - subset 1         (input)
+   [vol_2]                      ; Volume - subset 2         (input)
+   0.5,[m-rad]                  ; Shell width, mask radius
+   [sp_pixsiz], 0.5             ; Voxel size, resolution cutoff
+   [fscdoc_m]                   ; FSC doc file    (output)
+   *                            ; No Gnuplot file wanted
+
+ SYS
+   echo " Reconstruction, Masked resolution:'  '{%f6.2%[m-res]} UnMasked:' '{%f6.2%[u-res]} (Angstroms)"
+
+ SD / '      NORM-FREQ,    RESOL.(ANG.)  MASKED-RESOL.  (CUTOFF=50%)' 
+   [resol_doc]               ; Resolution doc file       (output)
+
+ [key]   = 1
+ [itert] = 0
+ SD [key], [itert],[u-spfr],[u-res],[m-res]
+   [resol_doc]
+ SD E
+   [resol_doc]
+
+ SYS
+   echo -n " Applying FSC matched filter" ;  date '+ TIME: %x  %X' ; echo
+
+ ; Filter volume using FSC doc file
+ FD C                         ; Fourier filter using FSC doc file 
+   [unfilt_volume]            ; Volume to be filtered  (input)
+   [filt_volume]              ; Filtered volume        (output)
+   [fscdoc_m]                 ; FSC doc file           (input)
+   4                          ; Register col. for filtration values
+
+ SYS
+   echo -n " Filtration done   "; date '+ TIME: %x  %X' ; echo
+
+ RE                              
+
+ ; Modified 2016-02-16
+ ;    2016-02-16 (agl) -- Merged with: make-matched-filt.spi
+ ;    2013-10-10 (agl) -- Rewritten for use with masked FSC operation
+ ;    2012-05-21 (trs) -- Reports spatial frequency in Angstroms
+ ;    2012-03-22 (trs) -- Reports nominal resolution in Angstroms
+ ;    2008-01-15 (trs) -- Generation of matched filter now separate
+ ; </pre></body></html>

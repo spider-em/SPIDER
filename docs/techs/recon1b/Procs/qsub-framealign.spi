@@ -1,0 +1,80 @@
+; Usage:
+;   source /storage/brno2/home/tapu/local/spider.cshrc
+;   rm results.spi.*
+;   spider spi/dat @qsub-framealign
+
+@settings-framealign([useScratchYN],[inCoreYN],[verboseLevel],[origFrame],[maxim],[skip],[epsZero],[searchRange],[numProcs])
+
+;  ----------------- Parameters -----------------------------------------
+
+[stackSpace]   = 0     ; Memory to allocate for stacks, megabytes (0 == Automatic)
+;                      ; 
+[defaultMem]   = 500   ; Default RAM requirements (megabytes) if not storing stacks in memory
+[numProcs]     = 4     ; Number of CPUs
+
+; ----------------- END BATCH HEADER ------------------------------------
+
+IF ([stackSpace] .LE. 0) THEN
+
+    ; Temporary file
+    [temp_spi_disk]       = 'jnk_stkspider'     ; SPIDER stack on disk
+
+    FR N [fails]
+    [file_list]
+    [entry]
+
+    SYS
+    echo "Checking storage requirements" ; date ; echo
+
+    CP FROM MRC           ; Convert MRC to: SPIDER
+    [in_mrc]              ; Existing 16 bit stack MRC file (input)
+    [temp_spi_disk]@*     ; SPIDER stack file              (output)
+    1                     ; Stacked image number           
+    NO,YES                ; No byte flip, Flip top
+
+    ; Estimate memory requirements
+    FI H [maxim],[xdim],[ydim]
+    [temp_spi_disk]@
+    MAXIM,NX,NY
+
+    DE
+    [temp_spi_disk]@
+
+    [memBytes]   = 4*[xdim]*[ydim]*[maxim]
+    [stackSpace] = [memBytes]/1e+6
+    [paddedMem]  = int([stackSpace]) + 1000
+    
+    IF ([useScratchYN] .GE. 1) THEN
+        [scratchMem] = int(1.1*[stackSpace]) 
+    ELSE
+        [scratchMem] = 0
+    ENDIF
+
+ELSE
+    SYS
+    echo "Using user estimate of {%i0%[stackSpace]} MB" ; date ; echo
+ENDIF
+
+SYS
+echo " Estimated scratch requirements: {%i0%[scratchMem]} MB"
+
+IF ([inCoreYN] .GE. 1) THEN
+    [coreMem] = int(2.2*[stackSpace]) 
+ELSE
+    [coreMem] = [defaultMem]
+ENDIF
+
+SYS
+echo " Estimated RAM requirements:     {%i0%[coreMem]} MB"
+
+SYS M
+echo ; 
+echo qsub -l nodes=1:ppn={%i0%[numProcs]}:xeon,mem={%i0%[coreMem]}mb,scratch={%i0%[scratchMem]}mb -v DATEXT=$DATEXT,scratch=[scratch_dir],workDir=`pwd` mlalign-qsub.sh ; 
+echo ;
+     qsub -l nodes=1:ppn={%i0%[numProcs]}:xeon,mem={%i0%[coreMem]}mb,scratch={%i0%[scratchMem]}mb -v DATEXT=$DATEXT,scratch=[scratch_dir],workDir=`pwd` mlalign-qsub.sh ; 
+echo
+.
+
+EN
+
+; Modified 2016-01-21

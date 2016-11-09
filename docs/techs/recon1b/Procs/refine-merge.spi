@@ -1,0 +1,152 @@
+ ([pixsiz],[iter],[ampenhance],[r2])
+ ;
+ ; <html><head><title>Merges groups at end of each refinement iteration</title></head><body><pre>
+ ;
+ ; SOURCE: spider/docs/techs/recon1/Procs/refine-merge.spi
+ ;         New                                ArDean Leith  Nov 2000
+ ;         Amplitude enhancement added        ArDean Leith  Apr 2005
+ ;         CofG centering now done here       ArDean Leith  Sep 2010
+ ;         Amplitude enhance seperated out    ArDean Leith  Oct 2010
+ ;         FSC, pixsiz                        ArDean Leith  Aug 2012
+ ;         For CTF corrected images           ArDean Leith  Oct 2013
+ ;         Center after filtration            ArDean Leith  Dec 2015
+ ;
+ ; PURPOSE: Merge group volumes (AS S) into a single set of volumes, find resolution (FSC),
+ ;          filter (FQ) to limit resolution, and center the filtered volumes.
+ ;          (This is not done in parallel).
+ ;
+  ; CALLED FROM: pub-refine <a href="./pub-refine.spi">pub-refine.spi</a>
+ ;               refine     <a href="./refine.spi">    refine.spi</a>
+ ;
+ ; INPUT REGISTERS:
+ ;    [pixsiz]                        Pixel size        
+ ;    [iter]                          Refinement step iteration counter  
+ ;    [ampenhance]                    Flag to use amplitude enhancement (>0 == yes) 
+ ;    [r2]                            Radius of object 
+ ;
+ ; '##' denotes iteration,  '##+' denotes next iteration,  '***' denotes group
+ ; INPUT FILES:
+ ;    [sel_group]                     input/sel_group        List of groups                
+ ;    [next_group_vol_template]       work/vol_##            Group volume    
+ ;    [next_group_vol_template]_s1    work/vol_##_s1         Group volume, deleted at end   
+ ;    [next_group_vol_template]_s2    work/vol_##_s2         Group volume, deleted at end 
+ ;
+ ; OUTPUT FILES:
+ ;    [next_vol]_all                  final/vol##_all        Unfiltered volume - complete
+ ;    [next_vol]_s1                   final/vol##_s1         Unfiltered volume - subset 1
+ ;    [next_vol]_s2                   final/vol##_s2         Unfiltered volume - subset 2
+ ;    [next_vol]_filt                 final/vol##_filt       Filtered volume
+ ;    [next_vol]                      final/vol##            Centered, filtered volume
+ ;    [next_u_fsc]                    final/fscdoc_u_##      Unmasked FSC curve doc file
+ ;    [next_m_fsc]                    final/fscdoc_m_##      Masked   FSC curve doc file
+ ;    [enhance_doc]                   work/enhance_doc_##+   OPTIONAL Amplitude filter doc file
+ ;
+ ;.......................................................................
+ ; -- END BATCH HEADER --
+
+ ; All parallel groups must be present here to use: "AS S"!
+
+ [next-iter] = [iter] + 1         ; Next iteration
+
+ SYS
+   echo ; echo "  Merging group volumes for iteration: {%I0%[iter]}  "
+
+ ; Average subset 1 volumes
+ AS S                             ; Average subset 1 volumes
+   [next_group_vol_template]_s1   ; Group volume template    (input)
+   [sel_group]                    ; Group selection file
+   A                              ; Find average
+   [next_vol]_s1                  ; Subset average volume    (output)
+
+ ; Average subset 2 volumes 
+ AS S                             ; Average subset 2 volumes
+   [next_group_vol_template]_s2   ; Group volume template    (input)
+   [sel_group]                    ; Group selection file
+   A                              ; Find average
+   [next_vol]_s2                  ; Subset average volume    (output)
+
+ ; Average complete volumes
+ AS S                             ; Average all volumes
+   [next_group_vol_template]      ; Group volume template    (input)
+   [sel_group]                    ; Group selection file     (input)
+   A                              ; Find average
+   [next_vol]_all                 ; Complete average volume  (output)
+
+ ; Remove existing  resolution curve doc files
+ DE                               ; Delete existing file
+   [next_m_fsc]                   ; FSC doc file             (removed) 
+ DE                               ; Delete existing file
+   [next_u_fsc]                   ; FSC doc file             (removed) 
+
+ ; Determine masked reconstruction resolution
+ FSC [half],[m-spfr],[m-res]      ; Find FSC
+   [next_vol]_s1                  ; Volume - subset 1        (input)
+   [next_vol]_s2                  ; Volume - subset 2        (input)
+   0.5, [r2]                      ; Shell width, mask radius
+   [pixsiz], 0.5                  ; Pixel size, 50% level
+   [next_m_fsc]                   ; Masked FSC doc file      (output)
+   *                              ; No Gnuplot file wanted
+
+ ; Determine unmasked reconstruction resolution
+ FSC [half],[u-spfr],[u-res]      ; Find FSC
+   [next_vol]_s1                  ; Volume - subset 1        (input)
+   [next_vol]_s2                  ; Volume - subset 2        (input)
+   0.5, 0                         ; Shell width, mask radius
+   [pixsiz], 0.5                  ; Pixel size, 50% level
+   [next_u_fsc]                   ; Unmasked FSC doc file    (output)
+   *                              ; No Gnuplot file wanted
+
+ SYS
+   echo "  Iteration: {%I0%[iter]}   Resolution, masked:{%f6.2%[m-res]}  unmasked:{%f6.2%[u-res]}  Masked spfrq:{%f7.2%[m-spfr]}"
+
+ SD [iter], [iter],[m-res],[u-res] ; Save in doc file
+   [iter_resol]                    ; Resolution doc file       (output)
+
+ IF ( [ampenhance] == 0 ) THEN     
+    ; No amplitude enhancement (usual case). Filter to limit resolution
+    [pass-band] = [m-spfr]
+    IF ( [pass-band]] > 0.35 ) [pass-band] = 0.4  ; Limits pass-band
+    [stop-band] = [pass-band] + 0.15              ; Stop band frequency
+
+    SYS
+       echo "  Iteration: {%I0%[iter]}  Filtration Freq: {%F5.2%[pass-band]} ... {%F5.2%[stop-band]} "   
+
+    ; Filter output volume to limit resolution
+    FQ                            ; Quick filter          
+      [next_vol]_all              ; Reconstructed volume      (input)
+      [next_vol]_filt             ; Filtered volume           (output)
+      7                           ; Butterworth low pass filter
+      [pass-band],[stop-band]     ; Pass-band and stop-band freq.
+
+ ELSE                               
+    ; Apply amplitude enhancement filter and limit resolution
+    @enhance([p69],[pixsiz],[next-iter],[m-spfr])  
+      [next_vol]_all              ; Reconstructed volume      (input)
+      [next_vol]_filt             ; Filtered volume           (output)
+
+ ENDIF
+ 
+ ; Find center of gravity of overall filtered volume
+ CG PH [unused],[unused],[unused], [xcg],[ycg],[zcg]  
+   [next_vol]_filt                ; Filtered volume           (input)
+
+ [xsh] = -[xcg]
+ [ysh] = -[ycg]
+ [zsh] = -[zcg]
+
+ ; Shift volume to its center of gravity
+ SH                               ; Shift volume
+   [next_vol]_filt                ; Filtered volume           (input)
+   [next_vol]                     ; Centered, filtered volume (output) 
+   [xsh],[ysh],[zsh]              ; Shift distances for CofG
+
+ SYS
+   echo -n "  Iteration: {%I0%[iter]}   Volume shifted: ({%F5.1%[xsh]},{%F5.1%[ysh]},{%F5.1%[zsh]}) " ; date '+ Time:  %x  %X'
+
+ SYS                             ; Delete temp. files to save space
+   \rm [next_group_vol_template]_s1*  [next_group_vol_template]_s2*   
+
+ MY FL
+ RE
+
+ ; </pre></body></html>
