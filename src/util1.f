@@ -91,7 +91,7 @@ C--*********************************************************************
         CHARACTER(LEN=1)           :: NULL = CHAR(0)
         CHARACTER(LEN=1)           :: DISP
 
-        INTEGER                    :: NX,NY,NZ
+        INTEGER                    :: NX,NY,NZ,NSEL_USED
         INTEGER                    :: IXC,IYC,IZC
 
  	INTEGER, PARAMETER         :: LUN1   = 8
@@ -115,6 +115,7 @@ C     &           'CG', 'CV', 'CL', 'HD'/
 
       CALL SET_MPI(icomm,mypid,mpierr)  ! SET MYPID
 
+      CALL REG_GET_USED(NSEL_USED)
 
 
       SELECT CASE(FCHAR(1:2))
@@ -394,7 +395,6 @@ C       NEED INPUT FILE, USE ~7 TO ALLOW STACK HEADER ACCESS
         DOCPRNT  = (FCHAR(4:4) == 'D') 
         TERMPRNT = (FCHAR(4:4) == 'T') 
  
-        CALL REG_GET_USED(NSEL_USED)
         IF (NSEL_USED > 0 .AND. .NOT. TERMPRNT .AND. .NOT. DOCPRNT) THEN
 C          SINGLE NUMBER (REGISTER) OPTION:
            CALL LISTITR(FILNAM,LUN1,NX,NY,NZ)
