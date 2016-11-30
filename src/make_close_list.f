@@ -57,13 +57,16 @@ C--*********************************************************************
       REAL                 :: DT,DTABS
       INTEGER              :: IREF
 
+
       IF (.NOT. LIMITRANGE) THEN
          IF (.NOT. ASSOCIATED(LCGPOINTER)) THEN
 C           DUMMY ALLOCATE TO AVOID BUS ERROR ON SOME SYSTEMS
             ALLOCATE(LCGPOINTER(1),STAT=IRTFLG)
          ENDIF
-         NCLOSE        = NUMREF
+         NCLOSE = NUMREF
+#ifndef __INTEL_COMPILER
          LCGPOINTER(1) = -999  ! BUG FLAG
+#endif
          RETURN
       ENDIF
 
@@ -93,7 +96,7 @@ C           MIRRORED OR NON-MIRRORED IS WITHIN RANGE
 C              DO NOT DISCARD IF NOT MIRRORED OR WANT MIRRORED
 	       NCLOSE             = NCLOSE + 1
 	       LCGPOINTER(NCLOSE) = IREF
-               IF (DT .LT. 0) LCGPOINTER(NCLOSE) = -IREF
+               IF (DT < 0) LCGPOINTER(NCLOSE) = -IREF
             ENDIF
          ENDIF
       ENDDO
