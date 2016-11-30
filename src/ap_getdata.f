@@ -12,12 +12,14 @@ C                     PAD                       AUG  2011 ARDEAN LEITH
 C                     AP_GETDATA_MASK           NOV  2011 ARDEAN LEITH
 C                     AP_GETDATA_MASK_RTSQ      DEC  2011 ARDEAN LEITH
 C                     RTSQ CALL                 DEC  2011 ARDEAN LEITH
+C                     FQ_BUF REPLACED WITH FQ2  NOV  2016 ARDEAN LEITH
+C                     DENOISE ONLY FOR _DEN     NOV  2016 ARDEAN LEITH
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2012  Health Research Inc.,                         *
+C=* Copyright 1985-2016  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -223,7 +225,7 @@ C       ************************** AP_GETDATA_RTSQ *******************
         DOUBLE PRECISION      :: DAV,DSIG
 
         SCALE    = 1.0
-        ONEIMAGE = (ILIST(IGO) .LE. 0)
+        ONEIMAGE = (ILIST(IGO) <= 0)
         PADIT     = (NXP > NX .OR. NYP > NY)
         IF (PADIT) THEN
             CALL ERRT(101,'PGM ERROR, PADDING NOT IMPLEMENTED',IDUM)
@@ -269,7 +271,6 @@ C          SHIFT & ROTATE THE INPUT IMAGE --> BUFOUT
            THETA = ANGEXP(4,ITI)
            SHXI  = ANGEXP(5,ITI)
            SHYI  = ANGEXP(6,ITI)
-           !print *,'rtsq; thta,xy',THETA,SHXI,SHYI
 
 C          ROTATE AND SHIFT
            IF (FBS_WANTED) THEN
@@ -338,7 +339,7 @@ C       ************************** AP_GETDATA_MASK ***************
 
 c       write(6,*) 'Reading images: ',igo,'...',iend
 
-        ONEIMAGE = (IGO .LE. 0 .OR. ILIST(IGO) .LE. 0)
+        ONEIMAGE = (IGO <= 0 .OR. ILIST(IGO) <= 0)
         IF (ONEIMAGE) THEN
            FILNAM = EXPPAT
         ENDIF
@@ -573,7 +574,7 @@ C       INPUT: 2XFFT PAD, OUTPUT: UNPADDED
      &                          NUMTH,EXPPAT,LUNIN, IGO,IEND,
      &                          ANGINHEADER,ANGEXP, MPIBCAST,
      &                          BUFEXP,BUFOUT,
-     &                          FBS_WANTED,IRTFLG)
+     &                          FBS_WANTED,TRANSFORM,IRTFLG)
 
         IMPLICIT NONE
 
@@ -592,7 +593,7 @@ C       INPUT: 2XFFT PAD, OUTPUT: UNPADDED
         LOGICAL                      :: MPIBCAST
 	REAL                         :: BUFEXP(N2XLD,N2Y) ! 2XFFT PAD
 	REAL                         :: BUFOUT(NX,NY,NUMTH)
-        LOGICAL, INTENT(IN)          :: FBS_WANTED
+        LOGICAL, INTENT(IN)          :: FBS_WANTED,TRANSFORM
         INTEGER, INTENT(OUT)         :: IRTFLG
 
         CHARACTER(LEN=MAXNAM)        :: FILNAM
@@ -600,7 +601,7 @@ C       INPUT: 2XFFT PAD, OUTPUT: UNPADDED
         INTEGER                      :: ITI,NLET,MAXIM,LX,LY
         INTEGER                      :: IFORMT,LZ,IT,IDUM
         REAL                         :: UNUSED
-        REAL                         :: BFPS(4),FDUM
+        REAL                         :: BFPS(4),PARM1,PARM2,PARM3
         REAL                         :: THETA,SHXI,SHYI,SCALE
         INTEGER                      :: INV,IOPT
         INTEGER                      :: IX,IY,IZ
@@ -609,16 +610,16 @@ C       INPUT: 2XFFT PAD, OUTPUT: UNPADDED
  
         !write(6,*) 'Reading images: ',igo,'...',iend,fbs_wanted
 
-        ONEIMAGE = (IGO .LE. 0 .OR. ILIST(IGO) .LE. 0)
+        ONEIMAGE = (IGO <= 0 .OR. ILIST(IGO) <= 0)
         IF (ONEIMAGE) FILNAM = EXPPAT
 
-        MASKIT  = (RADI > 0)
-        IOPT    = 7          ! BUTTERWORTH LOW PASS FILTER
-        BFPS(1) = 0.25       ! PASS-BAND FREQUENCY
-        BFPS(2) = 0.25 +0.15 ! STOP BAND FREQUENCY
-        BFPS(3) = 0.0 
-        BFPS(4) = 0.0 
-        SCALE   = 1.0
+        MASKIT = (RADI > 0)
+        IOPT   = 7            ! BUTTERWORTH LOW PASS FILTER
+        PARM1  = 0.25         ! PASS-BAND FREQUENCY
+        PARM2  = PARM1 + 0.15 ! STOP BAND FREQUENCY
+        PARM3  = 0.0 
+        BFPS   = 0.0 
+        SCALE  = 1.0
 
         DO ITI=IGO,IEND
 
@@ -662,39 +663,59 @@ C             OUTPUT: 2XFFT PADDED IMAGE
            CLOSE(LUNIN)
            IF (IRTFLG .NE. 0) RETURN
 
-           !write(6,*) ' radi,av:',radi,av,bufout(1,1,it)
-           !call chkpadfile('jnkld',66,1, N2XLD,n2y,1, nx,ny,1,bufexp,irtflg)
+           !write(6,*) ' radi,av:bufexp(50,50)',radi,av,bufexp(50,50)
+           !call chkpadfile('jnkld',66,1, n2xld,n2y,1, nx,ny,1,bufexp,irtflg)
+
+C          FORWARD FFT, 2XFFT PADDED
+	   INV = 1
+	   CALL FMRS_2(BUFEXP,N2X,N2Y,INV)
+	   IF (INV == 0) THEN
+	      IRTFLG = 1
+	      RETURN
+	   ENDIF
 
 C          FOURIER LOWPASS BUTTERWORTH, 2XFFT PAD IN/OUT
-           CALL FQ_BUF(IOPT,BFPS,FDUM,FDUM,FDUM,
-     &                 BUFEXP, N2XLD,N2X,N2Y, NX,NY, IRTFLG)
+           CALL FQ2(IOPT, PARM1,PARM2,PARM3,BFPS, 
+     &              BUFEXP, N2XLD,N2X,N2Y, NX,NY, IRTFLG)
            IF (IRTFLG .NE. 0) RETURN
 
-           !call chkpadfile('jnkfq',66,1, N2XLD,n2y,1, nx,ny,1, bufexp,irtflg)
-           !call chkfile('jnktmp',66,1,nx,ny,1, buftmp,irtflg)
+C          REVERSE FFT, 2X PADDED
+	   INV = -1
+	   CALL FMRS_2(BUFEXP,N2X,N2Y,INV)
 
-C          SHIFT & ROTATE THE INPUT IMAGE --> BUFOUT  
-           THETA = ANGEXP(4,ITI)
-           SHXI  = ANGEXP(5,ITI)
-           SHYI  = ANGEXP(6,ITI)
-           !print *,'theta,shifts',theta,shxi,shyi,fbs_wanted
+      !call chkpadfile('jnkfq2',66,1, n2xld,n2y,1, nx,ny,1,bufexp,irtflg)
 
-C          ROTATE AND SHIFT, FROM: 2xFFT PADDED  TO: UNPADDED
-           IF (FBS_WANTED) THEN
-              CALL RTSF_PADIN(BUFEXP,BUFOUT(1,1,IT),
+           IF (TRANSFORM) THEN
+C             SHIFT & ROTATE THE INPUT IMAGE --> BUFOUT  
+              THETA = ANGEXP(4,ITI)
+              SHXI  = ANGEXP(5,ITI)
+              SHYI  = ANGEXP(6,ITI)
+
+              !write(6,*) 'Theta,shifts',theta,shxi,shyi,fbs_wanted,numth,it
+
+C             ROTATE AND SHIFT, FROM: 2xFFT PADDED TO: UNPADDED
+              IF (FBS_WANTED) THEN
+                 CALL RTSF_PADIN(BUFEXP,BUFOUT(1,1,IT),
      &                        NXT,NX,NY, N2XLD, 
      &                        THETA,SCALE, SHXI,SHYI, IRTFLG)
-           ELSE
-              CALL RTSQ_PADIN(BUFEXP,BUFOUT(1,1,IT), 
+              ELSE
+                 CALL RTSQ_PADIN(BUFEXP,BUFOUT(1,1,IT), 
      &                        N2XLD,N2Y, NX,NY,
      &                        THETA,SCALE, SHXI,SHYI, IRTFLG)
+              ENDIF
+           ELSE
+C             UNPAD DENOISED IMAGE --> BUFOUT
+              BUFOUT(1:NX,1:NY,IT) = BUFEXP(1:NX,1:NY)
+
            ENDIF
 
-           !call chkfile('jnkout',66,1,nx,ny,1, BUFOUT(1,1,it),irtflg)
+          !call chkfile('jnkrtsq',66,1,nx,ny,1, bufout(1,1,it),irtflg)
 
         ENDDO
 
         IRTFLG = 0
 
         END
+
+
 
