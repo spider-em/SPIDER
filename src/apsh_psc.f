@@ -10,12 +10,13 @@ C                   AP_ENDS                       MAR 12 ARDEAN LEITH
 C                   DENOISE                       SEP 12 ARDEAN LEITH
 C                   FOURIER LOWPASS DENOISE       OCT 12 ARDEAN LEITH
 C                   AP_STAT_SHC USED              APR 15 ARDEAN LEITH
+C                   CAN DENOISE WITHOUT ROTFIRST  NOV 16 ARDEAN LEITH
 C
 C **********************************************************************
 C=* This file is part of:                                              * 
 C=* SPIDER - Modular Image Processing System.                          *
 C=* Authors: J. Frank & A. Leith                                       *
-C=* Copyright 1985-2015  Health Research Inc.                          *
+C=* Copyright 1985-2016  Health Research Inc.                          *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -355,18 +356,17 @@ C       LOOP OVER ALL SETS OF EXPERIMENTAL (SAMPLE) IMAGES -------------
 C          LOAD EXP. IMAGE DATA FOR THIS MP SET OF IMAGES INTO EXPBUF
            IEND = MIN(NUMEXP,IEXPT+NUMTH-1)
 
-           IF (ROTFIRST .AND. DENOISE) THEN
-C             ROTATE/SHIFT EXP IMAGES WHEN READING THEM, NEEDS 2XFFT PAD
-              !write(6,*) ' calling getdata_den'
-
+           IF (DENOISE) THEN
+C             DENOISE, ROTATE/SHIFT EXP IMAGES, NEEDS 2XFFT PAD
+ 
 	      CALL AP_GETDATA_DEN(IEXPLIST,NUMEXP, 
      &                    NXT,NX,NY, N2XLD,N2X,N2Y, 0.0,
      &                    NUMTH,EXPPAT,LUNT, IEXPT,IEND,
      &                    ANGINHEADER, ANGEXP, 
      &                    MPIBCAST,TMPBUF,EXPBUF,
-     &                    FBS_WANTED,IRTFLG)
+     &                    FBS_WANTED,ROTFIRST,IRTFLG)
 
-           ELSEIF (ROTFIRST .AND. .NOT. DENOISE) THEN
+           ELSEIF (ROTFIRST) THEN
 C             ROTATE/SHIFT EXP IMAGES WHEN READING THEM, NO PADDING,
 
 	      CALL AP_GETDATA_RTSQ(IEXPLIST,NUMEXP, 
@@ -376,8 +376,8 @@ C             ROTATE/SHIFT EXP IMAGES WHEN READING THEM, NO PADDING,
      &                    MPIBCAST,TMPBUF,EXPBUF,
      &                    .FALSE., ADUM, ADUM, FBS_WANTED,IRTFLG)
 
-          ELSE
-C             NO ROTATE, NO PADDING,
+           ELSE
+C             NO ROTATE, NO PADDING, NO DENOISE
 	      CALL AP_GETDATA(IEXPLIST,NUMEXP,
      &                    NX,NY, NX,NY,0.0,
      &                    NUMTH,EXPPAT,LUNT, IEXPT,IEND,
@@ -385,9 +385,6 @@ C             NO ROTATE, NO PADDING,
      &                    .FALSE., ADUM, ADUM, IRTFLG)
            ENDIF
            IF (IRTFLG .NE. 0) GOTO 9999
-
-C          NUMTH EXP. IMAGES READY TO BE ALIGNED
-
 
 C          NUMTH EXP. IMAGES READY TO BE ALIGNED
 
@@ -584,6 +581,7 @@ C       ALLOCATABLE ARRAYS
 
         MAXRIN  = NUMR(3,NRING) - 2 ! ACTUAL LENGTH OF LONGEST RING
         LCIRCD2 = LCIRC / 2
+        NULLIFY(LCG)         ! INTEL COMPILER NEEDS THIS 2016
 
 C       IF LIMITRANGE, MAKE LIST OF CLOSE REF. IMAGES, RETURNS: NPROJ
         CALL MAKE_CLOSE_LIST(NUMREF,LIMITRANGE,
@@ -877,7 +875,7 @@ C          SUB-PIXEL INTERPOLATION
 	   CNR2 = NY/2+1 + SY + SSY
 
            !write(6,'a,2f8.2,3x,2f8.2')' 3 X,Y:',sx+ssx,sy+ssy,CNR2,CNS2 
-        !write(6,'(a,f8.2)') ' rangnew4:',rangnew 
+           !write(6,'(a,f8.2)') ' rangnew4:',rangnew 
 
 C          NORMALIZE EXP VALUES UNDER MASK OVER VARIANCE RANGE.
 C          INTERPOLATE TO POLAR COORD. AROUND: CNS2,CNR2.
