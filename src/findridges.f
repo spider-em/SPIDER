@@ -2,6 +2,8 @@ C **********************************************************************
 C
 C  FINDRIDGES     NEW                              AUG 13 ArDean Leith
 C                 ADDED RIDGE SEPERATION           OCT 16 ArDean Leith
+C                 ADDED AVGLOC                     NOV 16 ArDean Leith
+C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
@@ -24,7 +26,7 @@ C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
 C **********************************************************************
 C
-C FINDRIDGES(RIDGESONLY)
+C FINDRIDGES(RIDGESONLY,AVGLOC)
 C
 C PURPOSE:   FIND RIDGES AND VALLEYS RUNNING UP/DOWN AN IMAGE.
 C            USUALLY USED WITH POWER SPECTRA CONVERTED TO POLAR VIEW
@@ -37,13 +39,13 @@ C OPERATIONS: 'RI R'  & 'RI RV'
 C
 C **********************************************************************
 
-        SUBROUTINE FINDRIDGES(RIDGESONLY)
+        SUBROUTINE FINDRIDGES(RIDGESONLY,AVGLOC)
 
         IMPLICIT NONE
         INCLUDE 'CMBLOCK.INC'
         INCLUDE 'CMLIMIT.INC' 
  
-        LOGICAL               :: RIDGESONLY
+        LOGICAL               :: RIDGESONLY,AVGLOC
 
         CHARACTER(LEN=MAXNAM) :: FILNAM,DOCNAM
         CHARACTER(LEN=84)     :: FORMOUT
@@ -57,6 +59,9 @@ C **********************************************************************
         INTEGER               :: MAXIM,ITYPE,NX,NY,NZ,IRTFLG,IER,NLET
         INTEGER               :: NA,NR,IROW,ISEL,NSUM,N1,N2,J,I,MIND
         REAL                  :: ANGLE_L,ANGLE_S
+        REAL                  :: RADRIDGEAVG1,RADRIDGEAVG2,RADRIDGEAVG3
+        REAL                  :: RADVALAVG1,RADVALAVG2
+        INTEGER               :: IRADVAL1,IRADVAL2,NAVG
         INTEGER               :: IRADRIDGESHORT,IRADRIDGELONG
         INTEGER               :: IASTIG,NMIN,NMAX,NSEPER,ISEP
         INTEGER               :: IRADRIDGEMAX,IRADRIDGEMIN,IRADRIDGE
@@ -68,8 +73,8 @@ C **********************************************************************
         LOGICAL               :: APPEND,MESSAGE,NEWFILE
         INTEGER               :: LUNDOCNO,NLETD,KEY,NDIGITS
  
-        INTEGER, PARAMETER    :: NUMMINS = 5 ! MAX NUMBER OF VALLEYS
-        INTEGER, PARAMETER    :: NUMMAXS = 5 ! MAX NUMBER OF RIDGES
+        INTEGER, PARAMETER    :: NUMMINS = 6!5 ! MAX NUMBER OF VALLEYS
+        INTEGER, PARAMETER    :: NUMMAXS = 6!5 ! MAX NUMBER OF RIDGES
 
         INTEGER               :: LOCVALLEY(NUMMINS),LOCRIDGE(NUMMAXS)
         REAL                  :: VALVALLEY(NUMMINS),VALRIDGE(NUMMAXS)
@@ -127,10 +132,17 @@ C       LOAD INPUT IMAGE
         IF (IRTFLG .NE. 0) GOTO 9999
 
 
-        IF (RIDGESONLY) THEN
+        IF (AVGLOC) THEN
+C        FIND AVERAGE LOCATIONS FOR RIDGES NOT MAXIMAL
 C                    123456789 123456789 123456789 123456789 123456789 123456789
          COMMENT= 
-     &   '  NUM,     Y,     ANG,   R1,    R2,    R3,    ASTIG   SEP'
+     &   '  NUM,     Y,     ANG,   R1,    R2,    R3,    V2,    ' //
+     &   'ASTIG,   SEP'
+ 
+        ELSEIF (RIDGESONLY) THEN
+C                    123456789 123456789 123456789 123456789 123456789 123456789
+         COMMENT= 
+     &   '  NUM,     Y,     ANG,   R1,    R2,    R3,    ASTIG,  SEP'
 
         ELSE
 C                   123456789 123456789 123456789 123456789 123456789 123456789
@@ -151,6 +163,12 @@ C       FIND RIDGES & VALLEY LOCATIONS ALONG ALL RAYS -------------
         IRAY_SHORT   = 0
         IRADRIDGEMAX = 0
         IRADRIDGEMIN = HUGE(IRADRIDGEMIN)
+
+        RADRIDGEAVG1 = 0.0
+        RADRIDGEAVG2 = 0.0
+        RADRIDGEAVG3 = 0.0
+        RADVALAVG1   = 0.0
+        NAVG         = 0
 
         DO IROW=1+2,NY-2  ! LOOP OVER ALL ROWS (SKIP 2 AT TOP & BOTTEM)
 
@@ -179,15 +197,17 @@ C       FIND RIDGES & VALLEY LOCATIONS ALONG ALL RAYS -------------
 
            DO I = 1,NUMMAXS -1
 C             FIND LONGEST AXIS OF CIRCLE RAY ---------------------------
-              IRADRIDGE  = LOCRIDGE(I)   ! RADIUS AT FIRST  RIDGE
-              IRADRIDGE2 = LOCRIDGE(I+1) ! RADIUS AT SECOND RIDGE
-              IRADRIDGE3 = LOCRIDGE(I+2) ! RADIUS AT THIRD  RIDGE
-              VALRIDG    = VALRIDGE(I)   ! VALUE  AT FIRST  RIDGE 
+              IRADRIDGE  = LOCRIDGE(I)    ! RADIUS AT FIRST  RIDGE
+              IRADRIDGE2 = LOCRIDGE(I+1)  ! RADIUS AT SECOND RIDGE
+              IRADRIDGE3 = LOCRIDGE(I+2)  ! RADIUS AT THIRD  RIDGE
+              VALRIDG    = VALRIDGE(I)    ! VALUE  AT FIRST  RIDGE 
+              IRADVAL1   = LOCVALLEY(I)   ! RADIUS AT FIRST  VALLEY
+              IRADVAL2   = LOCVALLEY(I+1) ! RADIUS AT FIRST  VALLEY
 
               IF ( IRADRIDGE >= MIND ) EXIT
            ENDDO
 
-C          FIND LONGEST DISTANCE TO RIDGE ---------------------------
+C          FIND LONGEST DISTANCE TO RIDGE ----------------------------
            IF (IRADRIDGE > IRADRIDGEMAX) THEN
               IRAY_LONG     = IROW
               IRADRIDGEMAX  = IRADRIDGE
@@ -200,6 +220,15 @@ C          FIND SHORTEST DISTANCE TO RIDGE ---------------------------
               IRAY_SHORT   = IROW
               IRADRIDGEMIN = IRADRIDGE
            ENDIF
+
+C          FIND AVERAGE DISTANCE TO RIDGE1 & 2 -----------------------
+           RADRIDGEAVG1 = RADRIDGEAVG1 + IRADRIDGE
+           RADRIDGEAVG2 = RADRIDGEAVG2 + IRADRIDGE2
+           RADRIDGEAVG3 = RADRIDGEAVG3 + IRADRIDGE3
+           RADVALAVG1   = RADVALAVG1   + IRADVAL1
+           RADVALAVG2   = RADVALAVG2   + IRADVAL2
+           NAVG         = NAVG + 1
+
         ENDDO
 
         ANGLE_S = 180.0 * FLOAT(IRAY_SHORT) / FLOAT(NY)
@@ -207,7 +236,28 @@ C          FIND SHORTEST DISTANCE TO RIDGE ---------------------------
         IASTIG  = IRADRIDGEMAX  - IRADRIDGEMIN 
         ISEP    = IRADRIDGEMAX2 - IRADRIDGEMAX
 
-        IF (RIDGESONLY) THEN
+        IF (AVGLOC) THEN
+C          FIND AVERAGE LOCATIONS FOR RIDGES NOT MAXIMAL
+
+           RADRIDGEAVG1 = RADRIDGEAVG1 / FLOAT(NAVG)
+           RADRIDGEAVG2 = RADRIDGEAVG2 / FLOAT(NAVG)
+           RADRIDGEAVG3 = RADRIDGEAVG3 / FLOAT(NAVG)
+           RADVALAVG1   = RADVALAVG1   / FLOAT(NAVG)
+           RADVALAVG2   = RADVALAVG2   / FLOAT(NAVG)
+
+           WRITE(6,93) ' LONG  RIDGE Y:', IRAY_LONG,
+     &                 '  ANG:',          ANGLE_L,
+     &                 '  R1: ',          RADRIDGEAVG1,
+     &                 '  R2: ',          RADRIDGEAVG2,
+     &                 '  R3: ',          RADRIDGEAVG3,
+     &                 '  V2: ',          RADVALAVG2,
+     &                 '  ASTIG: ',       IASTIG,
+     &                 '  SEP: ',         ISEP
+93         FORMAT(1X, A,I6, A,F7.2, 4(A,F5.1),A,I5,A,I5) 
+
+
+        ELSEIF (RIDGESONLY) THEN
+C          FIND MAXIMAL LOCATIONS FOR RIDGES
 
            WRITE(6,92) ' LONG  RIDGE Y:', IRAY_LONG,
      &                 '  ANG:',          ANGLE_L,
@@ -233,13 +283,28 @@ C          FIND SHORTEST DISTANCE TO RIDGE ---------------------------
         ENDIF
 
 
+
         !CALL GETFILENUM(FILNAM,KEY,NDIGITS,.TRUE.,IRTFLG)
 
 C       SAVE PARAMETERS
-        DLIST(1) = IRAY_SHORT 
-        DLIST(2) = ANGLE_S
-        DLIST(3) = IRADRIDGEMIN
-        IF (RIDGESONLY) THEN
+        IF (AVGLOC) THEN
+
+           DLIST(1) = IRAY_LONG 
+           DLIST(2) = ANGLE_L
+           DLIST(3) = RADRIDGEAVG1
+           DLIST(4) = RADRIDGEAVG2
+           DLIST(5) = RADRIDGEAVG3
+           DLIST(6) = RADVALAVG2
+
+           DLIST(7) = IASTIG
+           DLIST(8) = ISEP
+           ISEL     = 8
+
+C            123456789 123456789 123456789 123456789 123456789 123456789 
+           FORMOUT  = 
+     &     '(I7,1X,I2,1X,F5.0,2X,F6.2,4(1X,F6.0),3X,F6.0,1X,F6.0,)'
+
+        ELSEIF (RIDGESONLY) THEN
            DLIST(1) = IRAY_LONG 
            DLIST(2) = ANGLE_L
            DLIST(3) = IRADRIDGEMAX
