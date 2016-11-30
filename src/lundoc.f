@@ -1402,8 +1402,8 @@ C                REGULAR REGISTER LINE
 
 799     IF (SAYIT .AND. MYPID <= 0) then
               WRITE(NOUT,97) MAXREGT,KEYSINUSE,MAXKEYT
-97         FORMAT('  Doc file has:',I4,'  registers and:',I6,
-     &            ' keys,  Highest key in use:',I6,/)
+97         FORMAT('  Doc file has:',I0,'  registers and:',I0,
+     &            ' keys,  Highest key in use:',I0)
         ENDIF
 
         IF (MYPID <= 0) REWIND(NDOC)
