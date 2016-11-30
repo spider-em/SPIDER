@@ -2,10 +2,10 @@
 C++*********************************************************************
 C
 C    DRIV1
-C            CALLS ROUTINES REMOVED FROM DRIVER   MAR 93
+C            CALLS ROUTINES REMOVED FROM DRIVER   MAR 93   ARDEAN LEITH
 C            CHANGED READRQ PARAMETERS PASSED     AUG 99   ARDEAN LEITH
 C            'FR' MOVED TO SPIDER                 SEP 2000 ARDEAN LEITH
-C            'PO' FOR POLAR CONVERSION            SEP 2000
+C            'PO' FOR POLAR CONVERSION            SEP 2000 PP
 C            'FR L' ADDED                         MAR 2001 ARDEAN LEITH
 C            SIMPLIFED WITH SETSYMPAR IN RDPR     APR 2001 ARDEAN LEITH
 C            SYMPAR                               JUN 2002 ARDEAN LEITH
@@ -21,6 +21,7 @@ C            'PO R'                               OCT 2013 ARDEAN LEITH
 C            'NC' SHOULD NOT CLOSE NDAT           JAN 2014 ARDEAN LEITH
 C            FINDRIDGES                           APR 2014 ARDEAN LEITH
 C            FINDRIDGES(RIDGESONLY)               MAR 2016 ARDEAN LEITH
+C            FINDRIDGES(AVGLOC)                   NOV 2016 ARDEAN LEITH
 C
 C **********************************************************************
 C=*                                                                    *
@@ -65,7 +66,7 @@ C--*********************************************************************
       CHARACTER(LEN=2*MAXNAM) :: RESPONSE,PROMPT
       CHARACTER(LEN=7)        :: EXTEN
       INTEGER                 :: HRS,MIN,SEC
-      LOGICAL                 :: MULTILINE,RIDGESONLY
+      LOGICAL                 :: MULTILINE,RIDGESONLY,AVGLOC
       INTEGER                 :: ICOMM,MYPID,MPIERR
 
       CHARACTER(LEN=1)        :: NULL = CHAR(0)
@@ -175,13 +176,18 @@ C        GET NUMBER OF SEC. SINCE LAST TM, AND COMPUTE HOURS,MIN, & SEC
           IF (FCHAR(4:5) == 'RV') THEN 
 C            FIND RIDGES & VALLEYS 
              RIDGESONLY = .FALSE.
-             CALL FINDRIDGES(RIDGESONLY)
+             CALL FINDRIDGES(RIDGESONLY,.FALSE.)
+
+          ELSEIF (FCHAR(4:4) == 'A') THEN 
+C            FIND AVERAGE LOCATION OF RIDGES 
+             RIDGESONLY = .TRUE.
+             AVGLOC     = .TRUE.
+             CALL FINDRIDGES(RIDGESONLY,AVGLOC)
 
           ELSE  
-
 C            FIND VERTICAL RIDGES 
              RIDGESONLY = .TRUE.
-             CALL FINDRIDGES(RIDGESONLY)
+             CALL FINDRIDGES(RIDGESONLY,.FALSE.)
 
           ENDIF
 
