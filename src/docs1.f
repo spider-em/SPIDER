@@ -346,7 +346,8 @@ C          NO NEED TO SORT LISTS -------------------------- 'DOC MERGE'
            IF ((MAXX  < 1 .OR. MAXY  < 1) .AND. 
      &         (MAXX2 < 1 .OR. MAXY2 < 1)) THEN
                  ! OK   CALL ERRT(102,'EMPTY DOC. FILES',NDUM)
-                 GOTO 9990
+               WRITE(NOUT,*) '  Empty doc files'
+               GOTO 9990
            ENDIF
 
            MAXXT = MAX(MAXX,MAXX2)
@@ -833,13 +834,17 @@ C       CLOSE THE OUTPUT DOC. FILE(S)
 
 C       DEALLOCATE ALLOCATABLE ARRAYS
 9995    IF (ALLOCATED(DLIST))   DEALLOCATE(DLIST)
+            !write(6,*) '  deallocating sorted2'
+
         IF (ALLOCATED(SORTED2)) DEALLOCATE(SORTED2)
+            !write(6,*) '  deallocating sorted'
         IF (ALLOCATED(SORTED))  DEALLOCATE(SORTED)
         CLOSE(NDOCIN2)
 
 C       DEALLOCATE DOC. FILE MEMORY
 9997    IF (FCHAR(4:5) == 'ME') THEN
 C          USED TWO INPUT DOC FILES
+            !write(6,*) '  deallocating docbuf2'
            IF (ASSOCIATED(DOCBUF2)) DEALLOCATE(DOCBUF2)
         ENDIF
 
