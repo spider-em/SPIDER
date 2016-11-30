@@ -1,14 +1,15 @@
 
 C++*********************************************************************
 C
-C COPYTOVOL.F  LONG FILENAMES                      JAN 89 ARDEAN LEITH
-C              REWRITE FROM: STACK                 MAY 13 ARDEAN LEITH
-C
+C COPYTOVOL.F  LONG FILENAMES                      JAN 89 ArDean Leith
+C              REWRITE FROM: STACK                 MAY 13 ArDean Leith
+C              NSL = NILMAX FOR REPLACE BUG        NOV 16 ArDean Leith 
+
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2014  Health Research Inc.,                         *
+C=* Copyright 1985-2016  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -28,9 +29,9 @@ C **********************************************************************
 C
 C    COPYTOVOL()
 C
-C    PURPOSE:   STACK 2-D SLICES INTO 3-D IMAGE
-C               CAN OPERATE ON IMAGE SERIES
-C               CAN USE A SELECTION DOC FILE FOR IMAGE NUMBERS
+C    PURPOSE:     STACK 2-D SLICES INTO 3-D IMAGE
+C                 CAN OPERATE ON IMAGE SERIES
+C                 CAN USE A SELECTION DOC FILE FOR IMAGE NUMBERS
 C
 C    PARAMETERS:  REPLACE    FLAG FOR EXISTING VOLUME REPLACEMENT
 C
@@ -53,7 +54,7 @@ C--*******************************************************************
 
       CHARACTER (LEN=1)      :: NULL = CHAR(0)
 
-      INTEGER                :: NILMAX,ITYPE,NX,NY,NZ
+      INTEGER                :: NILMAX,ITYPE,NX,NY,NZ,IDUM
       INTEGER                :: IX,IY,IZ,NSL,NPIX,NLETF
       INTEGER                :: NLET,NDUM,NLETV
       INTEGER                :: NIMG,IMGNUM,NUM1,NLET2,NUM2,IVAL,INUM
@@ -113,6 +114,8 @@ C     SEE IF OUTPUT VOL EXISTS
       IF (IRTFLG .NE. 0) GOTO 9999
 
       ITYPE  = 3
+      IDUM   = 0     ! UNUSED
+      NSL    = NILMAX
 
       IF (EX) THEN
 C        OUTPUT VOLUME EXISTS ALREADY, OPEN OUTPUT VOLUME TO 
@@ -124,7 +127,7 @@ C        REPLACE SLICES
      &             MAXIM,'OUTPUT VOLUME',.FALSE.,IRTFLG)
          IF (IRTFLG .NE. 0)  GOTO 9999
 
-         CALL RDPRAI(ISLICES,NILMAX,NSL, 1,NX,
+         CALL RDPRAI(ISLICES,NILMAX,NSL, IDUM,IDUM,
      &            'OUTPUT SLICE NUMBERS',NULL,IRTFLG)
          IF (IRTFLG .NE. 0) GOTO 9999
 
@@ -132,8 +135,7 @@ C        REPLACE SLICES
 C        NEW OUTPUT VOLUME, FILL ALL SLICES
          MAXIM  = 1
 
-         NSL = NILMAX
-         CALL RDPRAI(ISLICES,NILMAX,NSL, 1,NIMG,
+         CALL RDPRAI(ISLICES,NILMAX,NSL, IDUM,IDUM,
      &            'OUTPUT SLICE NUMBERS',NULL,IRTFLG)
          IF (IRTFLG .NE. 0) GOTO 9999
 
@@ -173,7 +175,7 @@ C        PUT FILE NUMBER INTO PATTERN
          IF (IRTFLG .NE. 0) GOTO 9999 
 
          NLETF = lnblnkn(FILNAM)
-         IF (VERBOSE) WRITE(6,'(1X,4A,I6)')
+         IF (VERBOSE) WRITE(NOUT,'(2X,4A,I6)')
      &                FILNAM(:NLETF),'  --> ',
      &                FILOUT(:NLETV),'   Z:',IZ
 
