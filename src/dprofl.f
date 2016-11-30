@@ -1,13 +1,14 @@
 
 C++*********************************************************************
 C
-C DPROFL_G.F   -- CREATED FROM DPROFL            DEC 2014 ArDean Leith
+C DPROFL_G.F   CREATED FROM DPROFL               DEC 2014 ArDean Leith
+C              INTEL_COMPILER DOES NOT LIKE //   NOV 2016 ArDean Leith
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2014  Health Research Inc.,                         *
+C=* Copyright 1985-2016  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -129,8 +130,13 @@ C       PUT UP TO NNUM LINE NUMBERS ON TOP OF PLOT -------------------
            NC = NC + 2
         ENDDO
 
+#ifdef __INTEL_COMPILER
+        WRITE(LUNGPL,'(3A)') 'set title "INTENSITY vs COLUMN \n',
+     &                       LINE(1:NC),'"'
+#else
         WRITE(LUNGPL,'(3A)') 'set title "INTENSITY vs COLUMN \\n',
      &                       LINE(1:NC),'"'
+#endif
 
         IF (SUMALL) THEN
 
@@ -160,7 +166,11 @@ c              WRITE(LUNGPL,'(A,ES12.4,A,ES12.4,A)')
      &              'set yrange [',FMIN,':',FMAX,']'
            ENDIF
 
-           WRITE(LUNGPL,'(3A)') 'plot \\'
+#ifdef __INTEL_COMPILER
+          WRITE(LUNGPL,'(3A)') 'plot \'
+#else
+          WRITE(LUNGPL,'(3A)') 'plot \\'
+#endif
 
            DO IT = 1,NLIST         ! LOOP OVER ALL LINES IN LIST
               I = ILIST(IT)        ! CURRENT LINE
@@ -242,7 +252,7 @@ C
 C    PARAMETERS:
 C         IMFILE    CHAR. VARIABLE CONTAINING IMAGE FILE NAME
 C         NLETI     LENGTH OF IMAGE FILE NAME
-C         POSFILE    CHAR. VARIABLE CONTAINING CONTOUR FILE NAME (NEW)
+C         POSFILE   CHAR  VARIABLE CONTAINING CONTOUR FILE NAME (NEW)
 C         NLETC     LENGTH OF CONTOUR FILE NAME
 C         LUNI      LOGICAL UNIT NUMBER OF IMAGE FILE
 C         NSAM      NUMBER OF SAMPLES ON AN IMAGE LINE
@@ -474,7 +484,6 @@ C     CLOSE THE POSTSCRIPT-FILE
       CALL POEND(LUNPOS)
       CLOSE(LUNPOS)
 
-      RETURN
       END
 
 
