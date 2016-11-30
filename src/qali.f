@@ -1,14 +1,17 @@
 C++*********************************************************************
 C    QALI.F
-C                  USED OPFILE                     DEC 99 AL
-C                  OPFILEC                         FEB 03 ARDEAN LEITH
-C                  PROMPTS                         JUN 13 ARDEAN LEITH
+C            3D ORIENTATION SEARCH                  2/14/94
+C            ROTATION MATRIX CORRECTED
+C            USED OPFILE                            DEC 99 ArDean Leith
+C            OPFILEC                                FEB 03 ArDean Leith
+C            PROMPTS                                JUN 13 ArDean Leith
+C            NULLIFY(XPO) FOR IFORT 17              NOV 16 ArDean Leith
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2013  Health Research Inc.,                         *
+C=* Copyright 1985-2016  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -24,11 +27,11 @@ C=* General Public License for more details.                           *
 C=* You should have received a copy of the GNU General Public License  *
 C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
-C *     
 C **********************************************************************
-C     3D ORIENTATION SEARCH  02/14/9D
-C     ROTATION MATRIX CORRECTED
-C     ROTATION AROUND ARBITRARY POINT MODE='A'
+C     
+C     QALI(MODE)
+C
+C     PARAMETERS  MODE    ROTATION AROUND ARBITRARY POINT MODE='A'
 C
 C23456789012345678901234567890123456789012345678901234567890123456789012
 C **********************************************************************
@@ -53,9 +56,6 @@ C **********************************************************************
 
 
         DATA  LUN1,LUN2/77,78/
-
-C       ASK FOR DATA FILE
-        NT = NOUT
 
         MAXIM = 0
         CALL OPFILEC(0,.TRUE.,FILNAM,LUN1,'O',IFORM,NSAM,NROW,NSLICE,
@@ -157,12 +157,12 @@ C       ASK FOR DATA FILE
 
         CALL QNRF(XPO,YPO,KLX,KNX,KLY,KNY,KLZ,KNZ,R,AA,AB)
        
-        CALL UQU(PIT)  ! RETURNS PIT IN COMMON
+        CALL UQU(PIT)  
 
         WRITE(NOUT,91) 
 91      FORMAT(/,'  Final   Phi       Theta       Psi        R')
 
-        WRITE(NT,92)  (PIT(L),L=1,4)
+        WRITE(NOUT,92)  (PIT(L),L=1,4)
 92      FORMAT(8X,F9.4, 1X,F9.4, 1X,F9.4, 1X,F10.7)
 
         CALL REG_SET_NSEL(1,4,PIT(1),PIT(2),PIT(3),PIT(4),0.0,IRTFLG)
@@ -172,6 +172,9 @@ C       ASK FOR DATA FILE
 
 9998    IF (ASSOCIATED(XPO)) DEALLOCATE (XPO)
 	IF (ASSOCIATED(YPO)) DEALLOCATE (YPO)
+
+        NULLIFY(XPO)  ! FOR IFORT 17  nov 2016
+        NULLIFY(YPO)
 
 9999    CLOSE(LUN1)
         CLOSE(LUN2)
