@@ -1,23 +1,24 @@
 
 C ++********************************************************************
-C                                                                      *
+C          
 C MEANSHIFT                                                            *
-C                                                                      *
+C   HACK TO OVERCOME IFORT OPTIMIZE BUG         Nov 2016 ArDean Leith
+C 
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2010  Health Research Inc.,                         *
-C=* Riverview Center, 150 Broadway, Suite 560, Menands, NROW 12204.      *
+C=* Copyright 1985-2016  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
 C=* published by the Free Software Foundation; either version 2 of the *
-C=* License, or (at your option) aNROW later version.                    *
+C=* License, or (at your option) any later version.                    *
 C=*                                                                    *
 C=* SPIDER is distributed in the hope that it will be useful,          *
-C=* but WITHOUT ANROW WARRANTY; without even the implied warranty of     *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
 C=* merchantability or fitness for a particular purpose.  See the GNU  *
 C=* General Public License for more details.                           *
 C=* You should have received a copy of the GNU General Public License  *
@@ -234,7 +235,7 @@ C      ******************************* MEANSHIFT3 *******************
        !WRITE(6,*) 'KERNEL =',KERNEL
 
 C      CALCULATE THE SPHERICAL AREA OF KERNEL
-C       INVOLVING A ROUNDING OF BOUNDARIES
+C      INVOLVING A ROUNDING OF BOUNDARIES
 
        DO S=-KERNEL,KERNEL
            DO I=-KERNEL,KERNEL
@@ -285,6 +286,7 @@ C       INVOLVING A ROUNDING OF BOUNDARIES
 
                         IF (ABS(BUF1(JTMP,ITMP,STMP)-INCNTR) < GRAD)
      &                  THEN
+
                            RSCNTR = RSCNTR + S2*FILT(J2-NJ,I2-NI,S2-NS)
                            RICNTR = RICNTR + I2*FILT(J2-NJ,I2-NI,S2-NS)
                            RJCNTR = RJCNTR + J2*FILT(J2-NJ,I2-NI,S2-NS)
@@ -308,9 +310,23 @@ C       INVOLVING A ROUNDING OF BOUNDARIES
                 IF (NN < 40) GOTO 14
              ENDIF
 
-16           BUF2(J,I,S)  =  DENS / REAL(WEIGHT)
+C            following line overcomes ifort compiler optimize bug             
+             if (j < 1 )  Write(6,*) 'bad j:',j
+
+             BUF2(J,I,S)  =  DENS / REAL(WEIGHT)
           ENDDO
         ENDDO
       ENDDO
-       
       END
+
+#ifdef NEVER
+               if (j < 1 )  Write(6,*) 'bad j:',j
+               if (j > nx ) Write(6,*) 'bad j:',j
+
+               if (i < 1 )  Write(6,*) 'bad i:',i
+               if (i > ny ) Write(6,*) 'bad i:',i
+
+               if (s < 1 )  Write(6,*) 'bad s:',s
+               if (s > nz ) Write(6,*) 'bad s:',s
+
+#endif
