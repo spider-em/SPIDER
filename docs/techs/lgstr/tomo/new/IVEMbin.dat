@@ -1,0 +1,163 @@
+; IVEMbin.dat                                 2/11/03  M. Marko
+;
+; CONVERTS TILT-SERIES FILES FROM THE JEOL 4000 TO SPIDER
+;
+; Input files (typical):
+;
+; raw_1.bin-raw_122.bin       1024x1024 16-bit raw files recorded using
+;                             Emispec autosave. 
+;                            
+; Output files (typical):
+;
+; rot001.dat-rot122.dat       SPIDER images: CCD defects removed, 
+;                             rotated to make tilt axis vertical,
+;                             padded to avoid wrapping after
+;                             rotation.
+;
+; NOTE 1: If you want to check that the threshold for outlyers due
+;         to CCD defects is not cutting off any data, convert a test 
+;         image to SPIDER and use 'HI R' with the threshold you plan to 
+;         use for the series.  For typical cryo images with a mean
+;         below 1000, a threshold of 1500 is generous.
+;
+; NOTE 2: Column defects appear to be at x=423 and 424.  If lines are
+;         still seen in the output images, these positions might need 
+;         to be modified.  If blooming occurs, more lines may need to
+;         be filled in.
+;
+; NOTE 3: Images are automatically padded according to the angle of
+;         the tilt axis from vertical.  This avoids cutting off the
+;         corners of rotated images.  This procedure is only
+;         implemented for square images of 1024x1024 pixels.
+;
+
+FR
+?Raw file prefix (usually raw)? <1>
+;------------------------------------>  example:  raw
+FR
+?Output file prefix (usually rot)? <2>
+;------------------------------------>  example:  rot
+RR x11
+?First image file number (usually 1) ?
+;------------------------------------>  example: 1
+
+RR x12
+?Last image file number (often 61 or 122) ?
+;------------------------------------>  example: 61
+RR x99
+?Threshold for outlying pixels (usually 1500) ?
+;------------------------------------>  example: 1500
+RR x98
+?Rotation angle for vertical tilt axis (usually -60) ?
+;------------------------------------>  example: -60
+
+; ------ Convert from raw to SPIDER, adding leading zeros
+DO LB1 x13=x11,x12
+   IF (x13.lt.10) THEN     
+        CP FROM RAW
+        <1>_{*x13}.bin
+        (16)
+        (1024,1024)
+        (0)
+        (2)
+        N
+        tmp001
+   ELSE
+      IF (x13.LT.100) THEN
+         CP FROM RAW
+         <1>_{**x13}.bin
+         (16)        
+         (1024,1024)
+         (0)
+         (2)
+         N
+         tmp001          
+    ELSE
+         CP FROM RAW
+         <1>_{***x13}.bin
+         (16)        
+         (1024,1024)
+         (0)
+         (2)
+         N
+         tmp001
+       ENDIF
+    ENDIF
+
+;-------- remove column defect lines 
+WI
+tmp001
+win001
+(1,1024)
+(423,1)
+
+WI
+tmp001
+win002
+(1,1024)
+(426,1)
+
+IN
+win001
+tmp001
+(424,1)
+
+IN
+win002
+tmp001
+(425,1)
+;------- remove bright outlyers due to single-pixel defects
+TH
+tmp001
+tmp002
+A
+x99
+
+;------- In case rotation is zero or ninety degrees
+x22=ABS(x98)
+  IF (x98.EQ.0) THEN
+      CP
+      tmp002
+      <2>{***x13}
+      GOTO LB2
+  ELSE 
+      IF (x22.EQ.90) THEN
+      RT
+      tmp002
+      <2>{***x13}
+      x98
+      GOTO LB2
+  ELSE
+;------- calculate size for padding based on tilt axis angle
+      x23=ABS(x22-45)
+      x24=1.414*cos(x23)
+      x25=x24*1024        ; padded image dimension
+      x26=(x25-1024)/2    ; top left coordinate
+;------- pad so rotation won't cut off corners
+      PD
+      tmp002
+      tmp003
+      (x25,x25)
+      M
+      (x26,x26)
+;-------- rotate so tilt axis is vertical
+      RT M
+      tmp003
+      <2>{***x13}
+      x98
+  ENDIF
+ ENDIF
+LB2
+FS
+<2>{***x13}
+;------- clean up intermediate files
+LB1
+
+DE A
+tmp001
+DE A 
+win001
+re
+
+
+

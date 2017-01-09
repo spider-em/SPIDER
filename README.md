@@ -8,8 +8,7 @@ is an image processing system for electron microscopy, especially usefull for si
 This repository currently holds only *SPIDER* source code and text documentation since 
 the complete documentation is not yet suitable for inclusion in Github. 
 It contains 210,000 lines of Fortran code and 7400 files. 
-A complete distribution is 
-[available elsewhere](http://spider.wadsworth.org/spider_doc/spider/docs/spi-register.html). 
+A complete distribution is [available elsewhere](http://spider.wadsworth.org/spider_doc/spider/docs/spi-register.html). 
 
 
 * Uses:
@@ -20,7 +19,7 @@ A complete distribution is
   
    3.  [3D reconstruction](http://spider.wadsworth.org/spider_doc/spider/docs/strategies.html)
 
-   4.  [Object segmentation](http://spider.wadsworth.org/spider_doc/spider/docs/techs segment.html)   
+   4.  [Object segmentation](http://spider.wadsworth.org/spider_doc/spider/docs/techs/segment.html)   
 
    5.  [Electron tomography](http://spider.wadsworth.org/spider_doc/spider/docs/techs/lgstr/tomo/tomo.html)
    
@@ -40,7 +39,6 @@ A complete distribution is
                   [operations](http://spider.wadsworth.org/spider_doc/spider/docss/operations_doc.html) and
                   [techniques](http://spider.wadsworth.org/spider_doc/spider/docs/techniques.html).  
                   
-
    6.   Includes [source code](http://spider.wadsworth.org/spider_doc/spider/src) and is currently [supported on](http://spider.wadsworth.org/spider_doc/spider/docs/spider_avail.html) Linux and Aix. 
 
    7.   Includes [PubSub](http://spider.wadsworth.org/spider_doc/spider/pubsub/pubsub.html) for use on clusters.  
