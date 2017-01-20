@@ -50,7 +50,6 @@ rsync -zuEt $spider_root/rawdocs/*.css      $spider_root/docs
 rsync -zuEt $spider_root/rawdocs/exa/*.css  $spider_root/docs/exa
 
 echo " ------------------------";
-echo " Remember to run make on all machines in src directory"
 
 echo " Finished  " ; echo " " 
 

@@ -36,6 +36,7 @@ set pubsubdir  = $spiroot/pubsub
 set fftwdir    = $spiroot/fftw
 set toolsdir   = $spiroot/tools
 set spiredir   = $spiroot/spire 
+set spiredistdir = $spiroot/spire-dist 
    
 set jwebdir    = /usr8/web/jweb 
 
@@ -54,52 +55,52 @@ set toolsdest  = $destroot/spider/tools
 set jwebdest   = $destroot/web/jweb
 
 # Make necessary dir
-mkdir -p $destroot/spider $srcdest $docdest $mandest 
+mkdir -p $destroot/spider    $srcdest $docdest $mandest 
 mkdir -p $procdest $fftwdest $pubsubdest
 mkdir -p $destroot $jwebdest
 
 # Set rsync = verbose, compressed, update, 
 #             preserve executability, preserve time, follow Symlinks
-set sendit  = 'rsync -zuEtL --out-format="%n%L"  '
+set sendit  = 'rsync -zuEt --out-format="%n%L" --delete '
 
-set excludes = "--exclude="RCS" --exclude="old"  --exclude="Attic" "  
+set excludes = "--exclude="RCS" --exclude="Attic" --exclude="dev" "  
 
 
 # ------------------ Copy source files --------------------------------
 
 echo  'Copying src files. xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
 
-$sendit   $srcdir/*.f   \
-          $srcdir/*.INC \
-          $srcdir/Make* \
-          $srcdir/*.inc \
-          $srcdir/Nextversion   $srcdest
+$sendit -d  $srcdir/*.f   \
+            $srcdir/*.INC \
+            $srcdir/Make* \
+            $srcdir/*.inc \
+            $srcdir/Nextversion   $srcdest
 
 # Replace Makebody.inc with distribution version
-$sendit $srcdir/Makebody.inc.send $srcdest/Makebody.inc
+$sendit -d $srcdir/Makebody.inc.send  $srcdest/Makebody.inc
 
-$sendit $srcdir/Makefile_samples/* $srcdest/Makefile_samples
+$sendit -d $excludes $srcdir/Makefile_samples/*  $srcdest/Makefile_samples
  
 # --------------------- Copy man files -------------------------------
 
 echo 'Copying man files. xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
 
-$sendit   $mandir/*.man    \
-          $mandir/*.also   $mandest
+$sendit -d  $mandir/*.man    \
+            $mandir/*.also   $mandest
 
 # --------------------- Copy bin files -------------------------------
 
 echo 'Copying bin/Nextresults  file. xxxxxxxxxxxxxxxxxxxxxx'
 
-$sendit   $bindir/Nextresults   $bindest
+$sendit -d $bindir/Nextresults   $bindest
 
 # ------------------- Copy external tip files ------------------------
 
 echo "Copying external docs/tips files xxxxxxxxxxxxxxxxxxxx" 
 
 $sendit -d $tipsdir                    $docdest
-$sendit    $tipsdir/index_send.html    $docdest/tips/index.html 
-$sendit    $tipsdir/utilities.html      \
+$sendit -d $tipsdir/index_send.html    $docdest/tips/index.html 
+$sendit -d $tipsdir/utilities.html      \
            $tipsdir/spiprogramming.html \
            $tipsdir/timebprp.spi        \
            $tipsdir/timing.html        $docdest/tips            
@@ -108,19 +109,19 @@ $sendit    $tipsdir/utilities.html      \
 
 echo 'Copying pubsub files. xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
 
-$sendit $excludes  $pubsubdir/*   $pubsubdest
+$sendit -d $excludes  $pubsubdir/*   $pubsubdest
 
 # --------------------- Copy proc files ---------------------------
 
 echo 'Copying proc files. xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
-$sendit  $excludes       \
-         $procdir/*.dat  \
-         $procdir/*.bat  \
-         $procdir/*.spi  \
-         $procdir/*.py   \
-         $procdir/*.img  \
-         $procdir/*.tom  \
-         $procdir/*.perl      $procdest
+$sendit -d $excludes       \
+           $procdir/*.dat  \
+           $procdir/*.bat  \
+           $procdir/*.spi  \
+           $procdir/*.py   \
+           $procdir/*.img  \
+           $procdir/*.tom  \
+           $procdir/*.perl      $procdest
 
 # --------------------- Copy Python tools files ----------------------
 
@@ -129,7 +130,7 @@ $sendit -r $excludes \
            $toolsdir/readme*      \
            $toolsdir/install.html \
            $toolsdir/tools.tar.gz \
-           $toolsdir/docs  $toolsdest
+           $toolsdir/docs             $toolsdest
 
 # --------------------- Copy Spire files ---------------------------
 
@@ -137,28 +138,26 @@ echo 'Copying Spire distribution files. xxxxxxxxxxxxxxxxxxx'
 
 $sendit -r $spiredir/readme*                      $spiredest
 $sendit -r $excludes $spiredir/doc                $spiredest
-$sendit -r $spiredir/tosend/spire_linux-1.5.5.tar $spiredest
+$sendit -r $spiredistdir/spire_linux-1.5.5.tar.gz $spiredest
 
 # --------------------- Copy JWeb files ---------------------------
 
 echo 'Copying JWeb Linux, & Windows files. xxxxxxxxxxxxxxxx'
 
-$sendit -r  $excludes       \
-            $jwebdir/linux  \
-            $jwebdir/win    \
-            $jwebdir/src    $jwebdest
+$sendit -r $excludes       \
+           $jwebdir/linux  \
+           $jwebdir/win    \
+           $jwebdir/src    $jwebdest
 
-# --------------------- Copy  html doc files --------------------------
+# --------------------- Copy  html doc & tech files --------------------------
 
 echo 'Copying html doc & tech files. xxxxxxxxxxxxxxxxxxxxxx'
 
-$sendit $excludes -r    --exclude="tips"                  \
+$sendit -r  $excludes --exclude="tips"                    \
            --exclude="techs/lgstr/tomo/data"              \
-           --exclude="bzvol.dat"                          \
            --exclude="techs/lgstr/tomo/output"            \
            --exclude="exa/images/bp3fpart*dat"            \
-           --exclude="techs/recon1a/natproc_data_mics.tar" \
-           --exclude="techs/recon1b/natproc_data_mics.tar" \
+           --exclude="techs/recon1a/natproc_data_mics.tar.gz" \
            $docdir/*   $docdest
 
 # ----------------------------------------------------------------
@@ -170,7 +169,7 @@ echo 'Check for extra  tar archives '
 echo 'Update FFTW files with: send-fftw.sh '
 echo 'Update executables with make in src dir '
 echo 'Update Web  with:       /usr8/web/utils/tosend.sh '
-echo 'touch /usr8/send/spider/bin/CONTAINS_SPIDER_RELEASE_23.02 '
+echo 'touch /usr8/send/spider/bin/CONTAINS_SPIDER_RELEASE_24.00 '
 echo 'Archive and compress the distribution in: /usr8/send '
 echo 'set wwwdir = spider-stage:/export/apache/vhosts/spider.wadsworth.org/htdocs/spider_doc/spider '
 echo 'scp -p /usr8/send/spiderweb.23.02.tar.gz  $wwwdir/download '

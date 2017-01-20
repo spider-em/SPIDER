@@ -38,7 +38,7 @@ set wwwdocsdir    = $wwwhostdir/docs
 # For Wadsworth WWW. Set rsync = verbose, compressed, update, 
 #        preserve executability, preserve time, follow Symlinks
 #set sendit = 'rsync -vzuEtL' pre 4/27/2012 for Linux target
-set sendit = 'rsync -vzuptL --exclude="RCS" --exclude="Attic" '
+set sendit  = 'rsync -vzuptL  --exclude="RCS" --exclude="Attic" '
 
 pushd .
 cd $spider_root/utils
@@ -74,10 +74,6 @@ $sendit     $tmpdir/man/*               $wwwdocsdir/man/
 echo " Copied headerized SPIDER man files " >> $LOGFILE
 echo " $sendit     $tmpdir/man/*               $wwwdocsdir/man/"
 
-# Copy associated manual images --------------------------------------
-$sendit  $spider_root/man/*.jpg  $wwwdocsdir/man
-echo " Copied SPIDER man image files " >> $LOGFILE
-
 # Copy headerized SPIDER doc files  ----------------------------------
 echo " Copying headerized SPIDER doc files xxxxxxxxxxxxxxxxxxxxxxx" 
 $sendit    $tmpdir/*                    $wwwdocsdir
@@ -87,12 +83,9 @@ echo " Copied headerized SPIDER doc files " >> $LOGFILE
 # Copy exa, icons, buttons, img & spidui SPIDER doc files ------------
 echo " Copying exa, icons, buttons, img & spidui SPIDER files xxxxxxxxxxxxxxxxxxx" 
 $sendit    $docsdir/img/*               $wwwdocsdir/img/
-$sendit    $docsdir/icons/*             $wwwdocsdir/icons/
 $sendit    $docsdir/buttons/*           $wwwdocsdir/buttons/
-$sendit    $docsdir/spidui/*            $wwwdocsdir/spidui/
-$sendit    $docsdir/spidui/pics/*       $wwwdocsdir/spidui/pics/
-$sendit    $docsdir/exa/*               $wwwdocsdir/exa/
-$sendit    $docsdir/exa/images/*        $wwwdocsdir/exa/images/
+$sendit -r $docsdir/spipylib/*          $wwwdocsdir/spipylib/
+$sendit -r $docsdir/exa/*               $wwwdocsdir/exa/
 
 echo " Copied exa, icons, buttons, img & spidui SPIDER files " >> $LOGFILE
 
@@ -101,7 +94,6 @@ echo " Copying non-headerized SPIDER doc files xxxxxxxxxxxxxxxxxxx"
 $sendit    $docsdir/spider.html        \
            $docsdir/spider_license.html $docsdir/spider_avail.html  \
            $docsdir/spi-register.html   $docsdir/spi-download.html  \
-           $docsdir/agl.html            $docsdir/*.pdf              \
            $docsdir/*.gif               $docsdir/*.jpg              \
            $docsdir/*.spi               $docsdir/*.css              \
            $docsdir/spider78.html                                   $wwwdocsdir/
@@ -112,7 +104,7 @@ echo " Copied non-headerized SPIDER doc files " >> $LOGFILE
 echo " Copying SPIDER src files xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" 
 $sendit -r --exclude="*.o"   --exclude="*.mod"   --exclude="jnk*"   \
            --exclude="*.a"   --exclude="ifort/"  --exclude="gfort/" \
-           --exclude="RCS"   --exclude="Attic" \
+           --exclude="RCS"   --exclude="Attic"                      \
            $srcdir/*  $wwwhostdir/src
 echo " Copied SPIDER source files " >> $LOGFILE
 
@@ -120,8 +112,8 @@ echo " Copied SPIDER source files " >> $LOGFILE
 echo " Copying  $toolsdir   xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" 
 ssh  $wwwhost mkdir -p $wwwhostdir/tools
 $sendit    $toolsdir/*.html   $toolsdir/*.py $wwwhostdir/tools
-$sendit    $toolsdir/bin/*py  $wwwhostdir/tools/bin
-$sendit -r $toolsdir/docs     $wwwhostdir/tools
+$sendit    $toolsdir/bin/*py                 $wwwhostdir/tools/bin
+$sendit -r $toolsdir/docs                    $wwwhostdir/tools
 echo " Copied python tools files" >> $LOGFILE
 
 
@@ -160,7 +152,6 @@ echo " Copying various external tar files xxxxxxxxxxxxxxxxxxxxxxxxx"
 
 $sendit -v $docsdir/techs/supclass/tar_archive/*  $wwwdocsdir/techs/supclass/tar_archive 
 $sendit -v $docsdir/techs/verify/tar_archive/*    $wwwdocsdir/techs/verify/tar_archive 
-$sendit -v $docsdir/techs/recon/batcharch/*       $wwwdocsdir/techs/recon/batcharch 
 
 #echo " Copying SPIDER distribution file xxxxxxxxxxxxxxxxxxxxxxxxx" 
 #$sendit -v $spider_send/spiderweb.*tar.gz        $wwwhostdir/download

@@ -48,3 +48,6 @@ make clean
 echo " "
 
 exit 
+
+
+# may want to remove .libs directories??
