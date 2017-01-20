@@ -14,6 +14,7 @@
 #            AL Mar-10-09  Migrate to usr8
 #            AL Aug-05-14  Altered for no defocus groups
 #            AL Apr-25-16  Removed refine.html 
+#            AL Dec-28-16  Save uncompressed for use in git
 
 setenv ROOTDIR /usr8/spider/docs/techs/recon1b
 setenv DOCSDIR $ROOTDIR/Docs
@@ -21,7 +22,7 @@ setenv PROJDIR myproject
 
 echo ; echo " Read mr1.html  to list reconstruction procedure files -----"
 
-./mkdirs.py -n $PROJDIR
+$ROOTDIR/Utils/mkdirs.py -n $PROJDIR
 
 # Create project Docs directory to hold important html files & some useful info.
 mkdir -p $PROJDIR/Docs
@@ -40,7 +41,7 @@ cp -vu $DOCSDIR/mr1.html      $PROJDIR/Docs
 cp -vu $DOCSDIR/mrstyle2.css  $PROJDIR/Docs
 
 echo ; echo " Run SPIDER session and write version to info file -------- "
-# Create file "info". "info" contains infomation about the spider executable  
+# Create file "info". "info" contains infomation about the SPIDER executable  
 #    and the zipped file that is created by this script 
 echo " Zipped Batch File Info.  : " >  $PROJDIR/Docs/info
 echo " " >> $PROJDIR/Docs/info
@@ -56,18 +57,19 @@ spider zyx/cba en >>  $PROJDIR/Docs/info
 \rm -f LOG.zyx  results.zyx.*
 
 echo ; echo " Tar and zip file to desired location ---------------------"
-# Tar, zip and move the file to desired location; delete the temp. dir "$PROJDIR"
-tar cvf "spiproject.`date +%y%m%d`.tar"  myproject
-gzip -f "spiproject.`date +%y%m%d`.tar"
-\mv "spiproject.`date +%y%m%d`.tar.gz" $ROOTDIR
+tar cvf  "spiproject.`date +%y%m%d`.tar"  myproject
+gzip -cf "spiproject.`date +%y%m%d`.tar" > "spiproject.`date +%y%m%d`.tar.gz"
+
+# Delete the temp. dir "myproject"
 \rm -rf $PROJDIR
 
 # Link the zipped file for access from the WEB page
-\rm  $ROOTDIR/spiproject.tar.gz
+\rm     $ROOTDIR/spiproject.tar.gz
 ln -s  "$ROOTDIR/spiproject.`date +%y%m%d`.tar.gz" $ROOTDIR/spiproject.tar.gz
 
 echo ; echo " List final tar archive location -------------------------"
 ls -l "$ROOTDIR/spiproject.`date +%y%m%d`.tar.gz"
 ls -l  $ROOTDIR/spiproject.tar.gz
+ls -l "$ROOTDIR/spiproject.`date +%y%m%d`.tar"
 
 echo " "
