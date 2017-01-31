@@ -205,6 +205,8 @@ C          WANT OUTPUT DOC FILE
      &              REFPAT,EXPPAT,LUNREF,LUNEXP,NOUTANG,LUNXME,LUNXMR)
 
 9999    CLOSE(LUNDOC)
+        CLOSE(LUNEXP)
+        CLOSE(LUNREF)
 
         END
 
@@ -449,6 +451,7 @@ C             OPEN NEXT REFERENCE INPUT FILE, RESET NINDXR
           !write(6,*) 'calling nextfile exp, iexp, irtflg:',iexp, irtflg
 
 C          OPEN NEXT EXP. INPUT FILE, UPDATE NINDXR 
+
            CALL NEXTFILE(NINDXE, IEXPLST, 
      &                   FOUROK,  LUNXME,
      &                   NUMEXP,  MAXIME,  
@@ -467,7 +470,7 @@ C          OPEN NEXT EXP. INPUT FILE, UPDATE NINDXR
            ENDIF
 
         ENDDO
- 
+
 9999    IF (ALLOCATED(BUFI))   DEALLOCATE(BUFI)
         IF (ALLOCATED(BUFR))   DEALLOCATE(BUFR)
         IF (ALLOCATED(BUFE))   DEALLOCATE(BUFE)
