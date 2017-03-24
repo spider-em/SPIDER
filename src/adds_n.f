@@ -1,9 +1,10 @@
 C **********************************************************************
 C
-C ADDS_N.F                           USED FILELIST JULY 99 ARDEAN LEITH
-C                                    USED F90 JULY 99 ARDEAN LEITH
-C                                    SQRT(NEG) TRAP APR 00 ARDEAN LEITH
-C                                    ALLOC TRAP     APR 03 ARDEAN LEITH
+C ADDS_N.F                   USED FILELIST         JULY 99 ARDEAN LEITH
+C                            USED F90              JULY 99 ARDEAN LEITH
+C                            SQRT(NEG) TRAP        APR 00 ARDEAN LEITH
+C                            ALLOC TRAP            APR 03 ARDEAN LEITH
+C                            PARAMETER SETTING     APR 03 ARDEAN LEITH
 C
 C **********************************************************************
 C=*                                                                    *
@@ -43,6 +44,7 @@ C--*********************************************************************
 
       DOUBLE PRECISION              :: VARAV,VV,FNUMT,FNUMT1,FNUMT2
       DOUBLE PRECISION              :: AVALL,DTEMP
+      REAL                          :: FAVALL,FVV
       INTEGER                       :: NILMAX,IRTFLG,K,NLET,ITYPE,NCHAR
       INTEGER                       :: MAXIM
       INTEGER                       :: NUMA,NUMA1,NUMA2
@@ -110,9 +112,9 @@ C     OPEN INPUT IMAGE(S)
      &      'MENU OPTION (A/AS/V/VS/AV/AVS)',NULL,IRTFLG)
       IF (IRTFLG .NE. 0) GOTO 9999
 
-      WANTA = ( INDEX(ANSW(:NCHAR),'A') >0)  
-      WANTV = ( INDEX(ANSW(:NCHAR),'V') >0) 
-      WANT3 = ( INDEX(ANSW(:NCHAR),'S') >0)  
+      WANTA = ( INDEX(ANSW(:NCHAR),'A') > 0)  
+      WANTV = ( INDEX(ANSW(:NCHAR),'V') > 0) 
+      WANT3 = ( INDEX(ANSW(:NCHAR),'S') > 0)  
 
       NVOX = NX * NY * NZ
 C     COMPLAIN IF EXCESSIVE ALLOCATION
@@ -345,7 +347,9 @@ C        SAVE OVERALL VAR. OUTPUT IMAGE
 
       ENDIF
 
-      CALL REG_SET_NSEL(1,2, AVALL,VV,  0.0, 0.0, 0.0,IRTFLG)
+      FAVALL = AVALL
+      FVV    = VV
+      CALL REG_SET_NSEL(1,2, FAVALL,FVV,  0.0, 0.0, 0.0,IRTFLG)
 
       VV    = 0.0
       VARAV = 0.0
