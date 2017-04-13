@@ -9,11 +9,12 @@ C              REG SET REMOVED                       JAN 06 ARDEAN LEITH
 C              MPI CHANGES                           OCT 08 ARDEAN LEITH
 C              SET_MPI                               DEC 10 ARDEAN LEITH
 C              IUSEPUBSUB                            JAN 16 ARDEAN LEITH
+C              ILEN UNDEFINED                        APR 17 ARDEAN LEITH
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2016  Health Research Inc.,                         *
+C=* Copyright 1985-2017  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -59,7 +60,7 @@ C***********************************************************************
         CHARACTER(LEN=1000) :: WHOLECOMMAND
         INTEGER             :: iargc,lnblnk
         INTEGER             :: ICOMM,MYPID,MPIERR
-        INTEGER             :: IPUB,LENC,ISTATUS
+        INTEGER             :: IPUB,LENC,ISTATUS,ILEN
 
         CALL SET_MPI(ICOMM,MYPID,MPIERR)  ! SETS ICOMM AND MYPID
 
