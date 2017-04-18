@@ -12,12 +12,13 @@ C             EXCESSIVE PARTITION TRAP             DEC 05 ARDEAN LEITH *
 C             NFAC VS KFAC BUG                     DEC 07 ARDEAN LEITH *
 C             IPALIGN & REFACTORING                DEC 08 ARDEAN LEITH *
 C             KV FACTOR SELECTION                  NOV 11 ARDEAN LEITH *
-C                                                                      *
+C             UNDECLARED INUMBER on SORT CALL BUG  APR 17 ARDEAN LEITH *
+C                                                                   *
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2013  Health Research Inc.,                         *
+C=* Copyright 1985-2017  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -65,21 +66,34 @@ C***********************************************************************
 
         SUBROUTINE SCLASSI(LUNI,LUNK,LUNDOC)
 
+        IMPLICIT NONE
+
+
         INCLUDE 'CMBLOCK.INC' 
         INCLUDE 'CMLIMIT.INC' 
 
-        CHARACTER(LEN=MAXNAM) :: CLUSFILE,IMCFILE,FILPRE
-
-#ifndef SP_32
-        INTEGER *8            :: IBIG
-#else
-        INTEGER *4            :: IBIG
-#endif
-
-        CHARACTER(LEN=1)      :: NULL = CHAR(0)
+        INTEGER               :: LUNI,LUNK,LUNDOC
 
         REAL, ALLOCATABLE     :: Q(:)
-                                                                                                          
+        CHARACTER(LEN=MAXNAM) :: CLUSFILE,IMCFILE,FILPRE
+        CHARACTER(LEN=1)      :: NULL = CHAR(0)
+
+#ifndef SP_32
+        INTEGER *8            :: IBIG,IBIG4
+#else
+        INTEGER *4            :: IBIG,IBIG4
+#endif
+                                                                                  
+        INTEGER               :: NKLA,NLET,IRTFLG,NUMIM,NFAC
+        INTEGER               :: IDUM,KFAC,MINFAC,MAXFAC,IER,NITER
+        INTEGER               :: NCLAS,NOT_USED,NBASE,K
+        INTEGER               :: N2DIM,KDIM,N1,NK,ND,NU,NJV,NJW
+        INTEGER               :: MDIM,LDIM,L2DIM,NIDK,NCI,NGT,NNUM,NLA
+        INTEGER               :: NLB,NIV,NIW,NV,NW,NNT,NVAL,NPK,NNO
+        INTEGER               :: NI,NFIN
+
+        INTEGER               :: ipalign64
+                                                                                                         
 C       MARCH 02 al NKLA IS REDEFINED LATER! SO REPEAT FAILED
         NKLA   = 100
 
@@ -97,6 +111,7 @@ C       OPEN & READ HEADER OF _IMC FILE FORM='FORMATTED'
      &                       'O', ' ',.TRUE.,IRTFLG)
         READ(LUNI,*) NUMIM, NFAC,IDUM,IDUM,IDUM,IDUM                                       
 
+    
         WRITE(NOUT,90) NFAC,NUMIM
 90      FORMAT(/,'  FACTORS AVAILABLE:',I5,'  OBJECTS (IMAGES):',I6)
 
@@ -116,7 +131,7 @@ C       OPEN & READ HEADER OF _IMC FILE FORM='FORMATTED'
         ENDIF
 
 C       SORT THE INUMBER FACTOR LIST IN ASCENDING ORDER
-        IF (KFAC > 1) CALL SORTI(INUMBER,KFAC)
+        IF (KFAC > 1) CALL SORTI(INUMBR,KFAC)
 
         NITER = 5
         NCLAS = 5
