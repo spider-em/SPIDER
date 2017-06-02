@@ -12,7 +12,7 @@
 # AL Mar-10-09  Migrate to usr8
 # AL Dec-28-16  Save uncompressed for use in git
 
-setenv SRCDIR /usr8/spider/docs/techs/recon
+setenv SRCDIR /usr16/software/spider/docs/techs/recon
 
 echo " "; echo " Read mr.html  to get list of desired reconstruction procedure files -----"
 

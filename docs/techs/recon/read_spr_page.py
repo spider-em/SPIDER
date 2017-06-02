@@ -4,7 +4,7 @@
 
 """
 Read the Single Particle Reconstruction web page:
- /usr8/spider/docs/techs/recon/mr.html
+ /usr16/software/spider/docs/techs/recon/mr.html
 
 Generate an object containing the subdirectories and their batch files.
 Expects each section to begin with:
@@ -29,7 +29,7 @@ re_subdirs = re.compile("[sS]ubdirector(y|ies) *: *<i>.+</i>")
 re_spire = re.compile("<!-- *SPIRE")
 
 # source_dir : Location of the batch files
-source_dir = "/usr8/spider/docs/techs/recon"
+source_dir = "/usr16/software/spider/docs/techs/recon"
 
 default_page = os.path.join(source_dir, "mr.html")
 

@@ -2,61 +2,74 @@
  ;
  ; SOURCE:  spider/docs/techs/recon1/Procs/filter-refvol.spi
  ;          New                                       ArDean Leith  Nov 2000
- ;          For gold standard reconstruction          ArDean Leith  May 2014
+ ;          For gold standard reconstruction          ArDean Leith  May 2017
  ;
  ; PURPOSE: Filter original reference volume to limit resolution.
  ;
  ; CALLED FROM: 
  ;
- ; Register variables & files are set in: <a href="recon-settings.pam">recon-settings.pam</a>
- ;
- ; INPUT REGISTERS USED:
- ;   [pixsiz]              Pixel size (A)
- ;
- ; '***' denotes group number, '@' denotes subset 
- ; INPUT FILES:
- ;   [params]            ../params                EM parameters file                  (one)  
- ;   [ref_vol_unfilt]    ../data/ref_vol_unfilt   Initial unfiltered reference volume (one)   
- ;
- ; OUTPUT FILES:
- ;   [ref_vol]           ../data/ref_vol'         Initial filtered reference volume   (one)   
- ;
- ; INLINE FILES USED: none
- ;
+ ; ----------------- Original input file ---  May have to EDIT this name, This file must exist ------
+
+ [ref_vol_unfilt] = '../../reference_oct09'       ; Unfiltered reference volume (one)   
+
+ ; -------------- Output files -- No need to edit for default refinement ---------------------
+
+ [ref_vol] = '../../reference_oct09_fq'           ; Filtered reference volume   (one)   
+
  ; ---- Edit these parameters for your project ---------------------------------------------
 
- [filt-angstr]  = 60        ; Low pass filtration level (A) 
+ [sp_pixsiz]   = 1.17                             ; Pixel size (A) ( See: ../params  EM parameters file)
+
+ [filt-angstr] = 40                               ; Low pass filtration level (A) 
+
+ [filt-stop]   = 0.05                             ; Filter stop offset  (Spatial freq)
 
  ; -------------------------------- END BATCH HEADER ---------------------------------------
 
- ; Input initial parameters & file names
- [steptype] = -1            ; Alignment step
- @recon-settings([steptype],[num-grps],[pixsiz],[ang-step],[r2],[alignsh],[prj-radius],[winsiz],[incore-yn],[bp-type],[qsub])
- 
- [filt-spr]  = [pixsiz] / [filt-angstr]  ; Pass-band
- [stop-band] = [filt-spfr] + 0.15        ; Stop band frequency
+ FI H [nx]                  ; Query row length value (images/volumes must be square)
+   [ref_vol_unfilt]         ; Initial unfiltered reference volume    (input)
+   NX                       ; Dimension wanted (cubic)
+
+ ; Echo to results file    
+ [sp_pixsiz]
+
+ [pixels]   = [sp_pixsiz] * [filt-angstr]
+
+ [filt-fq1] = [pixels] / [nx]            ; Pass-band
+ [filt-fq2] = [filt-fq1] + [filt-stop]   ; Stop-band
+
+ [filt-pix1] = [filt-fq1] * [nx]         ; Pass-band
+ [filt-pix1]
+ [filt-pix2] = [filt-fq2] * [nx]         ; Stop-band
+ [filt-pix2]
+
+ [filt-ang1] = [filt-pix1] / [sp_pixsiz] ; Pass-band
+ [filt-ang1]
+ [filt-ang2] = [filt-pix2] / [sp_pixsiz] ; Stop-band
+ [filt-ang2]
 
  SYS
-   echo '  Low-pass filtration at {%f5.1%[filt-angstr]} Angstroms,  Spatial freq: {%f6.4%[filt-spfr]}'  
-
+   echo ' ' ; echo -n '  Low-pass filtration:' 
+ SYS
+   echo -n '  Angstroms:  {%f9.4%[filt-ang1]} ... {%f9.4%[filt-ang2]}'  
+ SYS
+   echo    '    Freq: {%f6.4%[filt-fq1]} ... {%f6.4%[filt-fq2]}'  
+ 
  ; Filter reference volume to limit resolution
- FQ                         ; Quick filter          
+ FQ NP                      ; Quick filter          
    [ref_vol_unfilt]         ; Initial unfiltered reference volume   (input)
    [ref_vol]                ; Filtered reference volume             (output)
    7                        ; Butterworth low pass filter
-   [filt-spfr],[stop-band]  ; Pass-band and stop-band spatial freq.
+   [filt-fq1],[filt-fq2]    ; Pass-band and stop-band spatial freq.
 
  SYS
    echo '  Created Low-passed reference: [ref_vol]  From: [ref_vol_unfilt]'
 
- FI H [nx]                  ; Query row length value (images/volumes must be square)
-   [ref_vol_unfilt]         ; Initial unfiltered reference volume        (input)
-   NX                       ; X dimension wanted (cubic)
+ FS [max],[min]             ; Query row length value (images/volumes must be square)
+   [ref_vol]                ; Filtered reference volume    (input)
+ SYS
+   echo '  Output range : {%f9.4%[min]} ... {%f9.4%[max]}'  
 
- ; Echo to results file    
- [pixsiz]
- [filt-pix] = [filt-spr] * [nx]  ; Pass-band
- [filt-pix]
- 
+
  EN
  ; </pre></body></html>

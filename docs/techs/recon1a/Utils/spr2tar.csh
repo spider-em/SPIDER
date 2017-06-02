@@ -1,6 +1,6 @@
 #!/bin/csh
 #
-# SOURCE: /usr8/spider/docs/techs/recon1a/Utils/spr2tar.csh
+# SOURCE: /usr16/software/spider/docs/techs/recon1a/Utils/spr2tar.csh
 #
 # PURPOSE: Puts batch files listed in: ../spider/docs/techs/recon1a/mr1.html
 #          into a zipped tar file:  spiproject.year.month.date.tar.gz
@@ -15,8 +15,9 @@
 #            AL Aug-05-14  Altered for no defocus groups
 #            AL Apr-25-16  Removed refine.html 
 #            AL Dec-28-16  Save uncompressed for use in git
+#            AL May-30-17  usr16
 
-setenv ROOTDIR /usr8/spider/docs/techs/recon1a
+setenv ROOTDIR /usr16/software/spider/docs/techs/recon1a
 setenv DOCSDIR $ROOTDIR/Docs
 setenv PROJDIR myproject
 
@@ -41,7 +42,7 @@ cp -vu $DOCSDIR/mr1.html      $PROJDIR/Docs
 cp -vu $DOCSDIR/mrstyle2.css  $PROJDIR/Docs
 
 echo ; echo " Run SPIDER session and write version to info file -------- "
-# Create file "info". "info" contains infomation about the spider executable  
+# Create file "info". "info" contains infomation about the SPIDER executable  
 #    and the zipped file that is created by this script 
 echo " Zipped Batch File Info.  : " >  $PROJDIR/Docs/info
 echo " " >> $PROJDIR/Docs/info
@@ -56,16 +57,19 @@ spider zyx/cba en >>  $PROJDIR/Docs/info
 # Remove unnecessary files created by SPIDER 
 \rm -f LOG.zyx  results.zyx.*
 
-echo ; echo " Tar and zip file to desired location ---------------------"
-tar  cvf "spiproject.`date +%y%m%d`.tar"  myproject
-gzip -cf "spiproject.`date +%y%m%d`.tar" > "spiproject.`date +%y%m%d`.tar.gz"
+echo ; echo " Tar files to desired location ---------------------"
+tar  cvf $ROOTDIR/"spiproject.`date +%y%m%d`.tar"  myproject
+
+echo ; echo " Zip file to desired location ---------------------"
+gzip -cf $ROOTDIR/"spiproject.`date +%y%m%d`.tar" > $ROOTDIR/"spiproject.`date +%y%m%d`.tar.gz"
 
 # Delete the temp. dir "myproject"
 \rm -rf $PROJDIR
 
 # Link the zipped file for access from the WEB page
-\rm  $ROOTDIR/spiproject.tar.gz
+\rm     $ROOTDIR/spiproject.tar.gz
 ln -s  "$ROOTDIR/spiproject.`date +%y%m%d`.tar.gz" $ROOTDIR/spiproject.tar.gz
+ln -s  "$ROOTDIR/spiproject.`date +%y%m%d`.tar" $ROOTDIR/spiproject.tar
 
 echo ; echo " List final tar archive location -------------------------"
 ls -l "$ROOTDIR/spiproject.`date +%y%m%d`.tar.gz"

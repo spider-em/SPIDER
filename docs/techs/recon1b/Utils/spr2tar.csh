@@ -1,6 +1,6 @@
 #!/bin/csh
 #
-# SOURCE: /usr8/spider/docs/techs/recon1b/Utils/spr2tar.csh
+# SOURCE: /usr16/software/spider/docs/techs/recon1b/Utils/spr2tar.csh
 #
 # PURPOSE: Puts batch files listed in: ../spider/docs/techs/recon1b/mr1.html
 #          into a zipped tar file:  spiproject.year.month.date.tar.gz
@@ -16,7 +16,7 @@
 #            AL Apr-25-16  Removed refine.html 
 #            AL Dec-28-16  Save uncompressed for use in git
 
-setenv ROOTDIR /usr8/spider/docs/techs/recon1b
+setenv ROOTDIR /usr16/software/spider/docs/techs/recon1b
 setenv DOCSDIR $ROOTDIR/Docs
 setenv PROJDIR myproject
 
@@ -57,8 +57,8 @@ spider zyx/cba en >>  $PROJDIR/Docs/info
 \rm -f LOG.zyx  results.zyx.*
 
 echo ; echo " Tar and zip file to desired location ---------------------"
-tar cvf  "spiproject.`date +%y%m%d`.tar"  myproject
-gzip -cf "spiproject.`date +%y%m%d`.tar" > "spiproject.`date +%y%m%d`.tar.gz"
+tar cvf  $ROOTDIR/"spiproject.`date +%y%m%d`.tar"  myproject
+gzip -cf $ROOTDIR/"spiproject.`date +%y%m%d`.tar" > $ROOTDIR/"spiproject.`date +%y%m%d`.tar.gz"
 
 # Delete the temp. dir "myproject"
 \rm -rf $PROJDIR

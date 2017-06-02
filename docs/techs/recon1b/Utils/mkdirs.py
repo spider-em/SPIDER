@@ -14,7 +14,7 @@ import os,sys
 import shutil
 import read_spr_page
 
-SpiderBatchDir = "/usr8/spider/docs/techs/recon1b/Procs"
+SpiderBatchDir = "/usr16/software/spider/docs/techs/recon1b/Procs"
 
 topleveldir    = "_top_level_project"
 

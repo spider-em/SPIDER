@@ -8,7 +8,7 @@ import os,sys
 import shutil
 import read_spr_page
 
-SpiderBatchDir = "/usr8/spider/docs/techs/recon/newprogs"
+SpiderBatchDir = "/usr16/software/spider/docs/techs/recon/newprogs"
 
 topleveldir = "_top_level_project"
 
