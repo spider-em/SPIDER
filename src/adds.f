@@ -1,15 +1,15 @@
 C **********************************************************************
 C
-C ADDS.F                             USED FILELIST JULY 99 ARDEAN LEITH
-C                                    USED F90 JULY 99 ARDEAN LEITH
-C                                    SQRT(NEG) TRAP APR 00 ARDEAN LEITH
-C                                    ALLOC TRAP     APR 03 ARDEAN LEITH
-C
+C ADDS.F                      USED FILELIST    JULY 1999  ArDean Leith
+C                             USED F90 J       JULY 1999  ArDean Leith
+C                             SQRT(NEG) TRAP   APR  2000  ArDean Leith
+C                             ALLOC TRAP       APR  2003  ArDean Leith
+C                             REDVOL           MAY  2017  ArDean Leith
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Copyright 1985-2017  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -30,19 +30,31 @@ C
 C  PURPOSE:   CREATE AVERAGE AND VARIANCE FILES FROM A SET OF INPUT
 C             IMAGES/VOLUMES OR EVEN/ODD SUBSETS FROM THE FILES 
 C
+C             OBSOLETE OPERATION 'AS' GIVES DIFFERING RESULTS ON
+C             MODERN XEONS DUE TO SUMMATION OF VALUES NEAR ZERO
+C             IN DIFFERING PRECISIONS.  al may 2017
 C--*********************************************************************
 
       SUBROUTINE ADDS(LUNA,LUNIN,LUNV,NDOC,IDUM)
 
+      IMPLICIT NONE
 
       INCLUDE 'CMBLOCK.INC'
       INCLUDE 'CMLIMIT.INC'
 
+      INTEGER                :: LUNA,LUNIN,LUNV,NDOC,IDUM
       CHARACTER (LEN=MAXNAM) :: FILNAM,FILA,FILV,FILPAT
 
       DOUBLE PRECISION       :: VARAV, AV2, VV
       CHARACTER (LEN=1)      :: SER
       CHARACTER (LEN=1)      :: NULL   = CHAR(0)
+
+      INTEGER                :: NILMAX,MAXIM,NLETP,NX,NY,NZ,NDUM,NUMT
+      INTEGER                :: IMGNUM,IRTFLG,NVOX3,NUMC,LUP,NLETA
+      INTEGER                :: ILUP,NLETV,NSEL_USED,NE,NUMPR,NOT_USED
+      REAL                   :: OFFOLD,FDUM,AV1,OFF,FNUMT,VAV,SAV,SAVT
+      INTEGER                :: NUMA,NMT,IFIL,I
+
       INTEGER,PARAMETER      :: LUNXM  = 0  ! SELFILE NOT ALLOWED
       LOGICAL,PARAMETER      :: FOUROK = .TRUE.
 
@@ -217,14 +229,12 @@ C              TO ALLOW GAPS IN FILE SERIES 7/21/89 MR.:
 
             NUMA = NUMA + 1
  
-            DO I=1,NY*NZ
-               CALL  REDLIN(LUNIN,BUFIN((I-1)*NX+1),NX,I)
-               CONTINUE
-            ENDDO
+            CALL  REDVOL(LUNIN,NX,NY,1,NZ,BUFIN,IRTFLG)
 
 	    AV2 = SUM(BUFIN) / NVOX
+
             IF (FCHAR(4:4) .NE. 'R')  THEN
-	        BUFIN = BUFIN - AV2
+	       BUFIN = BUFIN - AV2
 	    ENDIF
 
             AVGARAY = AVGARAY + BUFIN
@@ -249,7 +259,7 @@ C        NOW COMPUTE NORMALIZED AVERAGE AND VARIANCE IMAGE
          OFF     = AV1 / FLOAT(NUMA)
 
          CALL WRTVOL(LUNA,NX,NY, 1,NZ, AVGARAY,IRTFLG)
-
+         
          CALL WRTVOL(LUNV,NX,NY, 1,NZ, VARARAY,IRTFLG)
 
          IF (VARAV < 0.0) THEN

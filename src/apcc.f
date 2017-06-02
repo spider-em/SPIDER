@@ -194,17 +194,28 @@ C          BINARY INTERPOLATION TO FIND SUB-PIXEL PEAK
 C          X, Y & Z SUB-PIXEL SHIFT
            RX = 0
            IF (ISHRANGEX > 0) THEN 
-             CALL PKSR3_SUB(QMAX,BUFI(IX-1,IY,IZ),BUFI(IX+1,IY,IZ),1,RX)
+              CALL PKSR3_SUB
+     &             (QMAX,BUFI(IX-1,IY,IZ),BUFI(IX+1,IY,IZ),1.0,RX)
            ENDIF
            RY = 0
            IF (ISHRANGEY > 0) THEN 
-             CALL PKSR3_SUB(QMAX,BUFI(IX,IY-1,IZ),BUFI(IX,IY+1,IZ),1,RY)
+              CALL PKSR3_SUB
+     &             (QMAX,BUFI(IX,IY-1,IZ),BUFI(IX,IY+1,IZ),1.0,RY)
            ENDIF
-           CALL PKSR3_SUB  (QMAX,BUFI(IX,IY,IZ-1),BUFI(IX,IY,IZ+1),1,RZ)
+           CALL PKSR3_SUB
+     &             (QMAX,BUFI(IX,IY,IZ-1),BUFI(IX,IY,IZ+1),1.0,RZ)
           
            XSHNEW  = IXSH - RX 
            YSHNEW  = IYSH - RY
            ZSHNEW  = IZSH - RZ
+
+           !write(6,*) ' '
+           !write(6,*) ' qmax,peakv:',  qmax,peakv 
+           !write(6,*) ' 3d buf: -1',   bufi(ix-1,iy,iz) 
+           !write(6,*) ' 3d buf:  0',   bufi(ix,  iy,iz) 
+           !write(6,*) ' 3d buf: +1',   bufi(ix+1,iy,iz) 
+           !write(6,*) ' Rx,ry,rz:    ',rx,ry,rz
+           !write(6,*) ' Shifts:      ',ixsh,iysh,izsh, xshnew,yshnew,zshnew
 
         ELSEIF (ISHRANGEX > 0 .AND. ISHRANGEY > 0) THEN !--- IMAGE
 
@@ -230,12 +241,6 @@ C          2D PARABOLIC FIT TO 3X3 NEIGHBORHOOD OF PEAK
            YSHNEW = IYSH - RY
            ZSHNEW = 0.0
 
-           !write(6,*) ' '
-           !write(6,*) ' 2d buf,peak: ',bufi(ix,iy,iz),peakv
-           !write(6,*) ' Shifts:      ',ixsh,iysh, xshnew,yshnew
-           !write(6,*) ' Shifts:      ',ixsh,iysh, rx,ry
-           !write(6,"('  z:',1p3g12.4)") z 
-
         ELSEIF (ISHRANGEX > 0) THEN ! -------------------------- ROW
 
            IF (IX <= 1 .OR. IX >= NX) RETURN
@@ -244,7 +249,7 @@ C          2D PARABOLIC FIT TO 3X3 NEIGHBORHOOD OF PEAK
 
 C          BINARY INTERPOLATION TO FIND SUB-PIXEL PEAK
            QMAX = BUFI(IX,IY,IZ)         ! CENTRAL ELEMENT
-           CALL PKSR3_SUB(QMAX,BUFI(IX-1,IY,IZ),BUFI(IX+1,IY,IZ),1,RX)
+           CALL PKSR3_SUB(QMAX,BUFI(IX-1,IY,IZ),BUFI(IX+1,IY,IZ),1.0,RX)
 
            XSHNEW = IXSH - RX 
            YSHNEW = 0.0
@@ -258,7 +263,7 @@ C          BINARY INTERPOLATION TO FIND SUB-PIXEL PEAK
 
 C          BINARY INTERPOLATION TO FIND SUB-PIXEL PEAK
            QMAX = BUFI(IX,IY,IZ)         ! CENTRAL ELEMENT
-           CALL PKSR3_SUB(QMAX,BUFI(IX,IY-1,IZ),BUFI(IX,IY+1,IZ),1,RY)
+           CALL PKSR3_SUB(QMAX,BUFI(IX,IY-1,IZ),BUFI(IX,IY+1,IZ),1.0,RY)
 
            XSHNEW = 0.0 
            YSHNEW = IYSH - RY
@@ -397,13 +402,16 @@ C          BINARY INTERPOLATION TO FIND SUB-PIXEL PEAK
 C          X, Y & Z SUB-PIXEL SHIFT
            RX = 0
            IF (ISHRANGEX > 0) THEN 
-             CALL PKSR3_SUB(QMAX,BUFI(IX-1,IY,IZ),BUFI(IX+1,IY,IZ),1,RX)
+              CALL PKSR3_SUB
+     &           (QMAX,BUFI(IX-1,IY,IZ),BUFI(IX+1,IY,IZ),1.0,RX)
            ENDIF
            RY = 0
            IF (ISHRANGEY > 0) THEN 
-             CALL PKSR3_SUB(QMAX,BUFI(IX,IY-1,IZ),BUFI(IX,IY+1,IZ),1,RY)
+              CALL PKSR3_SUB
+     &           (QMAX,BUFI(IX,IY-1,IZ),BUFI(IX,IY+1,IZ),1.0,RY)
            ENDIF
-           CALL PKSR3_SUB  (QMAX,BUFI(IX,IY,IZ-1),BUFI(IX,IY,IZ+1),1,RZ)
+           CALL PKSR3_SUB
+     &           (QMAX,BUFI(IX,IY,IZ-1),BUFI(IX,IY,IZ+1),1.0,RZ)
           
            XSHNEW  = IXSH - RX 
            YSHNEW  = IYSH - RY
@@ -448,7 +456,8 @@ C          2D PARABOLIC FIT TO 3X3 NEIGHBORHOOD OF PEAK
 
 C          BINARY INTERPOLATION TO FIND SUB-PIXEL PEAK
            QMAX = BUFI(IX,IY,IZ)         ! CENTRAL ELEMENT
-           CALL PKSR3_SUB(QMAX,BUFI(IX-1,IY,IZ),BUFI(IX+1,IY,IZ),1,RX)
+           CALL PKSR3_SUB
+     &        (QMAX,BUFI(IX-1,IY,IZ),BUFI(IX+1,IY,IZ),1.0,RX)
 
            XSHNEW = IXSH - RX 
            YSHNEW = 0.0
@@ -462,7 +471,8 @@ C          BINARY INTERPOLATION TO FIND SUB-PIXEL PEAK
 
 C          BINARY INTERPOLATION TO FIND SUB-PIXEL PEAK
            QMAX = BUFI(IX,IY,IZ)         ! CENTRAL ELEMENT
-           CALL PKSR3_SUB(QMAX,BUFI(IX,IY-1,IZ),BUFI(IX,IY+1,IZ),1,RY)
+           CALL PKSR3_SUB
+     &        (QMAX,BUFI(IX,IY-1,IZ),BUFI(IX,IY+1,IZ),1.0,RY)
 
            XSHNEW = 0.0 
            YSHNEW = IYSH - RY

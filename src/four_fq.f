@@ -7,12 +7,13 @@ C             FQ Q PARAMS                          OCT 12 ARDEAN LEITH
 C             RAISED SINC                          OCT 13 ARDEAN LEITH    
 C             CREATED FROM FOUR1A                  NOV 14 ARDEAN LEITH    
 C             VOLUME IOPT 12 & 13 TRAP for ifort   JUN 15 ARDEAN LEITH    
+C             VOLUME FILTER BUG                    MAY 17 ARDEAN LEITH    
 C       
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2015  Health Research Inc.,                         *
+C=* Copyright 1985-2017  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -792,12 +793,13 @@ C                PARM2 BUG                      DEC 2012 ARDEAN LEITH
 C                FREQ UNIT CUTOFF = 1           AUG 2013 ARDEAN LEITH 
 C                RAISED SINC                    FEB 2014 ARDEAN LEITH 
 C                FROM FQ_Q                      NOV 2014 ARDEAN LEITH 
+C                VOLUME Z1 FILTER BUG           MAY 2017 ARDEAN LEITH    
 C        
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2014, Health Research Inc.,                         *
+C=* Copyright 1985-2017, Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -859,7 +861,7 @@ C--*******************************************************************
 
         X1      = FLOAT(N2X/2)**2
         Y1      = FLOAT(NR2)  **2
-        Y1      = FLOAT(NL2)  **2
+        Z1      = FLOAT(NL2)  **2
 
         ORD     = PARM3
         PARM1SQ = PARM1**2

@@ -1,6 +1,7 @@
 C++*********************************************************************
 C
 C PKSR3.F
+C           SGN BUG IF FED WITH INTEGER FIXED     MAY 2017 ARDEAN LEITH
 C
 C **********************************************************************
 C=*                                                                    *
@@ -24,6 +25,8 @@ C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
 C **********************************************************************
 C
+C  PKSR3(LUN,Q,NSAM,NROW,NSLICE,
+C        NSA1,NSA2,NRO1,NRO2,NSL1,NSL2,SGN,PEAK,NPC,RPC,ML,NMAX)
 C
 C
 C23456789012345678901234567890123456789012345678901234567890123456789012
@@ -88,7 +91,7 @@ C                 IXP=MOD(I+NSAM,NSAM)+1
                   DO    JZ=-1,1
                      DO    JY=-1,1
                         DO    JX=-1,1
-                           IF(QC.LT.Q(LX(JX),LY(JY),LZ(JZ)))  T=.FALSE.
+                           IF(QC < Q(LX(JX),LY(JY),LZ(JZ)))  T=.FALSE.
 	                ENDDO	 
 	             ENDDO	 
 	          ENDDO
@@ -107,7 +110,7 @@ C                       get floating point shifts
 501                     CONTINUE
                      ELSE
                      DO    N=NMAX,1,-1
-                        IF(QC.LT.PEAK(N)) THEN
+                        IF(QC < PEAK(N)) THEN
                            NN=N+1
                            GOTO  22
                         ENDIF
@@ -115,7 +118,7 @@ C                       get floating point shifts
                      NN=1
 22                   CONTINUE
 C                    no place for more peaks
-                     IF(NN.GT.ML)  GOTO 1
+                     IF(NN > ML)  GOTO 1
                      DO    M=MIN0(NMAX+1,ML),NN+1,-1
                         PEAK(M)=PEAK(M-1)
                         DO  MM=1,3
@@ -174,40 +177,56 @@ C    Z shift
 
          END
 
+
 C23456789012345678901234567890123456789012345678901234567890123456789012
 C--*********************************************************************
+C
+C SGN BUG IF  INTEGER FIXED FOR IFORT             MAY 2017 ARDEAN LEITH
 C Returns R, the subpixel amount of shift for the 3 values: QA,QMAX,QC
 
         SUBROUTINE  PKSR3_SUB(QMAX,QA,QC,SGN,R)
 
-         IF (SGN.GT.0) THEN
-            IF(QA.LT.QC) THEN
+        IMPLICIT NONE
+
+        REAL :: QMAX,QA,QC,SGN,R
+        REAL :: QMIN,QMID,QF,QM
+
+         IF (SGN >= 0) THEN
+C           WANT MAXIMUM
+            IF (QA < QC) THEN
                QMIN = QA
                QMID = QC
-               QF = 0.5
+               QF   = 0.5
             ELSE
                QMIN = QC
                QMID = QA
-               QF = -0.5
-            ENDIF
-         ENDIF
-         IF (SGN.LT.0) THEN 
-            IF(QA.GT.QC) THEN
-               QMIN = QA
-               QMID = QC
-               QF = 0.5
-            ELSE
-               QMIN = QC
-               QMID = QA
-               QF = -0.5
+               QF   = -0.5
             ENDIF
          ENDIF
 
-         IF ((QMAX - QMIN).NE.0) THEN
+         IF (SGN < 0) THEN 
+C           WANT MINIMUM
+            IF(QA > QC) THEN
+               QMIN = QA
+               QMID = QC
+               QF   = 0.5
+            ELSE
+               QMIN = QC
+               QMID = QA
+               QF   = -0.5
+            ENDIF
+         ENDIF
+
+         IF ( (QMAX - QMIN) .NE. 0) THEN
             QM = QF / (QMAX - QMIN)
-            R = QM * (QMID - QMIN)
+            R  = QM * (QMID - QMIN)
          ENDIF
 
-         RETURN
+         !write(6,*) ' sgn:',  sgn 
+         !write(6,*) ' qmax,qa,qc:',  qmax,qa,qc 
+         !write(6,*) ' qmin,qmid,qf:',qmin,qmid,qf 
+         !write(6,*) ' qmax - qmin:', qmax - qmin
+         !write(6,*) ' qm,r:', qm,r
 
          END
+
