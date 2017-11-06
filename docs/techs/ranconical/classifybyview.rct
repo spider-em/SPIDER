@@ -5,7 +5,7 @@
 ; ------------------------------- Parameters -------------------------------
 [multirefIterNum] = -1   ; iteration of multireference alignment to use as input (<0 == last)
 [verified-yn]     = 0    ; use verified particles? (0==No, 1==Yes)
-[first-view]      = 1    ; first reference-view
+[firstView]       = 1    ; first reference-view
 [last-view]       = -1   ; last reference-view (<1 == all)
 [ca-pca]          = 1    ; correspondence analysis (1), PCA (2), IPCA (3)
 [parts-per-class] = 50   ; particle-to-class ratio
@@ -230,11 +230,11 @@ set mp
 ;;;endif
 
 
-IF ([first-view] .EQ. 1) THEN
+IF ([firstView] .EQ. 1) THEN
     [globClass] = 1
 ELSE
     ; Get previous view#
-    [prevView] = [first-view] - 1
+    [prevView] = [firstView] - 1
 
     ; Get last key from previous view
     UD N [num-classes]
@@ -261,7 +261,7 @@ de a
 
 
 ; loop through reference views
-do lb1 [view-key] = [first-view],[last-view]
+do lb1 [view-key] = [firstView],[last-view]
     ; get reference-view#
     ud ic [view-key], [viewNum]
     [ref_view_list]
@@ -530,7 +530,6 @@ do lb1 [view-key] = [first-view],[last-view]
         ; loop through particles
         do lb6 [part-key6] = 1,[class-parts]
             ; read view-slice#, other parameters, from selection file
-;            ud ic [part-key6], [view-slice],[global-part],[grp-slice],[ccrot],[mirror],[group-num],[viewNum]
             ud ic [part-key6], [view-slice],[ccrot],[mirror]
             [temp_class_doc_noccc][viewClass]
 
@@ -544,7 +543,7 @@ do lb1 [view-key] = [first-view],[last-view]
 
             ; write to doc
             sd [part-key6], [view-slice],[view-slice],[ccc],[ccrot],[mirror],[viewNum],[view-slice]
-            [view_class_doc][globClass]  ; WAS [class_doc][globClass]
+            [view_class_doc][globClass]
         lb6
         ; end particle-loop
 
@@ -591,7 +590,6 @@ do lb1 [view-key] = [first-view],[last-view]
             [temp_exp_avg]       ; INPUT: expanded class-average
             [temp_labeled_avg1]  ; OUTPUT: expanded, average labeled with view#
             Iter {***[iter]}
-            ;Class {***[globClass]}
 
             ; label with class#
             la 
@@ -617,14 +615,12 @@ do lb1 [view-key] = [first-view],[last-view]
             [temp_exp_avg]       ; INPUT: expanded class-average
             [temp_labeled_avg1]  ; OUTPUT: expanded, average labeled with view#
             Iter {***[iter]}
-            ;Class {***[globClass]}
 
             ; label with class#
             la b
             [temp_labeled_avg1]   ; INPUT: expanded, average labeled with view#
             [temp_labeled_avg2]   ; OUTPUT: expanded, average labeled with class#, size
             Class {***[globClass]}
-            ;n={***[classParts]}
 
             ; label with #particles
             la 
@@ -667,6 +663,17 @@ do lb1 [view-key] = [first-view],[last-view]
         ; write CCC and variance-SD to doc file
         sd [viewClass], [globClass],[ccc-avg],[var-sd],[viewNum]
         [view_stats_toplevel][viewNum]_unsort
+        
+        VM
+        cp -f [view_class_doc][globClass].$DATEXT [untilted_dir]/[multiref_dir]/[class_doc][globClass].$DATEXT
+        
+;        IQ SYNC [wait]
+;        [view_stats_toplevel][viewNum]
+;        (1,-3)   ; delay interval, maximum wait (<0 == continue)
+;        ; (Diagnostic -- I sometimes get 'cannot stat' errors when copying listclasses in the next step.)
+;        
+;        VM
+;        cp -fa [view_stats_toplevel][viewNum].$DATEXT [view_stats_copy].$DATEXT
 
         ; clean up intermediate doc files
         de
@@ -696,6 +703,15 @@ do lb1 [view-key] = [first-view],[last-view]
     [view_stats_toplevel][viewNum]
     de
     [view_stats_toplevel][viewNum]_unsort
+    
+    VM
+    cp -fa [view_stats_toplevel][viewNum].$DATEXT [view_stats_copy].$DATEXT
+
+    ; link MULTIREF_DIR to a non-varying name (for SPIRE)
+    IF ([viewNum] .EQ. [firstView]) THEN
+        VM
+        cd [untilted_dir] && rm -f [last_dir] && ln -svf [multiref_dir] [last_dir] && echo
+    ENDIF
 
     ; remove class-map
     vm
@@ -714,50 +730,6 @@ do lb1 [view-key] = [first-view],[last-view]
     [summary_doc]
 lb1
 ; end view-loop
-
-
-VM
-echo "Cleaning up" ; date
-
-; Loop through views
-DO LB71 [viewNum] = 1,[last-view]
-    ; Get #classes 
-    UD N [num-classes]
-    [view_stats_toplevel][viewNum]  ; WAS _unsort
-    
-    ; Loop through classes
-    DO LB72 [viewClass] = 1,[num-classes]
-        ; Get class#
-        UD IC [viewClass], [globClass]
-        [view_stats_toplevel][viewNum]  ; WAS _unsort
-        
-        IF ([saveViewAvgs] .GE. 0.5) THEN
-            VM
-            cp -f [view_class_doc][globClass].$DATEXT [untilted_dir]/[multiref_dir]/[class_doc][globClass].$DATEXT
-            VM
-            cp -fa [view_stats_toplevel][viewNum].$DATEXT [view_stats_copy].$DATEXT
-        ELSE
-            VM
-            mv -f [view_class_doc][globClass].$DATEXT [untilted_dir]/[multiref_dir]/[class_doc][globClass].$DATEXT
-            
-            DE
-            [view_class_avg][globClass]
-        ENDIF
-    LB72
-    ; End class-loop
-    
-    ; Clean up
-    IF ([saveViewAvgs] .LT. 0.5) THEN
-        VM
-        rmdir [view_dir]
-    ENDIF
-    
-    UD ICE
-    [view_stats_toplevel][viewNum]  ; WAS _unsort
-;    DE
-;    [view_stats_toplevel][viewNum]_unsort
-LB71
-; End view-loop
 
 DE
 [combined_class_stats]
@@ -792,27 +764,27 @@ ud ice
 sd e
 [summary_doc]
 
-; link MULTIREF_DIR to a non-varying name (for SPIRE)
-VM
-cd [untilted_dir] && rm -f [last_dir] && ln -svf [multiref_dir] [last_dir]
+;; link MULTIREF_DIR to a non-varying name (for SPIRE)
+;VM
+;cd [untilted_dir] && rm -f [last_dir] && ln -svf [multiref_dir] [last_dir]
 
 vm
 echo ; echo "Done -- classified {%i0%[totalParticles]} particles"; date; echo 
 
-en 
+EN D
 
-; Modified 2015-08-13
+; Modified 2015-10-05
 ;    TO DO: extract MSA
 ;    TO DO: write separate subdirectory for all outputs
 ;    TO DO: label averages in separate loop, while automatically setting LABELDIM
 ;    2015-08-05 (trs) -- gets image dimension from input images rather than PARAMS
-;    2015-03-25 (trs) -- writes all views' classes to to Multiref# rather than broken up into Multiref#/View***
+;    2015-03-25 (trs) -- writes copies of all views' classes to to Multiref# rather than broken up into Multiref#/View***
 ;    2014-03-08 (trs) -- using stacked images 
 ;    2014-03-06 (trs) -- added parameter to choose between K-means and clustering directories
-;    2014-03-04 (trs) -- added flag to use verified images
+;    2014-03-04 (trs) -- added option to use verified images
 ;    2014-03-04 (trs) -- looks for last iteration
 ;    2014-02-04 (trs) -- checks references for downsampling, in case images were shrunk before alignment
-;    2012-03-01 (trs) -- added #classes and Davies-Bouldin# to summary doc
+;    2012-03-01 (trs) -- added number of classes and Davies-Bouldin number to summary doc
 ;    2012-02-29 (trs) -- K-means uses same factors as CA/PCA (had been hard-wired to 9)
 ;    2009-07-13 (trs) -- added summary-file output
 ;    2009-07-03 (trs) -- prints maximum class size to screen
@@ -823,13 +795,11 @@ en
 ;    2009-05-26 (trs) -- number of eigenvalues now user-defined
 ;    2009-05-22 (trs) -- uses selection doc in CA S instead of first N particles
 ;    2008-11-12 (trs) -- now a parameter to specify CA, PCA, or IPCA
-;    2007-11-27 (trs) -- calculates averaged CCC instead of CCC of class-average
+;    2007-11-27 (trs) -- calculates average CCC of particles instead of CCC of class-average against reference
 ;    2007-11-27 (trs) -- can force poorly-populated views into two classes
 ;    2007-10-11 (trs) -- last reference-view now an input parameter
 ;    2007-10-01 (trs) -- defocus-group list now optional
 ;    2007-09-06 (trs) -- input particles are now in stacks
-;    2007-09-06 (trs) -- uses iterative PCA instead of CorAn
-;    2006-08-29 (trs) -- gets last defocus-group number automatically
 ;    2006-07-27 (trs) -- bug fix in reference-projection file-pattern
 ;    2006-04-05 (trs) -- uses last defocus group projections for CCC
 ;    2006-02-06 (trs & pp) -- updated for changes in projection-matching
@@ -837,10 +807,9 @@ en
 ;    2005-01-27 (trs & gra) -- deals with variances of single-image classes
 ;    2005-01-24 (trs & js) -- bug fix in loop that checks for low intensities
 ;    2004-12-22 (trs) -- checks for images with low intensities
-;    2004-12-22 (trs & jl) -- prints standard deviation of the class-variance to stats document
+;    2004-12-22 (trs & jsl) -- prints standard deviation of the class-variance to stats document
 ;    2004-12-22 (trs) -- first reference-view is a parameter, in case you need to resume
 ;    2004-05-11 (trs) -- handles poorly-populated classes differently
 ;    2004-05-04 (trs) -- adds option to save/delete variance
 ;    2004-04-22 (trs) -- sorts individual images by CCC (worst to best)
-;    2004-04-16 (trs) -- uses CorAn instead of PCA
 ;    2004-04-14 (trs) -- deletes unused 'CA S' output (all except _IMC)
