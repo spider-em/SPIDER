@@ -1,0 +1,668 @@
+head	1.11;
+access;
+symbols
+	GPL_update:1.11
+	pre_rewrite_2010:1.10
+	pre_more_stack:1.8
+	best-code:1.7
+	no-named-regs:1.7
+	pre_GPL:1.7
+	tag_version1_0:1.7;
+locks; strict;
+comment	@:: @;
+
+
+1.11
+date	2010.01.19.18.52.00;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2007.01.18.16.09.01;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2007.01.17.16.35.42;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2006.12.18.15.34.28;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2005.04.01.21.05.32;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2004.08.06.19.35.08;	author bbaxter;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2004.08.06.19.00.34;	author bbaxter;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2004.05.25.19.09.32;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2004.04.20.16.33.08;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2004.04.20.14.09.22;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2003.07.24.18.10.54;	author bbaxter;	state Exp;
+branches;
+next	;
+
+
+desc
+@spider batch file
+@
+
+
+1.11
+log
+@simplify-rewrite
+@
+text
+@; <html><head><title>Creates histogram of CC values</title></head><body><pre>
+;
+; SOURCE: spider/docs/techs/recon/newprogs/cchistogram.spi
+;
+; PURPOSE: For each defocus group:
+;             Creates a histogram showing number of
+;             particles vs. cross correlation value. 
+;          Creates additional histogram of all combined defocus groups. 
+;          Optionally creates gnuplot commands for plotting
+;             the combined overall histogram and displays plot.
+;          All histograms have 128 bins.
+;
+;          To view individual defocus group plots use:  plotviews.bat
+;
+;
+; I/O PARAMETERS AND FILES ARE SET HERE:
+;
+;<b>------------ Edit next  Input parameter ------------------------------ 
+
+[doplot] = 1             ; If >0 create plot scripts and display overall histogram  
+
+;------------ Input files ----------------------------------------
+
+[defgrps]          = '../Alignment/sel_group'    ; List of defocus groups (selection   file)
+
+[docalign]         = '../Alignment/align_01_***' ; Alignment files from 'AP SH'
+
+[doccombine]       = 'align_01_all'              ; Combined output from 'AP SH' 
+
+; --------------- Output files  -------------------------------------
+
+[histdir]          = 'hist'
+
+[cchist]           = '[histdir]/cchist{***[grp]}'                   ; Group histogram doc files
+
+[cchistall]        = '[histdir]/cchist_all'                         ; Overall histogram doc file
+
+[gnuplot_commands] = '[histdir]/gnuplot_cchist_{***[grp]}.$DATEXT'   ; Gnuplot script files (one / group)
+
+[gnuplot_command]  = '[histdir]/gnuplot_cchist_all.$DATEXT'         ; Gnuplot script file (overall)
+
+; -------------- END BATCH HEADER ---------------------------------- </b>
+
+
+VM                          ; Make directory for histograms
+mkdir -p [histdir]
+
+DO                          ; Loop over all defocus group(s) ---------------------------
+
+   UD NEXT [key],[grp]      ; Get group from group sel. file
+   [defgrps]                ; Group selection doc file     (input)
+   IF ([key] .LE. 0) EXIT   ; End of groups in doc file
+
+   DE                       ; Delete any existing histogram doc file
+   [cchist]{***[grp]}
+
+   ; PHI,THE,PSI, MIR-REF#,IMG#,INPLANE, SX,SY,NPROJ, DIFF,CCROT,INPLANE,SX,SY
+
+   HD D                     ; Create histogram doc file
+   [docalign][grp]          ; Doc file                             (input)
+   (11)                     ; Column to plot ('AP SH' specific)
+   (128)                    ; Number of bins
+   [cchist][grp]            ; Histogram Doc. file                  (output)
+
+   IF ([doplot] .GT. 0) THEN
+      ; Create gnuplot command file
+      VM                   ; Delete any existing script file first
+      \rm -f [gnuplot_commands]
+ 
+      VM 
+      echo ' 'set ylabel \"# Particles\" >> [gnuplot_commands]
+      VM 
+      echo ' 'set xlabel \"cross correlation value\" >> [gnuplot_commands]
+      VM 
+      echo ' 'set title \"Histogram group: {***[grp]} \" >> [gnuplot_commands]
+      VM               
+      echo ' 'plot \'[cchist].$DATEXT\' using 3:4 notitle  with boxes >> [gnuplot_commands]
+
+      ; VM               ; UNCOMMENT TO DISPLAY PLOT                       
+      ;gnuplot -persist [gnuplot_commands] &
+
+      VM                                  
+      echo ' 'View group correlation histogram using:  gnuplot -persist [gnuplot_commands]
+   ENDIF
+
+ENDDO
+
+DE                  ; Delete any existing combined histogram doc file
+[cchistall]
+
+HD D                ; Create the combined histogram doc file
+[doccombine]        ; Combined alignment parameter file     (input)
+(11)                ; Column to plot ('AP SH' specific)
+(128)               ; Number of bins
+[cchistall]         ; Doc file                             (output)
+
+IF ([doplot] .GT. 0) THEN
+   ; Create gnuplot script file
+   VM               ; Delete any existing file first
+   \rm -f [gnuplot_command]
+ 
+   VM 
+   echo set ylabel \"# Particles\" >> [gnuplot_command]
+   VM 
+   echo set xlabel \"cross correlation value\" >> [gnuplot_command]
+   VM 
+   echo set title \"Histogram of all groups\" >> [gnuplot_command]
+   VM               ; Gnuplot graph
+   echo plot \'[cchistall].$DATEXT\' using 3:4 notitle  with boxes >> [gnuplot_command]
+
+   VM
+   echo  ' ' ; echo  ' 'Displaying overall histogram doc file: [cchistall].$DATEXT ; echo  ' '     
+
+   VM               ; Display plot                       
+   gnuplot -persist [gnuplot_command] &
+
+   VM                                      
+   echo ' ' 
+
+ENDIF
+
+EN
+ 
+; </body></pre></html>
+
+
+@
+
+
+1.10
+log
+@number of bins in hd
+@
+text
+@d3 1
+a3 1
+; SOURCE: cchistogram.spi
+d6 1
+a6 1
+;          Creates a histogram showing number of
+a14 1
+; MASTER COPY: /net/bali/usr1/spider/docs/techs/recon/newprogs/
+d20 1
+a20 1
+[doplot] = 1             ; If >0 create pllt commands and plot histogram  
+d24 1
+a24 2
+FR G                                     
+[defgrps]sel_group                   ; List of groups (group selection doc file)
+d26 1
+a26 2
+FR G
+[docalign]../Alignment/align_01_***    ; Alignment files from 'AP SH'
+d28 1
+a28 2
+FR G
+[doccombine]align_01_all               ; Combined output from 'AP SH' 
+d32 1
+a32 2
+FR G
+[cchist]hist/cchist***         ; Output histogram doc files
+d34 1
+a34 2
+FR G
+[cchistall]hist/cchist_all     ; Overall histogram doc file
+d36 1
+a36 2
+FR G
+[gnuplot_commands]plot_hist    ; Text file of gnuplot commands
+d38 4
+a43 2
+UD N [numgrps]              ; Get number of groups 
+[defgrps]                   ; Group selection doc file      (input)
+d46 1
+a46 1
+mkdir -p hist
+d48 1
+a48 1
+DO LB1 [numgrp]=1,[numgrps] ; Loop over all defocus group(s)
+d50 1
+a50 1
+   UD [numgrp],[grp]        ; Get current group number 
+d52 1
+d54 2
+a55 2
+   DE                       ; Delete any existing histogram
+   [cchist]
+d59 26
+a84 5
+   HD D             ; Create histogram
+   [docalign][grp]  ; Doc file                             (input)
+   (11)             ; Column to plot ('AP SH' specific)
+   (128)            ; Number of bins
+   [cchist][grp]    ; Histogram Doc. file                  (output)
+d86 1
+a86 3
+   VM
+   echo  ' 'Histogramed group: {****[grp]}    
+LB1
+d88 1
+a88 1
+DE                  ; Delete any existing combined histogram
+d91 1
+a91 1
+HD D                ; Create the combined histogram
+d98 1
+a98 1
+   ; Create gnuplot command file
+d100 1
+a100 1
+   \rm -f [gnuplot_commands].$DATEXT
+a101 2
+   VM               ; Gnuplot header
+   echo #!/bin/sh > [gnuplot_commands].$DATEXT
+d103 1
+a103 1
+   echo ' 'set ylabel \"# Particles\" >> [gnuplot_commands].$DATEXT
+d105 1
+a105 1
+   echo ' 'set xlabel \"cross correlation value\" >> [gnuplot_commands].$DATEXT
+d107 1
+a107 1
+   echo ' 'set title \"Histogram of all groups\" >> [gnuplot_commands].$DATEXT
+d109 1
+a109 1
+   echo ' 'plot \'[cchistall].$DATEXT\' using 3:4 notitle  with boxes >> [gnuplot_commands].$DATEXT
+d111 3
+d115 1
+a115 1
+   gnuplot -persist [gnuplot_commands].$DATEXT &
+a116 6
+   VM                                 
+   echo ' 'Overall Histogram Plotted with: gnuplot script --------
+   VM               ; Echo plot commands to terminal                        
+   cat [gnuplot_commands].$DATEXT 
+   VM                                      
+   echo ' '-----------------------
+d118 1
+a118 1
+   echo ' '
+d122 1
+a122 1
+EN D
+@
+
+
+1.9
+log
+@added stacks, named variables
+@
+text
+@d66 1
+d79 1
+@
+
+
+1.8
+log
+@bins needed
+@
+text
+@d5 6
+a10 3
+; PURPOSE: For each defocus group, creates a histogram showing number of
+;          particles vs. cross correlation value. 
+;          Also creates additional histogram of all combined defocus groups. 
+d13 1
+a13 2
+;          View output using gnuplot e.g.: 
+;          gnuplot> plot 'cchist001.hcc' using 3:4 with boxes
+d19 1
+a19 1
+; <b> ------------ Input files ----------------------------------------
+d21 6
+a26 2
+FR G
+[order]order_defocus                     ; List of defocus groups
+d29 1
+a29 1
+[docalign]../Alignment/align_01_***      ; Alignment files from 'AP SH'
+d32 1
+a32 1
+[doccombine]align_01_all                 ; Combined output from 'AP SH' 
+d37 4
+a40 1
+[cchist]hist/cchist***         ;  Output histogram doc files
+d43 1
+a43 1
+[cchistall]hist/cchist_all     ;  Overall histogram doc file
+d47 2
+a48 2
+UD N, x12                   ; Get number of defocus groups
+[order]
+d53 4
+a56 1
+DO LB1 x77=1,x12            ; Loop over all defocus groups
+d64 6
+a69 4
+   [docalign]x77    ; Input doc file
+   (11)             ; Column to plot (AP SH specific)
+   (128)            ; Number of bins
+   [cchist]x77      ; Output histogram files
+d76 33
+a108 4
+[doccombine]        ; Combined alignment parameter file
+(11)                ; Column to plot (AP SH specific)
+(128)               ; Number of bins
+[cchistall]         ; Output file
+@
+
+
+1.7
+log
+@*** empty log message ***
+@
+text
+@d54 1
+d64 1
+@
+
+
+1.6
+log
+@fixed a bug in the overall histogram
+@
+text
+@d23 1
+a23 1
+[docalign]../Alignment/align_01_{***x77} ; Alignment files from 'AP SH'
+d26 1
+a26 1
+[doccombine]../Alignment/align_01_all    ; Combined output from 'AP SH' 
+d29 1
+d31 1
+a31 1
+[cchist]hist/cchist{***x77}     ;  Output histogram doc files
+a37 1
+
+d52 1
+a52 1
+   [docalign]       ; Input doc file
+d54 1
+a54 1
+   [cchist]         ; Output histogram files
+a55 1
+
+@
+
+
+1.5
+log
+@fixed so it woul dlook for combined alignment in right place (../Alignment)
+@
+text
+@d59 1
+a59 1
+[cchist]
+d69 2
+@
+
+
+1.4
+log
+@ap sh
+@
+text
+@d3 1
+a3 1
+; SOURCE: cchistogram.bat 
+d26 1
+a26 1
+[doccombine]align_01_all                 ; Combined output from 'AP SH' 
+d30 1
+a30 1
+[cchist]hist/cchist                      ;  Output histogram doc file stem
+d32 3
+d47 1
+a47 1
+   [cchist]_{***x77}
+d51 4
+a54 4
+   HD D                      ; Create histogram
+   [docalign]                ; Input doc file
+   (11)                      ; Column to plot (AP SH specific)
+   [cchist]_{***x77}         ; Output histogram files
+d58 1
+a58 1
+DE                           ; Delete any existing combined histogram
+d61 4
+a64 4
+HD D                         ; Create the combined histogram
+[doccombine]                 ; Combined alignment parameter file
+(11)                         ; Column to plot (AP SH specific)
+[cchist]_all                 ; Output file
+d66 1
+a66 1
+EN
+a68 2
+
+
+@
+
+
+1.3
+log
+@*** empty log message ***
+@
+text
+@d1 1
+a1 1
+; <html><head><title>creates histogram</title></head><body><pre>
+d3 1
+a3 1
+; cchistogram.bat 
+d6 3
+a8 3
+;          particles vs. cross correlation value. Also creates an 
+;          additional histogram of all combined defocus groups. All 
+;          histograms have 128 bins.
+d10 1
+a10 1
+;          View output in gnuplot e.g.: 
+d20 1
+a20 1
+[order]order_defocus          ; List of defocus groups
+d23 1
+a23 1
+[docapsh]align_01_{***x77}    ; Combined alignment files from 'AP MQ'
+d26 1
+a26 1
+[df]df                        ; Directory template for input/output files
+a27 3
+FR G
+[combine]../Alignment/docapsh ; Combined output from 'AP SH'
+
+d30 1
+a30 1
+[cchist]hist/cchist           ;  Output histogram doc file
+d34 2
+a35 2
+; Get number of defocus groups
+UD N, x12
+d42 1
+d46 1
+a46 1
+   ; <,<,<, MIR-REF#,IMG#,INPLANE<, SX,SY,NPROJ, <DIF,CCROT,INPLANE<,SX,SY
+d48 3
+a50 3
+   HD D                     ; Create histogram
+   [df]/[docapsh]           ; Input doc file
+   (11)                      ; Column to plot
+d55 1
+a55 1
+DE                         ; Delete any existing  combined histogram
+d58 4
+a61 4
+HD D                       ; Create the combined histogram
+[combine]                  ; Combined alignment parameter file
+(11)                       ; Column to plot
+[cchist]                   ; Output file
+@
+
+
+1.2
+log
+@cosmetic
+@
+text
+@d1 1
+a1 1
+; <html><head><title>creates a histogram</title></head><body><pre>
+d5 1
+a5 1
+; PURPOSE: For each defocus group, creates a histogram showingnumber of
+d23 1
+a23 1
+[docapmq]docapmq              ; Combined alignment files from 'AP MQ'
+d29 1
+a29 1
+[combine]../Alignment/docapmq ; Combined output from 'AP MQ'
+d37 1
+a37 1
+; Get the number of defocus groups
+d41 1
+a41 1
+VM
+d44 10
+a53 8
+DO LB1 x50=1,x12
+   DE
+   [cchist]{***x50}
+
+   HD D
+   [df]{***x50}/[docapmq]   ; Input file
+   (2)                      ; Column to plot
+   [cchist]{***x50}         ; Output file
+d56 2
+a57 2
+; The combined histogram
+DE
+d60 4
+a63 4
+HD D
+[combine]
+(2)
+[cchist]
+d65 2
+a66 1
+EN 
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d1 2
+d5 13
+a17 16
+;  For each defocus group, creates a histogram showingnumber of
+;  particles vs. cross correlation value. Also creates an additional
+;  histogram of all combined defocus groups. All histograms have 128 bins.
+;
+;  View output in gnuplot with: 
+;  gnuplot> plot 'cchist001.hcc' using 3:4 with boxes
+;
+; Inputs:
+;    order_defocus  : to count defocus groups
+;    df/***docapmq  : output from alignment, with CC values.
+;    ../Alignment/apmq/docapmq : for combined histogram.
+;    df   : directory template for input files
+;
+; Outputs:
+;    hist/cchist : output doc files with histograms.
+;                  Combined output cchist (with no number)
+a18 1
+; ----------- Input files --------------
+d20 2
+a21 1
+<order>order_defocus   ; list of defocus groups
+d23 2
+a24 1
+<docapmq>docapmq   ; combined alignment files from AP MQ
+d26 2
+a27 1
+<df>df     ; directory template for input and output files
+d29 1
+a29 1
+<combine>../Alignment/docapmq  ; combined output from AP MQ
+d31 1
+a31 1
+; ----------- Output files --------------
+d33 1
+a33 1
+<cchist>hist/cchist   ; output histogram doc files
+d35 1
+a35 1
+; -------------- END BATCH HEADER --------------------------
+d37 1
+a37 1
+; get the number of defocus groups
+d39 1
+a39 1
+<order>
+d46 1
+a46 1
+   <cchist>{***x50}
+d49 3
+a51 3
+   <df>{***x50}/<docapmq>  ; input file
+   (2)                     ; column to plot
+   <cchist>{***x50}        ; output file
+d54 1
+a54 1
+; the combined histogram
+d56 2
+a57 1
+<cchist>
+d59 1
+a59 1
+<combine>
+d61 4
+a64 1
+<cchist>
+a65 1
+EN D
+@

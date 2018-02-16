@@ -1,0 +1,808 @@
+head	1.19;
+access;
+symbols
+	GPL_update:1.15
+	pre_rewrite_2010:1.13
+	pre_more_stack:1.12
+	best-code:1.12
+	no-named-regs:1.12
+	pre_GPL:1.12
+	tag_version1_0:1.12;
+locks; strict;
+comment	@:: @;
+
+
+1.19
+date	2012.04.10.15.43.56;	author leith;	state Exp;
+branches;
+next	1.18;
+
+1.18
+date	2011.08.09.16.24.39;	author leith;	state Exp;
+branches;
+next	1.17;
+
+1.17
+date	2011.08.08.18.30.25;	author leith;	state Exp;
+branches;
+next	1.16;
+
+1.16
+date	2011.02.24.17.03.56;	author leith;	state Exp;
+branches;
+next	1.15;
+
+1.15
+date	2010.02.04.17.18.07;	author leith;	state Exp;
+branches;
+next	1.14;
+
+1.14
+date	2010.01.19.18.54.58;	author leith;	state Exp;
+branches;
+next	1.13;
+
+1.13
+date	2007.03.19.13.58.14;	author leith;	state Exp;
+branches;
+next	1.12;
+
+1.12
+date	2004.11.24.17.43.19;	author bbaxter;	state Exp;
+branches;
+next	1.11;
+
+1.11
+date	2004.11.24.16.05.05;	author bbaxter;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2004.11.24.14.34.44;	author bbaxter;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2004.08.16.18.37.31;	author bbaxter;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2004.08.11.18.54.14;	author bbaxter;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2004.04.06.15.43.03;	author bbaxter;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2004.03.11.19.28.27;	author bbaxter;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2004.03.10.18.46.07;	author bbaxter;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2003.10.24.13.06.37;	author bbaxter;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2003.10.23.20.52.32;	author bimal;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2003.08.05.12.40.57;	author bbaxter;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2003.07.29.16.00.51;	author bbaxter;	state Exp;
+branches;
+next	;
+
+
+desc
+@procedure file for particle picking
+@
+
+
+1.19
+log
+@names
+@
+text
+@; <html><head><title>Pick particles from micrographs</title></head><body><pre>
+;
+; PURPOSE: Uses fast local correlation algorithm to pick particles from 
+;          input micrographs.  Requires a reference volume.  
+;
+; SOURCE:  spider/docs/techs/recon/newprogs/lfc_pick.spi    
+;
+; CALLS:   pickparticle.spi   convert_p.spi
+
+[part] = 1  ; The first particle number (= 1 or next particle number) 
+
+[decimate] = 0  ; Decimation factor (0 = get value from  param file)
+                ;  0 = get value from param file
+                ;  1 = full sized image
+                ;  2 = 1/2 size
+                ;  4 = 1/4 size
+
+; Peak separation distance (e.g., 75% of window size) may be changed such 
+;    that [sep]*[sp_winsiz] ~ size of particle, where [sp_winsiz]= side of the window   
+[sep] = 0.75    ; Separation distance (% of window size)
+[sep] = 0.62    ; Separation distance (% of window size) al feb 2007
+
+[proj] = 1      ; Project id # (Can be any arbitrary number) al aug 2011
+
+; ----------- Input files --------------
+
+[params]  = '../params'                         ; Parameter file 
+
+[sel_mic] = '../sel_micrograph'                 ; Micrograph file numbers
+
+[micgr]   = '../Micrographs/raw{****[mic]}.tif' ; Micrograph images
+
+[refvol]  = '../reference_volume'               ; Reference volume
+
+[noise]   = 'noise'                             ; Noise file 
+
+; ----------- Output files --------------
+
+[ser]     = 'win/winser_{****[mic]}@@'           ; Template for particle image stacks
+
+[sel_doc] = 'win/sel_particle_{****[mic]}'      ; Template for particle selection doc files
+
+[sndc]    = 'coords/sndc{****[mic]}'            ; Template for coordinates doc file
+
+[out]     = 'jnkout{****[mic]}'                 ; Temp file for converting from other formats
+
+; -------------- END BATCH HEADER --------------------------
+
+MD                      ; Use all available processors
+  SET MP
+  0 
+
+MD                      ; Skip unnecessary output 
+  VB OFF
+MD                      ; Skip unnecessary output 
+  TR OFF
+MY FL
+                                                               
+UD 5, [sp_pixsiz]       ; Get pixelsize 
+  [params]
+
+; Get window size from parameter file. If zero, compute 
+UD 17, [sp_winsiz]        ; Get window diameter
+  [params]
+
+; For ribosomes, actual size = 250 A, window = 368 A
+IF ([sp_winsiz].LT.1)  [sp_winsiz]  = INT(368/[sp_pixsiz])
+
+; Compute peak separation distance ([sep] is x% of window size)
+[peaksep] = [sep] * [sp_winsiz]
+[peaksep]               ; Echo to results file
+
+MY FL
+
+DO                      ; Loop over all micrographs ------------------
+
+   UD NEXT [key],[mic]  ; Get micrograph number
+     [sel_mic]
+   IF ([key].LE. 0) EXIT
+
+   @@convert_p([decimate])
+   [params]           ; Parameter file
+   [micgr]            ; Input micrograph
+   [out]              ; Template for output SPIDER file
+
+   DE
+     [sndc]           ; Delete any old output document files
+
+   @@pickparticle
+   [out]              ; Input micrograph 
+   [refvol]           ; Reference volume                 (input)
+   [noise]            ; Noise image used for normalization of windowed particles
+   [ser]              ; Template for windowed particles    (output)
+   (1)                ; Starting particle number for windowed particles
+   [sndc]             ; Document file with particle co-ordinate   (output)
+   0                  ; Selection file is NOT used
+   0                  ; PHI start value
+   0                  ; PHI end value
+   0                  ; PHI step size
+   0                  ; THETA start value
+   0                  ; THETA end value
+   0                  ; THETA step size
+   0                  ; PSI start value
+   0                  ; PSI end value
+   0                  ; PSI step size
+   2                  ; Interpolation factor
+   20000              ; No of peaks to be searched (arbitrary)
+   [peaksep]          ; Peak separation distance
+   1                  ; Use symmetric mask
+   [proj]             ; Project id # 
+   [mic]              ; Micrograph # 
+
+
+   UD N  [n]          ; Get number of particles in this micrograph
+     [sndc]
+
+   [part]=[part]+[n]  ; Increment the particle counter
+
+   DE                 ; Delete the temporary SPIDER file
+     [out]
+
+   VM
+     echo ' 'Picked: {*****[n]} images From micrograph: [micgr]
+   VM
+     echo ' '
+
+   DOC CREATE         ; Make selection doc file
+     [sel_doc]        ; Doc file                         (output)
+     (1)              ; First register
+     (1-[n])          ; Image numbers
+
+ENDDO
+
+VM
+  echo ' 'Total picked particles:  {*******[part]}
+VM
+  echo ' '
+
+EN
+; </body></pre></html>
+@
+
+
+1.18
+log
+@ Project id, etc header changes
+@
+text
+@d27 1
+a27 1
+[params]  = '../params'                          ; Parameter file 
+d29 1
+a29 1
+[sel_mic] = '../sel_micrograph'                  ; Micrograph file numbers
+d31 1
+a31 1
+[micgr]   = '../Micrographs/raw{****[mic]}.tif'  ; Micrograph images
+d33 1
+a33 1
+[refvol]  = '../reference_volume'                ; Reference volume
+d35 1
+a35 1
+[noise]   = 'noise'                              ; Noise file 
+d39 1
+a39 1
+[ser]     = 'win/winser_{****[mic]}@@'         ; Template for particle image stacks
+d41 1
+a41 1
+[sel_doc] = 'win/sel_particle_{****[mic]}'    ; Template for particle image stacks
+d43 1
+a43 1
+[sndc]    = 'coords/sndc{****[mic]}'          ; Template for doc file with coordinates
+d45 1
+a45 1
+[out]     = 'jnkout{****[mic]}'               ; Temp file for converting from other formats
+d50 2
+a51 2
+SET MP
+0 
+d54 1
+a54 1
+VB OFF
+d56 1
+a56 1
+TR OFF
+d60 1
+a60 1
+[params]
+d64 1
+a64 1
+[params]
+d78 1
+a78 1
+   [sel_mic]
+d87 1
+a87 1
+   [sndc]             ; Delete any old output document files
+d115 1
+a115 1
+   [sndc]
+d120 1
+a120 1
+   [out]
+d123 1
+a123 1
+   echo ' 'Picked: {*****[n]} images From micrograph: [micgr]
+d125 1
+a125 1
+   echo ' '
+d128 3
+a130 3
+   [sel_doc]          ; Doc file                         (output)
+   (1)                ; First register
+   (1-[n])            ; Image numbers
+d135 1
+a135 1
+echo ' 'Total picked particles:  {*******[part]}
+d137 1
+a137 1
+echo ' '
+@
+
+
+1.17
+log
+@[proj] = 1 , [proj] sent to pickparticle
+@
+text
+@d23 2
+a24 1
+[proj] = 1      ; Project id # (Can be any arbitrary number)
+d45 1
+a45 1
+[out] = 'jnkout{****[mic]}'                   ; Temp file for converting from other formats
+d111 1
+@
+
+
+1.16
+log
+@added .tif to micgr
+@
+text
+@d23 1
+d109 1
+@
+
+
+1.15
+log
+@VAR NAMES
+@
+text
+@d25 1
+a25 1
+[params]  = '../params'                      ; Parameter file 
+d27 1
+a27 1
+[sel_mic] = '../sel_micrograph'              ; Micrograph file numbers
+d29 1
+a29 1
+[micgr]   = '../Micrographs/raw{****[mic]}'  ; Micrograph images
+d31 1
+a31 1
+[refvol]  = '../reference_volume'            ; Reference volume
+d33 1
+a33 1
+[noise]   = 'noise'                          ; Noise file 
+@
+
+
+1.14
+log
+@simplify-rewrite
+@
+text
+@d6 1
+a6 1
+; SOURCE:  lfc_pick.spi    
+d19 1
+a19 1
+;    that [sep]*[windiam] ~ size of particle, where [windiam]= side of the window   
+a23 2
+FR G
+[params]../params                      ; Parameter file 
+d25 1
+a25 2
+FR G
+[sel_mic]../sel_micrograph             ; Micrograph file numbers
+d27 1
+a27 2
+FR G
+[micgr]../Micrographs/raw{****[mic]}   ; Micrograph images
+d29 1
+a29 2
+FR G
+[refvol]../reference_volume            ; Reference volume
+d31 1
+a31 2
+FR G
+[noise]noise                           ; Noise file 
+d33 2
+d36 4
+a39 2
+FR G
+[ser]win/winser_{****[mic]}@@          ; Template for particle image stacks
+d41 1
+a41 2
+FR G
+[sel_doc]win/sel_particle_{****[mic]} ; Template for particle image stacks
+d43 1
+a43 2
+FR G
+[sndc]coords/sndc{****[mic]}          ; Template for doc file with coordinates
+d57 1
+a57 4
+FR G
+[out]out{****[mic]}     ; Temporary spider file for converting from other formats
+
+UD 5, [pixelsize]       ; Get pixelsize 
+d60 2
+a61 2
+; Get window size & actual size from parameter file. If zero, compute them
+UD 17, [windiam]        ; Get window diameter
+d65 1
+a65 1
+IF ([windiam].LT.1)  [windiam]  = INT(368/[pixelsize])
+d68 1
+a68 1
+[peaksep] = [sep] * [windiam]
+d72 3
+a74 2
+; Loop over all micrographs ----------------------------------------------------
+DO  
+d135 1
+a135 1
+EN D
+@
+
+
+1.13
+log
+@stack usage
+@
+text
+@a11 5
+; [decimate] = decimation factor for 'DC S' operation
+;    0 = get value from param file
+;    1 = full sized image
+;    2 = 1/2 size
+;    4 = 1/4 size
+d13 4
+d25 1
+a25 1
+[params]../params                    ; Parameter file 
+d28 1
+a28 1
+[sel_mic]../sel_micrograph           ; Micrograph file numbers
+d31 1
+a31 1
+[micgr]../Micrographs/mic{****[mic]} ; Micrograph images
+d34 1
+a34 1
+[refvol]../reference_volume          ; Reference volume
+d37 1
+a37 1
+[noise]noise                         ; Noise file (should be in current dir)
+d85 1
+a85 1
+   @@convert_p([mic],[decimate])
+d125 3
+a127 1
+   echo ' 'Picked:  {*****[n]} images from micrograph: {*****[mic]}
+@
+
+
+1.12
+log
+@*** empty log message ***
+@
+text
+@d1 1
+a1 1
+; LFC_PICK : uses fast local correlation algorithm to pick particles
+d3 6
+a8 1
+;  requires a reference volume  
+d10 13
+a22 19
+MD 
+SET MP
+0      ; use all processors available
+                                                                
+x91 = 1  ; the first particle number (= 1 or next particle number) 
+
+
+; x87 = decimation factor for DC S command
+;  0 = get value from param file
+;  1 = full sized image
+;  2 = 1/2 size
+;  4 = 1/4 size
+
+x87 = 0  ; decimation factor (0 = get value from  param file)
+
+; peak separation distance (e.g., 75% of window size)
+; may be changed such that x59 * x92 ~ size of the particle, 
+; where x92 = side of the window   
+x59 = 0.75 ; separation distance (% of window size)
+d26 2
+a27 1
+<params>../params      ; parameter file 
+d29 2
+a30 1
+<filenums>../filenums     ; file numbers
+d32 2
+a33 1
+<mic>../Micrographs/mic{****x55}  ;micrographs
+d35 2
+a36 1
+<refvol>../reference_volume  ; reference volume
+d38 1
+a38 1
+<noise>./noise               ; noise file, should be in the current directory
+d42 5
+a46 1
+<ser>win/ser       ; template for particle images
+d48 1
+a48 1
+<sndc>coords/sndc{****x55} ; template for doc file with coordinates
+d52 3
+a54 2
+FR G
+<out>out{****x55}   ; temporary spider file for converting from other formats
+d56 34
+a89 33
+; get pixelsize 
+UD 5,x39
+<params>
+
+; get window size and actual size from parameter file
+; if they are zero, then compute them
+UD 17,x92  ; x92 = window diameter
+<params>
+UD 18,x27  ; x27 = particle diameter 
+<params>
+
+; for ribosomes, actual size = 250 A, window = 368 A
+; pixelsize = x39
+
+IF (x92.LT.1) x92 = INT(368/X39)
+IF (x27.LT.1) x27 = INT(250/X39)
+
+; compute peak separation distance (x59 is x% of window size)
+x54 = x59 * x92
+
+; get the filenumbers
+UD N,x20
+<filenums>
+
+DO LB1 x11=1,x20
+   UD x11,x55
+   <filenums>
+   ; x55 is now the file number
+
+   @@convert_p[x55,x87]
+   <params>   ; parameter file
+   <mic>      ; input Micrograph
+   <out>  ; template for output spider file
+d92 1
+a92 32
+   <sndc>   ; delete any old output document files
+
+@@pickparticle
+<out>      ; input micrograph 
+<refvol>   ; input 3D reference volume
+<noise>    ; noise image used for normalization of windowed particles
+<ser>      ; template for output windowed particles
+X91        ; starting particle number for windowed particles
+<sndc>     ; output document file with particle co-ordinate
+0          ; selection file is NOT used
+0          ; PHI start value
+0          ; PHI end value
+0          ; PHI step size
+0          ; THETA start value
+0          ; THETA end value
+0          ; THETA step size
+0          ; PSI start value
+0          ; PSI end value
+0          ; PSI step size
+2          ; interpolation factor
+20000      ; no of peaks to be searched (arbitrary)
+x54        ; peak separation distance
+1          ; symmetric mask is used
+
+
+UD N  x13
+<sndc>
+
+X91 = X91+X13    ; increment the particle counter
+
+DE             ;delete the temporary spider file
+<out>
+d94 45
+a138 1
+LB1
+d141 1
+@
+
+
+1.11
+log
+@converted from overview number to decimation factor
+@
+text
+@d13 1
+a13 1
+;  0 = get value from param file (key=21)
+@
+
+
+1.10
+log
+@set default ZI overview # to 1
+@
+text
+@d10 9
+a18 1
+x87 = 1  ; overview # (for ZI files. Ignored if not in ZI format 
+@
+
+
+1.9
+log
+@fixed typo in output specification
+@
+text
+@d10 1
+a10 1
+x87 = 2  ; overview # (for ZI files. Ignored if not in ZI format 
+@
+
+
+1.8
+log
+@changed convert_p1 to convert_p
+@
+text
+@d33 1
+a33 1
+<sndc>coords/sndc {****x55} ; template for doc file with coordinates
+@
+
+
+1.7
+log
+@uses new convert.bat calling comvention; incr from 3 to 4 asterisks
+@
+text
+@d23 1
+a23 1
+<mic>../Micrographs/mic   ;micrographs
+d33 1
+a33 1
+<sndc>coords/sndc  ; template for doc file with coordinates
+d38 1
+a38 1
+<out>out     ; temporary spider file for converting from other formats
+d69 4
+a72 4
+   @@convert_p1[x55,x87]
+   <params>        ; parameter file
+   <mic>{****x55}  ; input Micrograph
+   <out>{****x55}  ; template for output spider file
+d75 1
+a75 1
+   <sndc>{****x55}   ; delete any old output document files
+d78 20
+a97 20
+<out>{****x55}    ; input micrograph 
+<refvol>         ; input 3D reference volume
+<noise>          ; noise image used for normalization of windowed particles
+<ser>            ; template for output windowed particles
+X91              ; starting particle number for windowed particles
+<sndc>{****x55}   ; output document file with particle co-ordinate
+0                ; selection file is NOT used
+0                ; PHI start value
+0                ; PHI end value
+0                ; PHI step size
+0                ; THETA start value
+0                ; THETA end value
+0                ; THETA step size
+0                ; PSI start value
+0                ; PSI end value
+0                ; PSI step size
+2                ; interpolation factor
+20000            ; no of peaks to be searched (arbitrary)
+x54              ; peak separation distance
+1                ; symmetric mask is used
+d101 1
+a101 1
+<sndc>{****x55}
+d106 1
+a106 1
+<out>{****x55}
+@
+
+
+1.6
+log
+@added noise parameter
+@
+text
+@d70 3
+a72 3
+   <params>      ; parameter file
+   <mic>         ; input Micrograph
+   <out>         ; template for output spider file
+d75 1
+a75 1
+   <sndc>{***x55}   ; delete any old output document files
+d78 1
+a78 1
+<out>{***x55}    ; input micrograph 
+d83 1
+a83 1
+<sndc>{***x55}   ; output document file with particle co-ordinate
+d101 1
+a101 1
+<sndc>{***x55}
+d106 1
+a106 1
+<out>{***x55}
+@
+
+
+1.5
+log
+@added a comment to x59 register assignment
+@
+text
+@d26 2
+d80 1
+@
+
+
+1.4
+log
+@changed  SET MP = 0 : use all processors available
+>> .
+@
+text
+@d15 1
+a15 1
+x59 = 0.75
+@
+
+
+1.3
+log
+@added comments
+@
+text
+@d7 1
+a7 1
+2
+@
+
+
+1.2
+log
+@made peak separation a user-defined variable
+@
+text
+@d13 2
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d12 3
+d53 2
+a54 2
+; compute peak separation distance (e.g., 70% of window size)
+x54 = 0.7 * x92
+@

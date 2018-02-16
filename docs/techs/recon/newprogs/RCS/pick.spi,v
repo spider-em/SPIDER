@@ -1,0 +1,860 @@
+head	1.14;
+access;
+symbols
+	GPL_update:1.12
+	pre_rewrite_2010:1.10
+	pre_more_stack:1.10
+	best-code:1.10
+	no-named-regs:1.10
+	pre_GPL:1.10
+	tag_version1_0:1.10;
+locks; strict;
+comment	@:: @;
+
+
+1.14
+date	2012.05.04.16.01.58;	author leith;	state Exp;
+branches;
+next	1.13;
+
+1.13
+date	2011.08.09.17.37.25;	author leith;	state Exp;
+branches;
+next	1.12;
+
+1.12
+date	2010.02.04.17.05.59;	author leith;	state Exp;
+branches;
+next	1.11;
+
+1.11
+date	2010.01.19.19.01.29;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2004.11.24.17.42.49;	author bbaxter;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2004.11.24.16.04.06;	author bbaxter;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2004.11.24.14.35.11;	author bbaxter;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2004.08.05.17.51.43;	author bbaxter;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2004.08.05.15.03.40;	author bbaxter;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2004.04.06.15.40.51;	author bbaxter;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2003.10.24.13.07.16;	author bbaxter;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2003.08.15.16.59.02;	author bbaxter;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2003.07.29.16.02.15;	author bbaxter;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2003.07.24.18.06.43;	author bbaxter;	state Exp;
+branches;
+next	;
+
+
+desc
+@spider batch file
+@
+
+
+1.14
+log
+@*** empty log message ***
+@
+text
+@;                                           
+; PURPOSE: Picks particles from micrograph using 'AT PK'
+;
+; SOURCE:  spider/docs/techs/recon/newprogs/pick.spi 
+; CALLS:   spider/docs/techs/recon/newprogs/pick_p.spi 
+;
+; I/O PARAMETERS AND FILES ARE SET HERE:
+;
+; <b> ----------- Input Parameters ---------------------------------------
+
+; The following are obtained/derived from the parameter doc file:
+; [sp_pixsiz]  - Pixel size
+; [sp_winsiz]  - Window size of particles
+; [sp_partsiz] - Actual size of particles 
+                                                                                                                                
+[decimate] = 0  ; Decimation factor for 'DC S' (0 = get value from  param file)
+                ;  0 = get value from param file
+                ;  1 = full sized image
+                ;  2 = 1/2 size
+                ;  4 = 1/4 size
+
+[proj] = 1      ; Project id # (Can be any arbitrary number) aug 2011
+
+; ----------- Input files --------------
+
+[params]  = '../params'                     ; Parameter file 
+
+[sel_mic] = '../sel_micrograph'             ; Micrograph selection file
+
+[mic]     = '../Micrographs/raw****'        ; Micrographs
+
+[noise]   = 'noise'                         ; Noise file
+
+; ----------- Output files --------------
+
+[ser]     = 'win/winser_{****[num]}@@******' ; Selected particle images
+
+[ndc]     = 'coords/pkcoord{****[num]}'     ; Peak search doc files
+
+[sndc]    = 'coords/sndc{****[num]}'        ; Upper-left corner coord. doc files
+
+[out]     = 'jnkpickout{****[num]}'         ; Temporary SPIDER file template
+; -------------- END BATCH HEADER --------------------------
+
+MD 
+  SET MP
+  0                       ; Use all available processors
+
+VM                        ; Dir. for temporary files and output files
+  mkdir -p win coords 
+
+UD 5,[sp_pixsiz]          ; Get pixelsize from parameter file
+  [params]
+
+; Get window size and actual size from parameter file
+; if they are zero, then compute them
+UD 17,[sp_winsiz]
+  [params]
+UD 18,[sp_partsiz]
+  [params]
+
+; Actual size = 250 A
+; Window      = 368 A
+; Pixelsize   = [sp_pixsiz]
+
+IF ([sp_winsiz].LT.1)  [sp_winsiz] = INT(368/[sp_pixsiz])
+IF ([sp_partsiz].LT.1) [sp_partsiz] = INT(250/[sp_pixsiz])
+
+[v31]= 0.075*([sp_pixsiz]/4.78)
+                                                        
+; Low pass filter radius                                                   
+; Frequency=2*pixel size/filt.rad.=const: [v31]=0.075*([sp_pixsiz]/4.78)
+; approxim.(particle size/2)+1)/interpolated x dimension                         
+; or (([sp_winsiz]/2)+1)/[v71] - corrected for better res.                                
+
+[v44]=4                    ; Decimation of mic for peak search       
+
+[v79]=INT([sp_partsiz]/[v44]) ; Actual size of a particle divided by width of peaks
+
+[sp_partsiz]=int([sp_partsiz]/4)+1  ; Range of CCC in center step.
+     
+CP                         ; Noise will be in _7                                                           
+  [noise]                                                                         
+  _7 
+                                                                             
+[v55] = INT([sp_winsiz]/2)-2
+MO                         ; Create mask file
+  mask                     ; Mask file                  (output)
+  [sp_winsiz],[sp_winsiz]  ; Mask dimensions
+  C                        ; Circle
+  [v55]                    ; Radius
+
+AR                         ; Arithmetic operation                                                                             
+  mask                     ; Mask file                  (input)                                                                            
+  _8                       ; Mask file                  (output)                                                                          
+(p1-1)*(-1)
+                                                                     
+DO 
+   UD NEXT [key],[num]     ; Get micrograph # 
+     [sel_mic]             ; Micrograph selection file  (input)
+   IF ([key].LE.0) EXIT    ; End of groups in doc file
+
+   @@convert_p([decimate])
+     [params]              ; Parameter file
+     [mic][num]            ; Input Micrograph
+     [out]                 ; Template for output spider file
+                                                                 
+   DE                      ; If output doc file exists, delete it
+     [ndc]
+   DE                      ; If output doc file exists, delete it
+     [sndc]
+
+   @@pick_p([v31],[v44],[sp_winsiz],[v79],[sp_partsiz])
+     [out]
+     [ndc]
+     [ser]
+     [sndc]
+     [proj]
+     [num]
+
+   DE                     ; Delete temporary file
+     [out]
+ENDDO
+
+UD NEXT END               ; Finished with doc file 
+  [sel_mic]
+
+EN
+@
+
+
+1.13
+log
+@Save micrograph # and img. # in header aug 2011
+@
+text
+@d2 1
+a2 1
+; PURPOSE: Picks particles from micrograph using 'AT **'
+d4 2
+a5 1
+; SOURCE: spider/docs/techs/recon/newprogs/pick.spi 
+d46 2
+a47 2
+SET MP
+0                         ; Use all available processors
+d50 1
+a50 1
+mkdir -p win coords 
+d53 1
+a53 1
+[params]
+d58 1
+a58 1
+[params]
+d60 1
+a60 1
+[params]
+d69 2
+a70 1
+[v31]= 0.075*([sp_pixsiz]/4.78)                                                        
+d78 1
+a78 1
+[v79]=INT([sp_partsiz]/[v44])   ; Actual size of a particle divided by width of peaks
+d80 1
+a80 1
+[sp_partsiz]=int([sp_partsiz]/4)+1   ; Range of CCC in center step.
+d83 2
+a84 2
+[noise]                                                                         
+_7 
+d87 9
+a95 9
+MO                       ; Create mask file
+mask                     ; Mask file                  (output)
+[sp_winsiz],[sp_winsiz]        ; Mask dimensions
+C                        ; Circle
+[v55]                    ; Radius
+
+AR                       ; Arithmetic operation                                                                             
+mask                     ; Mask file                  (input)                                                                            
+_8                       ; Mask file                  (output)                                                                          
+d99 3
+a101 3
+   UD NEXT [key],[num]   ; Get micrograph # 
+   [sel_mic]             ; Micrograph selection file  (input)
+   IF ([key].LE.0) EXIT  ; End of groups in doc file
+d104 3
+a106 3
+   [params]              ; Parameter file
+   [mic][num]            ; Input Micrograph
+   [out]                 ; Template for output spider file
+d108 4
+a111 4
+   DE                    ; If output doc file exists, delete it
+   [ndc]
+   DE                    ; If output doc file exists, delete it
+   [sndc]
+d114 6
+a119 6
+   [out]
+   [ndc]
+   [ser]
+   [sndc]
+   [proj]
+   [num]
+d121 2
+a122 2
+   DE                   ; Delete temporary file
+   [out]
+d125 2
+a126 2
+UD NEXT END             ; Finished with doc file 
+[sel_mic]
+@
+
+
+1.12
+log
+@var naming
+@
+text
+@d11 3
+a13 3
+; [sp_pixsiz]  - pixel size
+; [sp_winsiz] - window size of particles
+; [sp_partsiz] - actual size of particles 
+d21 2
+d116 2
+@
+
+
+1.11
+log
+@simplify-rewrite
+@
+text
+@d11 3
+a13 3
+; [pxsiz]  - pixel size
+; [winsiz] - window size of particles
+; [asize] - actual size of particles 
+a21 2
+FR G
+[params]../params               ; Parameter file 
+d23 1
+a23 2
+FR G
+[sel_mic]../sel_micrograph      ; Micrographs selection file
+d25 1
+a25 2
+FR G
+[mic]../Micrographs/raw****     ; Micrographs
+d27 1
+a27 2
+FR G
+[noise]noise                    ; Noise file
+d29 2
+d32 2
+a33 2
+FR G
+[ser]win/winser_{****[num]}@@****** ; Selected particle images
+d35 1
+a35 2
+FR G
+[ndc]coords/pkcoord{****[num]}  ; Peak search doc files
+d37 1
+a37 2
+FR G
+[sndc]coords/sndc{****[num]}    ; Upper-left corner coord. doc files
+d39 1
+d49 1
+a49 4
+FR G
+[out]out{****[num]}       ; Temporary SPIDER file template
+
+UD 5,[pxsiz]              ; Get pixelsize from parameter file
+d54 1
+a54 1
+UD 17,[winsiz]
+d56 1
+a56 1
+UD 18,[asize]
+d61 1
+a61 1
+; Pixelsize   = [pxsiz]
+d63 2
+a64 2
+IF ([winsiz].LT.1) [winsiz] = INT(368/[pxsiz])
+IF ([asize].LT.1) [asize] = INT(250/[pxsiz])
+d66 1
+a66 1
+[v31]= 0.075*([pxsiz]/4.78)                                                        
+d68 3
+a70 2
+; Frequency=2*pixel size/filt.rad.=const: [v31]=0.075*([pxsiz]/4.78)
+; approxim.(particle size/2)+1)/interpolated x dimension                         ; or (([winsiz]/2)+1)/[v71] - corrected for better res.                                
+d74 1
+a74 1
+[v79]=INT([asize]/[v44])   ; Actual size of a particle divided by width of peaks
+d76 1
+a76 1
+[asize]=int([asize]/4)+1   ; Range of CCC in center step.
+d82 1
+a82 1
+[v55] = INT([winsiz]/2)-2
+d85 1
+a85 1
+[winsiz],[winsiz]        ; Mask dimensions
+d109 1
+a109 1
+   @@pick_p([v31],[v44],[winsiz],[v79],[asize])
+@
+
+
+1.10
+log
+@*** empty log message ***
+@
+text
+@d1 2
+a2 5
+; pick.bat
+                                           
+; parameters : 
+; x91 - the number of the first particle (CHANGE THIS WITH EACH RUN!)
+; x87 - overview number for ZI file
+d4 1
+a4 4
+; The following are obtained/derived from the parameter doc file:
+; x39 - pixel size
+; x92 - window size of particles
+; x27 - actual size of particles 
+d6 1
+a6 7
+; Inputs
+;   Micrographs/raw{***x11}.tif - scanned micrograph files
+;   noise - used to normalize the statistics of the particle backgrounds.
+; Outputs
+;   ser****** - the output serial files for automaticly selected particles
+;   ndc{***x55} - the output document files from peak search
+;   sndc{***x55} -  upperleft corner coordinates for particles
+d8 1
+a8 12
+                                                                 
+MD 
+SET MP
+0      ; use all processors available
+                                                                
+x91 = 0  ; the first particle number (= 0 or last picked before) 
+
+; x87 = decimation factor for DC S command
+;  0 = get value from param file
+;  1 = full sized image
+;  2 = 1/2 size
+;  4 = 1/4 size
+d10 10
+a19 1
+x87 = 0  ; decimation factor (0 = get value from  param file)
+d23 2
+a24 1
+[params]../params      ; parameter file 
+d26 2
+a27 1
+[FILENUMS]../filenums     ; file numbers
+d29 2
+a30 1
+[mic]../Micrographs/mic{****x12};            ;   ;micrographs
+d32 1
+a32 1
+[noise]noise             ; noise file
+d36 2
+a37 1
+[ser]win/ser******       ; template for particle images
+d39 2
+a40 1
+[ndc]coords/ndc{****x12}    ; template for peak search doc file
+d42 1
+a42 1
+[sndc]coords/sndc{****x12}  ; template for doc file with coordinates
+d46 6
+a51 4
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;
+;  DO NOT CHANGE BELOW (unless you have to)
+;
+d54 1
+a54 1
+[out]out{****x12}       ; temporary spider file template
+d56 1
+a56 2
+; get pixelsize 
+UD 5,x39
+d59 1
+a59 1
+; get window size and actual size from parameter file
+d61 1
+a61 1
+UD 17,x92
+d63 1
+a63 1
+UD 18,x27
+d66 3
+a68 3
+; actual size = 250 A
+; window = 368 A
+; pixelsize = x39
+d70 2
+a71 2
+IF (x92.LT.1) x92 = INT(368/X39)
+IF (x27.LT.1) x27 = INT(250/X39)
+d73 4
+a76 4
+x31= 0.075*(x39/4.78)                                                        
+; low pass filter radius                                                   
+; frequency=2*pixel size/filt.rad.=const: x31=0.075*(x39/4.78)
+; approxim.(particle size/2)+1)/interpolated x dimension                         ; or ((x92/2)+1)/x71 - corrected for better res.                                
+d78 1
+a78 1
+x44=4       ; compression of the mic for peak search       
+d80 1
+a80 1
+x79=INT(x27/x44)  ;actual size of a particle divided by x44=width of peaks
+d82 1
+a82 1
+x27=int(x27/4)+1  		; Range of CCC in center step.
+d84 1
+a84 2
+; noise will be in _7                                                           
+cp                                                                              
+d88 11
+a98 28
+; mask will be in _8                                                            
+X55=INT(X92/2)-2
+mo
+mask
+x92,x92
+C
+X55
+
+ar                                                                              
+mask                                                                            
+_8                                                                              
+(p1-1)*(-1)                                                                     
+x93 = 1                        
+
+; get the filenumbers
+ud n,x20
+[FILENUMS]
+
+DO LB2 x11=1,x20
+ud x11,x12
+[FILENUMS]
+; x12 is now the micrograph number
+
+@@convert_p[x12,x87]
+[params]        ; parameter file
+[mic]  ; input Micrograph
+[out]  ; template for output spider file
+
+d100 24
+a123 25
+; if the output doc files already exist, delete them
+    IQ FI x88
+    [ndc]
+    IF (x88.EQ.1) THEN
+        DE
+        [ndc]
+    ENDIF
+    IQ FI x88
+    [sndc]
+    IF (x88.EQ.1) THEN
+        DE
+        [sndc]
+    ENDIF
+
+@@pick_p[x91,x31,x44,x92,x79,x27]
+[out]
+[ndc]
+[ser]
+[sndc]
+
+;delete the temporary spider file
+DE
+[out]
+
+LB4
+d125 2
+a126 1
+LB2
+d128 1
+a128 1
+EN D
+@
+
+
+1.9
+log
+@converted from overview number to decimation factor
+@
+text
+@d28 1
+a28 1
+;  0 = get value from param file (key=21)
+@
+
+
+1.8
+log
+@set default ZI overview # to 1
+@
+text
+@d26 8
+a33 1
+x87 = 1  ; overview # (for ZI files. Ignored if not in ZI format 
+@
+
+
+1.7
+log
+@changed # asterisks to 4 in mic****
+@
+text
+@d26 1
+a26 1
+x87 = 2  ; overview # (for ZI files. Ignored if not in ZI format 
+@
+
+
+1.6
+log
+@changed ext bat --> spi, changed brackets, put {***} substitutions in header
+@
+text
+@d34 1
+a34 1
+[mic]../Micrographs/mic{***x12};            ;   ;micrographs
+@
+
+
+1.5
+log
+@uses new convert.bat calling comvention; incr from 3 to 4 asterisks
+@
+text
+@d30 1
+a30 1
+<params>../params      ; parameter file 
+d32 1
+a32 1
+<filenums>../filenums     ; file numbers
+d34 1
+a34 1
+<mic>../Micrographs/mic   ;micrographs
+d36 1
+a36 1
+<noise>noise             ; noise file
+d40 1
+a40 1
+<ser>win/ser       ; template for particle images
+d42 1
+a42 1
+<ndc>coords/ndc    ; template for peak search doc file
+d44 1
+a44 1
+<sndc>coords/sndc  ; template for doc file with coordinates
+d54 1
+a54 1
+<out>out       ; temporary spider file template
+d58 1
+a58 1
+<params>
+d63 1
+a63 1
+<params>
+d65 1
+a65 1
+<params>
+d87 1
+a87 1
+<noise>                                                                         
+d106 1
+a106 1
+<filenums>
+d110 1
+a110 1
+<filenums>
+d113 4
+a116 4
+@@convert_p1[x12,x87]
+<params>        ; parameter file
+<mic>{****x12}  ; input Micrograph
+<out>{****x12}  ; template for output spider file
+d121 1
+a121 1
+    <ndc>{****x12}
+d124 1
+a124 1
+        <ndc>{****x12}
+d127 1
+a127 1
+    <sndc>{****x12}
+d130 1
+a130 1
+        <sndc>{****x12}
+d133 5
+a137 5
+@@pick_p1[x91,x31,x44,x92,x79,x27]
+<out>{****x12}
+<ndc>{****x12}
+<ser>******
+<sndc>{****x12}
+d141 1
+a141 1
+<out>{****x12}
+@
+
+
+1.4
+log
+@changed  SET MP = 0 : use all processors available
+@
+text
+@d114 3
+a116 3
+<params>      ; parameter file
+<mic>         ; input Micrograph
+<out>         ; template for output spider file
+d121 1
+a121 1
+    <ndc>{***X12}
+d124 1
+a124 1
+        <ndc>{***X12}
+d127 1
+a127 1
+    <sndc>{***X12}
+d130 1
+a130 1
+        <sndc>{***X12}
+d134 2
+a135 2
+<out>{***x12}
+<ndc>{***x12}
+d137 1
+a137 1
+<sndc>{***x12}
+d141 1
+a141 1
+<out>{***x12}
+@
+
+
+1.3
+log
+@changed 5 stars to 6 stars
+@
+text
+@d23 1
+a23 1
+2
+@
+
+
+1.2
+log
+@changed to use convert_p1 procedure
+@
+text
+@d16 1
+a16 1
+;   ser***** - the output serial files for automaticly selected particles
+d136 1
+a136 1
+<ser>*****
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d34 1
+a34 1
+<mic>../Micrographs/win   ;micrographs
+d113 4
+a116 5
+; get zip and tif flags from parameter file
+ud 1,x80
+<params>
+ud 2,x81
+<params>
+d118 1
+a118 55
+IF (x80*x81.GT.0) THEN     ; both tif & zip flags set
+    vm
+    gunzip <mic>{***x12}.tif.gz
+    GOTO LB3
+ENDIF
+
+IF (x80.GT.0) THEN     ; zip, but not tif, flag set
+    vm
+    gunzip <mic>{***x12}.$DATEXT.gz
+    GOTO LB3
+ENDIF
+
+LB3
+
+IF (x81.eq.1) THEN	    ; if HiScan tif, get X,Y size parameters 
+    UD 3,x51    
+    <params>
+    UD 4,x52          
+    <params>
+
+    cp from raw
+    (16)
+    <mic>{***x12}.tif
+    x51,x52
+    (342)
+    (1)
+    n
+    _1
+
+    ar
+    _1
+    <out>{***x12}
+    log(p1+1)
+
+ENDIF 
+
+IF (x81.eq.2) THEN	    ; if from Perkin Elmer
+    ar
+    <mic>{***x12}
+    <out>{***x12}
+    p1*(-1)+5
+ENDIF
+
+IF (x81.eq.3) THEN   ; if it's a ZI tif, extract overview  
+    VM
+    zi2spi <mic>{***x12}.tif <out>{***x12}.$DATEXT {**x87}
+
+ENDIF
+
+IF (x81.eq.0) THEN	   ; it's already a spider file, put in out template
+    cp
+    <mic>{***x12}
+    <out>{***x12}
+ENDIF 
+                                                                      
+a141 13
+
+; rezip if necessary
+IF (x80*x81.GT.0) THEN     ; both tif & zip flags set
+    vm
+    gzip <mic>{***x12}.tif
+	GOTO LB4
+ENDIF
+
+IF (x80.eq.1) THEN     ; only zip flag
+    vm
+    gzip <mic>{***x12}.$DATEXT
+    GOTO LB4
+ENDIF
+@

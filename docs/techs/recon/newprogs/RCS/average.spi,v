@@ -1,0 +1,1063 @@
+head	1.13;
+access;
+symbols
+	GPL_update:1.13
+	pre_rewrite_2010:1.12
+	pre_more_stack:1.9
+	best-code:1.8
+	no-named-regs:1.8
+	pre_GPL:1.8
+	tag_version1_0:1.8;
+locks; strict;
+comment	@:: @;
+
+
+1.13
+date	2010.01.19.18.51.59;	author leith;	state Exp;
+branches;
+next	1.12;
+
+1.12
+date	2007.08.06.14.03.10;	author leith;	state Exp;
+branches;
+next	1.11;
+
+1.11
+date	2007.03.21.13.28.07;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2007.01.17.16.35.39;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2006.04.13.15.31.38;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2005.04.01.21.05.21;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2004.12.30.21.05.00;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2004.06.03.19.32.33;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2004.05.25.19.42.42;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2004.04.20.14.28.25;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2004.04.20.14.23.35;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2003.08.15.16.52.49;	author bbaxter;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2003.07.24.18.13.09;	author bbaxter;	state Exp;
+branches;
+next	;
+
+
+desc
+@spider batch file
+@
+
+
+1.13
+log
+@simplify-rewrite
+@
+text
+@; <html><head><title>Creates average and variance images</title></head><body><pre>
+;
+; SOURCE:  spider/docs/techs/recon/newprogs/average.spi 
+;
+; PURPOSE: Creates average and variance for images which come from a 
+;          each reference projection view.  Works for a <b>single</b>
+;          specified group!
+;
+; I/O PARAMETERS AND FILES ARE SET HERE:
+;
+;  ------------ Input files ---------------------------------------
+
+[params]        = '../params '                            ; The parameter file
+
+[dfdir]         = 'df{***[grp]}'                          ; An input directory
+
+[defgrps]       = '../Alignment/sel_group'                ; Defocus group selection doc file
+
+[part_per_proj] = '[dfdir]/how_many'                      ; # of particles for each projection for group
+
+[select]        = '[dfdir]/ref_sel***'                    ; Particle numbers assigned to each projection set
+
+[ali]           = '../Alignment/dala01_{***[grp]}@@******' ; Aligned particle images
+
+; --------------- Output files  -----------------------------------
+
+[dir]           = 'avg'                                   ; Output directory
+
+[avg]           = '[dir]/avg_{***[grp]}@@*****'           ; Average image stack  (one image per reference view)
+
+[var]           = '[dir]/var_{***[grp]}@@*****'           ; Variance image stack (one image per reference view)
+
+
+; -------------- END BATCH HEADER ---------------------------------</b>
+
+MD
+TR OFF                                   ; Decrease results file output
+MD
+VB OFF                                   ; Decrease results file output
+
+UD 17,[sp_winsiz]                        ; Get image size
+[params]
+
+VM                                       ; Create output directory if necessary                            
+mkdir -p [dir]                   
+
+[grp]=1                                  ; Assume all groups have same # of projections
+UD N [numprojs]                          ; Get number of projections
+[part_per_proj]
+
+DO                                       ; Loop over all defocus groups -------------------
+   UD NEXT [k],[grp]                     ; Get group from group sel. file
+   [defgrps]                             ; Group selection file           (input)
+   IF ([k].LE.0) EXIT                    ; End of input
+
+   VM
+   echo " Creating avg. and var. images for group: {***[grp]}    Projections: {***[numprojs]}"
+
+   DO                                    ; Loop over all projections ------------------
+
+      UD NEXT [proj], [part]             ; Get number of particles for current projection
+      [part_per_proj]                    ; Number of particles per projection (input)
+      IF ([proj].LE.0) EXIT              ; End of input
+
+      IF ([part] .EQ. 0) THEN            ; Zero particles for this projection
+         BL
+         [avg][proj]                     ; Average output                    (output)
+         [sp_winsiz],[sp_winsiz]         ; Size
+         N                               ; No background
+         (0.0)                           ; Value
+
+         BL
+         [var][proj]                     ; Variance output                   (output)
+         [sp_winsiz],[sp_winsiz]         ; Size
+         N                               ; No background
+         (0.0)                           ; Value
+
+         CYCLE                           ; Zero particle (should not occur!)
+      ENDIF
+  
+      UD IC 1, [pn],[cc],[mir]           ; Retrieve particle number, CC, & mirror flag
+      [select][proj]                     ; Selection file                   (input)
+
+      IF ([part] .EQ. 1) THEN            ; Only a single particle for this projection
+         IF ([mir] .LT. 0.0) THEN
+            MR                           ; Must mirror the image
+            [ali][pn]                    ; Image file
+            [avg][proj]                  ; Average file                     (output)
+            Y                            ; Y axis
+         ELSE
+            CP                           ; Copy image to average
+            [ali][pn]                    ; Image file                       (input)
+            [avg][proj]                  ; Average file                     (output)
+         ENDIF
+
+         BL
+         [var][proj]                     ; Variance                         (output) 
+         [sp_winsiz],[sp_winsiz]         ; Size
+         N                               ; No background
+         (0.0)                           ; Value
+
+      ELSE                               ; Multiple particles for this projection
+         MS
+         _1@@
+         [sp_winsiz],[sp_winsiz]         ; Dimensions
+         [part]                          ; Num. slices
+
+         DO [partorder]=1,[part]         ; Loop over particles ----------------
+            UD IC [partorder],[pn],[cc],[mir]
+            [select][proj]
+
+            IF ([mir] .LT. 0.0) THEN
+               MR                        ; Must mirror the image
+               [ali][pn]                 ; Image file                     (input)
+               _1@@{*****[partorder]}     ; Temp. mirrored file            (output)
+               Y                         ; Y axis
+            ELSE
+               CP
+               [ali][pn]                 ; Image file                     (input)
+               _1@@{*****[partorder]}     ; Temp. mirrored file            (output)
+            ENDIF
+         ENDDO                           ; End particle-loop
+
+         AS R                            ; Add to average/variance
+         _1@@******
+         (1-[part])                      ; Selection file
+         A
+         [avg][proj]                     ; Average input
+         [var][proj]                     ; Average output                  (output)
+
+         DE
+         _1@@
+      ENDIF
+
+      UD ICE
+      [select][proj]                     ; Selection file                  (input)
+
+   ENDDO
+
+   UD NEXT END                
+   [part_per_proj]                     
+ENDDO
+
+UD NEXT END                        
+[defgrps]                                 ; Group selection file           (ends)
+
+VM
+echo ' '
+
+EN
+; </body></pre></html>
+@
+
+
+1.12
+log
+@mirror not applied where needed usually
+@
+text
+@d3 1
+a3 1
+; SOURCE: average.spi 
+d7 1
+a7 1
+;          group
+d11 1
+a11 1
+; <b> ------------ Parameters ---------------------------------------
+d13 1
+a13 1
+[grp] = 1                              ; Defocus group
+d15 1
+a15 1
+;  ------------ Input files ---------------------------------------
+d17 1
+a17 2
+FR G
+[params]../params                      ; The parameter file
+d19 1
+a19 2
+FR G
+[part_per_proj]df{***[grp]}/how_many   ; Number of particles for each projection for group
+d21 1
+a21 2
+FR G
+[select]df{***[grp]}/select/sel***     ; Particle numbers assigned to each projection set
+d23 1
+a23 2
+FR G
+[ali]../Alignment/dala01_{***[grp]}@@****** ; Aligned particle images
+d27 1
+a27 2
+FR G
+[dir]avg                              ; Output directory
+d29 1
+a29 2
+FR G
+[avg][dir]/avg***                     ; Average image stack for each projection set
+d31 1
+a31 2
+FR G
+[var][dir]/var_{***[grp]}@@******      ; Variance image stack for each projection set
+d33 1
+d37 1
+a37 1
+TR OFF                                ; Decrease results file output
+d39 1
+a39 1
+VB OFF                                ; Decrease results file output
+d41 1
+a41 1
+UD 17,[winsiz]                        ; Get image size
+d44 1
+a44 1
+VM                                    ; Create output directory if necessary                            
+d47 2
+a48 1
+UD N [numprojs]                       ; Get number of projections
+d51 26
+a76 10
+[proj]=1
+UD N,x30,x31                          ; Get number of cols in particle selection files
+[select][proj]                        ; First selection file                    (input)
+
+[navg]=0                              ; Zero average counter
+
+VM
+echo " Group: {****[grp]} Creating average and variance images for {***[numprojs]} projections"
+
+DO LB1 [proj]=1,[numprojs]            ; Loop over all projections
+d78 1
+a78 39
+   UD IC [proj], [part]               ; Get number of particles for current projection
+   [part_per_proj]                    ; Number of particles per projection (input)
+
+   IF ([part] .EQ. 0) THEN            ; Zero particles for this projection
+      BL
+      [avg][proj]                     ; Average output                    (output)
+      [winsiz],[winsiz]               ; Size
+      N                               ; No background
+      (0.0)                           ; Value
+
+      BL
+      [var][proj]                     ; Variance output                   (output)
+      [winsiz],[winsiz]               ; Size
+      N                               ; No background
+      (0.0)                           ; Value
+
+      GOTO LB10                       ; Zero particle (should not occur!)
+   ENDIF
+
+   IF (x31 .GT. 2) THEN               ; New 'AP SH' & 'VO MQ' input
+      UD IC 1, [pn],[cc],[mir]        ; Retrieve particle number, CC, & mirror flag
+      [select][proj]                  ; Selection file                   (input)
+   ELSE                               ; Old 'VO MQ' style input
+      UD IC 1, [pn],[cc]              ; Retrieve particle number, CC
+      [select][proj]                  ; Selection file                   (input)
+      
+      [mir] = 1.0                     ; No need to mirror
+   ENDIF
+
+   IF ([part] .EQ. 1) THEN            ; Only a single particle for this projection
+      IF ([mir] .LT. 0.0) THEN
+         MR                           ; Must mirror the image
+         [ali][pn]                    ; Image file
+         [avg][proj]                  ; Average file                     (output)
+         Y                            ; Y axis
+      ELSE
+         CP                           ; Copy image to average
+         [ali][pn]                    ; Image file                       (input)
+         [avg][proj]                  ; Average file                     (output)
+d80 3
+a82 16
+
+      BL
+      [var][proj]                     ; Variance                         (output) 
+      [winsiz],[winsiz]               ; Size
+      N                               ; No background
+      (0.0)                           ; Value
+
+   ELSE                               ; Multiple particles for this projection
+      MS
+      _1@@
+      [winsiz],[winsiz]               ; Dimensions
+      [part]                          ; Num. slices
+
+      DO LB2 [partorder]=1,[part]     ; Loop over particles
+         UD IC [partorder],[pn],[cc],[mir]
+         [select][proj]
+d84 1
+d86 4
+a89 4
+            MR                        ; Must mirror the image
+            [ali][pn]                 ; Image file                     (input)
+            _1@@{*****[partorder]}     ; Temp. mirrored file            (output)
+            Y                         ; Y axis
+d91 3
+a93 3
+            CP
+            [ali][pn]                 ; Image file                     (input)
+            _1@@{*****[partorder]}     ; Temp. mirrored file            (output)
+a94 1
+      LB2                             ; End particle-loop
+d96 34
+a129 6
+      AS R                            ; Add to average/variance
+      _1@@******
+      (1-[part])                      ; Selection file
+      A
+      [avg][proj]                     ; Average input
+      [var][proj]                     ; Average output                  (output)
+d131 3
+a133 3
+      DE
+      _1@@
+   ENDIF
+d135 2
+a136 2
+   UD ICE
+   [select][proj]                     ; Selection file                  (input)
+d138 1
+a138 1
+   [navg] = [navg] + 1                ; Increment counter for average
+d140 3
+a142 2
+   LB10
+LB1
+d144 2
+a145 5
+UD ICE
+[part_per_proj]
+
+DE
+jnk_mir_tmp_1                         ; Temp. mirrored file cleanup
+d149 1
+@
+
+
+1.11
+log
+@group: listing
+@
+text
+@d35 1
+a35 1
+[avg][dir]/avg_{***[grp]}@@******      ; Average image stack for each projection set
+d68 1
+a68 1
+   [part_per_proj]                    ; Number of particles per projection      (input)
+d72 1
+a72 1
+      [avg][proj]                     ; Average output                          (output)
+d78 1
+a78 1
+      [var][proj]                     ; Variance output                          (output)
+d88 1
+a88 1
+      [select][proj]                  ; Selection file                          (input)
+d91 1
+a91 1
+      [select][proj]                  ; Selection file                          (input)
+d100 1
+a100 1
+         [avg][proj]                  ; Average file                          (output)
+d104 2
+a105 2
+         [ali][pn]                    ; Image file                            (input)
+         [avg][proj]                  ; Average file                          (output)
+d109 1
+a109 1
+      [var][proj]                     ; Variance output
+d115 27
+a141 20
+      IF ([mir] .LT. 0.0) THEN
+         MR                           ; Must mirror the image
+         [ali][pn]                    ; Image file                            (input)
+         jnk_mir_tmp_1                ; Temp. mirrored file                   (output)
+         Y                            ; Y axis
+
+         AS R                         ; Add to average/variance
+         jnk_mir_tmp_*                ; Temp. mirrored file                   (input)
+         (1)                          ; File number (dummy)
+         A
+         [avg][proj]                  ; Average input
+         [var][proj]                  ; Variance output                        (output)
+      ELSE
+         AS R                         ; Add to average/variance
+         [ali]
+         [select][proj]               ; Selection file
+         A
+         [avg][proj]                  ; Average input
+         [var][proj]                  ; Average output                         (output)
+      ENDIF
+d143 2
+d148 1
+a148 1
+   [select][proj]                     ; Selection file                         (input)
+@
+
+
+1.10
+log
+@added stacks, named variables
+@
+text
+@d6 2
+a7 3
+;          <b>SINGLE</b> reference projection view.
+;
+; MASTER COPY: /net/bali/usr1/spider/docs/techs/recon/newprogs/
+d63 1
+a63 1
+echo " Creating average and variance images for {***[numprojs]} projections"
+@
+
+
+1.9
+log
+@_1 file name bug for AS R
+@
+text
+@a9 14
+; Inputs:
+;    ../params     - Document file containing image size... 
+;    how_many      - Document file containing number of particles 
+;                    for each projection group
+;    select/sel*** - Document files containing particle numbers 
+;                    for each projection set
+;    ali/sar_***@@  - Aligned particle image stacks
+;
+; Outputs:
+;    avg/avg***@@    - Average image atack for each projection set
+;    avg/var***@@    - Variance map stack for each projection set
+;    jnk_mir_tmp_1  - Temp. mirrored file (junk)
+;
+;
+d14 1
+a14 1
+x77 = 1                               ; Defocus group
+d19 1
+a19 1
+[params]../params                     ; The parameter file
+d22 1
+a22 1
+[how_many]df{***x77}/how_many         ; Number of particles for each projection for group
+d25 1
+a25 1
+[select]df{***x77}/select/sel***      ; Particle numbers assigned to each projection set
+d28 1
+a28 1
+[ali]../Alignment/ali/sar******       ; Aligned particle images
+d33 4
+a36 1
+[avg]avg/avg_{***x77}@@******           ; Average image stack for each projection set
+d39 1
+a39 1
+[var]avg/var_{***x77}@@******           ; Variance image stack for each projection set
+d43 6
+a48 1
+UD 17,x17                             ; Get image size
+d51 2
+a52 2
+VM                                    ; Create output directory                             
+mkdir -p avg                   
+d54 2
+a55 2
+UD N x20                              ; Get number of projections
+[how_many]
+d57 1
+a57 1
+x55=1
+d59 1
+a59 1
+[select]x55                           ; First selection file
+d61 1
+a61 1
+x91=0                                 ; Zero average counter
+d63 2
+a64 1
+DO LB1 x55=1,x20                      ; Loop over all projections
+d66 1
+a66 2
+   UD IC x55, x71                     ; Get number of particles for current projection
+   [how_many]                         ; Number of particles per projection
+d68 4
+a71 1
+   IF (x71 .EQ. 0) THEN               ; Zero particles for this projection
+d73 2
+a74 2
+      [avg]x55                        ; Average output
+      x17,x17                         ; Size
+d79 2
+a80 2
+      [var]x55                        ; Variance output
+      x17,x17                         ; Size
+d88 2
+a89 2
+      UD IC 1, x66,x67,x68            ; Retrieve particle number, CC, & Mirror flag
+      [select]x55                     ; Selection file
+d91 2
+a92 2
+      UD IC 1, x66,x67                ; Retrieve particle number, CC
+      [select]x55                     ; Selection file
+d94 1
+a94 1
+      x68 = 1.0                       ; No need to mirror
+d97 2
+a98 3
+
+   IF (x71 .EQ. 1) THEN               ; Only a single particle for this projection
+      IF (x68 .LT. 0.0) THEN
+d100 2
+a101 2
+         [ali]x66                     ; Image file
+         [avg]x55                     ; Average file
+d105 2
+a106 2
+         [ali]x66                     ; Image file
+         [avg]x55                     ; Average file
+d110 2
+a111 2
+      [var]x55                        ; Variance output
+      x17,x17                         ; Size
+d116 1
+a116 1
+      IF (x68 .LT. 0.0) THEN
+d118 2
+a119 2
+         [ali]x66                     ; Image file
+         jnk_mir_tmp_1                ; Temp. mirrored file
+d123 1
+a123 1
+         jnk_mir_tmp_*                ; Temp. mirrored file
+d126 2
+a127 2
+         [avg]x55                     ; Average input
+         [var]x55                     ; Variance output
+d131 1
+a131 1
+         [select]x55                  ; Selection file
+d133 2
+a134 2
+         [avg]x55                     ; Average input
+         [var]x55                     ; Average output
+d140 1
+a140 1
+   [select]x55                        ; Selection file
+d142 1
+a142 1
+   x91 = x91 + 1                      ; Increment counter for average
+d148 1
+a148 1
+[how_many]
+d153 2
+@
+
+
+1.8
+log
+@*** empty log message ***
+@
+text
+@d21 1
+d123 1
+a123 1
+         _1                           ; Temp. file
+d127 2
+a128 2
+         _1                           ; Temp. file
+         [select]x55                  ; Selection file
+d154 3
+@
+
+
+1.7
+log
+@'altered for no-mirror bug'
+@
+text
+@d6 1
+a6 1
+;          <b>SINGLE</b> reference view.
+d11 1
+d16 1
+a16 1
+;    ali/sar****** - Rotated particle images
+d19 2
+a20 2
+;    avg/avg***    - Average images for each projection set
+;    avg/var***    - Variance map for each projection set
+d32 1
+a32 1
+[how_many]df{***x77}/how_many         ; Number of particles in this group
+d35 3
+d41 1
+a41 1
+[ali]../Alignment/ali/sar             ; Aligned particle images
+d46 1
+a46 1
+[avg]avg/avg***                       ; Average image for each projection set
+d49 1
+a49 1
+[var]avg/var***                       ; Variance image for each projection set
+d53 2
+a54 2
+VM                                    
+mkdir -p avg                          ; Output directory
+d56 4
+a59 1
+UD N,x20                              ; Get number of particles (images) in defocus group
+d68 1
+a68 1
+DO LB1 x55=1,x20                      ; Loop over all particle numbers in defocus group
+d70 1
+a70 1
+   UD IC,x55,x71                      ; Get reference number for current particle
+d73 15
+a87 1
+   IF (x71 .EQ. 0) GOTO LB10          ; Zero particle (should not occur!)
+d90 1
+a90 1
+      UD IC,1, x66,x67,x68            ; Retrieve particle number, CC, & Mirror flag
+a91 1
+
+d93 1
+a93 1
+      UD IC,1, x66,x67                ; Retrieve particle number, CC, & Mirror flag
+d100 1
+a100 2
+   IF (x71 .EQ. 1) THEN               ; Initial particle for this projection
+
+d103 1
+a103 1
+         [ali]{******x66}             ; Image file
+d108 1
+a108 1
+         [ali]{******x66}             ; Image file
+d112 5
+a116 2
+      UD ICE
+      [select]x55                     ; Selection file
+a118 1
+
+d121 1
+a121 1
+         [ali]{******x66}             ; Image file
+d130 1
+a130 1
+         [var]x55                     ; Average output
+d133 1
+a133 1
+         [ali]******
+d138 2
+a139 1
+      ELSE
+d142 4
+a145 1
+   x91=x91+1                          ; Counter for average
+@
+
+
+1.6
+log
+@cosmetic
+@
+text
+@d3 1
+a3 1
+; SOURCE: average.bat 
+d5 2
+a6 1
+; PURPOSE: Creates average and variance images for a <b>SINGLE</b> defocus group.
+d11 6
+a16 5
+;    how_many - the document file with the number of particles 
+;                      corresponding to each projection
+;    select/sel*** - document files with the particlenumbers corresponding
+;                    to each projection
+;    ali/sar****** - the serial files of rotated particles
+d18 2
+a19 2
+;    avg/avg*** - average images for each projection group
+;    avg/var*** - variance map for each projection group
+d26 1
+a26 1
+x77 = 1                              ; Which defocus group
+d31 1
+a31 1
+[how_many]df{***x77}/how_many         ; Number of particles per projection
+d34 1
+a34 1
+[select]df{***x77}/select/sel{***x55} ; Particles assigned to each projection
+d37 1
+a37 1
+[ali]../Alignment/ali/sar             ; Aligned images
+d42 1
+a42 1
+[avg]avg/avg{***x55}                  ; Output average images
+d45 1
+a45 1
+[var]avg/var{***x55}                  ; Output variance images
+d49 2
+a50 2
+VM
+mkdir -p avg
+d52 1
+a52 1
+UD N,X20                              ; Get number of particles
+d55 64
+a118 32
+x91=0
+
+DO LB1 x55=1,x20                       ; Loop over all particle numbers
+
+   UD IC,x55,x71   ; Get number of 
+   [how_many]
+
+   IF (X71.EQ.0) GOTO LB10
+   IF (X71.GT.1) GOTO LB3
+
+   UD IC,1,x66
+   [select]
+
+   CP
+   [ali]{******x66}
+   [avg]
+
+   UD ICE
+   [select]
+
+   x91=x91+1
+
+   GOTO LB10
+
+   LB3
+
+   AS R
+   [ali]******
+   [select]
+   A
+   [avg]
+   [var]
+d120 1
+a120 1
+   x91=x91+1
+@
+
+
+1.5
+log
+@ap sh
+@
+text
+@d5 1
+a5 1
+; PURPOSE: Creates average and variance images for a SINGLE defocus group.
+d24 1
+a24 1
+x60 = 1                              ; Which defocus group
+d29 1
+a29 1
+[how_many]df{***x60}/how_many         ; Number of particles per projection
+d32 1
+a32 1
+[select]df{***x60}/select/sel{***x55} ; Particles assigned to each projection
+@
+
+
+1.4
+log
+@typo
+@
+text
+@d3 1
+a3 1
+; average.bat 
+d5 1
+a5 1
+; PURPOSE: Creates average and variance images for a single defocus group.
+d7 2
+a18 1
+; MASTER COPY: /net/bali/usr1/spider/docs/techs/recon/newprogs/
+d24 1
+a24 3
+x60 = 1                    ; Which defocus group
+
+; <b> ------------ Input files ---------------------------------------
+d26 1
+a26 2
+FR G
+[df]df{***x60}             ; Defocus group directory
+d29 1
+a29 1
+[how_many][df]/how_many    ; Number of particles per projection
+d32 1
+a32 1
+[select][df]/select/sel   ; Particles assigned to each projection
+d35 1
+a35 3
+[ali]../Alignment/ali/sar ; Aligned images
+
+; --------------- Output files  -----------------------------------</b>
+d37 1
+a37 2
+FR G
+[avgdir]avg              ; Directory for output files
+d40 1
+a40 1
+[avg][avgdir]/avg        ; Output average images
+d43 1
+a43 1
+[var][avgdir]/var        ; Output variance images
+d48 1
+a48 1
+mkdir -p [avgdir]
+d50 1
+a50 1
+UD N,X20
+d55 1
+a55 1
+DO LB1 x55=1,x20
+d57 1
+a57 1
+   UD IC,x55,x71
+d64 1
+a64 1
+   [select]{***x55}
+d68 1
+a68 1
+   [avg]{***x55}
+d71 1
+a71 1
+   [select]{***x55}
+d81 1
+a81 1
+   [select]{***x55}
+d83 2
+a84 2
+   [avg]{***x55}
+   [var]{***x55}
+@
+
+
+1.3
+log
+@cosmetic
+@
+text
+@d39 1
+a39 1
+; --------------- Output files  -------------------------------------
+@
+
+
+1.2
+log
+@ changed 5 stars to 6 stars
+@
+text
+@d1 1
+a1 1
+; average.bat (formerly b17.avg)
+d3 1
+a3 1
+; Creates average and variance images FOR A SINGLE DEFOCUS GROUP.
+d5 2
+d16 6
+d23 1
+d25 1
+a25 1
+x60 = 1 ; which defocus group
+d27 2
+a29 1
+; ----------- Input files --------------
+d31 2
+a32 1
+<df>df{***x60}      ; defocus group directory
+d34 2
+a35 1
+<how_many><df>/how_many  ; number of particles per projection
+d37 4
+a40 1
+<select><df>/select/sel  ; particles assigned to each projection
+d42 1
+a42 1
+<ali>../Alignment/ali/sar ; aligned images
+a43 1
+; ----------- Output files --------------
+d45 2
+a46 3
+<avgdir>avg  ; directory for output files
+FR G
+<avg><avgdir>/avg   ; output average images
+d48 1
+a48 1
+<var><avgdir>/var   ; output variance images
+d50 1
+a50 1
+; -------------- END BATCH HEADER --------------------------
+d53 1
+a53 1
+mkdir -p <avgdir>
+d56 1
+a56 1
+<how_many>
+d62 2
+a63 2
+UD IC,x55,x71
+<how_many>
+d65 2
+a66 2
+IF (X71.EQ.0) GOTO LB10
+IF (X71.GT.1) GOTO LB3
+d68 2
+a69 2
+UD IC,1,x66
+<select>{***x55}
+d71 3
+a73 3
+CP
+<ali>{******x66}
+<avg>{***x55}
+d75 2
+a76 2
+UD ICE
+<select>{***x55}
+d78 1
+a78 1
+x91=x91+1
+d80 1
+a80 1
+GOTO LB10
+d82 1
+a82 1
+LB3
+d84 6
+a89 6
+AS R
+<ali>******
+<select>{***x55}
+A
+<avg>{***x55}
+<var>{***x55}
+d91 1
+a91 1
+x91=x91+1
+d93 1
+a93 1
+LB10
+d97 1
+a97 1
+<how_many>
+d99 2
+a100 1
+EN D
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d10 1
+a10 1
+;    ali/sar***** - the serial files of rotated particles
+d59 1
+a59 1
+<ali>{*****x66}
+d72 1
+a72 1
+<ali>*****
+@

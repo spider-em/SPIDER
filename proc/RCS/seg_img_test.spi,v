@@ -1,0 +1,702 @@
+head	1.1;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+1.1
+date	2015.06.08.16.30.40;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@; MASTER COPY: /usr8/spider/proc/seg_img_test.spi
+;
+; AUTHOR:  ArDean Leith   August 2013 
+;
+; PURPOSE:  Applies Anisotropic Diffusion to denoise image then
+;           studies influence of some parameter settings on
+;           results of 22 different SPIDER segmentation 
+;           filters/operations.
+;
+; INPUT:    A SPIDER image.  Should be reasonably small (e.g. <= 500 x 500)  
+;
+; USAGE:    First alter: 
+;               Input image name, 
+;               Input parameters
+;           Then run SPIDER and invoke the procedure:
+;           spider spi/dat @@seg_img_test
+;
+;           Use Web to look at results in:       seg_stk 
+;             or
+;           Use Web to look at final montage in: seg_montage
+;
+; OUTPUTS:  1) Stack of images created with various parameter settings.
+;           2) Montage of resulting images.
+; 
+; INVOCATION:    spider spi/dat @@seg_img_test
+
+
+ ; Toggles to select type of input and types of outputs
+ ; Value of '1' is true.
+
+ [CE_GNC]    = 1
+ [CE_MED]    = 1
+ [CE_HI]     = 1
+ [CE_LAH]    = 1
+ [CE_HAR]    = 1
+ [CE_HURST]  = 1
+ [CE_MAX]    = 1
+ [CE_VAR]    = 1
+ [CE_RANGE]  = 1
+ [CE_G]      = 1
+ [CE_LAP]    = 1
+ [CE_SO]     = 1
+ [CE_FREI]   = 1
+ [CE_PR]     = 1
+ [FC]        = 1
+ [ED]        = 1
+ [CE_WATER]  = 1
+ [ER_WA]     = 1
+ [CE_RIDGE]  = 1
+ [ER_EDM]    = 1
+ [CE_TOP]    = 1         ; Usefull for particles only
+ [FQ]        = 1         
+
+ ; -----------------------------------  INPUT IMAGE  
+
+ [imgin] = 'sav_bz_sli_75'      ; Input image file  
+
+ ; -----------------------------------  OUTPUT FILES  
+
+ [stkout]  = 'seg_stk'          ; Labeled output stack file
+ [montage] = 'seg_montage'      ; Final labeled output montage
+
+ ; -----------------------------------  INPUT PARAMETERS  
+
+ ; Set parameters for initial denoising using 'CE AD'
+ [aditer]  =   5                ; Iteration ('CE AD' Iterations)
+ [time]    = .02                ; Time-step ('CE AD' Time step) (0... 0.25)
+ [sigma]   = 3.0                ; Sigma     ('CE AD' Standard deviation)
+ [lambda]  =  10                ; Lambda    ('CE AD' Contrast) (integers)
+
+ ; -------------- END BATCH HEADER -------------------------------------------
+
+ ; ----------------------------------- INITIALIZATION
+
+ ; Remove any existing output files
+ DE 
+   [stkout] 
+ DE 
+   [montage]
+ 
+ ; Report input image size, location, etc
+ FI H [nx],[ny],[nz],[fmax],[fmin],[favg]
+   [imgin]                   ; Original image        (input)
+   NX,NY,NZ,MAX,MIN,AV       ; NX,NY, & NZ locations
+           
+ SYS
+   echo " File:         [imgin]"
+ SYS
+   echo " Size:         {%i0%[nx]} x {%i0%[ny]} x {%i0%[nz]}  "
+
+ IF ([nz] > 1) THEN
+   SYS
+     echo " Does not work in volumes,  Window out a slice!  "
+   EN
+ ENDIF
+
+ SYS
+   echo ' Image range: {%f9.2%[fmin]} ... {%f8.2%[fmax]}  Avg: {%f8.2%[favg]} '
+
+ ; Copy the input image to inline file 
+ CP                             ; Copy operation
+   [imgin]                      ; Image                  (input)
+   _1                           ; Image                  (output
+
+ ; Scale image values: 0...255
+ AR SCA                         ; Scale image 0...255
+   _1                           ; Image                  (input
+   _2                           ; Image                  (output)
+   0 255                        ; Scaling range
+
+ ;NEG                           ; Negate the image (MAY BE NECESSARY)
+  ;_2                           ; Image                  (input)
+  ;_2                           ; Image                  (output) 
+
+ ; Report scaled image range (For setting threshold)
+ FI H [max],[min],[iavg]
+   _2                            ; Image                  (input)
+   MAX,MIN,AVG
+ SYS
+   echo ' Image scaled:        {%i0%[min]} ... {%i0%[max]}       Avg:  {%f6.2%[iavg]}'
+ SYS
+   echo "  "
+
+ [imgnum] = 0                  ; Initialize output image number
+
+ ; ----------------------------------- ORIGINAL SLICE 
+
+ [imgnum]=[imgnum]+1           ; Increment stack pointer 
+ LA                            ; Label the image 
+   _2                          ; Image                  (input) 
+   [stkout]@@{****[imgnum]}     ; Image                  (output) 
+   ORIGINAL
+
+ SYS  
+   echo " N: {%i3%[imgnum]} Original" 
+
+ ; ----------------------------------------- CE AD
+ 
+
+ CE AD                         ; Anisotropic Diffusion 
+   _2                          ; Input image 
+   _5                          ; Image                  (output) 
+   HEG                         ; AD filter type
+   [aditer]                    ; Iterations 
+   [time]                      ; Time step 
+   [sigma],[lambda]            ; Sigma & Lambda 
+ 
+
+ [imgnum]=[imgnum]+1           ; Increment stack pointer 
+ LA                            ; Label the image 
+   _5                          ; Image                  (input) 
+   [stkout]@@{****[imgnum]}     ; Image                  (output) 
+   CE AD ORIGINAL
+
+ SYS  
+   echo " N: {%i3%[imgnum]} CE AD Denoised  Iter:{%i0%[aditer]}  Time: {%f3.2%[time]}  S:{%f3.1%[sigma]} L: {%i0%[lambda]}" 
+
+
+ ; Uncomment 'CP' to use original image not denoised image
+ ;CP
+   ;_2
+   ;_5
+
+ IF ([CE_MED] == 1) THEN
+   ; ----------------------------------- CE -- Median 
+    
+   DO [iter]=1,3 
+      [radius] = [iter] * 2 + 1 
+      CE MED                    ; Median 
+        _5                      ; Image                  (input) 
+        _6                      ; Image                  (output) 
+        [radius]                ; Length 
+        B                       ; Box shape 
+      
+      [imgnum]=[imgnum]+1       ; Increment stack pointer 
+      LA                        ; Label the image 
+        _6                      ; Image                  (input) 
+        [stkout]@@{****[imgnum]} ; Image                  (output) 
+        CE MED R:{***[radius]}
+   
+      SYS  
+        echo " N: {%i3%[imgnum]} CE Median Radius: {%i0%[radius]}" 
+   ENDDO 
+ ENDIF
+
+ IF ([CE_GNC] == 1) THEN
+  ; ----------------------------------- CE -- GNC 
+    
+   DO [iter]=1,3 
+      [glambda] = [iter] * 2 + 1 
+      CE GNC                    ; GNC 
+        _5                      ; Image                  (input) 
+        _6                      ; Image                  (output) 
+        [iter]                  ; Lambda (smaller is for smaller obj) 
+        0.2                     ; Contrast sensitivity 
+        1.0E-8                  ; accuracy 
+    
+      [imgnum]=[imgnum]+1       ; Increment stack pointer 
+      LA                        ; Label the image 
+        _6                      ; Image                  (input) 
+        [stkout]@@{****[imgnum]} ; Image                  (output) 
+        CE GNC L:{***[glambda]}
+   
+      SYS  
+        echo " N: {%i3%[imgnum]} CE GNC Lambda: {%i0%[glambda]}" 
+   ENDDO 
+ ENDIF
+
+
+ IF ([CE_HI] == 1) THEN
+   
+   ; ----------------------------------- CE -- Histogram Equalization
+   
+   CE HI                        ; CE HI
+     _5                         ; Image                  (input)
+     _6                         ; Image                  (output)
+   N                            ; No print
+   
+   [imgnum]=[imgnum]+1          ; Increment stack pointer 
+   LA                           ; Label the image 
+     _6                         ; Image                  (input) 
+     [stkout]@@{****[imgnum]}    ; Image                  (output) 
+   CE HI
+   
+   SYS  
+     echo " N: {%i3%[imgnum]} CE HI" 
+ ENDIF
+ 
+
+ IF ([CE_LAH] == 1) THEN
+   ; ----------------------------------- CE -- LAH 
+    
+   [bins]   = 64                   ; Number of bins 
+   
+   DO  [iter]=1,3 
+      [radius] = [iter] * 2 + 1 
+    
+      CE LAH                       ; Local area histogram equalization 
+        _5                         ; Image                  (input) 
+        _6                         ; Image                  (output) 
+        [radius],[radius]          ; Neighborhood 
+        [bins]                     ; Number of bins 
+      
+      [imgnum]=[imgnum]+1          ; Increment stack pointer 
+      LA                           ; Label the image 
+        _6                         ; Image                  (input) 
+        [stkout]@@{****[imgnum]}    ; Image                  (output) 
+        CE LAH R:{**[radius]} B:{**[bins]}  
+   
+      SYS  
+        echo " N: {%i3%[imgnum]} CE LAH Radius: {%i0%[radius]} Bins: {%i0%[bins]}" 
+   ENDDO
+ ENDIF
+
+ IF ([CE_HAR] == 1) THEN
+   ;------------------------------ CE -- Haralick 
+    
+   [off] = 2
+   DO  [iter]=0,1 
+      DO  [mode]=1,6 
+   
+         [radius] = 9 + [iter] * 6 
+    
+         CE HAR                    ; Haralick 
+           _5                      ; Image                  (input)
+           _6                      ; Image                  (output)
+           [radius],[radius]       ; Neighborhood 
+           32                      ; Intensity Levels 
+           [off],[off]             ; Offset 
+           [mode]                  ; Mode 
+   
+         [imgnum]=[imgnum]+1       ; Increment stack pointer 
+         LA                        ; Label the image 
+           _6                      ; Image                  (input) 
+           [stkout]@@{****[imgnum]} ; Image                  (output) 
+           CE HAR M:{*[mode]} R:{**[radius]} O:2 
+   
+         SYS
+           echo " N: {%i3%[imgnum]} CE Haralick Radius: {%i2%[radius]} Mode: {*[mode]} Offset: 2"
+      ENDDO 
+   ENDDO 
+   
+   [off] = 4
+   DO  [iter]=0,1 
+      DO  [mode]=1,6 
+   
+         [radius] = 11 + [iter] * 6 
+    
+         CE HAR                    ; Haralick 
+           _5                      ; Image                  (input) 
+           _6                      ; Image                  (output) 
+           [radius],[radius]       ; Neighborhood 
+           32                      ; Intensity Levels 
+           [off],[off]             ; Offset 
+           [mode]                  ; Mode 
+   
+         [imgnum]=[imgnum]+1       ; Increment stack pointer 
+         LA                        ; Label the image 
+           _6                      ; Image                   (input) 
+           [stkout]@@{****[imgnum]} ; Image                   (output) 
+           CE HAR M:{*[mode]} R:{**[radius]} O:4" 
+   
+         SYS
+           echo " N: {%i3%[imgnum]} CE Haralick Radius: {%i2%[radius]} Mode: {*[mode]} Offset: 4"
+      ENDDO 
+   ENDDO 
+ ENDIF
+
+ IF ([CE_HURST] == 1) THEN
+   ;------------------------------ CE -- Hurst 
+    
+   DO  [iter]=1,3 
+      [radius] =1  + [iter] * 2 
+   
+      CE HURST                     ; Hurst 
+        _5                         ; Image                  (input) 
+        _6                         ; Image                  (output) 
+        [radius]                   ; Radius 
+      
+      [imgnum]=[imgnum]+1          ; Increment stack pointer 
+      LA                           ; Label the image 
+        _6                         ; Image                  (input) 
+        [stkout]@@{****[imgnum]}    ; Image                  (output) 
+        CE HURST  R:{***[radius]}
+   
+      SYS  
+        echo " N: {%i3%[imgnum]} CE Hurst    Radius: {%i0%[radius]}" 
+   ENDDO
+ ENDIF
+
+
+
+ IF ([CE_MAX] == 1) THEN
+   ;------------------------------ CE -- Maximum 
+   
+   DO [iter]=1,3 
+      [radius] = 1  + [iter] * 2 
+   
+      CE MAX                      ; Maximum 
+        _5                        ; Image                  (input) 
+        _6                        ; Image                  (output) 
+        [radius]                  ; Radius 
+      
+      [imgnum]=[imgnum]+1         ; Increment stack pointer 
+      LA                          ; Label the image 
+        _6                        ; Image                  (input) 
+        [stkout]@@{****[imgnum]}   ; Image                  (output) 
+        CE MAX R:{***[radius]}
+   
+      SYS  
+        echo " N: {%i3%[imgnum]} CE MAX      Radius: {%i0%[radius]}" 
+   ENDDO
+ ENDIF
+
+ IF ([CE_VAR] == 1) THEN
+   ;------------------------------ CE -- Variance 
+   
+   DO  [iter]=1,3 
+      [radius] = 1  + [iter] * 2 
+   
+      CE VAR                    ; Variance 
+        _5                      ; Image                  (input) 
+        _6                      ; Image                  (output) 
+        [radius]                ; Radius 
+   
+      [imgnum]=[imgnum]+1       ; Increment stack pointer 
+      LA                        ; Label the image 
+        _6                      ; Image                  (input) 
+        [stkout]@@{****[imgnum]} ; Image                  (output) 
+        CE VAR R:{***[radius]}
+   
+      SYS  
+        echo " N: {%i3%[imgnum]} CE VAR      Radius: {%i0%[radius]}" 
+   ENDDO
+ ENDIF
+
+ IF ([CE_RANGE] == 1) THEN
+   ;------------------------------ CE -- Range 
+   
+   DO [iter]=1,3 
+      [radius] = 1  + [iter] * 2 
+   
+      CE RANGE                  ; Hurst 
+        _5                      ; Image                  (input) 
+        _6                      ; Image                  (output) 
+        [radius]                ; Radius 
+   
+
+      [imgnum]=[imgnum]+1       ; Increment stack pointer 
+      LA                        ; Label the image 
+        _6                      ; Image                  (input) 
+        [stkout]@@{****[imgnum]} ; Image                  (output) 
+        CE RANGE R:{***[radius]}
+   
+      SYS  
+        echo " N: {%i3%[imgnum]} CE Range    Radius: {%i0%[radius]}" 
+   ENDDO
+ ENDIF
+
+
+ IF ([CE_G] == 1) THEN
+   ;------------------------------ CE -- Gradient 
+   
+   CE G                         ; Gradient 
+     _5                         ; Image                  (input) 
+     _6                         ; Image                  (output) 
+   
+   [imgnum]=[imgnum]+1          ; Increment stack pointer 
+   LA                           ; Label the image 
+     _6                         ; Image                  (input) 
+     [stkout]@@{****[imgnum]}    ; Image                  (output) 
+     CE GRADIENT  
+   
+   SYS  
+     echo " N: {%i3%[imgnum]} CE Gradient" 
+ ENDIF
+
+ IF ([CE_LAP] == 1) THEN
+   ;------------------------------ CE -- Laplacian 
+   
+   DO [iter]=0,2 
+      [radius] = 3  + [iter] * 4 
+   
+      CE L                      ;  
+        _5                      ; Image                  (input) 
+        _6                      ; Image                  (output) 
+        [radius]                ; Radius 
+   
+      [imgnum]=[imgnum]+1       ; Increment stack pointer 
+      LA                        ; Label the image 
+        _6                      ; Image                  (input) 
+        [stkout]@@{****[imgnum]} ; Image                  (output) 
+        CE LAP R:{***[radius]}
+   
+      SYS  
+        echo " N: {%i3%[imgnum]} CE Laplacian Radius: {%i0%[radius]}" 
+   ENDDO
+ ENDIF
+
+ IF ([CE_SO] == 1) THEN
+   ;------------------------------ CE -- Sobel 
+   
+   CE S                        ;  
+     _5                        ; Image                  (input) 
+     _6                        ; Image                  (output) 
+   
+   [imgnum]=[imgnum]+1         ; Increment stack pointer 
+   LA                          ; Label the image 
+     _6                        ; Image                  (input) 
+     [stkout]@@{****[imgnum]}   ; Image                  (output) 
+     CE SOBEL
+   
+   SYS  
+     echo " N: {%i3%[imgnum]} CE Sobel" 
+ ENDIF
+
+ IF ([CE_FREI] == 1) THEN
+   ;------------------------------ CE -- Frei Chen 
+   
+   CE F                         ; Frei Chen 
+     _5                         ; Image                  (input) 
+     _6                         ; Image                  (output) 
+   
+   [imgnum]=[imgnum]+1          ; Increment stack pointer 
+   LA                           ; Label the image 
+     _6                         ; Image                  (input) 
+     [stkout]@@{****[imgnum]}    ; Image                  (output)
+     CE FREI-CHEN
+   
+   SYS  
+     echo " N: {%i3%[imgnum]} CE Frei-Chen " 
+ ENDIF
+
+ IF ([CE_PR] == 1) THEN
+   ;------------------------------ CE -- Prewitt 
+   
+   CE PR                        ; Prewitt  
+     _5                         ; Image                  (input) 
+     _6                         ; Image                  (output) 
+      
+   [imgnum]=[imgnum]+1          ; Increment stack pointer 
+   LA                           ; Label the image 
+     _6                         ; Image                  (input) 
+     [stkout]@@{****[imgnum]}    ; Image                  (output) 
+     CE PREWITT
+   
+   SYS  
+     echo " N: {%i3%[imgnum]} CE Prewitt" 
+ ENDIF
+
+ IF ([FC] == 1) THEN
+   ;------------------------------ FC
+   
+   [levels] = 4
+   
+   FC                           ; Contouring 
+     _5                         ; Image                  (input)  
+     _6                         ; Image                  (output)  
+     [levels]                   ; Number of Contours
+     NO                         ; No overwrite
+   
+   [imgnum]=[imgnum]+1          ; Increment stack pointer 
+   LA                           ; Label the image 
+     _6                         ; Image                  (input) 
+     [stkout]@@{****[imgnum]}    ; Image                  (output) 
+     FC LEVELS:{**[levels]}
+   
+   SYS  
+     echo " N: {%i3%[imgnum]} FC Levels: {%i0%[levels]}" 
+ ENDIF
+
+ IF ([ED] == 1) THEN
+   ;------------------------------ ED 
+   
+   DO  [Thresh]=1,3 
+      DO  [mode]=1,4 
+   
+         ED                        ; Edge Detection (Wiener) 
+           _5                      ; Image                  (input) 
+           _6                      ; Image                  (output) 
+           [mode]                  ; Filter number 
+           [Thresh]                ; Relative Threshold 
+   
+         [imgnum]=[imgnum]+1       ; Increment stack pointer 
+         LA                        ; Label the image 
+           _6                      ; Image                  (input) 
+           [stkout]@@{****[imgnum]} ; Image                  (output) 
+           ED M:{**[mode]} T:{*[Thresh]} 
+   
+         SYS
+           echo " N: {%i3%[imgnum]} ED Mode: {%i0%[mode]} Thresh: {%i0%[Thresh]}"
+      ENDDO
+   ENDDO
+  ENDIF
+
+ IF ([CE_WATER] == 1) THEN
+   ;------------------------------ CE WATER
+   
+   CE WATER                     ;  
+     _5                         ; Image                  (input) 
+     _6                         ; Image                  (output) 
+   
+   [imgnum]=[imgnum]+1          ; Increment stack pointer 
+   LA                           ; Label the image 
+     _6                         ; Image                  (input) 
+     [stkout]@@{****[imgnum]}    ; Image                  (output) 
+     CE WATERSHED   
+   
+   SYS  
+     echo " N: {%i3%[imgnum]} CE Watershed" 
+ ENDIF
+
+
+
+ IF ([ER_WA] == 1) THEN
+   ; ----------------------------------- ER -- Watershed 
+
+   ER WA                        ; Erode to Watershed Skeleton 
+     _5                         ; Image                  (input) 
+     _6                         ; Image                  (output) 
+
+   [imgnum]=[imgnum]+1          ; Increment stack pointer 
+   LA                           ; Label the image 
+     _6                         ; Image                  (input) 
+     [stkout]@@{****[imgnum]}    ; Image                  (output)   
+     ER WA 
+
+   SYS  
+     echo " N: {%i3%[imgnum]} ER WA" 
+ ENDIF
+
+ IF ([CE_RIDGE] == 1) THEN
+   ; ----------------------------------- CE -- Ridge 
+   
+   CE RIDGE                   ; Erode to Watershed Skeleton 
+     _5                       ; Image                  (input)  
+     _6                       ; Image                  (output)  
+
+   [imgnum]=[imgnum]+1        ; Increment stack pointer 
+   LA                         ; Label the image 
+     _6                       ; Image                  (input) 
+     [stkout]@@{****[imgnum]}  ; Image                  (output) 
+     CE RIDGE 
+
+   SYS  
+     echo " N: {%i3%[imgnum]} CE Ridge" 
+ ENDIF
+
+ IF ([ER_EDM] == 1) THEN
+   ;------------------------------ ER EDM Distance Map
+   
+   [level] = 100
+   
+   ER EDM                     ;  
+     _5                       ; Image                  (input) 
+     _6                       ; Image                  (output)  
+     [level]                  ; Background Threshold
+   
+   [imgnum]=[imgnum]+1        ; Increment stack pointer 
+   LA                         ; Label the image 
+     _6                       ; Image                  (input) 
+     [stkout]@@{****[imgnum]}  ; Image                (output) 
+     ER EDM  L:{***[level]}
+   
+   SYS  
+     echo " N: {%i3%[imgnum]} ER EDM Level: {%i0%[level]}" 
+ ENDIF
+
+ IF ([CE_TOP] == 1) THEN
+   ;------------------------------ CE -- TopHat 
+   
+   DO  [iter]=2,6 
+      [radius]  = 1  + [iter] * 2 
+      [radius1] = [radius] + 2 
+   
+      CE TOP                    ; TopHat 
+        _5                      ; Input image 
+        _6                      ; Image                  (output) 
+       [radius],[radius1]       ; Radii 
+   
+      [imgnum]=[imgnum]+1       ; Increment stack pointer 
+      LA                        ; Label the image 
+        _6                      ; Image                 (input)
+        [stkout]@@{****[imgnum]} ; Image                 (output) 
+        CE TOPHAT R:{***[radius]}
+   
+      SYS  
+        echo " N: {%i3%[imgnum]} CE TopHat Radius: {%i2%[radius]}" 
+   ENDDO
+ ENDIF
+ ; ----------------------------------- 
+
+
+ IF ([FQ] == 1) THEN
+   ;------------------------------------ FQ  
+    
+   DO [mode]=1,2;6 
+      DO  [radius]=2,14,2    
+         FQ                        ; Fourier filter 
+           _5                      ; Image                 (input) 
+           _6                      ; Image                 (output) 
+           [mode]                  ; Filter type 1...10 
+           [radius]                ; Radius 
+   
+         [imgnum]=[imgnum]+1       ; Increment stack pointer 
+         LA                        ; Label the image 
+           _6                      ; Image                (input) 
+           [stkout]@@{****[imgnum]} ; Image                (output) 
+           FQ: {*[mode]} R:{**[radius]}  
+   
+         SYS
+           echo " N: {%i3%[imgnum]} FQ Mode: {%i0%[mode]} Radius: {%i2%[radius]}"
+      ENDDO 
+   ENDDO 
+   
+   ;------------------------------------ FINISHED -------------------------  
+
+ SYS
+   echo ; echo " Total Frames: {%i3%[imgnum]}"
+
+ MN S                       ; Montage the output images
+   [stkout]@@****            ; Image template       (input)
+   1-[imgnum]               ; File numbers
+   8,1                      ; Images / row, margin width
+   0                        ; Margin value
+   [montage]                ; Montage file         (output)
+
+ FS
+   [montage]                ; Output file
+
+ SYS
+   echo " Stack in:   [stkout]" 
+ SYS
+   echo " Montage in: [montage]" ; echo " "
+
+ EN
+
+
+ 
+@

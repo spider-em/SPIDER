@@ -1,0 +1,1656 @@
+head	1.9;
+access;
+symbols
+	Pre_gold:1.7;
+locks;
+comment	@# @;
+
+
+1.9
+date	2016.07.06.13.18.20;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2016.03.25.17.26.25;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2013.12.13.16.16.26;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2013.11.21.19.19.03;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2013.11.13.19.41.47;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2013.11.13.16.52.50;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2013.11.12.14.03.24;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2013.11.08.19.28.24;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2012.05.23.03.11.58;	author tapu;	state Exp;
+branches;
+next	;
+
+
+desc
+@new file -- combines selections from classification-based verification
+@
+
+
+1.9
+log
+@cosmetic echos
+@
+text
+@ ; <html><head><title>Combine particles from good classes</title></head><body><pre>
+ ;
+ ; SOURCE:    spider/docs/techs/recon1/Procs/verify-combine-classes.spi
+ ;
+ ; PURPOSE:   Combine particles from good classes
+ ;
+ ; USAGE:     clean ; ./spider spi/dat @@verify-combine-classes
+ ;
+ ; REQUIRES:  spider/docs/techs/recon1/Procs/verify-settings.spi
+ ;
+ ; INPUTS:  (Where *** denotes group,  ### denotes view,   ??? denotes class)
+ ;   [ref_view_list]       [rec_dir]/sel_proj                 List of projection views            (one)
+ ;   [prj_dir]             views/prj###                       View sub-directories                (one/view)
+ ;   [good_classes_list]   views/prj###/sel_class_good        Selected classes                    (one/view)
+ ;   [class_doc]           views/prj###/sel_part_byclass_???  Particle selection by class         (one/class/view) 
+ ;   [view_list]           views/prj###/sel_part_byv          Total particle selection files      (one/view)
+ ;   [byhand_list]         views/prj###/sel_part_byhand       OPTIONAL hand-picked particle list  (one/class)
+ ;   [first_good_part_doc] views/prj###/first_good_part       OPTIONAL for reference views        (one/view)
+ ;
+ ; OUTPUTS:  
+ ;   [good_particles]      views/prj###/sel_part_byv_good     Good-particle list                  (one/view)
+ ;   [bad_particles]       views/prj###/sel_part_byv_bad      Sorted bad-particle list            (one/view) 
+ ;   [parts_vsview_good]   views/parts_vsview_good            Total # of good particles           (one/view)
+ ;   [good_particle_copy]  ../Particles/good/sel_part_***     OPTIONAL Archive copy of good particle list  (one/view)
+ ;
+ ; ---------------------- Parameters  ----------------------
+
+ [archive-yn] = 0     ; Copy files to Particles/good/... for archiving? (0 == no)
+
+ ; ------------------- END BATCH HEADER -------------------
+
+ MD
+   TR OFF                                    ; Decrease results file output
+ MD
+   VB OFF                                    ; Decrease results file output
+
+ ; Set common filenames & parameters
+ @@verify-settings
+
+ ; Set temporary filenames
+
+ [temp_goodbyview_wdupes_unsort_noccrot]  = 'tmp_goodbyview_1_combined'
+ [temp_goodbyview_nodupes_unsort_noccrot] = 'tmp_goodbyview_2_wodupes'
+ [temp_goodbyview_nodupes_unsorted_ccrot] = 'tmp_goodbyview_3_ccrot'
+ [temp_badbyview_unsort]                  = 'tmp_badbyview_1_unsort'
+ [temp_good_class]                        = 'tmp_good_class'
+
+ SYS
+   echo -n "  Combining good particles    "; date
+
+ IF ( [archive-yn] == 0 ) THEN
+   SYS
+     echo "  Not archiving copy of selection files"    ; echo
+ ELSE
+   SYS
+     echo "  Archiving copy of output selection files" ; echo
+ ENDIF
+
+ ; Prepare output-stats doc
+ DE
+   [parts_vsview_good]
+ ;SD /     UNVERIFIED  GOOD_CLASSES     KEPT      PERCENTAGE
+ SD /        #KEPT      GOODCLASSES    PREVERIFY      PERCENT
+   [parts_vsview_good]
+
+ ; Initialize total kept-particle counter
+ [kept-parts] = 0
+
+ ; Get number of reference-views
+ UD N [num-refs]
+   [ref_view_list]
+
+ ; Loop through reference-views
+ DO  [view-key] = 1,[num-refs]
+ 
+  ; Get view #
+   UD IC [view-key],[view]
+     [ref_view_list]
+
+   IF ( [archive-yn] .NE. 0 ) THEN
+     SYS
+       cp -f [good_particles][view].$DATEXT  [good_particle_copy][view].$DATEXT
+   ENDIF
+
+   ; CHECK IF THERE ARE ANY PARTICLES
+
+   ; Look for selection file
+   IQ FI [sel-exists]
+     [view_list][view]
+
+   ; If no selection file
+   IF ( [sel-exists] == 0 ) THEN
+     SYS
+       echo "  View: {%I4%[view]}   No particles found "
+
+     [tot-view-parts]   = 0
+     [good-class-parts] = 0
+     [good-parts]       = 0
+     [fraction-kept]    = 0
+
+     SYS
+       touch [good_particles][view].$DATEXT
+     ; Downstream procedures will look for this file
+
+     GOTO LB7
+   ENDIF
+
+
+   ; Get total number of particles in current reference view
+   UD N [tot-view-parts]
+     [view_list][view]
+
+   ; Check if good-class list exists
+   IQ FI [goodclasses-exists]
+     [good_classes_list][view]         ; File  (input)
+
+   IF ( [goodclasses-exists] == 1 ) THEN
+     ; Get number of good classes
+     UD N [num-good-classes]
+       [good_classes_list][view]
+   ENDIF
+
+   ; If good-class list doesn't exist or is empty
+   IF ( [num-good-classes]*[goodclasses-exists] == 0 ) THEN
+     SYS
+       echo "  View: {%I0%[view]}   No good classes found"
+
+     [good-class-parts] = 0
+     [good-parts]       = 0
+     [fraction-kept]    = 0
+
+     SYS
+       touch [good_particles][view].$DATEXT
+     ; Downstream procedures will look for this file
+
+     ; Copy total-particle list to bad-particle list (to be sorted)
+     DOC REN
+       [view_list][view]         ; File  (input)
+       [temp_badbyview_unsort]   ; File  (output)
+
+     GOTO LB4
+   ENDIF
+
+
+   ; JUGGLE PARTICLE-PICKING MODES
+
+   ; Clean up pre-existing files
+   DE
+     [good_particles][view]
+   DE
+     [temp_goodbyview_wdupes_unsort_noccrot]
+
+
+   ; Get first good-class number
+   UD 1, [class-num]
+    [good_classes_list][view]         ; File  (input)
+   UD E
+
+   ; Check if by-hand class doc exists
+   IQ FI [byhand-exists]
+    [byhand_list][view]{***[class-num]}  ; File  (input)
+
+
+   ; PARTICLES PICKED BY HAND
+
+   ; If by-hand class docs exist then
+   IF ( [byhand-exists] == 1 ) THEN
+     SYS
+       echo "  View: {%I0%[view]}  Using hand-picked particle list"
+
+     ; Make sure by-hand lists exist (will crash DOC COMBINE otherwise)
+
+     ; Loop through good classes
+     DO  [good-class-key5] = 1,[num-good-classes]  ; Loop through good classes -----
+
+       ; Get class number
+       UD IC [good-class-key5], [class-num]
+         [good_classes_list][view]
+
+       ; Check if by-hand list exists
+       IQ FI [b-exists]
+         [byhand_list][view]{***[class-num]}
+
+       ; If by-hand list doesn't exist, create empty one
+       IF ( [b-exists] == 0 ) THEN
+         SYS
+           echo "  View: {%I4%[view]}, Class: {%I3%[class-num]}  No by-hand particle-list found -- Continuing"
+         SYS
+           touch [byhand_list][view]{***[class-num]}.$DATEXT
+       ENDIF
+     ENDDO                               ; End class-loop ----------------------
+
+     ; Combine good classes for hand-picked particles
+     DOC COMBINE
+       [byhand_list][view]***                    ; File (input)
+       [good_classes_list][view]                 ; Selection file (input)
+       [temp_goodbyview_wdupes_unsort_noccrot]   ; File   (output)
+
+     ; Remove duplicates & renumber
+     AT IT
+       [temp_goodbyview_wdupes_unsort_noccrot]   ; File   (input)
+       [temp_goodbyview_nodupes_unsort_noccrot]  ; File   (output)
+
+     ; Get # particles kept
+     UD N [good-parts]
+       [temp_goodbyview_nodupes_unsort_noccrot]  ; File   (input)
+
+     ; Calculate fraction kept
+     [fraction-kept] = [good-parts]/[tot-view-parts]
+
+     ; Combine good classes for total particles
+     DOC COMBINE
+       [class_doc][view]                        ; File  template (input)
+       [good_classes_list][view]                ; Selection file (input)
+       [good_particles][view]_notbyhand         ; Temporary file (output)
+
+     ; Renumber
+     DOC RENUM
+       [good_particles][view]_notbyhand         ; Temporary file (input)
+       [good_particles][view]_nohandrenum       ; Temporary file (output)
+
+     ; Get number of particles in good classes
+     UD N [good-class-parts]
+       [good_particles][view]_nohandrenum       ; Temporary   (input)
+
+     ; Clean up
+     UD ICE
+       [good_classes_list][view]                ; File        (closed)
+     DE
+       [good_particles][view]_notbyhand         ; File        (removed)
+     DE
+       [good_particles][view]_nohandrenum       ; File        (removed)
+
+     GOTO LB6
+   ENDIF
+   ; End by-hand conditional
+
+
+   ; FIRST GOOD PARTICLE PICKED FOR EACH CLASS
+
+   ; Check if first good particle doc exists
+   IQ FI  [exits]
+     [first_good_part_doc][view]
+
+   ; If first good particle doc exists then
+   IF ( [exits] == 1 ) THEN
+      SYS
+        echo "  View: {***[view]}  Starting from first good particle"
+
+      [good-parts]       = 0
+      [good-class-parts] = 0
+
+      ; Loop through good classes
+      DO  [good-class-key2] = 1,[num-good-classes]
+        ; Get class number
+        UD IC [good-class-key2],[class-num]
+          [good_classes_list][view]
+
+        ; Get number of particles in class
+        UD N [class-parts]
+          [class_doc][view][class-num]           ; File    (input)
+
+        ; Get first good particle# from current class
+        UD IC [class-num],[first-good-part]
+          [first_good_part_doc][view]            ; File    (input)
+
+        ; Increment good-class particle-counter
+        [good-class-parts] = [good-class-parts] + [class-parts]
+            
+        ; Initialize flag that good particles haven't started
+        [good-part-flag] = 0        
+
+        ; Loop through particles
+        DO [part-key] = 1,[class-parts]       ; Loop through particles ----------
+
+          ; Get particle#
+          UD IC [part-key],[part-num]
+            [class_doc][view][class-num]      ; File    (input)
+          ; PART-NUM is probably VIEW-SLICE, but it could be unstacked particle #
+
+          ; Check if first good particle hasn't been reached
+          IF ( [good-part-flag] == 0 ) THEN
+            ; Check if current particle is first good one
+            IF ( [part-num] == [first-good-part] ) [good-part-flag] = 1  
+          ENDIF
+
+          ; Check if first good particle has been reached
+          IF ( [good-part-flag] == 1 ) THEN  
+            ; Increment good-particle counter
+            [good-parts] = [good-parts] + 1  
+
+            ; Write particle # to truncated-class, good-particle list
+            SD [good-parts],[part-num]
+              [temp_goodbyview_wdupes_unsort_noccrot]   ; File    (output)
+          ENDIF
+        ENDDO                    ; End particle-loop ---------------------
+
+        UD ICE
+         [class_doc][view][class-num]              ; File    (closed)
+      ENDDO                      ; End class-loop-------------------------
+
+      SD E  ;                       Close doc
+        [temp_goodbyview_wdupes_unsort_noccrot]    ; File    (closed)
+
+      ; Remove duplicates
+      AT IT
+        [temp_goodbyview_wdupes_unsort_noccrot]    ; File    (input)
+        [temp_goodbyview_nodupes_unsort_noccrot]   ; File    (output)
+     ; End first good conditional
+
+
+     ; WHOLE CLASSES PICKED
+
+   ELSE
+     ; Check to see if all selected classes actually exist 
+     DE
+       [temp_good_class]                       ; Temp selection file   (removed)
+     [n] = 0
+     DO 
+       UD NEXT [key],[classnum]                ; Get class number
+         [good_classes_list][view]             ; Selection file   (input)
+       IF ( [key] == 0 ) EXIT                  ; End of list
+
+       IQ FI [c-exists]                        ; See if class file exists
+         [class_doc][view][classnum]           ; File template    (input)
+       IF ( [c-exists] > 0) THEN
+         [n] = [n] + 1                         ; This class exists
+         SD [n], [classnum]                    ; Save class number in temp file
+           [temp_good_class]                   ; Temp selection file   (output)
+       ENDIF
+     ENDDO
+     SD E                                      ; Close temp file 
+        [temp_good_class]                      ; Temp selection file   (closed)
+     UD N [numlists]                           ; Get number of existing classes
+        [temp_good_class]                      ; Temp selection file   (output)
+
+     SYS
+       echo "  View: {%I4%[view]}   Combining: {%I3%[numlists]} class-membership lists"
+
+     ; Combine good classes
+     DOC COMBINE
+       [class_doc][view]                          ; File template    (input)
+       [temp_good_class] ;[good_classes_list][view]                  ; Selection file   (input)
+       [temp_goodbyview_wdupes_unsort_noccrot]    ; File             (output)
+
+     ; Remove duplicates
+     AT IT
+       [temp_goodbyview_wdupes_unsort_noccrot]    ; File    (input)
+       [temp_goodbyview_nodupes_unsort_noccrot]   ; File    (output)
+
+     ; Get number of particles kept
+     UD N [good-parts]
+       [temp_goodbyview_nodupes_unsort_noccrot]   ; File    (input)
+
+       [good-class-parts] = [good-parts]
+   ENDIF
+   ; End whole-classes conditional
+
+
+   LB6  ; Jump here if picking by hand
+
+   ; Clean up
+   UD ICE
+     [good_classes_list][view]
+   UD ICE
+     [first_good_part_doc][view]
+   DE
+     [temp_goodbyview_wdupes_unsort_noccrot]
+
+   ; Add CCC info to selection-doc
+   DOC AND
+     [view_list][view]                          ; Re-keyed total particle selection file  (input)
+     [temp_goodbyview_nodupes_unsort_noccrot]   ; File    (input)
+     [temp_goodbyview_nodupes_unsorted_ccrot]   ; File    (output)
+     1                                          ; Column # to find intersection
+
+   DE
+     [good_particles][view]         ; File    (removed)
+   SD /     VIEW_WIN     GLOBAL_NUM    GRP_WIN        CCROT       MIRROR       GRP_NUM    VIEW
+     [good_particles][view]         ; File    (output)
+   SD E
+     [good_particles][view]         ; File    (closed)
+
+   ; Sort good particles by CCC, Append to labeled header
+   DOC SORT A
+     [temp_goodbyview_nodupes_unsorted_ccrot]
+     [good_particles][view]         ; File      (output)
+     -4                             ; Column # to sort: CCROT, Reverse sort order
+     Y                              ; Renumber keys 
+
+   ; Clean up
+   DE
+     [temp_goodbyview_nodupes_unsort_noccrot]         ; File    (removed)
+   DE
+     [temp_goodbyview_nodupes_unsorted_ccrot]         ; File    (removed)
+
+   ; Copy to single directory (for archival purposes)
+   IF ( [archive-yn] .NE. 0 ) THEN
+     SYS
+       cp -f [good_particles][view].$DATEXT [good_particle_copy][view].$DATEXT
+   ENDIF
+
+
+   ; CREATED SORTED BAD-PARTICLE LIST
+
+   ; Create bad-particle list
+   DOC SUBTRACT
+     [view_list][view]          ; Re-keyed total-particle selection doc (w/CCC) (input)
+     [good_particles][view]     ; Good-particle selection doc, no CCC           (input)
+     [temp_badbyview_unsort]    ; Bad-particle selection doc, unrenumbered      (output)
+     1                          ; Column # to subtract: view-slice#
+
+   LB4  ; Jump here if no good-class list found
+
+   DE
+     [bad_particles][view]
+   
+   ; Get # of bad particles
+   UD N [bad-parts]
+     [temp_badbyview_unsort]
+
+   IF ( [bad-parts] > 0 ) THEN
+     ; Sort bad particles by CCC, from highest to lowest
+     SD /     VIEW_WIN     GLOBAL_NUM    GRP_WIN        CCROT       MIRROR       GRP_NUM    VIEW
+       [bad_particles][view]   ; File    (output)
+     SD E
+       [bad_particles][view]   ; File    (closed)
+
+     DOC SORT A
+       [temp_badbyview_unsort]
+       [bad_particles][view]   ; File      (output)
+       -4                      ; Column# to sort: CCROT, Reverse sort
+       Y                       ; Renumber keys
+   ENDIF
+
+   ; Clean up
+   DE
+     [temp_badbyview_unsort]
+
+ ; LB4  ; Jump here if no good-class list found
+
+    ; Calculate percentage kept
+   IF ( [tot-view-parts] > 0 )  [fraction-kept] = 100*[good-parts]/[tot-view-parts]
+
+
+   LB7  ; Jump here if no selection file 
+
+   ; Write to stats doc
+ ; SD [view], [tot-view-parts],[good-class-parts],[good-parts],[fraction-kept]
+   SD [view], [good-parts],[good-class-parts],[tot-view-parts],[fraction-kept]
+     [parts_vsview_good]
+
+   ; Increment total kept-particle counter
+   [kept-parts] = [kept-parts] + [good-parts]
+ ENDDO                       ; End view-loop -----------------
+
+ ; Close docs
+ UD ICE
+   [ref_view_list]
+ DE
+   [temp_good_class]       ; Temp selection file   (removed)
+
+ [dummy] = -[num-refs]     ; Dummy variable
+ SD /         GOODPARTICLES
+   [parts_vsview_good]     ; File    (output)
+ SD [dummy], [kept-parts]  ; File    (output)
+   [parts_vsview_good]
+ SD E
+   [parts_vsview_good]     ; File    (closed)
+
+ SYS
+   echo ; echo -n "  Done, kept: {%I0%[kept-parts]} particles    "; date ; echo
+
+ EN ;D
+
+ ; Modified 2013-10-23
+ ;    2013-10-23 (agl) -- New file names, modernized syntax & cosmetic
+ ;    2013-10-23 (agl) -- Replaced: reversedoc-7col with reverse DOC SORT
+ ;    2012-03-15 (trs) -- Summary doc now has the format of HOW_MANY
+ ;    2012-03-01 (trs) -- Switched to named registers
+ ;    2011-01-11 (trs) -- Error-check for zero bad particles
+ ;    2009-06-30 (trs) -- Creates bad-particle list even if no good particles
+ ;    2009-06-05 (trs) -- Removes duplicate particles
+ ;    2009-06-03 (trs) -- Changed format of select/sel files
+ ;    2009-05-13 (trs) -- Sorted good and bad particle lists
+ ;    2009-05-08 (trs) -- Changed fraction kept per view to percentage kept
+ ;    2009-04-03 (trs) -- Added copy of GOODSEL for archival purposes (all in one directory)
+ ;    2009-02-24 (trs) -- Selection files now written to select/prj###
+ ;    2009-02-23 (trs) -- Added view# to GOODSEL output
+ ;    2008-02-05 (trs) -- Added divide-by-0 trap for empty views
+ ;    2007-10-05 (trs) -- Modified for stacked particles
+ ;                     -- TO DO: check whether this still works on unstacked particles
+ ;    2006-02-06 (trs,pp) -- Bug fix: if picking by hand, CCC wasn't added to GOOD_PARTICLE_DOC
+ ;    2005-08-30 (trs,hg) -- Bug fix: error when good-class list not found
+ ;    2004-10-19 (trs) -- Bug fix: I had labelled loops with LB2 twice
+ ;    2004-07-23 (trs,ga) -- Added option to pick particles from classes by hand
+ ;    2004-07-23 (trs) -- Gets number of total particles from SELECT/SEL rather than HOW_MANY
+ ;    2004-05-31 (trs) -- Adds CCC to output selection doc
+ ;    2004-05-05 (trs) -- Handles reference-views with no good particles
+ ;    2004-05-04 (trs) -- Gets number of classes from class-stats doc
+
+ ; </pre></body></html>
+@
+
+
+1.8
+log
+@comments
+@
+text
+@d49 1
+a49 1
+   echo -n " Combining good particles    "; date
+d53 1
+a53 1
+     echo " Not archiving copy of selection files"    ; echo
+d56 1
+a56 1
+     echo " Archiving copy of output selection files" ; echo
+d94 1
+a94 1
+       echo " View: {%I4%[view]}   No particles found "
+d126 1
+a126 1
+       echo " View: {%I0%[view]}  No good classes found"
+d169 1
+a169 1
+       echo " View: {%I0%[view]}  Using hand-picked particle list"
+d187 1
+a187 1
+           echo " View: {%I4%[view]}, Class: {%I3%[class-num]}  No by-hand particle-list found -- Continuing"
+d248 1
+a248 1
+        echo " View: {***[view]}  Starting from first good particle"
+d338 1
+a338 1
+       echo " View: {%I4%[view]}   Combining:{%I3%[numlists]} class-membership lists"
+d472 1
+a472 1
+   echo ; echo -n " Done, kept: {%I0%[kept-parts]} particles    "; date ; echo
+d478 14
+a491 14
+ ;    2013-10-23 (agl) -- replaced: reversedoc-7col with reverse DOC SORT
+ ;    2012-03-15 (trs) -- summary doc now has the format of HOW_MANY
+ ;    2012-03-01 (trs) -- switched to named registers
+ ;    2011-01-11 (trs) -- error-check for zero bad particles
+ ;    2009-06-30 (trs) -- creates bad-particle list even if no good particles
+ ;    2009-06-05 (trs) -- removes duplicate particles
+ ;    2009-06-03 (trs) -- changed format of select/sel files
+ ;    2009-05-13 (trs) -- sorted good and bad particle lists
+ ;    2009-05-08 (trs) -- changed fraction kept per view to percentage kept
+ ;    2009-04-03 (trs) -- added copy of GOODSEL for archival purposes (all in one directory)
+ ;    2009-02-24 (trs) -- selection files now written to select/prj###
+ ;    2009-02-23 (trs) -- added view# to GOODSEL output
+ ;    2008-02-05 (trs) -- added divide-by-0 trap for empty views
+ ;    2007-10-05 (trs) -- modified for stacked particles
+d493 8
+a500 9
+ ;    2006-02-06 (trs,pp) -- bug fix: if picking by hand, CCC wasn't added to GOOD_PARTICLE_DOC
+ ;    2005-08-30 (trs,hg) -- bug fix: error when good-class list not found
+ ;    2004-10-19 (trs) -- bug fix: I had labelled loops with LB2 twice
+ ;    2004-07-23 (trs,ga) -- added option to pick particles from classes by hand
+ ;    2004-07-23 (trs) -- gets number of total particles from SELECT/SEL rather than HOW_MANY
+ ;    2004-05-31 (trs) -- adds CCC to output selection doc
+ ;    2004-05-05 (trs) -- handles reference-views with no good particles
+ ;    2004-05-04 (trs) -- gets number of classes from class-stats doc
+
+@
+
+
+1.7
+log
+@de bad_partilcs file
+@
+text
+@d12 7
+a18 7
+ ;   [ref_view_list]       = 'sel_proj'                          ; List of projection views            (one)
+ ;   [prj_dir]             = 'views/prj###'                      ; View sub-directories                (one/view)
+ ;   [good_classes_list]   = 'views/prj###/sel_class_good'       ; Selected classes                    (one/view)
+ ;   [class_doc]           = 'views/prj###/sel_part_byclass_???' ; Particle selection by class         (one/class/view) 
+ ;   [view_list]           = 'views/prj###/sel_part_byv'         ; Total particle selection files      (one/view)
+ ;   [byhand_list]         = 'views/prj###/sel_part_byhand'      ; OPTIONAL hand-picked particle list  (one/class)
+ ;   [first_good_part_doc] = 'views/prj###/first_good_part'      ; OPTIONAL for reference views        (one/view)
+d21 4
+a24 4
+ ;   [good_particles]      = 'views/prj###/sel_part_byv_good'    ; Good-particle list                  (one/view)
+ ;   [bad_particles]       = 'views/prj###/sel_part_byv_bad'     ; Sorted bad-particle list            (one/view) 
+ ;   [parts_vsview_good]   = 'views/parts_vsview_good'           ; Total # of good particles           (one/view)
+ ;   [good_particle_copy]  = '../Particles/good/sel_part_***'    ; OPTIONAL Archive copy of good particle list  (one/view)
+@
+
+
+1.6
+log
+@de tmp file
+@
+text
+@d415 3
+@
+
+
+1.5
+log
+@using_settings
+@
+text
+@d457 2
+@
+
+
+1.4
+log
+@using_settings
+@
+text
+@d3 1
+a3 1
+ ; SOURCE:   spider/docs/techs/recon1/Procs/verify-combine-classes.spi
+d5 1
+a5 1
+ ; PURPOSE:  Combine particles from good classes
+d7 1
+a7 1
+ ; USAGE:    clean ; ./spider spi/dat @@verify-combine-classes
+d9 1
+a9 1
+ ; REQUIRES:     spider/docs/techs/recon1/Procs/verify-settings.spi
+d11 14
+a24 14
+ ; INPUTS:  (Where *** denotes image group)
+ ;   [ref_view_list]       = 'sel_proj'                       ; List of projection views            (one)
+ ;   [prj_dir]             = 'views/prj***'                   ; View sub-directories                (one/view)
+ ;   [good_classes_list]   = '[prj_dir]/sel_class_good'       ; Selected classes                    (one/view)
+ ;   [view_list]           = '[prj_dir]/sel_part_byv'         ; Total particle selection files      (one/view)
+ ;   [byhand_list]         = '[prj_dir]/sel_part_byhand'      ; OPTIONAL hand-picked particle list  (one/class)
+ ;   [class_doc]           = '[prj_dir]/sel_part_byclass_***' ; Particle selection by class         (one/class/view) 
+ ;   [first_good_part_doc] = '[prj_dir]/first_good_part'      ; OPTIONAL for reference views        (one/view)
+ ;
+ ; OUTPUTS:  (Where *** denotes view)
+ ;   [good_particle_copy]  = '../Particles/good/sel_part_***' ; Archive copy of good particle list  (one/view)
+ ;   [good_particles]      = '[prj_dir]/sel_part_byv_good'    ; Good-particle list                  (one/view)
+ ;   [bad_particles]       = '[prj_dir]/sel_part_byv_bad'     ; Sorted bad-particle list            (one/view) 
+ ;   [parts_vsview_good]   = 'views/parts_vsview_good'        ; Total # of good particles           (one/view)
+d53 1
+a53 1
+     echo ; echo " Not archiving copy of selection files" ; echo
+d56 1
+a56 1
+     echo ; echo " Archiving copy of output selection files" ; echo
+@
+
+
+1.3
+log
+@consolidated_filenames
+@
+text
+@d8 18
+a25 1
+
+d30 1
+a30 17
+ ; ------------------------ Inputs ------------------------
+
+ [ref_view_list]       = 'sel_proj'                       ; List of projection views            (one)
+
+ [prj_dir]             = 'views/prj***'           ; View sub-directories                (one/view)
+
+ [good_classes_list]   = '[prj_dir][view]/sel_class_good'       ; Selected classes                    (one/view)
+
+ [view_list]  = '[prj_dir][view]/sel_part_byv'         ; Total particle selection files      (one/view)
+ ;   VIEW_WIN    GLOBAL_NUM    GRP_WIN      CCROT           MIRROR  GRP_NUM    VIEW
+
+![class_member_list]   = '[prj_dir][view]/docclass***'          ; Class-membership selection files    (one/class/view)
+ [class_member_list]   = '[prj_dir][view]/sel_part_byclass_***' ; Particle selection by class         (one/class/view) 
+
+ [byhand_list]         = '[prj_dir][view]/sel_part_byhand'      ; OPTIONAL hand-picked particle list  (one/class)
+
+ [first_good_part_doc] = '[prj_dir][view]/firstgoodparticle'    ; OPTIONAL for reference views        (one/view)
+d32 4
+a35 1
+ ; ------------------------ Outputs ------------------------
+d37 2
+a38 12
+ [good_particle_copy]  = '../Particles/good/sel{***[view]}' ; Archive copy of good particle list  (one/view)
+
+![good_particles]   = '[prj_dir][view]/goodsel'                ; Good-particle list                  (one/view)
+ [good_particles]   = '[prj_dir][view]/sel_part_byv_good'      ; Good-particle list                  (one/view)
+ ;   VIEW_WIN    GLOBAL_NUM    GRP_WIN      CCROT  MIRROR     GRP_NUM    VIEW
+
+![bad_particles]    = '[prj_dir][view]/badsel'                 ; Sorted bad-particle list            (one/view) 
+ [bad_particles]    = '[prj_dir][view]/sel_part_byv_bad'       ; Sorted bad-particle list            (one/view) 
+
+ [summary_parts_vsview_good]         = 'views/parts_per_view_good'        ; Total # of good particles           (one/view)
+
+ ; ------------------- END BATCH HEADER -------------------
+a42 1
+
+a43 1
+
+a44 1
+
+d46 1
+d61 1
+a61 1
+   [summary_parts_vsview_good]
+d64 1
+a64 1
+   [summary_parts_vsview_good]
+d75 5
+d82 1
+a82 1
+       cp -f [good_particles].$DATEXT [good_particle_copy].$DATEXT
+a84 5
+   ; Get view#
+   UD IC [view-key],[view]
+     [ref_view_list]
+
+
+d89 1
+a89 1
+     [view_list]
+d94 1
+a94 1
+       echo " View: {%I4%[view]}: No particles found "
+d102 1
+a102 1
+       touch [good_particles].$DATEXT
+d111 1
+a111 1
+     [view_list]
+d115 1
+a115 1
+     [good_classes_list]
+d120 1
+a120 1
+       [good_classes_list]
+d126 1
+a126 1
+       echo " View: {%I0%[view]}:  No good classes found"
+d133 1
+a133 1
+       touch [good_particles].$DATEXT
+d138 2
+a139 2
+       [view_list]
+       [temp_badbyview_unsort]
+d149 1
+a149 1
+     [good_particles]
+d156 1
+a156 1
+    [good_classes_list]
+d161 1
+a161 1
+    [byhand_list]{***[class-num]}
+d167 1
+a167 1
+   IF ( [byhand-exists] == 1) THEN
+d169 1
+a169 1
+       echo " View: {%I0%[view]}:  Using hand-picked particle list"
+d174 2
+a175 1
+     DO  [good-class-key5] = 1,[num-good-classes]
+d178 1
+a178 1
+         [good_classes_list]
+d181 2
+a182 2
+       IQ FI x28
+         [byhand_list]{***[class-num]}
+d185 1
+a185 1
+       IF ( x28 == 0 ) THEN
+d187 1
+a187 1
+           echo " View: {%I4%[view]}, Class: {%I3%[class-num]}: No by-hand particle-list found -- Continuing"
+d189 1
+a189 1
+           touch [byhand_list]{***[class-num]}.$DATEXT
+d191 1
+a191 1
+     ENDDO    ; End class-loop ----------------------
+d195 3
+a197 3
+       [byhand_list]***                          ; File (input)
+       [good_classes_list]
+       [temp_goodbyview_wdupes_unsort_noccrot]
+d201 2
+a202 2
+       [temp_goodbyview_wdupes_unsort_noccrot]  ; File   (input)
+       [temp_goodbyview_nodupes_unsort_noccrot]
+d206 1
+a206 1
+       [temp_goodbyview_nodupes_unsort_noccrot] ; File    (input)
+d213 3
+a215 3
+       [class_member_list]                      ; File      (input)
+       [good_classes_list]
+       [good_particles]_notbyhand            ; Temporary
+d219 2
+a220 2
+       [good_particles]_notbyhand           ; Temporary     (input)
+       [good_particles]_nohandrenum         ; Temporary
+d224 1
+a224 1
+       [good_particles]_nohandrenum         ; Temporary     (input)
+d228 1
+a228 1
+       [good_classes_list]
+d230 1
+a230 1
+       [good_particles]_notbyhand
+d232 1
+a232 1
+       [good_particles]_nohandrenum
+d242 2
+a243 2
+   IQ FI  x37
+     [first_good_part_doc]
+d246 1
+a246 1
+   IF ( x37 == 1 ) THEN
+d257 1
+a257 1
+          [good_classes_list]
+d261 1
+a261 1
+          [class_member_list][class-num]
+d265 1
+a265 1
+          [first_good_part_doc]
+d274 1
+a274 1
+        DO [part-key] = 1,[class-parts]  ; Loop through particles -------
+d278 2
+a279 2
+            [class_member_list][class-num]
+          ; PART-NUM is probably VIEW-SLICE, but it could be unstacked particle#
+d294 1
+a294 1
+              [temp_goodbyview_wdupes_unsort_noccrot]
+d299 1
+a299 1
+         [class_member_list][class-num]
+d303 1
+a303 1
+        [temp_goodbyview_wdupes_unsort_noccrot]
+d307 2
+a308 2
+        [temp_goodbyview_wdupes_unsort_noccrot]
+        [temp_goodbyview_nodupes_unsort_noccrot]
+d315 22
+d338 1
+a338 1
+       echo " View: {%I4%[view]}:   Combining class-membership lists"
+d342 3
+a344 3
+       [class_member_list] 
+       [good_classes_list]
+       [temp_goodbyview_wdupes_unsort_noccrot]
+d348 2
+a349 2
+       [temp_goodbyview_wdupes_unsort_noccrot]
+       [temp_goodbyview_nodupes_unsort_noccrot]
+d353 1
+a353 1
+       [temp_goodbyview_nodupes_unsort_noccrot]
+d364 1
+a364 1
+     [good_classes_list]
+d366 1
+a366 1
+     [first_good_part_doc]
+d372 4
+a375 4
+     [view_list]                 ; re-keyed total-particle selection doc (w/CCC)a (input)
+     [temp_goodbyview_nodupes_unsort_noccrot]
+     [temp_goodbyview_nodupes_unsorted_ccrot]
+     1                           ; Column# to find intersection
+d378 1
+a378 1
+     [good_particles]
+d380 1
+a380 1
+     [good_particles]
+d382 1
+a382 1
+     [good_particles]
+d387 3
+a389 3
+     [good_particles]         ; File      (output)
+     -4                          ; Column # to sort: CCROT, Reverse sort order
+     Y                           ; Renumber keys 
+d393 1
+a393 1
+     [temp_goodbyview_nodupes_unsort_noccrot]
+d395 1
+a395 1
+     [temp_goodbyview_nodupes_unsorted_ccrot]
+d400 1
+a400 1
+       cp -f [good_particles].$DATEXT [good_particle_copy].$DATEXT
+d408 3
+a410 3
+     [view_list]                ; File  (input)  re-keyed total-particle selection doc (w/CCC)
+     [good_particles]        ; File  (input) (temp): good-particle selection doc, no CCC
+     [temp_badbyview_unsort]    ; File  (output)  bad-particle selection doc, unrenumbered
+d415 1
+a415 1
+   ; Get #bad particles
+d419 1
+a419 1
+   IF ( [bad-parts] > 0) THEN
+d421 6
+a426 1
+     DOC SORT
+d428 3
+a430 3
+       [bad_particles]        ; File      (output)
+       -4                        ; Column# to sort: CCROT, Reverse sort
+       Y                         ; Renumber keys
+a432 5
+   SD /     VIEW_WIN     GLOBAL_NUM    GRP_WIN        CCROT       MIRROR       GRP_NUM    VIEW
+     [bad_particles]
+   SD E
+     [bad_particles]
+
+d448 1
+a448 1
+     [summary_parts_vsview_good]
+d452 1
+a452 1
+ ENDDO                     ; End view-loop -----------------
+d460 3
+a462 3
+   [summary_parts_vsview_good]
+ SD [dummy], [kept-parts]
+   [summary_parts_vsview_good]
+d464 1
+a464 1
+   [summary_parts_vsview_good]
+@
+
+
+1.2
+log
+@rewrite_syntax_filenames
+@
+text
+@d17 1
+a17 1
+ [prj_dir]             = 'views/prj{***[view]}'           ; View sub-directories                (one/view)
+d19 1
+a19 1
+ [good_classes_list]   = '[prj_dir]/sel_class_good'       ; Selected classes                    (one/view)
+d21 1
+a21 1
+ [total_particle_doc]  = '[prj_dir]/sel_part_byv'         ; Total particle selection files      (one/view)
+d24 2
+a25 2
+![class_member_list]   = '[prj_dir]/docclass***'          ; Class-membership selection files    (one/class/view)
+ [class_member_list]   = '[prj_dir]/sel_part_byclass_***' ; Particle selection by class         (one/class/view) 
+d27 1
+a27 1
+ [byhand_list]         = '[prj_dir]/sel_part_byhand'      ; OPTIONAL hand-picked particle list  (one/class)
+d29 1
+a29 1
+ [first_good_part_doc] = '[prj_dir]/firstgoodparticle'    ; OPTIONAL for reference views        (one/view)
+d35 2
+a36 2
+![good_particle_doc]   = '[prj_dir]/goodsel'                ; Good-particle list                  (one/view)
+ [good_particle_doc]   = '[prj_dir]/sel_part_byv_good'      ; Good-particle list                  (one/view)
+d39 2
+a40 2
+![bad_particle_doc]    = '[prj_dir]/badsel'                 ; Sorted bad-particle list            (one/view) 
+ [bad_particle_doc]    = '[prj_dir]/sel_part_byv_bad'       ; Sorted bad-particle list            (one/view) 
+d42 1
+a42 1
+ [summary_doc]         = 'views/parts_per_view_good'        ; Total # of good particles           (one/view)
+d59 1
+a59 2
+
+ IF ( [archive-yn] == 0) THEN
+d69 1
+a69 1
+   [summary_doc]
+d72 1
+a72 1
+   [summary_doc]
+d83 1
+a83 1
+   IF ( [archive-yn] .NE. 0) THEN
+d85 1
+a85 1
+       cp -f [good_particle_doc].$DATEXT [good_particle_copy].$DATEXT
+d97 1
+a97 1
+     [total_particle_doc]
+d110 1
+a110 1
+       touch [good_particle_doc].$DATEXT
+d119 1
+a119 1
+     [total_particle_doc]
+d141 1
+a141 1
+       touch [good_particle_doc].$DATEXT
+d146 1
+a146 1
+       [total_particle_doc]
+d157 1
+a157 1
+     [good_particle_doc]
+d192 1
+a192 1
+       IF (x28 == 0) THEN
+d222 1
+a222 1
+       [good_particle_doc]_notbyhand            ; Temporary
+d226 2
+a227 2
+       [good_particle_doc]_notbyhand           ; Temporary     (input)
+       [good_particle_doc]_nohandrenum         ; Temporary
+d231 1
+a231 1
+       [good_particle_doc]_nohandrenum         ; Temporary     (input)
+d237 1
+a237 1
+       [good_particle_doc]_notbyhand
+d239 1
+a239 1
+       [good_particle_doc]_nohandrenum
+d357 1
+a357 1
+     [total_particle_doc]  ; File      (input): re-keyed total-particle selection doc (w/CCC)
+d360 1
+a360 1
+     1                     ; Column# to find intersection
+d363 1
+a363 1
+     [good_particle_doc]
+d365 1
+a365 1
+     [good_particle_doc]
+d367 1
+a367 1
+     [good_particle_doc]
+d372 1
+a372 1
+     [good_particle_doc]         ; File      (output)
+d385 1
+a385 1
+       cp -f [good_particle_doc].$DATEXT [good_particle_copy].$DATEXT
+d393 3
+a395 3
+     [total_particle_doc]       ; File      (input)  re-keyed total-particle selection doc (w/CCC)
+     [good_particle_doc]        ; File      (input) (temp): good-particle selection doc, no CCC
+     [temp_badbyview_unsort]    ; File      (output)  bad-particle selection doc, unrenumbered
+d408 1
+a408 1
+       [bad_particle_doc]        ; File      (output)
+d414 1
+a414 1
+     [bad_particle_doc]
+d416 1
+a416 1
+     [bad_particle_doc]
+d433 1
+a433 1
+     [summary_doc]
+d445 1
+a445 1
+   [summary_doc]
+d447 1
+a447 1
+   [summary_doc]
+d449 1
+a449 1
+   [summary_doc]
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d1 244
+a244 202
+; COMBINE PARTICLES FROM GOOD CLASSES
+;
+; REQUIRES reversedoc_7col.spi
+
+; ---------------------- Parameters  ----------------------
+[archive-yn] = 0  ; copy files to Particles/good? (for archival purposes)
+
+; ------------------------ Inputs ------------------------
+fr l
+[ref_view_list]../Alignment/projlist               ; list of projection views
+fr l
+[prj_dir]Views/prj{***[view-num]}                  ; subdirectory template, for each reference-view
+fr l
+[class_membership_list]docclass***                 ; class-membership list template, for each class, in PRJ_DIR
+fr l
+[good_classes_list]goodclasses                     ; selected classes, for each reference-view, in PRJ_DIR
+fr l
+[first_good_particle_doc]firstgoodparticle         ; (optional) for each reference-view, in PRJ_DIR
+fr l
+[byhand_list]byhand                                ; (optional) hand-picked list, for each class, in PRJ_DIR
+fr l
+[total_particle_doc]Views/sel{***[view-num]}       ; total-particle list-prefix, for each reference-view
+; /     VIEW_SLICE   GLOBALPART    GRPSLICE      CC_ROT       MIRROR       GRPNUM        VIEW
+
+; ------------------------ Outputs ------------------------
+fr l
+[good_particle_doc]Views/prj{***[view-num]}/goodsel       ; good-particle list-prefix, for each reference-view
+; /     VIEW_SLICE   GLOBALPART    GRPSLICE      CC_ROT       MIRROR       GRPNUM        VIEW
+fr l
+[good_particle_copy]../Particles/good/sel{***[view-num]}  ; copy of good particle list, for archiving
+fr l
+[bad_particle_doc]Views/prj{***[view-num]}/badsel         ; sorted bad-particle doc template
+fr l
+[summary_doc]how_many-good                                ; lists #particles: kept, in good classes, total
+
+; ------------------- END BATCH HEADER -------------------
+
+; set temporary filenames
+fr l
+[temp_goodbyview_wdupes_unsort_noccrot]tmp_goodbyview_1_combined
+fr l
+[temp_goodbyview_nodupes_unsort_noccrot]tmp_goodbyview_2_wodupes
+fr l
+[temp_goodbyview_nodupes_unsorted_ccrot]tmp_goodbyview_3_ccrot
+fr l
+[temp_goodbyview_nodupes_sortrev_ccrot]tmp_goodbyview_4_unreversed
+fr l
+[temp_badbyview_unsort]tmp_badbyview_1_unsort
+fr l
+[temp_badbyview_sortrev]tmp_badbyview_2_sortrev
+
+vm
+echo "Combining good particles"; date
+
+
+if([archive-yn].eq.0) then
+    vm
+    echo ; echo "Not archiving a copy of selection files" ; echo
+else
+    vm
+    echo ; echo "Archiving a copy of output selection files" ; echo
+endif
+
+; prepare output-stats doc
+de
+[summary_doc]
+;SD /     UNVERIFIED  GOOD_CLASSES     KEPT      PERCENTAGE
+SD /        #KEPT      GOODCLASSES    PREVERIFY      PERCENT
+[summary_doc]
+
+; initialize total kept-particle counter
+[kept-parts] = 0
+
+; get number of reference-views
+ud n [num-refs]
+[ref_view_list]
+
+; loop through reference-views
+do lb1 [view-key] = 1,[num-refs]
+    if([archive-yn].ne.0) then
+        vm
+        cp -f [good_particle_doc].$DATEXT [good_particle_copy].$DATEXT
+    endif
+
+    ; get view#
+    ud ic [view-key],[view-num]
+    [ref_view_list]
+
+
+    ; CHECK IF THERE ARE ANY PARTICLES
+
+    ; look for selection file
+    iq fi [sel-exists]
+    [total_particle_doc]
+
+    ; if no selection file
+    if([sel-exists].eq.0) then
+        vm
+        echo "View #{***[view-num]}: No particles found -- Continuing..."
+
+        [tot-view-parts]   = 0
+        [good-class-parts] = 0
+        [good-parts]       = 0
+        [fraction-kept]    = 0
+
+        vm
+        touch [good_particle_doc].$DATEXT
+        ; downstream procedures will look for this file
+
+        goto lb7
+    endif
+
+
+    ; get number of particles in current reference view
+    ud n [tot-view-parts]
+    [total_particle_doc]
+
+    ; check if good-class list exists
+    iq fi [goodclasses-exists]
+    [prj_dir]/[good_classes_list]
+
+    if([goodclasses-exists].eq.1) then
+        ; get number of good classes
+        ud n [num-good-classes]
+        [prj_dir]/[good_classes_list]
+    endif
+
+    ; if good-class list doesn't exist or is empty
+    if([num-good-classes]*[goodclasses-exists].eq.0) then
+        vm
+        echo "View #{***[view-num]}: No good classes found"
+
+        [good-class-parts] = 0
+        [good-parts]       = 0
+        [fraction-kept]    = 0
+
+        vm
+        touch [good_particle_doc].$DATEXT
+        ; downstream procedures will look for this file
+
+        ; copy total-particle list to bad-particle list (to be sorted)
+        doc ren
+        [total_particle_doc]
+        [temp_badbyview_unsort]
+
+        goto lb4
+    endif
+
+
+    ; JUGGLE PARTICLE-PICKING MODES
+
+    ; clean up pre-existing files
+    de
+    [good_particle_doc]
+    de
+    [temp_goodbyview_wdupes_unsort_noccrot]
+
+
+    ; get first good-class number
+    ud 1,[class-num]
+    [prj_dir]/[good_classes_list]
+    ud e
+
+    ; check if by-hand class doc exists
+    iq fi [byhand-exists]
+    [prj_dir]/[byhand_list]{***[class-num]}
+
+
+    ; PARTICLES PICKED BY HAND
+
+    ; if by-hand class docs exist then
+    if([byhand-exists].eq.1) then
+        vm
+        echo "View #{***[view-num]}: Using hand-picked particle list"
+
+        ; make sure by-hand lists exist (will crash DOC COMBINE otherwise)
+
+        ; loop through good classes
+        do lb5 [good-class-key5] = 1,[num-good-classes]
+            ; get class number
+            ud ic [good-class-key5],[class-num]
+            [prj_dir]/[good_classes_list]
+
+            ; check if by-hand list exists
+            iq fi x28
+            [prj_dir]/[byhand_list]{***[class-num]}
+
+            ; if by-hand list doesn't exist, create empty one
+            if(x28.eq.0) then
+                vm
+                echo "View {***[view-num]}, class {***[class-num]}: No by-hand particle-list found -- Continuing"
+                vm
+                touch [prj_dir]/[byhand_list]{***[class-num]}.$DATEXT
+            endif
+        lb5
+        ; end class-loop
+
+        ; combine good classes for hand-picked particles
+        doc combine
+        [prj_dir]/[byhand_list]***
+        [prj_dir]/[good_classes_list]
+        [temp_goodbyview_wdupes_unsort_noccrot]
+a245 4
+        ; remove duplicates & renumber
+        at it
+        [temp_goodbyview_wdupes_unsort_noccrot]
+        [temp_goodbyview_nodupes_unsort_noccrot]
+d247 1
+a247 3
+        ; get #particles kept
+        ud n [good-parts]
+        [temp_goodbyview_nodupes_unsort_noccrot]
+d249 3
+a251 2
+        ; calculate fraction kept
+        [fraction-kept] = [good-parts]/[tot-view-parts]
+d253 4
+a256 55
+        ; combine good classes for total particles
+        doc combine
+        [prj_dir]/[class_membership_list]  ; INPUT: template
+        [prj_dir]/[good_classes_list]
+        [good_particle_doc]_notbyhand  ; temporary
+
+        ; renumber
+        doc renum
+        [good_particle_doc]_notbyhand    ; temporary
+        [good_particle_doc]_nohandrenum  ; temporary
+
+        ; get number of particles in good classes
+        ud n [good-class-parts]
+        [good_particle_doc]_nohandrenum  ; temporary
+
+        ; clean up
+        ud ice
+        [prj_dir]/[good_classes_list]
+        de
+        [good_particle_doc]_notbyhand
+        de
+        [good_particle_doc]_nohandrenum
+
+        goto lb6
+    endif
+    ; end by-hand conditional
+
+
+    ; FIRST GOOD PARTICLE PICKED FOR EACH CLASS
+
+    ; check if first good particle doc exists
+    iq fi x37
+    [prj_dir]/[first_good_particle_doc]
+
+    ; if first good particle doc exists then
+    if(x37.eq.1) then
+        vm
+        echo "View #{***[view-num]}: Starting from first good particle"
+
+        [good-parts]       = 0
+        [good-class-parts] = 0
+
+        ; loop through good classes
+        do lb2 [good-class-key2] = 1,[num-good-classes]
+            ; get class number
+            ud ic [good-class-key2],[class-num]
+            [prj_dir]/[good_classes_list]
+
+            ; get number of particles in class
+            ud n [class-parts]
+            [prj_dir]/[class_membership_list][class-num]
+
+            ; get first good particle# from current class
+            ud ic [class-num],[first-good-part]
+            [prj_dir]/[first_good_particle_doc]
+d258 2
+a259 5
+            ; increment good-class particle-counter
+            [good-class-parts] = [good-class-parts] + [class-parts]
+            
+            ; initialize flag that good particles haven't started
+            [good-part-flag] = 0        
+d261 5
+a265 29
+            ; loop through particles
+            do lb3 [part-key] = 1,[class-parts]
+                ; get particle#
+                ud ic [part-key],[part-num]
+                [prj_dir]/[class_membership_list][class-num]
+                ; PART-NUM is probably VIEW-SLICE, but it could be unstacked particle#
+
+                ; check if first good particle hasn't been reached
+                if([good-part-flag].eq.0) then
+                    ; check if current particle is first good one
+                    if([part-num].eq.[first-good-part]) [good-part-flag] = 1  
+                endif
+
+                ; check if first good particle has been reached
+                if([good-part-flag].eq.1) then  
+                    ; increment good-particle counter
+                    [good-parts] = [good-parts] + 1  
+
+                    ; write particle# to truncated-class, good-particle list
+                    sd [good-parts],[part-num]
+                    [temp_goodbyview_wdupes_unsort_noccrot]
+                endif
+            lb3
+            ; end particle-loop
+
+            ud ice
+            [prj_dir]/[class_membership_list][class-num]
+        lb2
+        ; end class-loop
+d267 3
+a269 2
+        sd e  ; close doc
+        [temp_goodbyview_wdupes_unsort_noccrot]
+d271 3
+a273 5
+        ; remove duplicates
+        at it
+        [temp_goodbyview_wdupes_unsort_noccrot]
+        [temp_goodbyview_nodupes_unsort_noccrot]
+    ; end first good conditional
+d275 5
+d281 2
+a282 1
+    ; WHOLE CLASSES PICKED
+d284 25
+a308 3
+    else
+        vm
+        echo "View #{***[view-num]}: Combining class-membership lists"
+d310 1
+a310 4
+        ; combine good classes
+        doc combine
+        [prj_dir]/[class_membership_list]
+        [prj_dir]/[good_classes_list]
+d313 2
+a314 2
+        ; remove duplicates
+        at it
+d317 2
+d320 162
+a481 3
+        ; get number of particles kept
+        ud n [good-parts]
+        [temp_goodbyview_nodupes_unsort_noccrot]
+a482 150
+        [good-class-parts] = [good-parts]
+    endif
+    ; end whole-classes conditional
+
+    lb6  ; jump here if picking by hand
+
+    ; clean up
+    ud ice
+    [prj_dir]/[good_classes_list]
+    ud ice
+    [prj_dir]/[first_good_particle_doc]
+    de
+    [temp_goodbyview_wdupes_unsort_noccrot]
+
+    ; add CCC info to selection-doc
+    doc and
+    [total_particle_doc]  ; INPUT: re-keyed total-particle selection doc (w/CCC)
+    [temp_goodbyview_nodupes_unsort_noccrot]
+    [temp_goodbyview_nodupes_unsorted_ccrot]
+    (1)                   ; column# to find intersection
+
+    ; sort good particles by CCC
+    doc sort
+    [temp_goodbyview_nodupes_unsorted_ccrot]
+    [temp_goodbyview_nodupes_sortrev_ccrot]
+    (4)  ; column# to sort: CCROT
+    Y    ; renumber keys?
+
+    ; reverse order, from highest to lowest
+    @@reversedoc_7col
+    [temp_goodbyview_nodupes_sortrev_ccrot]  ; INPUT
+    [good_particle_doc]         ; OUTPUT
+
+    ; clean up
+    SD /     VIEW_SLICE   GLOBALPART    GRPSLICE      CC_ROT       MIRROR       GRPNUM        VIEW
+    [good_particle_doc]
+    sd e
+    [good_particle_doc]
+    de
+    [temp_goodbyview_nodupes_unsort_noccrot]
+    de
+    [temp_goodbyview_nodupes_unsorted_ccrot]
+    de
+    [temp_goodbyview_nodupes_sortrev_ccrot]
+
+    ; copy to single directory (for archival purposes)
+    if([archive-yn].ne.0) then
+        vm
+        cp -f [good_particle_doc].$DATEXT [good_particle_copy].$DATEXT
+    endif
+
+
+    ; CREATED SORTED BAD-PARTICLE LIST
+
+    ; create bad-particle list
+    doc subtract
+    [total_particle_doc]     ; INPUT: re-keyed total-particle selection doc (w/CCC)
+    [good_particle_doc]      ; INPUT (temp): good-particle selection doc, no CCC
+    [temp_badbyview_unsort]  ; OUTPUT: bad-particle selection doc, unrenumbered
+    (1)                      ; column# to subtract: view-slice#
+
+    lb4  ; jump here if no good-class list found
+
+    ; get #bad particles
+    ud n [bad-parts]
+    [temp_badbyview_unsort]
+
+    if([bad-parts].gt.0) then
+        ; sort bad particles by CCC
+        doc sort
+        [temp_badbyview_unsort]
+        [temp_badbyview_sortrev]
+        (4)  ; column# to sort: CCROT
+        Y    ; renumber keys?
+
+        ; reverse order, from highest to lowest
+        @@reversedoc_7col
+        [temp_badbyview_sortrev]  ; INPUT
+        [bad_particle_doc]        ; OUPUT
+    endif
+
+    SD /     VIEW_SLICE   GLOBALPART    GRPSLICE      CC_ROT       MIRROR       GRPNUM        VIEW
+    [bad_particle_doc]
+    sd e
+    [bad_particle_doc]
+
+    ; clean up
+    de
+    [temp_badbyview_unsort]
+    de
+    [temp_badbyview_sortrev]
+
+;    lb4  ; jump here if no good-class list found
+
+    ; calculate percentage kept
+    if([tot-view-parts].gt.0) [fraction-kept] = 100*[good-parts]/[tot-view-parts]
+
+
+    lb7  ; jump here if no selection file 
+
+    ; write to stats doc
+;    sd [view-num], [tot-view-parts],[good-class-parts],[good-parts],[fraction-kept]
+    sd [view-num], [good-parts],[good-class-parts],[tot-view-parts],[fraction-kept]
+    [summary_doc]
+
+    ; increment total kept-particle counter
+    [kept-parts] = [kept-parts] + [good-parts]
+lb1
+; end view-loop
+
+; close docs
+ud ice
+[ref_view_list]
+[dummy] = -[num-refs]  ; dummy variable
+SD /         GOODPARTICLES
+[summary_doc]
+sd [dummy], [kept-parts]
+[summary_doc]
+sd e
+[summary_doc]
+
+vm
+echo ; echo "Done, kept {******[kept-parts]} particles"; date
+
+en d
+
+; Modified 2012-05-03
+;    TO DO: replace REVERSEDOC_7COL with updated DOC SORT (will require SPIDER 18.19+) 
+;    2012-03-15 (trs) -- summary doc now has the format of HOW_MANY
+;    2012-03-01 (trs) -- switched to named registers
+;    2011-01-11 (trs) -- error-check for zero bad particles
+;    2009-06-30 (trs) -- creates bad-particle list even if no good particles
+;    2009-06-05 (trs) -- removes duplicate particles
+;    2009-06-03 (trs) -- changed format of select/sel files
+;    2009-05-13 (trs) -- sorted good and bad particle lists
+;    2009-05-08 (trs) -- changed fraction kept per view to percentage kept
+;    2009-04-03 (trs) -- added copy of GOODSEL for archival purposes (all in one directory)
+;    2009-02-24 (trs) -- selection files now written to select/prj###
+;    2009-02-23 (trs) -- added view# to GOODSEL output
+;    2008-02-05 (trs) -- added divide-by-0 trap for empty views
+;    2007-10-05 (trs) -- modified for stacked particles
+;                     -- TO DO: check whether this still works on unstacked particles
+;    2006-02-06 (trs,pp) -- bug fix: if picking by hand, CCC wasn't added to GOOD_PARTICLE_DOC
+;    2005-08-30 (trs,hg) -- bug fix: error when good-class list not found
+;    2004-10-19 (trs) -- bug fix: I had labelled loops with LB2 twice
+;    2004-07-23 (trs,ga) -- added option to pick particles from classes by hand
+;    2004-07-23 (trs) -- gets number of total particles from SELECT/SEL rather than HOW_MANY
+;    2004-05-31 (trs) -- adds CCC to output selection doc
+;    2004-05-05 (trs) -- handles reference-views with no good particles
+;    2004-05-04 (trs) -- gets number of classes from class-stats doc
+d484 1
+@

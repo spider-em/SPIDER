@@ -1,0 +1,224 @@
+head	1.3;
+access;
+symbols
+	Pre_gold:1.3;
+locks;
+comment	@# @;
+
+
+1.3
+date	2015.11.18.19.28.29;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2013.11.20.13.47.50;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2013.11.08.17.39.47;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.3
+log
+@ctf correction using 'TF CT'
+@
+text
+@ ; <html><head><title>CTF corrects selected images and places in a single stack</title></head><body><pre>
+ ;
+ ; SOURCE:  apply-ctfcor.spi
+
+ ; PURPOSE: CTF corrects selected images and places in a single stack
+
+ ; USAGE:   clean ; spider spi/mrf @@apply-ctfcor
+
+ ; ------------------ Parameters ------------------
+ 
+ [pad-size]      = 0    ; Final dimension (0==keep original size)
+ 
+ [class]         = 6    ; Class number
+
+ [echo-interval] = 1
+
+ ; -------------------- Inputs --------------------
+
+ [sel_part]  = 'sel_part_{**[class]}'                          ; Particle selection file with group 
+
+![stk]       = '/usr14/mxg26/MRF/Alignment_feb/data{***[grp]}' ; Particle stacks (one / defocus group)
+ [stk]       = 'Alignment_feb/data_with_mic{***[grp]}'         ; Particle stacks (one / defocus group)
+
+ [ctf_cor]   = 'Power_Spectra/power/flipctf_****'              ; CTF correction  file template
+                                                          
+; -------------------- Outputs --------------------
+
+ [ctf_dir]   = 'Particles/ctfcor'                              ; Output directory
+
+ [ctfd_imgs] = '[ctf_dir]/jnkdata_ctfcor_{**[class]}@@******'   ; CTF-corrected images in single stack
+
+ ; --------------- END BATCH HEADER ---------------
+
+ MD
+   SET MP
+   0
+ MD
+   VB OFF
+
+ SYS
+   mkdir -p [ctf_dir]
+
+ ; Find reconstruction size
+ UD NEXT [key],[num],[grp]           ; Get Relion particle num and group 
+   [sel_part]                        ; Particle selection file        (input)
+ IF ([key] <= 0) EXIT                ; If no particles in listing exit loop
+ UD NEXT END                         ; Reset particle selection file
+   [sel_part]                        ; Group particle selection file  (reset input)
+ 
+
+ ; Loop through selected particles -----------------------------------------------
+ DO                                  ; Loop through selected particles 
+   UD NEXT [key],[num],[grp],[class] ; Get particle class from Relion
+     [sel_part]                      ; Particle selection file        (input)
+   IF ([key] .LE. 0) EXIT            ; End of particles in listing
+ 
+   ; Filter using CTF correction file
+   TF COR
+     [stk]@@{****[num]}               ; Image                          (input)
+     [ctf_cor][mic]                  ; CTF correction file            (input)
+     [ctfd_imgs][key]                ; CTF-corrected image            (output)
+     [ctfd_imgs]                     ; New particle in stack          (output)
+
+   IF (INT([key]/[echo-interval]) == [key]/[echo-interval]) THEN
+      SYS 
+        echo ' 'Group: {***[grp]}  Num: {*****[num]}  Mic: {*****[mic]}'  'from WIN: {******[win]}
+   ENDIF
+
+   [totpart] = [key]
+
+ ENDDO                              ; End of : Loop through particles ----------
+
+ UD NEXT END                        ; 
+   [sel_part]                       ; Group particle selection file  (reset input)
+
+ SYS
+   echo " Total particles: {******[totpart]}"
+ EN
+ ; </body></pre></html>
+@
+
+
+1.2
+log
+@new_name
+@
+text
+@d1 7
+a7 3
+; SOURCE:  apply-ctfcor.spi
+; PURPOSE: CTF corrects selected images and places in single stack
+; USAGE:   clean ; spider spi/mrf @@apply-ctfcor
+d19 1
+a19 1
+ [sel_part]      = 'sel_part_{**[class]}'                            ; Particle selection file with group 
+d21 2
+a22 2
+ [stk]           = '/usr14/mxg26/MRF/Alignment_feb/data{***[grp]}'   ; Particle stacks (one / defocus group)
+ [stk]           = 'Alignment_feb/data_with_mic{***[grp]}'           ; Particle stacks (one / defocus group)
+d24 1
+a24 1
+ [ctf_cor_doc]   = 'Power_Spectra/power/flipctf****'                 ; CTF correction doc file template
+d26 1
+a26 1
+ ; -------------------- Outputs --------------------
+d28 1
+a28 1
+ [ctf_dir]       = 'Particles/ctfcor'                                ; Output directory
+d30 1
+a30 1
+ [ctfxpart]      = '[ctf_dir]/jnkdata_ctfcor_{**[class]}@@******'     ; CTF-corrected images in single stack
+a39 4
+ ; Temporary files
+ [temp_padded_img]  = '_1'
+ [temp_filt_img]    = '_2'
+
+d44 1
+a44 1
+ UD NEXT [key],[num],[grp]           ; Get Relion particle num and group: 
+d46 4
+a49 16
+ IF ([key] .LE. 0) EXIT              ; If no particles in listing
+ UD NEXT END                         ; Reset particle sel. file
+   [sel_part]                        ; Group particle selection file  (input)
+
+ ; Find image size
+ FI H [size]                         ; Find image size
+   [stk]@@*[num]                      ; Original particle stacks       (input)
+   NX
+
+ ; Find padded size
+ [pad-factor] = 2                    ; Padding factor (2 --> doubles size)
+ [pad-size]   = [size]*[pad-factor]  ; Pad into a larger box before filtering
+ IF ([pad-size].NE.0) THEN
+   SYS
+     echo " Resizing images {***[size]} to {***[pad-size]}" ;  echo ' '
+ ENDIF
+d51 1
+a51 2
+ 
+ ; Loop through selected particles 
+d54 1
+a54 1
+     [sel_part]                      ; Particle selection file    (input)
+d57 6
+d64 1
+a64 22
+   ; Pad Image with right & bottom border
+   PD                                ; Pad Image 2X
+     [stk]@@{****[num]}               ; Image                      (input)
+     [temp_padded_img]               ; Padded image               (output)
+     [pad-size],[pad-size]           ; Padded size
+     B                               ; Use border average for background
+     1,1                             ; Top-left coords
+
+   ; Filter using CTF correction doc file
+   FD                                ; Filter  
+     [temp_padded_img]               ; Padded image               (input)
+     [temp_filt_img]                 ; CTF corrected image        (output)
+     [ctf_cor_doc][mic]              ; CTF correction doc file    (input)
+
+   ; Window back to original size
+   WI                                ; Window  
+     [temp_filt_img]                 ; CTF corrected image        (input)
+     [ctfxpart][key]                 ; CTF-corrected image        (output)
+     [size],[size]                   ; X,Y dimensions
+     1,1                             ; Top-left coords
+
+   IF (int([key]/[echo-interval]) .EQ. [key]/[echo-interval]) THEN
+d71 1
+a71 1
+ ENDDO
+d74 1
+a74 1
+   [sel_part]                      ; Group particle selection file  (input)
+d79 1
+@
+
+
+1.1
+log
+@Rewrite_new_syntax
+@
+text
+@d1 1
+a1 1
+; SOURCE:  applyctfcor.spi
+d3 1
+a3 1
+; USAGE:   clean ; spider spi/mrf @@applyctfcor
+@

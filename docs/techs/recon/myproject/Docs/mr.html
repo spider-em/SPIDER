@@ -1,0 +1,1768 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 3.2//EN">
+<html>
+
+<head>
+  <title>Single Particle Reconstruction Techniques</title> 
+  <link rel='stylesheet' href='mrstyle.css' type='text/css' />
+</head>
+
+<body link="#0000ee" vlink="#0000ee" alink="#ff0000" bgcolor="#cccccc">
+
+<br />
+
+<table class="top" width = "100%" border="8" bordercolor="#99ccff">
+   <tr>
+   <td  align="left">
+   <img width="108" height="103" src="pics/new11.jpg" align="left"></td>
+
+   <td>
+   <h2 class="top">Three Dimensional Reconstruction of Single Particle 
+       Specimens using Reference Projections With Defocus Groups</h2>
+   </td>
+
+   <td  align="right">
+   <img width="108" height="104" src="pics/new22.jpg" align="right"></td>
+   </tr>
+</table>
+<p />
+
+<!-- xxxxxxxxxxxxxxxxxxxxxxxx Introduction xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx -->
+
+<h3 align="center">Introduction</h3>
+
+<P>
+This page describes methods for creating a 3D reconstruction from electron micrographs 
+using defocus groups. 
+Once a set of particle images has been obtained, 
+an initial 3D reconstruction is calculated using coarse projection angles. 
+This is followed by refinement, which iteratively adjusts the angles for finer resolution. 
+The CTF is accounted for by computing reconstructions of groups of particles from micrographs 
+with simlar defocus values ("defocus groups"), and
+CTF-correction is performed when these reconstructions are merged.
+</p>
+
+<p>
+An alternative method is available for 
+<a href="../recon1/Docs/mr1.html">
+creating a 3D reconstruction from electron micrographs without defocus groups</a>. 
+The advantages of using defocus groups is as follows. 
+First is that it can readily account for the non-uniform distribution of 
+signal-to-noise in projection data (<a href="#PP12">Penczek, 2012</a>).  
+Second, we find that reconstructions using particle-level CTF-correction 
+sometimes show artifacts when using iterative backprojection methods, such as 
+<a href="../../man/bprp.html"> <b>'BP RP'</b></a> or
+<a href="../../man/bpcg.html"> <b>'BP CG'</b></a>, 
+whereas the use of defocus groups does not present such limitations.   
+</p>
+
+<p>
+In comparison, CTF-correction is applied at the level of windowed particle images offers 
+its own advantages.  
+First, it circumvents one of the approximations when using defocus groups, namely that 
+all particle in a defocus group follow the same CTF profile.  At high resolution,
+where the CTF oscillates more rapidly, this assumption will not hold.  
+Second, parallelization can be more efficient, since groups can be of identical 
+size, independent of the number of particles at each defocus.  Third, particles 
+from what would be sparsely populated defocus groups need not be thrown out.  
+Lastly, interoperability with other software packages which correct for the CTF at 
+the level of particle images will be more straightforward.
+</p>
+
+<p>The procedures are described in greater detail below.</p>
+
+<p />
+
+<hr />
+
+<!-- --------------------- Outline ------------------------------------ -->
+
+<a name="Links">
+<table class="heading" width="100%" >
+   <tr> <td>       
+   <p />  
+   <h3 class="heading">Outline</h3>
+   <p />
+   </td> </tr>
+</table>
+</a>
+
+<dl>
+
+  <dt> <a href="#CTF">Contrast Transfer Function (CTF) Estimation</a> </dt>
+  <dd>The CTF is estimated for each micrograph, and the micrographs 
+     are sorted into defocus groups.</dd>
+
+  <dt> <a href="#AUTO">Particle Picking and Selection</a> </dt> 
+  <dd>Identifies likely particles from the micrographs, 
+     and extracts windowed images of individual particles from the micrographs.</dd>
+
+  <dt> <a href="#SH">Alignment</a> </dt>
+  <dd>The particle images are aligned to reference projections using shifts 
+      and rotations.</dd>
+
+  <dt> <a href="#CA">Averaging</a> </dt>
+  <dd>The averages of each reference view are computed, to assess the distribution 
+      of projection views.</dd>
+
+  <dt> <a href="#3D">3D Reconstruction</a></dt>
+  <dd>An initial volume is calculated by back projection, along with an estimate 
+      of its resolution.</dd>
+
+  <dt> <a href="#REF">Refinement</a> </dt>
+  <dd>Initial alignments are iteratively improved, as each projection is given a
+      chance "to find a better home" in terms of its orientation and phase
+      origin, thus improving the resolution of the initial reconstruction.</dd>
+
+  <dt> <a href="#OTHER">Additional methods</a> </dt>
+  <dd>Other useful methods, such as classification, difference maps, and 
+      frequency correction by X-ray scattering.  Additional details about these 
+      methods may be found at the <a href="../../techniques.html">techniques</a> page.</dd>
+
+</dl>
+ 
+<p \>
+
+<a name="Links"></a>
+<table class="heading" width="100%" >
+   <tr> <td> <p />
+   <h3 class="heading">Links to further information</h3> 
+   <p /> </td> </tr>
+</table>
+<p />
+
+<ul>
+  <li> <a href="../../../glossary.html"> Glossary</a>. </li>
+
+  <li> <a href="../../../strategies.html">Reconstruction strategies</a>.  </li>
+
+  <li> <a href="flowchart/flowchart.html">Flowchart of operations</a>.</li>
+  
+  <li> <a href= "mr1_verify.html">Classification-based particle verification</a>.</li>
+  
+  <li> <a href="docfiles.html">Format information for doc files</a>. </li>
+  
+  <li> <a href="params.html">Description of reconstruction parameters</a>.</li>
+  
+  <li> <a href="../zi/zidoc.html">Using images from a ZI scanner</a>. </li>
+
+  <li> <a href="../../recon/quantifoil.html">Handling circular images from Quantifoil grids</a>.</li>
+  
+  <li> <a href="#Refs">References</a>.</li>
+
+</ul>
+
+
+<p />
+
+<hr>
+<!-- xxxxxxxxxxxxxxxxxxxxxxxxx Running  SPIDER procedure files xxxxxxxxxxxxxxxxxx -->
+
+<a name="RunningSPIDER"></a>
+<table class="heading" width="100%" >
+   <tr> <td>    <br />  
+   <h3 class="heading">Running SPIDER procedure files</h3>
+   </td> </tr>
+</table>
+
+<p />
+In the sections below, various file types are denoted by different fonts:
+
+<ul>
+<li><b>Each step in the process is bold and marked  by a bullet</b><br />
+   <a href="./newprogs">procedure files</a> are links to the procedure script, <br />
+   <font class="input">input files</font> for that procedure are marked in pink, <br />
+   <code class="output">output files</code> created by that procedure are marked in green., <br />
+   Sometimes more than one approach is available. 
+   Lists starting with lowercase letters indicate that you should choose
+
+   <ol class="choice">
+      <li>one approach, or</li>
+      <li>the other approach,</li>
+   </ol>
+   but not both (unless you want to compare the two techniques) <br />
+
+   <p />
+
+   If you have <a href="../../../tools/install.html">installed</a> them,   
+   <a href="../../../../tools/docs/tools.html"> SPIDER's Python Tools</a>   
+   <font class="guitool"> (marked in brown)</font>  
+   are usefull for analyzing some results. 
+</li>
+</ul>
+<p />
+
+There are two different choices for running SPIDER procedures: Using 
+<a href="../../../spire/doc/index.html">
+<font class="guitool">SPIRE</font></a> or using SPIDER
+procedures directly.
+
+<p />
+
+<ol class="choice">
+   <li> If you are using  
+   <a href="../../../spire/doc/index.html"> 
+   <font class="guitool">SPIRE</font></a>, then read <a href="mrspire.html">how to run SPIDER procedure files in SPIRE</a>. 
+   <font class="guitool">SPIRE</font> will create the necessary top level directory. </li>
+   <p />
+
+   <li> If you are running SPIDER at the Unix prompt the processing steps are 
+   carried out by procedure files,
+   which run many SPIDER operations automatically. To use a procedure
+   in this document, click the procedure filename and copy the procedure
+   to your current working directory. At the beginning of each
+   procedure, there is a list of parameters that can be adjusted
+   according to the particular project. Some of the procedures will
+   call additional procedure(s) (listed below the procedure
+   filename). You need not change anything in the procedures. Use the
+   following format to run a SPIDER procedure: <br />
+
+   <code class="snippet">spider spi/dat @proc</code> <br />
+   
+   where <code class="snippet">spi</code> is the procedure file extension, 
+   <code class="snippet">dat</code>       is the project data file extension, and 
+   <code class="snippet">proc.spi</code>  is the procedure file.
+  </li>
+</ol>
+
+<p />
+   The data below are sometimes shown plotted with <i>gnuplot</i>.  See the
+   <a href="http://www.gnuplot.info/">Gnuplot manual</a> 
+<p />
+
+
+<h4>After each SPIRE step or after running each procedure file, check the 
+  output files to make sure the results are sensible. If you are not sure what is
+  "sensible", ask an expert.</h4> 
+</p>
+
+
+<hr />
+<!-- xxxxxxxxxxxxxxxxx Creating new reconstruction project xxxxxxxxxxxxxxxxxxxxx -->
+
+<a name="CreatingProject"></a>
+
+<table class="heading" width="100%" >
+   <tr> <td>    <br />
+   <h3 class="heading">Creating new reconstruction project</h3>
+
+   <p class="explain">At the start of a reconstruction project, a project 
+   directory should be set up with the proper subdirectories and procedure files. </p>
+
+   <p>These procedures should be run in the <i>project</i> directory.   </p>
+   </td> </tr>
+</table>
+
+   <p />
+
+   <ul>
+   <li><p class="action">Create a project directory containing the required 
+   subdirectories and procedure files                                 </li> 
+
+   <ol class="choice">
+   <li> If using SPIRE it will create the necessary top level directory and populate 
+   the directories with the current set of procedure files.          </li>
+
+   <p />
+
+   <li> If using SPIDER procedures, the procedure files below are packed into the 
+   zipped tar file <a href="./spiproject.tar.gz">spiproject.tar.gz</a>  
+   <small> (for an archive of older procedure files used at Albany, 
+   <a href="Attic/batcharch">click here</a>)</small>.  Copy this archive to your 
+   working directory and unpack it:                                      <br />
+   <b><code>tar -zxvf spiproject.tar </code> </b>                        <br />
+   This will create a directory called <i>myproject</i>, containing 
+   the procedure files and subdirectories for a reconstruction project. Rename 
+   <i>myproject</i> to the name of your project directory, usually the same three letters 
+   as the data extension, e.g.:                                          <br />
+   <b><code>mv myproject acn</code></b> 
+   </li>
+
+   <p />
+
+   <!-- SPIRE directory=_top_level_project -->
+
+   <a name="PROTOCOLS"></a>
+   <li><small>
+    <p class="action"> If using data from Nature Protocols for testing, 
+    you can untar the data set and use the directory structure as your project directory.</p>
+ 
+    The data from the tar archive will then be already in place. However you must replace 
+    the procedures from the data set and 
+    stack the particle images before using the set of current procedures. The procedure 
+    <a class="project" href="./newprogs/nat2stk.spi">nat2stk.spi</a> 
+    reads <font class="input">win/ser******</font>,
+    <font class="input">../sel_micrograph</font>, 
+    <font class="input">good/ngood***</font>, and
+    <font class="input">order_select</font> 
+    to stack images by defocus groups and creates: <br />
+   <table class="outs">
+      <tr valign="top"><td>&curren;</td>
+         <td><code class="output">Alignment/data***</code>: </td>
+         <td>Stacks of particle images.</td></tr>
+      <tr valign="top"><td>&curren;</td>
+         <td><code class="output">Alignment/sel_particles_***</code>: </td>
+         <td>Lists of particle images by group.</td></tr>
+      <tr valign="top"><td>&curren;</td>
+         <td><code class="output">Alignment/sel_group</code>: </td>
+         <td>Group selection doc file.</td></tr>
+   </table>
+   It also renames the data set's micrograph files as necessary. </li>
+</small>
+</li>
+</ol>
+
+<p />
+
+<li><p class="action">Create a parameter document file</p>
+
+   Some information is stored in project-wide document files that are used 
+   by many procedure files.
+   Run the interactive procedure 
+   <a class="project" href="./newprogs/makeparams.spi">makeparams.spi</a> 
+   in the top directory of your project. It makes a document file: <br />
+   <table class="outs">
+      <tr valign="top">  <td>&curren;</td>
+          <td><code class="output">params</code>:</td>
+          <td>A doc. file containing the 
+             <a href="./params.html">reconstruction parameters</td> 
+      </tr>
+   </table>
+</li>
+<p />
+
+<p class="action">[<b>Optional</b>] Resize reference volume</p>
+<p>   <li>A reference volume is required. If the pixel size of your reference 
+   volume (key 5 in the <font class="input">params</font> file) and/or the 
+   dimensions do not match the dimensions of the data that you will be
+   processing, then you must run the procedure 
+   <a class="project" href="./newprogs/resizevol.spi">resizevol.spi</a>
+   in the top-level project directory to resize the volume. This creates:  <br />
+
+   <table class="outs">
+      <tr valign="top"><td>&curren;</td>
+          <td> <code class="output">reference_volume</code>: </td>
+          <td>&nbsp; Resized reference volume.</td></tr>
+   </table>
+   The reported interpolated pixel size may not exactly match the target 
+   pixel size due to rounding errors, but the values should be close.
+   </li>
+</p>
+
+
+<li><p class="action">Place micrograph files in  <i>Micrographs</i> directory</p>
+
+<p> Files of the digitized micrographs should be placed in the <i>Micrographs</i> 
+   directory if they are not already there. 
+   For example:  <br />
+   <code class="snippet">mv  /actual/location/of/micrographs/raw* &nbsp; Micrographs/ </code></p>
+
+<p>The procedures below can accept 
+   SPIDER, Hiscan TIFF, PerkinElmer, ZI, and Nikon Coolscan outputs.  
+   Any of these files may have been compressed with 
+   <i>gzip</i>.  Because micrographs require so much disk space, it may be desirable to 
+   keep the Micrographs in another location, and make <i>Micrographs</i> a 
+   symbolic link. In that case, 
+   <code>cd</code> to your project directory, remove <i>Micrographs</i>, and 
+   make a symbolic link:  <br />
+   <b><code>rmdir Micrographs</code></b> <br />
+   <b><code>ln -s  /the/actual/location/of/the/micrographs &nbsp; Micrographs </code></b>
+</li>
+</p>
+</ul>
+
+<hr />
+<!-- ------------------- Selecting micrographs ------------------- -->
+
+<a name="Micrographs"></a>
+<table class="heading" width="100%" >
+   <tr> <td>    <br />
+   <h3 class="heading">Selecting micrographs</h3>
+
+   <p class="explain">Generate a list of micrographs and screen the micrographs.</p>
+
+   <p>These procedures should be run in the <i>Micrographs/ </i> directory.   </p>
+   </td> </tr>
+</table>
+
+<ul>
+ 
+<li><p class="action">Create a selection doc file for micrograph file numbers</p>
+
+   The procedure
+   <a class="project" href="./newprogs/makefilelist.spi">makefilelist.spi</a>  
+   creates a micrograph selection doc file containing non-consecutive file numbers in 
+   the top-level project directory: <br/>
+
+   <table class="outs">
+      <tr valign="top"><td>&curren;</td>
+          <td><code class="output">sel_micrograph</code>:</td>
+          <td>Micrograph selection doc file listing the numbers of 
+             the micrograph files to be processed. </td> </tr>
+   </table>
+   The  text part of the filenames are entered as templates in the top 
+   level procedure files - see below).  If you need to add/exclude
+   files from this list, use a text editor to edit the appropriate
+   lines, then use the <a href="../../man/docren.html"><b>'DOC REN'</b></a> 
+   operation in SPIDER to renumber lines in the selection doc file.
+</li>
+<p />
+
+
+</ul>
+
+
+<hr />
+
+<!-- xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx CTF  xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx --> 
+
+<a name="CTF"></a> 
+
+<table class="heading" width="100%"><tr><td>              <br />
+   <h3 class="heading">Contrast Transfer Function estimation</h3>
+
+   <p class="explain">Estimate the defocus of each micrograph by calculating its 
+   power spectrum. Then group the micrographs into groups of similar defocus.
+   </p>
+
+   <p>These procedures should be run in the <i>Power_Spectra</i> directory.  <br />
+</td></tr>
+</table>
+
+<!-- SPIRE directory=Power_Spectra subdirectories=power -->
+ <p>
+ For more information, see;
+
+ <ul class="options">
+    <li> <a href="../ctf/ctf.html">Contrast transfer function correction</a> tutorial. </li>
+    <li> <a href="../../../tools/docs/ctfdemo.html">
+         <font class="guitool">ctfdemo</font></a>, a program that demonstrates 
+         the effects of various parameters on the CTF.                              </li>
+    <li> <a href="#PP97">Penczek et al. 1997</a> for a fuller discussion.           </li>
+  </ul>
+  </p>
+
+<ul>
+<a name="DEF"></a>
+
+<li><p class="action"> Calculate the power spectrum for each micrograph and
+   determine defocus using one of the following three methods</p> 
+
+<ol class="choice">
+
+<li> Use SPIDER procedure:
+   <a class="project" href="./newprogs/powdefocus.spi">powdefocus.spi</a> which
+   calls SPIDER procedure  
+   <a class="project" href="./newprogs/loadmic.spi">loadmic.spi</a>
+   to read each micrograph, computes an averaged power spectrum, and estimates defocus
+   using SPIDER operation: 
+   <a href="../../../docs/man/ctfed.html"><b>'CTF ED'</b></a>. 
+  This creates four  output files for each micrograph: 
+
+   <table class="outs">
+      <tr valign="top"><td>&curren;</td>
+          <td><font class="output">power/pw_avg****</font> </td>
+          <td>2D power spectra, each is an average of many smaller
+              power spectra calculated over the surface of the micrograph. </td> </tr>
+
+      <tr valign="top"><td>&curren;</td>
+          <td><font class="output">power/roo****</font></td>
+          <td>Doc files of 1D profiles of the rotationally averaged power spectra.  
+          These doc files can be plotted with <b>gnuplot</b> or 
+          <a href="../../../tools/docs/pyplot.html">
+          <font class="guitool">pyplot</font></a> </td>  </tr>
+
+       <tr valign="top"> <td>&curren;</td>
+          <td><font class="output">power/ctf****</font>: </td>
+          <td>Doc files of the background-subtracted 1D power spectra.</td></tr>
+
+       <tr valign="top"> <td>&curren;</td>
+          <td><font class="output">defocus</font>:</td>
+          <td>A doc file of defocus and astigmatism values.</td></tr>
+   </table>
+
+   The <font class="output">ctf****</font> files can be verified with 
+   <a href="../../../tools/docs/ctfmatch.html">
+   <font class="guitool">ctfmatch.py</font></a>
+</li>
+<p />
+ 
+
+<li> Use SPIDER procedure:
+   <a class="project" href="./newprogs/ctffind.spi">ctffind.spi</a> 
+   to read each micrograph using
+   <a class="project" href="./newprogs/loadmic.spi">loadmic.spi</a>,
+   compute an averaged power spectrum, and estimate defocus, 
+   astigmatism, and cut-off frequency using SPIDER operation 
+   <a href="../../man/ctffind.html"><b>'CTF FIND'</b></a>.
+   This invokes the MRC 
+   <a href="http://emlab.rose2.brandeis.edu/software">ctffind3</a> 
+   program and creates two  output files for each micrograph: 
+
+   <table class="outs">
+      <tr valign="top"><td>&curren;</td>
+          <td><code class="output">power/powchk***</code> </td>
+          <td>2D power spectra, each is an average of many smaller
+              power spectra calculated over the surface of the 
+              micrograph and half is replaced by an idealized
+              power spectrum. </td> </tr>
+
+       <tr valign="top"> <td>&curren;</td>
+          <td><code class="output">defocus</code>:</td>
+          <td>A doc file of defocus and astigmatism values.</td></tr>
+   </table>
+
+<li>Run <a href="./newprogs/powdefocus.spi">powdefocus.spi</a> 
+    as in <b>a.</b> to create power spectra: 
+    <font class="input">power/roo***</font>.  Then use  
+    <a href="../../../../web/docs/ctf.html">CTF from doc file</a>
+    in <b>WEB</b> to read <font class="input">power/roo***</font> 
+    and  manually fit a CTF model to the 1D profiles.
+</li>
+<p />
+
+</ol>
+<p />
+
+<li>
+   <p class="action">Check the rings in the power spectrum images.</p>
+
+   <p>
+   Make a montage using <a href="../../../../web/docs/web.html">WEB</a> 
+   (reduction factor 4) to
+   look at these power spectra. They are equivalent to diffraction
+   patterns obtained in the optical diffractometer. It is absolutely
+   important that you screen these spectra before proceeding any
+   further. Things to look out for: 
+   <ul>
+      <li>Are the Thon rings round?              </li>
+      <li>Do the rings extend to high resolution?</li>
+   </ul>
+   <br />
+
+   See this example:
+   <p><a href="pics/power.jpg"><img width="182" height="243" src="pics/power.jpg"></a></p>
+
+   You can discard micrographs that show one of the following artifacts, 
+   by removing them from the <font class="input">sel_micrograph</font> micrograph 
+   selection doc file:
+   <ul>
+      <li>Rings that are cut off unidirectionally (evidence of drift).             </li>
+      <li>Rings that are elliptical, or even  hyperbolic (evidence of astigmatism).</li>
+   </ul>
+
+   See this example:
+   <p><a href="pics/power.jpg"><img width="182" height="243" src="pics/power.jpg"></a></p>
+</li>
+
+
+   <p>
+   <li>
+      <p class="action">Assign defocus groups according to the power spectrum.</p>
+
+      <p>
+      <a class="project" href="./newprogs/defsort.spi">defsort.spi</a>: reads 
+      a <font class="input">defocus</font> doc file generated by one of the above methods, 
+      and the <font class="input">sel-micrograph</font> micrograph selection file 
+      and assigns the micrographs to a tentative defocus group.  It creates: <br />
+
+      <table class="outs">
+         <tr valign="top"><td>&curren;</td>
+             <td><code class="output">def_sort</code>: </td>
+             <td>A doc file with the group assignments sorted by defocus.</td></tr>
+      </table>
+      <b> These automated defocus group assignments are only a starting point, however. 
+      You must manually inspect the defocus groupings to see
+      which micrographs belong together, ensuring that they are "in phase".</b>
+   
+      <p>
+      Spectral profiles (that is, the roo*** or ctf*** files) from the same defocus
+      group should be plotted together, to ensure that their zeroes (minima)
+      line up, and do not cancel out. Plot the power spectrum for each
+      micrograph and assign them to defocus groups such that the curves are in phase.
+      Use either:
+
+      <ol class="choice">
+      <li> <a href="../../../tools/docs/ctfgroup.html">
+           <font class="guitool">ctfgroup.py</font></a>
+      </li>
+
+      <li> <a href="../../../tools/docs/pyplot.html">
+           <font class="guitool">pyplot.py</font></a>
+      </li>
+
+      <li> <b>gnuplot</b>   <br />
+         Gnuplot commands can be saved in a
+         text file, such as <a href="./newprogs/plotpower.plot">plotpower.plot</a>,
+         then run in <i>gnuplot</i> using the <i>load</i> command:    <br />
+         <code>gnuplot&gt; load 'plotpower.plot'</code>
+         <p><a href="pics/plotpower1.gif">
+            <img width="200" height="150" src="pics/plotpower1.gif"></a></p>
+      </li>
+      </ol>
+
+   When you have determined a satisfactory set of groupings, update the 
+   docfile: <code class="output">def_sort</code>, which is used in the next step.
+</li>
+</p>
+
+<p>
+<li><p class="action">Compute averages for each defocus group</p>
+
+   <a class="project" href="./newprogs/defavg.spi">defavg.spi</a>,   
+   uses the updated values in <font class="input">def_sort</font>, to compute the
+   averages for each defocus group, creating: <br />
+
+   <table class="outs">
+      <tr valign="top"> <td>&curren;</td>
+          <td> <code class="output">def_avg</code>: </td>
+          <td>A micrograph selection doc file containg average defocus level,
+              and defocus group assignment.</td> </tr>
+
+      <tr valign="top"><td>&curren; </td>
+          <td><code class="output">sel_group</code>: </td>
+          <td>A defocus group selection doc file containing 
+          average defocus level.</td> </tr>
+    </table>
+
+</li>
+</p>
+</ul>
+
+<hr>
+<!-- xxxxxxxxxxxxxxxxxxxxxxx Particle Picking and Selection xxxxxxxxxxxxxxxxxxxx -->
+
+<!-- ------------------- Particle Windowing and Verification ------------------- -->
+
+<a name="AUTO"></a> 
+<table class="heading" width="100%"><tr><td>      <br />
+   <h3 class="heading">Particle Windowing and Initial Verification</h3>
+
+   <p class="explain">A particle picking procedure file analyzes each micrograph, 
+      cutting out small windows of likely particle candidates. This is followed 
+      by a manual selection process that identifies the good particle images and 
+      rejects the bad ones. Particles automatically output by the procedure file are 
+      said to be <i>windowed</i>; the subset that are manually chosen are said to 
+      be <i>verified</i>.
+   </p>
+
+   <p>These procedures should be run in the <i>Particles/</i> directory.</p>
+   </td></tr>
+</table>
+
+<!-- SPIRE directory=Particles subdirectories=coords, good, win, flt -->
+
+<ul>
+
+<li><p class="action">Select a background noise file</p>
+   A noise image is required to normalize the backgrounds of the
+   particle images. Do one of the following:
+   <p />
+   <ol class="choice">
+      <li>Use a noise image from a previous project (this is the easier
+         way). The window sizes do not need to match.
+      </li>
+      <p />
+
+      <li>
+         Use the procedure:  <a class="project" href="./newprogs/noise.spi">noise.spi</a> 
+         (which calls 
+         <a class="project" href="./newprogs/convert_p.spi">convert_p.spi</a>) to
+         read the micrograph images: <font class="input">../Micrographs/raw****</font> 
+         and create: <br />
+ 
+         <table class="outs">
+            <tr valign="top"><td>&curren;</td>
+                <td><code class="output">noise</code>: </td>
+                <td> &nbsp; A noise image.</td></tr>
+         </table>
+
+         This noise file is randomly selected from a set of files 
+         (<code class="output">tmpnoise/noi***</code>) that are windowed from regions 
+         in the micrograph that appear not to contain any particles.   
+     
+         View the selected noise file.   
+         If it has any structure (i.e. particles or junk), then select another one of the
+         candidates and copy it to: <code class="output">noise.ext</code>.
+      </li>
+  </ol>
+
+  <p />
+
+  <li> <p class="action">Run automatic phase of particle selection.</p>
+
+   Either of the following two approaches can be used. They both
+   require the image format conversion procedure: 
+   <a href="./newprogs/convert_p.spi">convert_p.spi</a> 
+   <p />
+
+   <ol class="choice">
+     <li>
+       SPIDER procedure <a class="project" href="../newprogs/pick.spi">pick.spi</a> (which calls:  
+       <a class="project" href="./newprogs/convert_p.spi">convert_p.spi</a> 
+       and <a class="project" href="./newprogs/pick_p.spi">pick_p.spi</a>)
+       applys correlation with a Gaussian blob to window particles.
+       <br />
+       The micrographs are decimated by 1/4,
+       Fourier filtered with a Gaussian low pass filter, and searched for
+       peaks over regions corresponding to particle dimensions. Particles
+       are windowed out and centered, then peak locations are corrected, and
+       particles are windowed again. This procedure uses histogram
+       equalization. Output files:<br />
+
+       <table class="outs">
+          <tr valign="top"><td>&curren;</td>
+              <td><font class="output">win/winser****</font>: </td>
+              <td>Stacked particle images.</td></tr>
+          <tr valign="top"><td>&curren;</td>
+              <td><font class="output">win/sel_particle****</font>: </td>
+              <td>Particle selection doc file for each micrograph.</td></tr>
+          <tr valign="top"><td>&curren;</td>
+              <td><font class="output">coords/sndc****</font>: </td>
+              <td>Peak coordinates for particles.</td></tr>
+       </table>
+    </li>
+    <p />
+
+    <li>SPIDER procedure <a class="project" href="./newprogs/lfc_pick.spi">lfc_pick.spi</a> 
+       (which calls  
+       <a class="project" href="./newprogs/convert_p.spi">convert_p.spi</a> and
+       <a class="project" href="./newprogs/pickparticle.spi">pickparticle.spi</a>) 
+       uses the Local Fast Correlation algorithm to window particles.  
+       This procedure uses <a href="../../../../partpick.html#LFC">local cross-correlation</a> 
+       calculated using Fourier methods outlined by
+       <a href="#AR03">Roseman (2003)</a>. This implementation is described in 
+       <a href="#BR04">Rath and Frank (2004)</a>. A reference volume is required
+       to generate projections at desired Eulerian angles for 
+       searching different orientations of the search image in the micrograph. 
+       Procedure <a  href="./newprogs/lfc_pick.spi">lfc_pick.spi</a>
+       also performs a histogram-fitting normalization of the images.
+       Output files:<br />
+
+        <table class="outs">
+          <tr valign="top"><td>&curren; </td>
+              <td><font class="output">win/winser_****</font>: </td>
+              <td>Stacks of particle images for each micrograph.</td></tr>
+          <tr valign="top"><td>&curren; </td>
+              <td><font class="output">win/sel_particle_****</font>: </td>
+              <td>Particle selection doc file for each micrograph.</td></tr>
+          <tr valign="top"><td>&curren; </td>
+              <td><font class="output">coords/sndc****</font>: </td>
+              <td>Pixel coordinates for <i>center</i> of particle images.</td></tr>
+        </table>
+    </li>
+  </ol>
+
+ <a name="PFILT"></a>
+ <li><p class="action">[<b>Optional</b>] Low-pass filter particle images before
+     particle selection</p>
+
+     The procedure <a class="project" href="./newprogs/pfilt.spi">pfilt.spi</a> 
+     filters a set of images, adjusting filter settings for each micrograph, 
+     based on its defocus and creates:      <br />
+     <table class="outs">
+       <tr valign="top"><td>&curren;</td>
+         <td><code class="output">flt/winser_***</code>: </td>
+         <td>&nbsp;&nbsp;Stacks of low-pass filtered particle images.</td></tr>
+    </table>
+    Manual selection of good particles (the next step) is easier if
+    the particles have been low-pass filtered beforehand. Use the 
+    filtered particles, not the raw particles, during selection in 
+    <a href= "../../../../web/docs/web.html">WEB</a>. 
+ </li>
+ <p />
+
+
+<li><p class="action">Verify the windowed particles</p>
+
+   This step is optional if using 
+   <a href="mrverify.html">classification-based verification</a> later on.</p>
+
+   Sort through the output files to eliminate any non-particles. 
+   This step is optional if using 
+   <a href="mrverify.html">classification-based verification</a> later on.</p>
+
+   Sorting can be done in <a href="../../../../web/docs/web.html">WEB</a>
+   using the <b>Categorize from sequential montage</b> operation. When
+   the particle image files are displayed on the screen, use the mouse
+   to click on each good particle. For each micrograph, save your 
+   selections to a file called <code class="output">good/good***</code>. (More
+   details in the <a href="../../faq.html#pick">SPIDER FAQ</a> and 
+   <a href="../../partpick.html">partpick.html</a>). This creates:   <br />
+
+   <table class="outs">
+      <tr valign="top"><td>&curren;</td>
+         <td><code class="output">good/good***</code>: </td>
+         <td>A set of particle selection doc files, one for each micrograph.</td></tr>
+   </table>
+</li>
+<p />
+
+<li><p class="action">Remove any duplicated particles and list number of picked and 
+   selected particles by micrograph</p>
+
+   The procedure: <a class="project" href="./newprogs/renumber.spi">renumber.spi</a> creates: <br />
+   <table class="outs">
+      <tr valign="top"><td>&curren;</td>
+         <td><code class="output">good/ngood***</code>: </td>
+         <td>A set of particle selection doc files, one for each micrograph,
+             listing unduplicated selected particle numbers.</td></tr>
+      <tr valign="top"><td>&curren;</td>
+         <td> <code class="output">percent_selected</code>: </td>
+         <td>A doc file listing percentages of automatically picked vs 
+             manually selected particles for each micrograph and overall.</td></tr>
+   </table>
+   <p />
+   When manually selecting particles in <a href="../../../../web/docs/web.html">WEB</a>,
+   sometimes a particle is accidentely double clicked. This procedure 
+   will delete the appropriate lines from the file. Run this procedure, 
+   even you you don't think you made any mistakes - subsequent procedure files 
+   will require the <code class="output">ngood***</code> files as input.
+</li>
+<p />
+
+
+<p />
+
+
+</ul>
+
+<hr />
+
+<!-- xxxxxxxxxxxxxxxxxxxxxxxxxxxx Alignment xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx -->
+
+<a name="SH"></a> 
+<table class="heading" width="100%"><tr><td> <br />
+   <h3 class="heading">Alignment</h3>
+
+   <p class="explain">
+   Reference images are generated from the reference volume. Data particles 
+   are compared to each reference to find the best match, and the corresponding 
+   transformations (shifts and rotations) are written to a doc file. Finally, 
+   the transformations are applied to the data images, aligning them to the 
+   references.
+   </p>
+
+   <p>These procedures should be run in the <i>Alignment</i> directory.</p
+   </td></tr>
+</table>
+
+<!-- SPIRE directory=Alignment subdirectories=ali,projs -->
+
+
+<ul>
+
+
+<li><p class="action">Create lists of images in each defocus group   </p>
+
+   <a class="project" href="./newprogs/sel_by_group.spi">sel_by_group.spi</a> reads 
+   <font class="input">../Power_Spectra/def_avg</font>, 
+   <font class="input">../Power_Spectra/sel_group</font>, and 
+   <font class="input">../Particles/good/ngood****</font> to 
+   create  selection document files and a group summary file:        <br />
+   <table class="outs">
+      <tr valign="top"><td>&curren;</td>
+          <td><code class="output">sel_particles_***</code>: </td>
+          <td>A doc file for each defocus group, listing all the particles in 
+              that group.</td></tr>
+
+      <tr valign="top"><td>&curren;</td>
+          <td><code class="output">sel_group</code>:  </td> 
+          <td>A summary doc file with 4 columns listing: <br />
+              Defocus group, Number of particles, Cumulative number of particles, <br /> 
+              and Average defocus value for each group. </td>  </tr>
+   </table>
+   <small>Note: this step is not necessary when using Nature Protocols data set.</small>
+</li>
+<p />
+
+<li><p class="action">Create stacks of images for each defocus group</p>
+   <a class="project" href="./newprogs/win2stk.spi">win2stk.spi</a> reads 
+   <font class="input">sel_group</font>, 
+   creates stacks: <br />
+
+   <table class="outs">
+      <tr valign="top"><td>&curren;</td>
+          <td><code class="output">data***</code>: </td>
+          <td>A stack file for each defocus group, containing all particle 
+              images from that group.</td></tr>
+   </table>
+   <small>Note: this step is not necessary when using the Nature Protocols data set.</small>
+</li>
+
+<p />
+
+<li><p class="action">Create reference projections for alignment from a reference
+     volume  </p>
+
+    <p> Reference projections (images) are views of the object at known angles.
+    In what follows, angular accuracy is set to 15 degrees, which
+    results in 83 reference projections. A reference volume
+    is needed in the top level project directory to create the projections. 
+    The row and column dimensions of the reference volume must match the 
+    dimensions of the particle windows. (see 
+    <a class="project" href="./newprogs/resizevol.spi">resizevol.spi</a>)
+    </p>
+
+   <a class="project" href="./newprogs/refproj.spi">refproj.spi</a> reads 
+   <font class="input">../reference_volume</font> and 
+   <font class="input">sel_group</font>
+   to create two sets of files:        <br />
+
+   <table class="outs">
+      <tr valign="top"><td>&curren;</td>
+          <td><code class="output">refangles</code>: </td>
+          <td>A doc. file from
+             <a href="../../man/voea.html"><b>VO EA</b></a>
+            listing the three Euler angles for each of the projections.</td></tr>
+
+      <tr valign="top"><td>&curren;</td>
+          <td><code class="output">projs/prj_****</code>: </td>
+          <td>Stacked reference images from   
+              <a href="../../man/pj3q.html"><b>PJ 3Q</b></a> 
+              corresponding to the angles in the preceeding file.</td></tr>
+   </table>
+   <p />
+    
+   There are two types of reference projections:
+   <ol class="choice">
+     <li>You can use the same stack of references for all defocus groups, by 
+         setting register [usectf] = 0. They will be in the file: 
+         <code class="output">projs/prj_001</code>     </li>
+
+     <li>Generate more realistic references by multiplying them by the CTF  
+         There will be a stack of reference projections for each defocus 
+         group.     </li>
+   </ol>
+</li>
+
+<p />
+
+<li><p class="action">Align particles to the reference projections</p>
+   <ol class="choice">
+   <li> If you are using the same reference stack for each defocus group: <br />
+      <a class="project" href="./newprogs/apsh.spi">apsh.spi</a> reads
+      <font class="input">projs/prj_***</font>, 
+      <font class="input">refangles</font>, and 
+      <font class="input">data***</font> to create an alignment parameters
+      document file and a stack of the aligned images.<br />
+
+      <table class="outs">
+      <tr valign="top"><td>&curren;</td>
+          <td><code class="output">align_01_001</code>: </td> 
+          <td>Shift and rotation parameters for the best matched projection.</td></tr>
+
+      <tr valign="top"><td>&curren;</td>
+          <td><code class="output">dala01_001</code>:</td>
+          <td>Aligned stack of the particle images.</td></tr>
+      </table>
+   </li>
+
+   <p />
+   <li> If you have references for each defocus group: <br />
+      <a class="project" href="./newprogs/apshgrp.spi">apshgrp.spi</a> reads
+      <font class="input">sel_group</font>, <font class="input">projs/prj_***</font>, 
+      <font class="input">refangles</font>, and 
+      <font class="input">data***</font> to create a set of 
+      alignment parameter document files and stacks of aligned images.<br />
+
+      <table class="outs">
+      <tr valign="top"><td>&curren;</td>
+          <td><code class="output">align_01_***</code>:</td>
+          <td>Shift and rotation parameters for the best matched projections.</td></tr>
+
+      <tr valign="top"><td>&curren;</td>
+          <td><code class="output">dala01_***</code>:</td>
+          <td>Aligned stacks of the particle images.</td></tr>
+      </table>
+
+     If you are using <a href="../../../pubsub/pubsub.html">Publish and Subscribe</a>
+      on a Cluster, activate <i>PubSub</i> within <i>apshgrp.spi</i> procedure heading.</p>
+   </li>
+<p />
+
+</ul>
+
+<hr>
+<!-- xxxxxxxxxxxxxxxxxxxxxxxxx Compute Averages xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx -->
+
+<a name="CA"></a> 
+<table class="heading" width="100%"><tr><td> <br />
+   <h3 class="heading">Compute Averages</h3>
+
+   <p class="explain">For all projections, all aligned particles of a 
+   given reference view are averaged together. Further particle selection is 
+   made by selecting a correlation cutoff threshold to reject some particles. 
+   The distribution of particles among projections can be displayed.
+   </p>
+
+   <p>These procedures should be run in the <i>Reconstruction</i> directory.</p>
+   </td></tr>
+</table>
+
+<!-- SPIRE directory=Reconstruction subdirectories=hist,ctf, avg, display -->
+
+<ul>
+<li><p class="action"> Make particle selection document files listing 
+   particles cooresponding to each reference projection</p>
+   <a class="project" href="./newprogs/select.spi">select.spi</a></i> reads  
+   <font class="input">../Alignment/sel_group</font>, and
+   <font class="input">../Alignment/align_01_***</font> 
+   to create the following doc files:<br />
+
+   <table class="outs">
+      <tr valign="top"><td>&curren;</td>
+          <td><code class="output">df***/how_many</code>: </td>
+          <td>Lists number of particles associated with each reference view for 
+              each group. </td></tr>
+
+      <tr valign="top"><td>&curren;</td>
+          <td><code class="output">df***/ref_sel???</code>: </td>
+          <td>Lists the particles numbers associated with each reference view for
+              each group (from 'VO MQ'). </td></tr>
+
+      <tr valign="top"><td>&curren;</td>
+          <td><code class="output">how_many</code>: </td>
+          <td>Summary file listing total number of particles associated 
+              with each reference view.</td></tr>
+   </table>
+</li>
+
+<p />
+
+<li> <p class="action">Create average images for all projection groups and
+       combine all alignment parameter files into a single 
+       summary file (if necessary). </p>
+
+    <a class="project" href="./newprogs/average.spi">average.spi</a> 
+    reads
+    <font class="input">df***/how_many</font>, 
+    <font class="input">select/sel***</font>,  
+    <font class="input">../Alignment/sel_group</font>, and 
+    <font class="input">../Alignment/dala01_***</font> to
+    create the following files for all defocus groups.
+    <table class="outs">
+      <tr valign="top"><td>&curren;</td>
+          <td><code class="output">avg***</code>:    </td>
+          <td>Stacks of average images for each set of projections.</td></tr>
+
+      <tr valign="top"><td>&curren;</td>
+          <td><code class="output">var***</code>: </td>
+          <td>Stacks of variance images for each set of projections</td></tr>
+
+   </table>
+   <p />
+
+   <!-- if avgs were made for def grp 1, use df001
+   -d = doc file template, -i = particle template
+   classavg.py -d df001/select/sel**.ext -i ../Alignment/ali/sar******.ext avg/avg*
+   -->
+</li>
+
+<p>The next three operations help to identify a threshold
+   correlation coefficient that describes true particles as opposed to any 
+   erroneously selected particles. Create histograms of each defocus
+   group that plots the number of particles vs. the cross correlation
+   value. For example, if the histograms display a bimodal
+   distribution, the higher peak may correspond to actual particles,
+   while the lower peak may show noise. The threshold should be chosen
+   between two such peaks.</p>
+
+<p />
+
+<li><p class="action">Identify a threshold correlation coefficient for 
+   selecting true particles. </p>
+
+    <p>Create histograms for each defocus
+    group that plots the number of particles vs. the cross correlation
+    value. If the histograms display a bimodal
+    distribution, the higher peak may correspond to actual particles,
+    while the lower peak may show noise. The threshold should be chosen
+    between two such peaks.</p>
+
+   <a class="project" href="./newprogs/cchistogram.spi">cchistogram.spi</a> reads 
+   <font class="input">../Alignment/sel_group</font>, 
+   <font class="input">../Alignment/align_01_***</font>, and 
+   <font class="input">align_01_all</font> to
+   to create histograms and a gnuplot control script:
+
+   <table class="outs">
+      <tr valign="top"><td>&curren;</td>
+          <td><code class="output">hist/cchist_***</code>: </td>
+          <td>Set of histogram doc files of cross correlation values by defocus group.</td></tr>
+
+      <tr valign="top"><td>&curren;</td>
+          <td><code class="output">hist/cchist_all</code>: </td>
+          <td>Overall histogram doc file of cross correlation values.</td></tr>
+
+      <tr valign="top"><td>&curren;</td>
+          <td><code class="output">gnuplot_cchist_***</code>: </td> 
+          <td>Gnuplot scripts to display group cross correlation values histograms.</td></tr>
+
+      <tr valign="top"><td>&curren;</td>
+          <td><code class="output">gnuplot_cchist_all</code>: </td> 
+          <td>Gnuplot script to display overall cross correlation values histogram.</td></tr>
+   </table>
+
+   <p />
+
+   To view the overall histogram plot issue following system command:  
+   <code>gnuplot -persist gnuplot_hist_all.ext</code>               <br />
+</li>
+
+
+<li><p class="action">Compute correlation thresholds for discarding 
+    particles</p>
+
+   <a class="project" href="./newprogs/ccthresh.spi">ccthresh.spi</a> reads   
+   <font class="input">../Alignment/sel_group</font>, 
+   <font class="input">../Alignment/align_01_***</font>, and 
+   <font class="input">hist/cchist***</font>.   
+   Using the given percent cutoff level, it creates:                   <br />
+
+   <table class="outs">
+      <tr valign="top"><td>&curren;</td>
+          <td><code class="output">thresh</code>  </td>
+          <td> Doc file listing CC Value thresholds for each defocus group. </td></tr>
+
+      <tr valign="top"><td>&curren;</td>
+          <td> <code class="output">sav_particles_***</code></td>
+          <td> Particle selection files listing particle numbers of images
+               with correlation values above the threshold,sorted by 
+               correlation value..</td></tr>
+
+      <tr valign="top"><td>&curren;</td>
+          <td> <code class="output">rej_particles_***</code></td>
+          <td> Particle selection files listing particle numbers of images
+               with correlation values below the threshold, sorted by 
+               correlation value.</td></tr>
+   </table>
+
+   E.g., if a threshold of 0.20 is selected, then 20% of all particles in each 
+   defocus group having the lowest correlation values will be rejected. The output
+   doc file <code class="output">thresh</code> lists, for each defocus group, 
+   the cutoff correlation threshold, and the numbers 
+   of particles above and below the threshold. NB, BECAUSE THE HISTOGRAM 'BINS' 
+   THE VALUES, THE NUMBERS OF PARTICLES ARE 
+   NOT EXACT, AND THEREFORE WILL NOT EXACTLY MATCH THE OUTPUT OF 
+   <a href="./newprogs/dftotals.spi">dftotals.spi</a>.
+
+   <p />
+
+   Use the <b>Montage from doc file</b> operation in 
+   <a href="../../../../web/docs/web.html">WEB</a> to display the rejected
+   particles identified in the selection doc file (e.g. rej_particles_001).  
+   The greater the correlation coefficient value, the more
+   similiar the particle should look to the reference projection.
+   This will help you determine whether the correlation coefficient threshold that
+   you chose is appropriate for selecting true particles. Select
+   <b>Compute Average</b> to view an average of the particles displayed.
+   <p />
+
+   <p> The correlation thresholds in <code class="output">thresh</code> may be 
+   edited at this time, if you wish to apply different cutoff thresholds.</p>
+</li>
+<p />
+
+<li>
+   <p class="action">Make final selection of particles above the correlation thresholds</p>
+
+   <a class="project" href="./newprogs/dftotals.spi">dftotals.spi</a> reads 
+   <font class="input">../Alignment/sel_group</font>, 
+   <font class="input">../Alignment/align_01_***</font>, and   
+   <font class="input">thresh</font>.  It applies the updated cutoff levels
+   from thresh to create:                        <br />
+   <table class="outs">
+      <tr valign="top"><td>&curren;</td>
+          <td> <code class="output">sel_particles_***</code></td>
+          <td> Particle selection files.</td></tr>
+
+      <tr valign="top"><td>&curren;</td>
+          <td> <code class="output">sel_group_cclim</code></td>
+          <td> Group selection file with updated numbers of particles in each group.</td></tr>
+   </table>
+  The particle selection files list particles with correlation values greater 
+  than the threshold and are used to select particles for inclusion in the
+  reconstruction.</td></tr>
+</li>
+<p />
+
+<li>
+   <p class="action">Check the spatial distribution of views 
+   (angular directions) for the reconstruction.     </p>
+
+   <p> <a class="project" href="./newprogs/plotrefviews.spi">plotrefviews.spi</a> reads  
+   <font class="input">../Alignment/sel_group</font>,
+   <font class="input">how_many</font>, and 
+   <font class="input">df{***[grp]}/how_many</font>.
+   It creates script files of gnuplot commands: <br />
+
+   <table class="outs">
+      <tr valign="top"><td>&curren;</td>
+          <td> <code class="output">gnuplot_view</code></td>
+          <td> Gnuplot script to plot overall histogram of number of particles vs projection view.</td></tr>
+
+      <tr valign="top"><td>&curren;</td>
+          <td> <code class="output">display/gnuplot_views_***</code></td>
+          <td> Gnuplot scripts to plot histogram of number of particles vs projection view 
+               for each defocus group.</td></tr>
+   </table>
+
+   <p />
+
+   <a class="project" href="./newprogs/plotangs.spi">plotangs.spi</a> and its procedure 
+   <a class="project" href="./newprogs/plotangs_p.spi">plotangs_p.spi</a> read 
+   <font class="input">../Alignment/sel_group</font>,  
+   <font class="input">../Alignment/refangles</font>, and 
+   <font class="input">df***/how_many</font> to create: <br />
+
+   <table class="outs">
+      <tr valign="top"><td>&curren;</td>
+          <td> <code class="output">display/angdis_by_group</code>: </td> 
+          <td>A stack of SPIDER images showing distribution of sample images 
+             among various reference projections for each group. </td></tr>
+
+      <tr valign="top"><td>&curren;</td>
+          <td> <code class="output">display/angdis_all_groups</code>: </td> 
+          <td>Combined SPIDER image file showing distribution of sample images 
+             among various reference projections for all groups. </td></tr>
+
+   </table> 
+
+   These images show the various angular reference groups represented by small 
+   circles. The radii of these circles are proportional to the number of 
+   particles in each group.
+
+   <p> Use the <b>Montage</b> operation in <a href="../../../../web/docs/web.html">WEB</a> 
+   to display the images.</p>
+</li>
+
+<li>
+   <p class="action">[Optional] Limit strongly over-represented angular projections</p>
+
+   <p> <a class="project" href="./newprogs/bestim.spi">bestim.spi</a> reads 
+   <font class="input">../Alignment/sel_group</font>,  
+   <font class="input">../Alignment/refangles</font>,  
+   <font class="input">df***/how_many</font>, and 
+   <font class="input">df***/ref_sel{***[grp]}</font> to create: <br />
+
+   <table class="outs">
+      <tr valign="top"><td>&curren;</td>
+          <td> <code class="output">sel_group_cclim</code></td>
+          <td> Group selection file for specified defocus group</td></tr>
+      <tr valign="top"><td>&curren;</td>
+          <td> <code class="output">sel_particles_***</code></td>
+          <td> Particle selection file for specified defocus group</td></tr>
+   </table> 
+
+   The selection limits the numbers of images per reference view direction to a 
+   certain specified count. This will limit strongly over-represented 
+   angular projections which may cause a shape error in the reconstruction.
+   Continue reconstruction with the limited set of particles.
+</p>
+</li>
+
+</ul>
+
+<p />
+
+<hr>
+<!-- xxxxxxxxxxxxxxxxxxxxxxxxx 3D Reconstruction xxxxxxxxxxxxxxxxxxxxxxxxxxxxx -->
+
+<a name="3D"></a> 
+<table class="heading" width="100%"><tr><td> <br />
+   <h3 class="heading">3D Reconstruction</h3>
+
+   <p class="explain">Use the selected aligned particles to create an initial 3D volume. 
+   To estimate the resolution of the resulting structure, the particle images are split 
+   into two equal sets, and the two resulting reconstruction volumes are compared. 
+   </p>
+
+   <p>These procedures should be run in the <i>Reconstruction</i> directory.</p>
+</td></tr></table>
+
+<p />
+
+<ul>
+
+<li><p class="action">Split the particle images, create reconstructions,
+    merge reconstructions into final reconstruction.  </p>
+
+    <p> Split the particle images from each defocus group into two 
+    sets, create paired reconstructions, determine resolution for each 
+    reconstruction,  merge group reconstuctions into final combined 
+    reconstruction and compute reconstruction resolution. Choose one of the
+    following two procedures</p>
+
+   <ol class="choice">
+      <li> For normal serial reconstruction use 
+           <a class="project" href="./newprogs/recon.spi">recon.spi</a>. </li> 
+
+      <li>For parallel reconstruction under control of PubSub use 
+      <a class="project" href="./newprogs/pub_recon.spi">pub_recon.spi</a> and 
+      <a class="project" href="./newprogs/recon.spi">recon.spi</a>.
+   </ol>
+   <p />
+   These procedures read  
+   <font class="input">sel_group_cclim</font>, <font class="input">sel_particles_***</font>,  
+   <font class="input">../Alignment/dala01_***</font>, and 
+   <font class="input">../Alignment/align_01_***</font>.  
+
+   They create two subset reconstructions for each defocus group using 
+   <a href="../../man/bprp3.html">'BP RP 3'</a> for 
+   back projection, compute the resolution of each defocus group 
+   reconstruction by comparing the two volumes, and create a CTF
+   correction file for each group: 
+
+   <table class="outs">
+      <tr valign="top"><td>&curren;</td>
+          <td> <code class="output">df***/vol01_sub1</code>: </td>
+          <td> Reconstructed volume from first subset of images for each defocus group.</td></tr> 
+
+      <tr valign="top"><td>&curren;</td>
+          <td> <code class="output">df***/vol01_sub2</code>: </td>
+          <td> Reconstructed volume from second subset of images for each defocus group.</td></tr> 
+
+      <tr valign="top"><td>&curren;</td>
+          <td> <code class="output">df***/fscdoc</code>: </td>
+          <td> Doc files containing  <a href="../../glossary.html#Fourier">FSC curve</a> 
+               for each defocus group.</td></tr> 
+
+    <tr valign="top"><td>&curren;</td>
+          <td> <code class="output">df***/ctffile</code>: </td>
+          <td> <a href="../../glossary.html#CTR">CTF</a> correction file for
+               each defocus group:</td></tr> 
+   </table>
+
+   <p />
+
+     Finally, they apply CTF correction to all the defocus group subset volumes 
+     (see the <a href="../../man/tfcts.html">TF CTS</a> operation),   
+     add together the two subset volumes to make a volume for the entire data set, . 
+     and  calculate the FSC resolution curve for the combined reconstruction  
+     (see <a href="../../man/fsc.html">FSC</a> operation) creating 
+     the following files:                                        
+
+    <table class="outs">
+      <tr valign="top"><td>&curren;                               </td>
+          <td> <code class="output">vol01</code>:                 </td>
+          <td> 3D reconstruction from entire set of particles.    </td></tr> 
+
+      <tr valign="top"><td>&curren;                               </td>
+          <td> <code class="output">combires</code>:              </td>
+          <td> Doc file containing FSC curve for final reconstruction. </td></tr>
+
+      <tr valign="top"><td>&curren;                               </td>
+          <td> <code class="output">resolution</code>:            </td>
+          <td> Doc file containing group number,  
+              normalized frequency, and resolution (in Angstroms). </td> </tr> 
+    </table>
+
+   <p />
+
+   This reconstruction is known as the <i>initial volume</i> and will be
+   used as the input for the Refinement step. 
+</li>
+
+<p />
+
+<li><p class="action">Check the defocus group volumes by viewing a central 
+    slice from each volume </p>
+
+    <a class="project" href="./newprogs/slices.spi">slices.spi</a> reads
+   <font class="input">sel_group_cclim</font>, and  
+   <font class="input">df***/vol01_sub1</font> to create:    <br />
+
+    <table class="outs">
+      <tr valign="top"><td>&curren;</td>
+          <td> <code class="output">central_slices</code>:  </td>
+          <td> Stack of central slices from each first subset defocus group volume. </td></tr> 
+    </table>
+    <p />
+
+    Use the <b>Montage</b> operation in <a href="../../../../web/docs/web.html">WEB</a> 
+    to view the stacked slices. Ideally, each 
+    image should show a particle isolated from its surroundings, exhibiting 
+    some internal structure - somewhat like the reference images. If any 
+    images are blank or otherwise unusual, go back and check the processing of 
+    that defocus group.
+</li>
+
+<p />
+
+<li><p class="action">Check the FSC curves from the group volumes by viewing a plot
+    of the curves </p>
+
+   <a class="project" href="./newprogs/plotres.spi">plotres.spi</a> reads
+   <font class="input">sel_group_cclim</font>,  
+   <font class="input">combires</font>, and <font class="input">df***/fscdoc</font>.  
+   It creates a text file of gnuplot commands:  
+
+    <table class="outs">
+      <tr valign="top"><td>&curren;</td>
+          <td> <code class="output">gnuplot_res</code>: </td>
+          <td> Gnuplot script for plotting the resolution curve of each 
+               defocus group, along with the combined resolution curve. </td></tr> 
+    </table>   
+
+   <p>
+   <a href="pics/plotres2.gif"><img width="200" height="150" src="./pics/plotres2.gif"></a></p>
+
+   Examine this plot and see if there are any unusual curves, if so, go back and check 
+   the processing of that defocus group.
+</li>
+
+<p />
+
+<li><p class="action">Filter the initial volume</p>
+   Information at spatial frequencies above the cutoff value is  
+   considered to be uncorrelated noise, and should be filtered out.  <br />
+
+   <a class="project" href="./newprogs/filt.spi">filt.spi</a> reads 
+   <font class="input">resolution</font> and   
+   <font class="input">vol01</font>. It filters the 
+   initial volume at the cutoff frequency to create: <br />
+
+    <table class="outs">
+      <tr valign="top"><td>&curren;</td>
+          <td> <code class="output">volfq01</code>: </td>
+          <td>Filtered volume.  </td></tr> 
+    </table>   
+   <p />
+    
+   Use the <b>Surface</b> operation in 
+   <a href="../../../../web/docs/web.html">WEB</a> 
+   to view the filtered volume.
+</li>
+
+</ul>
+
+<hr>
+<!-- xxxxxxxxxxxxxxxxxxxxxxxxxxx Refinement xxxxxxxxxxxxxxxxxxxxxxxxxxx -->
+
+<a name="REF"></a> 
+<table class="heading" width="100%"><tr><td> <br />
+   <h3 class="heading">Refinement</h3>
+
+   <p class="explain">Refinement essentially performs the reconstruction steps repeatedly, 
+     decreasing the angular resolution of reference projections with each iteration, 
+     thereby giving the data particles a chance to find a better approximating 
+     reference match each time. Thus the data particles are allowed to "settle in" 
+     and find better fitting angles, than the initial choices.  Refinement is a 
+     computationally expensive operation. Before starting a refinement, check the 
+     results of the above reconstructions, to ensure that <u>all</u> defocus groups
+     have reasonable particle volumes. Remove any groups that are defective.
+   </p>
+
+   <p>These procedures should be run in the <i>Refinement</i> directory.</p>
+</td></tr></table>
+
+<!-- SPIRE directory=Refinement subdirectories=input, final, work -->
+
+<ul>
+
+<li><p> The refinement step uses the following input files ('***' denotes
+  group number and '##' denotes iteration number </p>
+
+   <table>  
+   <tr><td> <font class="input">../params</font>: </td> 
+       <td> Parameter definition file.</td></tr>
+   <tr><td> <font class="input">../Reconstruction/sel_group_cclim</font>: </td> 
+       <td> Group selection file.</td></tr>
+   <tr><td> <font class="input">../Reconstruction/vol01</font>: </td> 
+       <td> Initial starting volume.</td></tr>
+   <tr><td> <font class="input">../Reconstruction/sel_particles_***</font>: </td> 
+       <td> Particle selection files.</td></tr> 
+   <tr><td> <font class="input">../Alignment/align_01_***</font>: </td> 
+       <td> Initial alignment parameter files.</td></tr> 
+   <tr><td> <font class="input">../Alignment/data***</font>: </td> 
+       <td> Unaligned stacked image files.</td></tr>
+   <tr><td> <font class="input">input/scattering</font>: </td> 
+       <td> Optional amplitude enhancement scatter file.</td></tr>
+   <tr><td> <font class="input">input/mask</font>: </td> 
+       <td> Optional amplitude enhancement mask file.</td></tr>
+   </table>
+</li>
+<p />
+
+<li><p class="action">Edit the values in 
+  <a class="project" href="./newprogs/refine_settings.pam">refine_settings.pam</a>
+  to set necessary values for refinement parameters and specify any non-standard input 
+   file names.</p>
+</li>
+
+<li><p class="action">If you are using  <i>PubSub</i>, copy latest SPIDER executable into the 
+    current directory and rename it: <i>spider</i>. e.g. <br />
+   <i>cp /spider/bin/spider_linux_mp_opt64.18.16 &nbsp;&nbsp; spider </i> </p>
+     This ensures that the same SPIDER executable is available throughout whole refinement.
+</li>
+
+<li><p class="action"> Run either:
+    <a class="project" href="./newprogs/refine.pam">refine.pam</a> 
+    (If using normal serial operation) or 
+    <a class="project" href="./newprogs/pub_refine.pam">pub_refine.pam</a> 
+    (If  using parallel refinement on a cluster with PubSub) 
+    </p>
+
+  There are a number of sub-procedures used in refinement: 
+   <a class="project" href="./newprogs/refine_settings.pam">refine_settings.pam</a>, &nbsp;
+   <a class="project" href="./newprogs/prepare.pam">        prepare.pam</a>,         &nbsp;
+   <a class="project" href="./newprogs/enhance.pam">        enhance.pam</a>,         &nbsp; 
+   <a class="project" href="./newprogs/grploop.pam">        grploop.pam</a>,         &nbsp; 
+   <a class="project" href="./newprogs/smangloop.pam">      smangloop.pam</a>,       &nbsp;
+   <a class="project" href="./newprogs/mergegroups.pam">    mergegroups.pam</a>,     &nbsp;
+   <a class="project" href="./newprogs/endmerge.pam">       endmerge.pam</a>,        &nbsp;
+   <a class="project" href="./newprogs/endrefine.pam">      endrefine.pam</a>, and   &nbsp;
+   <p />
+
+   If you are running on a cluster using <i>PubSub</i> you will also need: 
+   <a href="../../../pubsub/publish.perl">publish.perl</a>,                                     &nbsp; 
+   <a class="project" href="./newprogs/pub_refine_start.pam">     pub_refine_start.pam</a>,     &nbsp;
+   <a class="project" href="./newprogs/pub_refine_doc_sync.pam">  pub_refine_doc_sync.pam</a>,  &nbsp;
+   <a class="project" href="./newprogs/pub_refine_wait.pam">      pub_refine_wait.pam</a>,          &nbsp;
+
+   <a class="project" href="./newprogs/pub_ref_loop_clone.pam">   pub_ref_loop_clone.pam</a>,   &nbsp;
+   <a class="project" href="./newprogs/pub_ref_loop_declone.pam"> pub_ref_loop_declone.pam</a>, &nbsp;
+   <a class="project" href="./newprogs/pub_ref_merge_clone.pam">  pub_ref_merge_clone.pam</a>,  &nbsp;
+   <a class="project" href="./newprogs/pub_ref_merge_declone.pam">pub_ref_merge_declone.pam</a>, and 
+   <a class="project" href="./newprogs/pub_fixrefine.pam">        pub_fixrefine.pam</a>.
+
+  <p />
+  Further details are given in the <a href="refine.html">Refinement</a> page.  
+  <p />
+
+  Among the outputs of refinement are volumes, images, and document files. Some of the
+  important outputs are listed here ('***' denotes group number and '##' denotes iteration number):
+
+    <table class="outs">
+      <tr valign="top"><td>&curren;</td>
+          <td> <code class="output">final/align_##_***</code>: </td>
+          <td>Alignment parameter doc files</td></tr>
+      <tr valign="top"><td>&curren;</td>
+          <td> <code class="output">final/fscdoc##_***</code>: </td>
+          <td> FSC curve doc. file</td></tr>
+      <tr valign="top"><td>&curren;</td>
+          <td> <code class="output">final/val##</code>: </td>
+          <td> Unfiltered volume </td></tr>
+      <tr valign="top"><td>&curren;</td>
+          <td><code class="output">final/vol##</code>: </td>
+          <td>Filtered volume from all images</td></tr> 
+      <tr valign="top"><td>&curren;</td>
+          <td> <code class="output">final/vol##_sub1</code>: </td>
+          <td>Filtered volume from first subset of images</td></tr>
+      <tr valign="top"><td>&curren;</td>
+          <td><code class="output">final/vol##_sub</code>: </td>
+          <td>Filtered volume from second subset of images</td></tr>
+      <tr valign="top"><td>&curren;</td>
+          <td><code class="output">final/dbpr##_***</code>: </td>
+          <td>Resolution curve doc file</td></tr>
+      <tr valign="top"><td>&curren;</td>
+          <td><code class="output">final/bpr##_***</code>: </td>
+          <td>Group volume</td></tr> 
+      <tr valign="top"><td>&curren;</td>
+          <td><code class="output">final/bpr##_***_sub1</code>: </td>
+          <td>Group volume from first subset of images</td></tr>
+      <tr valign="top"><td>&curren;</td>
+          <td><code class="output">final/bpr##_***_sub2</code>: </td>
+          <td>Group volume from second subset of images</td></tr>
+      <tr valign="top"><td>&curren;</td>
+          <td><code class="output">final/bpr##</code>: </td>
+          <td>Final volume from all images</td></tr>    
+      <tr valign="top"><td>&curren;</td>
+          <td> <code class="output">final/bpr##_sub1</code>: </td>
+          <td>Final volume from first subset of images</td></tr>
+      <tr valign="top"><td>&curren;</td>
+          <td><code class="output">final/bpr##_sub2</code>: </td>
+          <td>Final volume from second subset of images</td></tr>
+      <tr valign="top"><td>&curren;</td>
+          <td><code class="output">final/ofscdoc##</code>: </td>
+          <td>Overall FSC curve doc file</td></tr>
+       <tr valign="top"><td>&curren;</td>
+          <td><code class="output">resolutions</code>: </td>
+          <td>Doc file listing resolution at each iteration.</td></tr> 
+    </table>
+</li>
+<p />
+
+
+
+<li><p class="action">Plot the refinement FSC curves</p>
+
+   The procedure <a class="project" href="./newprogs/plotrefres.spi">plotrefres.spi</a> reads
+   <font class="input">input/sel_group</font>, 
+   <font class="input">final/resolutions</font>, 
+   <font class="input">dres##</font>, 
+   <font class="input">dbpr##_***</font>, and
+   <font class="input">dbpr##</font>. 
+   It creates two text files of gnuplot commands: <br /> 
+
+   <table class="outs">
+      <tr valign="top"><td>&curren;</td>
+          <td><code class="output">gnuplot_refi</code>: </td>
+          <td>Plots combined resolution curve for each iteration of refinement.</td></tr> 
+
+      <tr valign="top"><td>&curren;</td>
+          <td><code class="output">gnuplot_refd</code>: </td>
+          <td>Plots resolution curve for each defocus group for the last iteration.</td></tr> 
+    </table>   
+</li>
+</p> 
+
+<p>
+<li><p class="action">[Optional] View angular data output from Refinement
+   procedure files</p>
+
+   The procedure <a class="project" href="./newprogs/angdisp.spi">angdisp.spi</a> reads
+   <font class="input">final/align_##_***</font> 
+   and  creates angular distribution images: <br /> 
+
+   <table class="outs">
+      <tr valign="top"><td>&curren;</td>
+          <td> <code class="output">disp_<i>ii</i>_***</code>: </td>
+          <td>Set of images showing angular positions from the  
+             <code class="output">align_<i>ii</i>_***</code> refined alignment 
+             parameter output files. </td></tr> 
+    </table>   
+
+   The procedure <a class="project" href="./newprogs/angdiff.spi">angdiff.spi</a> reads
+   <font class="input">final/align_##_***</font> 
+   and creates: 
+   <table class="outs">
+      <tr valign="top"><td>&curren;</td>
+          <td> <code class="output">diff_<i>ii</i>_***</code>: </td>
+          <td>Image showing changes in angular positions from iteration <i>n-1</i> to 
+             iteration <i>n</i>.</td></tr> 
+    </table>   
+</li>
+
+</p>
+
+<!-- SPIRE end -->
+
+<hr \>
+
+<a name="OTHER"></a> 
+<table class="heading" width="100%">
+   <tr><td>    <br /> <h3> Other Useful Methods </h3>  </td></tr>
+</table>
+
+<dl>
+<p><dt><u>Create tar files for backup</u></dt>
+<dd><a href="backup">backup</a> a shell script, puts a number of vital 
+   files into tar files, which can be backed up on tape. Edit the 
+   shell script to correspond to your data extension, make sure it is 
+   executable and run it from your project directory. It creates 2 tar files 
+   <code class="output">order.tar</code>, and 
+   <code class="output">project.tar</code>
+</dd>
+</p>
+
+<p><dt><a href="../diffmaps/index.html">Difference Maps</a> </dt>
+<dd>Differences between volumes can be assessed by subtracting one volume 
+    from the other.</dd>
+</p>
+
+<p><dt><a href="../xray/xray.html">Frequency amplitude correction with X-ray
+      scattering data</a></dt>
+<dd>Enhance the Fourier amplitudes of a reconstructed cryo-EM volume so they more 
+   closely resemble those of experimental low-angle X-ray scattering data. </dd>
+</p>
+
+<p><dt><a href="../classification/index.html">Classification of Particles</a></dt>
+<dd>This method can be used to investigate differences between particles.</dd>
+</p>
+
+<p><dt>See more methods on the <a href="../../techniques.html">techniques page</a></dt>
+<dd></dd>
+</p>
+
+</dl>
+
+<hr>
+
+<a name="Refs"></a> 
+
+<table class="heading" width="100%">
+   <tr><td> <h3 class="heading"> References</h3> </td></tr>
+</table>
+
+<ol>
+
+<li> <a href="http://dx.doi.org/10.1016/j.jsb.2014.05.002">
+     Spherical Deconvolution Improves Quality of Single Particle Reconstruction</a>. &nbsp;&nbsp;&nbsp;
+  Kishchenko GP and Leith A.                              &nbsp;&nbsp;
+ <i>J. Structural Biol.</i> 187: 84-92 (2014).            &nbsp;&nbsp;
+
+<li> <a href="http://dx.doi.org/doi:10.1107/97809553602060000874">
+     Use of SPIDER and SPIRE in Image Reconstruction </a>.&nbsp;&nbsp;&nbsp;
+  Leith A, Baxter W and Frank J.                          &nbsp;&nbsp;  
+  <i>International Tables for Crystallography.</i>        &nbsp;&nbsp; 
+ Vol. F, ch. 19.8, 620-623 (2012)                         &nbsp;&nbsp;
+
+<li>Fundamentals of three-dimensional reconstruction from projections. &nbsp;&nbsp;&nbsp;
+ Penczek PA.                                              &nbsp;&nbsp;
+ <i>Methods in Enzymology</i> 482: pages 1-33 (2012)    . &nbsp;&nbsp;
+
+
+<li> Prevention of overfitting in cryo-EM structure determination.&nbsp;&nbsp;&nbsp;
+ Scheres SHW and Chen S.                                          &nbsp;&nbsp;    
+ <i>Nature Methods</i>. 9: 853-854 (2012)                         &nbsp;&nbsp;  
+
+<li> <a href="http://www.nature.com/nprot/journal/v3/n12/full/nprot.2008.156.html">
+    SPIDER image processing for single-particle reconstruction of 
+    biological macromolecules from electron micrographs</a>.               &nbsp;&nbsp;&nbsp;
+ Shaikh TR, Gao H, Baxter WT, Asturias FJ, Boisset N, Leith A, and Frank J &nbsp;&nbsp;
+ Nature Protocols. (online) </i> 3: 1941-1974 (2008)                       &nbsp;&nbsp;
+
+<li><a href="http://www.amazon.com/gp/product/0195182189/">
+   Three-Dimensional Electron Microscopy of Macromolecular Assemblies</a>  &nbsp;&nbsp;&nbsp; 
+ Oxford University Press, (2006)                                           &nbsp;&nbsp;
+
+<li>A cryo-electron microscopic study of ribosome-bound termination factor RF2.&nbsp;&nbsp;&nbsp; 
+ Rawat UBS., Zavialov A, Sengupta J, Valle JM, Grassucci R, 
+    Linde J, Vestergaard B, Ehrenberg M, and Frank J.                          &nbsp;&nbsp; 
+ <i>Nature</i> 421: 87-90 (2003)                                               &nbsp;&nbsp;
+
+<li>Ribosomal dynamics explored by cryo-electron microscopy.&nbsp;&nbsp;&nbsp; 
+ J Frank                                                    &nbsp;&nbsp; 
+ <i>Methods</i> 25: 309-315 (2001)                          &nbsp;&nbsp;
+
+<li>Three Dimensional Reconstruction with Contrast Transfer Compensation 
+    from Defocus Series.                                    &nbsp;&nbsp;&nbsp;
+ Penczek PA, Zhu J, Schröder R, and Frank J.                &nbsp;&nbsp;
+ <i>Scanning Microscopy</i> 11: 147- (1997)                 &nbsp;&nbsp; 
+
+<li>SPIDER and WEB: Processing and Visualization of Images in 3D 
+    Electron Microscopy and Related Fields.                               &nbsp;&nbsp;&nbsp; 
+ Frank J, Radermacher M, Penczek P, Zhu J, Li Y, Ladjadj M, and Leith A.  &nbsp;&nbsp; 
+ <i>J. Structural Biol.</i> 116: 190-199 (1996)                           &nbsp;&nbsp;
+
+<li>The ribosome at improved resolution: New techniques for merging and 
+    orientation refinement in 3D cryo-electron microscopy of biological 
+    particles.                               &nbsp;&nbsp;&nbsp; 
+  Penczek P, Grassucci RA and Frank J.       &nbsp;&nbsp;   
+  <i>Ultramicroscopy</i> 53: 251-270 (1994)  &nbsp;&nbsp;
+ 
+<li>Three-dimensional reconstruction of single particles embedded in ice.&nbsp;&nbsp;&nbsp;
+ Penczek P, Rademacher M, and Frank J.       &nbsp;&nbsp;
+ <i>Ultramicroscopy</i> 40: 33-53 (1992)     &nbsp;&nbsp;
+
+<li> SPIDER -- a modular software system for electron image processing.&nbsp;&nbsp;&nbsp;
+ Frank J, Shimkin B, Dowse H.                &nbsp;&nbsp; 
+ <i>Ultramicroscopy</i> 6: 343-358 (1981)    &nbsp;&nbsp;
+
+</ol>
+
+
+<hr />
+<p />
+
+<small>
+  Source: mr.html         &nbsp;&nbsp;&nbsp; 
+  Page updated: 8/5/14    &nbsp;&nbsp;&nbsp;
+  ArDean Leith                              <br />
+  <address> Enquiries: <a href= "mailto:spider@wadsworth.org">spider@wadsworth.org</a> </address>
+</small>
+
+</body>
+</html>
+

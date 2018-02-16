@@ -1,0 +1,328 @@
+head	1.6;
+access;
+symbols
+	Pre_gold:1.5;
+locks;
+comment	@# @;
+
+
+1.6
+date	2016.02.24.17.05.45;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2014.05.22.14.52.13;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2013.11.08.19.26.51;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2013.10.10.14.52.26;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2012.06.06.00.45.10;	author tapu;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2012.05.23.03.01.55;	author tapu;	state Exp;
+branches;
+next	;
+
+
+desc
+@nwe file -- applies match filter to volume
+@
+
+
+1.6
+log
+@for gold
+@
+text
+@ ([pixsiz],[m-rad])
+
+ ; <html><head><title>Generate and apply FSC matched filter</title></head><body><pre>
+ ;
+ ; SOURCE: spider/docs/techs/recon1/Procs/matched-filt.spi   
+ ;
+ ; PURPOSE:  Generate and apply FSC matched filter
+ ;           FSC-masking adapted from JSL's makegauss.bat
+ ;
+ ; INPUT REGISTERS:
+ ;   [pixsiz]                Pixel size        
+ ;   [m-rad]                 Mask radius        
+ ;
+ ; '##' denotes iteration, '***' denotes group,  '@@' denotes subset
+ ; INPUT FILES:
+ ;   [vol_1]                 vol_01_one            Reconstructed subset vol      (one)
+ ;   [vol_2]                 vol_01_two            Reconstructed subset vol      (one)
+ ;
+ ; OUTPUT FILES:
+ ;   [fscdoc_u]              fscdoc_u_01           Unmasked FSC curve doc file   (one)
+ ;   [fscdoc_m]              fscdoc_m_01           Masked   FSC curve doc file   (one)
+ ;   [resol_doc]             resolution'           Summary doc file              (one)
+
+
+ [odd_half_volume]   = '[recon_dir]/vol_01_one'   ; First half-set volume
+
+ [even_half_volume]  = '[recon_dir]/vol_01_two'   ; Second half-set volume
+
+ [unfilt_volume]     = '[recon_dir]/vol_01'       ; Unfiltered volume 
+
+ ; -------------------- Output --------------------
+
+ [m_fscdoc]          = '[recon_dir]/fscdoc_m_01'  ; FSC matched-filter doc file
+
+ [filt_volume]       = '[recon_dir]/vol_01_filt'  ; Filtered volume
+
+ ; ---------------- END BATCH HEADER ----------------
+
+ SYS
+   echo -n " Generating FSC matched filter doc file: [m_fscdoc] " ; date '+ TIME: %x  %X' ; echo
+ 
+ ; Determine unmasked reconstruction FSC and resolution
+ FSC [u-half],[u-spfr],[u-res]  ; Find FSC curve 
+   [vol_1]                      ; Volume - subset 1         (input)
+   [vol_2]                      ; Volume - subset 2         (input)
+   0.5,0                        ; Shell width, mask radius
+   [sp_pixsiz], 0.5             ; Voxel size, resolution cutoff
+   [fscdoc_u]                   ; FSC doc file    (output)
+   *                            ; No Gnuplot file wanted
+
+ ; Determine masked reconstruction FSC and resolution
+ FSC [m-half],[m-spfr],[m-res]  ; Find FSC curve 
+   [vol_1]                      ; Volume - subset 1         (input)
+   [vol_2]                      ; Volume - subset 2         (input)
+   0.5,[m-rad]                  ; Shell width, mask radius
+   [sp_pixsiz], 0.5             ; Voxel size, resolution cutoff
+   [fscdoc_m]                   ; FSC doc file    (output)
+   *                            ; No Gnuplot file wanted
+
+ SYS
+   echo " Reconstruction, Masked resolution:'  '{%f6.2%[m-res]} UnMasked:' '{%f6.2%[u-res]} (Angstroms)"
+
+ SD / '      NORM-FREQ,    RESOL.(ANG.)  MASKED-RESOL.  (CUTOFF=50%)' 
+   [resol_doc]               ; Resolution doc file       (output)
+
+ [key]   = 1
+ [itert] = 0
+ SD [key], [itert],[u-spfr],[u-res],[m-res]
+   [resol_doc]
+ SD E
+   [resol_doc]
+
+ SYS
+   echo -n " Applying FSC matched filter" ;  date '+ TIME: %x  %X' ; echo
+
+ ; Filter volume using FSC doc file
+ FD C                         ; Fourier filter using FSC doc file 
+   [unfilt_volume]            ; Volume to be filtered  (input)
+   [filt_volume]              ; Filtered volume        (output)
+   [fscdoc_m]                 ; FSC doc file           (input)
+   4                          ; Register col. for filtration values
+
+ SYS
+   echo -n " Filtration done   "; date '+ TIME: %x  %X' ; echo
+
+ RE                              
+
+ ; Modified 2016-02-16
+ ;    2016-02-16 (agl) -- Merged with: make-matched-filt.spi
+ ;    2013-10-10 (agl) -- Rewritten for use with masked FSC operation
+ ;    2012-05-21 (trs) -- Reports spatial frequency in Angstroms
+ ;    2012-03-22 (trs) -- Reports nominal resolution in Angstroms
+ ;    2008-01-15 (trs) -- Generation of matched filter now separate
+ ; </pre></body></html>
+@
+
+
+1.5
+log
+@vol_01
+@
+text
+@d1 1
+a1 1
+ ; <html><head><title>Low-pass filters using a matched filter</title></head><body><pre>
+d3 2
+d7 17
+a23 1
+ ; PURPOSE: Low-pass filters using a matched filter 
+d25 1
+a25 1
+ ; ----------------------- Inputs -----------------------
+d27 1
+a27 1
+ [matched_filter_doc] = 'matched_filt_doc_01'  ; Matched-filter doc file
+d29 1
+a29 1
+ [unfiltered_volume]  = 'vol_01'               ; Volume to be filtered
+d31 1
+a31 1
+ ; ----------------------- Output -----------------------
+d33 1
+a33 1
+ [filtered_volume]    = 'vol_01_matched'       ; Filtered volume
+d35 1
+a35 1
+ ; ------------------ END BATCH HEADER ------------------
+d37 25
+a61 1
+ ; Check if matched-filter doc exists
+d63 2
+a64 2
+ IQ FI [filter-exists]
+   [matched_filter_doc]
+d66 6
+a71 5
+ IF ( [filter-exists] == 0 ) THEN
+    SYS
+      echo " Matched-filter doc doesn't exist. Run: make-matched.spi"
+    EN
+ ENDIF
+d74 1
+a74 1
+   echo -n " Applying matched filter" ;  date '+ TIME: %x  %X' ; echo
+d76 6
+a81 5
+ ; Apply filter to volume
+ FD
+   [unfiltered_volume]   ; Volume to be filtered  (input)
+   [filtered_volume]     ; Filtered volume        (output)
+   [matched_filter_doc]  ; Filter doc file        (input)
+d86 1
+a86 1
+ RE
+d88 5
+a92 2
+ ;    2013-10-05 (agl) -- Cosmetic
+ ;    2012-06-05 (trs) -- Modified 
+@
+
+
+1.4
+log
+@rewrite_syntax_filenames
+@
+text
+@d11 1
+a11 1
+ [unfiltered_volume]  = 'vol01'             ; Volume to be filtered
+d15 1
+a15 1
+ [filtered_volume]    = 'vol01_matched'     ; Filtered volume
+@
+
+
+1.3
+log
+@rewrite
+@
+text
+@d1 2
+d44 4
+a47 3
+;    2013-10-05 Modified, cosmetic
+;    2012-06-05 Modified 
+;    2008-01-15 (trs) -- Generation of matched filter now separate
+@
+
+
+1.2
+log
+@changed iteration# to 2 digits, i.e., vol01 from vol001
+@
+text
+@d1 3
+a3 1
+; LOW-PASS FILTERS USING A MATCHED FILTER 
+d5 1
+a5 5
+; ----------------------- Inputs -----------------------
+fr l
+[matched_filter_doc]../Reconstruction/docmatched_vol01  ; matched-filter doc
+fr l
+[unfiltered_volume]../Reconstruction/vol01              ; volume to be filtered
+d7 1
+a7 3
+; ----------------------- Output -----------------------
+fr l
+[filtered_volume]../Reconstruction/vol01_matched        ; filtered volume
+d9 1
+a9 1
+; ------------------ END BATCH HEADER ------------------
+d11 1
+a11 3
+; check if matched-filter doc exists
+iq fi [filter-exists]
+[matched_filter_doc]
+d13 1
+a13 4
+; if matched-filter doc doesn't exist, exit
+if ([filter-exists].eq.0) then
+    vm
+    echo "Matched-filter doc doesn't exist. Run make_matched.spi"
+d15 1
+a15 2
+    en d
+endif
+d17 1
+d19 2
+a20 2
+vm
+echo "Applying matched filter"; date
+d22 5
+a26 5
+; apply to volume
+fd
+[unfiltered_volume]   ; INPUT: volume to be filtered
+[filtered_volume]     ; OUTPUT: filtered volume
+[matched_filter_doc]  ; INPUT: filter doc
+d28 2
+a29 2
+vm
+echo "Done" ; date
+d31 5
+a35 1
+en d
+d37 7
+a43 1
+; Modified 2012-06-05
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d3 1
+a3 1
+; ------------------------ Inputs ------------------------
+d5 1
+a5 1
+[matched_filter_doc]../Reconstruction/docmatched_vol001  ; matched-filter doc
+d7 1
+a7 1
+[unfiltered_volume]../Reconstruction/vol001              ; volume to be filtered
+d9 1
+a9 1
+; ------------------------ Output ------------------------
+d11 1
+a11 1
+[filtered_volume]../Reconstruction/vol001_matched        ; filtered volume
+d13 1
+a13 1
+; ------------------- END BATCH HEADER -------------------
+d42 1
+a42 1
+; Modified 2009-05-29
+@

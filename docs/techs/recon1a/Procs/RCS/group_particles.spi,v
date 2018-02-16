@@ -1,0 +1,299 @@
+head	1.1;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+1.1
+date	2012.05.23.02.54.57;	author tapu;	state Exp;
+branches;
+next	;
+
+
+desc
+@new file -- assigns particle images to groups
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@; Assign particles to groups for parallelization
+
+; ------------------- Parameters -------------------
+
+[num-groups]        = 32   ; number of desired groups (e.g., number of nodes)
+[stacks-yn]         = 1    ; write group stacks (1==Y)
+[idim]              = 0    ; image dimension (0==get from PARAMS)
+[progress-interval] = 2    ; message written to screen every Nth group
+
+; --------------------- Inputs ---------------------
+fr l
+[parameter_doc]../params                           ; parameter doc file
+fr l
+[micrograph_list]../sel_micrograph                 ; list of micrographs
+fr l
+[parts_by_mic]../Particles/good/ngood****          ; list of good particles per micrograph
+;       MIC_SLICE
+fr l
+[mic2global_lut]../Particles/win/globalmic****     ; particle-to-global lookup table
+; KEY=MIC_SLICE /  COLUMN1=GLOBAL_PART
+fr l
+[mic_stacks]../Particles/win/winctf_****           ; micrograph stacks (required if writing stacks)
+
+; -------------------- Outputs --------------------
+fr l
+[combined_parts]global2group                ; combined-particle list
+;KEY=GLOBAL / APSHSLICE     MIC_SLICE     APSHGROUP       MICNUM
+fr l
+[group_particle_list]apsh_grp_particles***  ; group particle list
+;        APSHSLICE     MIC_SLICE     APSHGROUP      MICNUM       GLOBALNUM
+fr l
+[group_stacks]data***                       ; group particle stacks (optional, see above)
+fr l
+[group_list]sel_group                       ; summary file
+
+; ------------- END BATCH HEADER -------------
+
+vm
+echo "Separating particles into {***[num-groups]} groups" ; date
+
+; temporary files
+fr l
+[temp_combined_noglobal]tmpcombined_noglobal
+fr l
+[temp_combined_nogrp_incore]tmpcombined_nogroups_incore
+fr l
+[temp_combined_nogrp_ondisk]tmpcombined_nogroups_ondisk
+fr l
+[temp_combined_rekey]tmpcombined_rekeyed
+fr l
+[temp_group_incore]tmpselparticles_incore
+fr l
+[temp_stack_incore]_1
+
+; get image dimension
+if([idim].eq.0) then
+    ud 17, [idim]
+    [parameter_doc]
+    ud e
+endif
+
+; prepare summary doc
+de
+[group_list]
+SD /      APSHGROUP     NUM_PARTS
+[group_list]
+
+
+; GET TOTAL PARTICLES
+
+vm
+echo ; echo "Combining micrograph lists" ; date
+
+; combine particle lists
+doc combine
+[parts_by_mic]
+[micrograph_list]
+[temp_combined_noglobal]
+; (Is SD IC usage worth this step?)
+
+; get #particles
+ud n [num-parts]
+[temp_combined_noglobal]
+de
+[temp_combined_noglobal]
+
+
+; ADD GLOBAL INFO
+
+sd ic new
+[temp_combined_nogrp_incore]
+(2,[num-parts])
+
+; get #micrographs
+ud n [num-mics]
+[micrograph_list]
+
+; loop through micrographs
+do lb6 [mic-key] = 1,[num-mics]
+    ; get mic#
+    ud ic [mic-key], [mic-num]
+    [micrograph_list]
+
+    ; get #particles
+    ud n [mic-parts]
+    [parts_by_mic][mic-num]
+
+    ; loop through particles
+    do lb51 [part-key] = 1,[mic-parts]
+        ; read slice#
+        ud ic [part-key], [mic-slice]
+        [parts_by_mic][mic-num]
+
+        ; read global#
+        ud ic [mic-slice], [global-part]
+        [mic2global_lut][mic-num]
+
+        ;;[part-counter] = [part-counter] + 1
+
+        ; write to combined doc (incore)
+        sd ic [global-part], [mic-slice],[mic-num]
+        [temp_combined_nogrp_incore]
+    lb51
+    ; end particle-loop
+
+    ud ice
+    [parts_by_mic][mic-num]
+    ud ice
+    [mic2global_lut][mic-num]
+lb6
+; end micrograph-loop
+
+; close in-core doc files
+ud ice
+[micrograph_list]
+sd ic copy
+[temp_combined_nogrp_incore]
+[temp_combined_nogrp_ondisk]
+sd ic e
+[temp_combined_nogrp_incore]
+
+
+vm
+echo ; echo "Done combining micrograph lists" ; date ; echo ; echo "Writing new groups"
+
+; re-key combined particle list
+doc key
+[temp_combined_nogrp_ondisk]
+[temp_combined_rekey]
+de
+[temp_combined_nogrp_ondisk]
+
+; initialize in-core doc
+sd ic new
+[temp_combined_incore]
+(4,[num-parts])
+
+; compute particles/group
+[avg-parts] = [num-parts]/[num-groups]
+; might be non-integer
+
+[max-length] = int([avg-parts]) + 1  ; for in-core length
+[last-part] = 0                      ; initialize counter
+
+; loop through groups
+do lb7 [group-num] = 1,[num-groups]
+    if([group-num]/[progress-interval].eq.int([group-num]/[progress-interval])) then
+    vm
+    echo "Working on group #{***[group-num]} out of {***[num-groups]}"
+    endif
+
+    [first-part] = [last-part] + 1
+    [last-part]  = int([avg-parts]*[group-num])
+
+    ; make sure there's no rounding error
+    if([group-num].eq.[last-group]) [last-part]=[num-parts]
+
+    ; prepare in-core doc file
+    sd ic new
+    [temp_group_incore]
+    (5,[max-length])
+
+    ; write stacks, if desired
+    if([stacks-yn].ne.0) then
+    de
+    [group_stacks][group-num]@@
+
+    ms
+    [temp_stack_incore]
+    [idim],[idim]
+    [max-length]
+    endif
+
+    [group-slice] = 0
+
+    ; loop through particles
+    do lb5 [part-counter] = [first-part],[last-part]
+        ; read particle info
+        ud ic [part-counter], [global-part],[mic-slice],[mic-num]
+        [temp_combined_rekey]
+        ;ud ic [part-counter], [mic-slice],[mic-num],[global-part]
+        ;[combined_parts]
+
+        [group-slice] = [group-slice] + 1
+
+        ; write group selection
+        sd ic [group-slice], [group-slice],[mic-slice],[group-num],[mic-num],[global-part]
+        [temp_group_incore]
+
+        ; write combined doc
+        sd ic [global-part], [group-slice],[mic-slice],[group-num],[mic-num]
+        [temp_combined_incore]
+
+        ; write stacks, if desired
+        if([stacks-yn].ne.0) then
+            cp
+            [mic_stacks][mic-num]@@{****[mic-slice]}
+            [temp_stack_incore]@@{*****[group-slice]}
+            endif
+    lb5
+    ; end particle-loop
+
+    sd [group-num], [group-num],[group-slice]
+    [group_list]
+
+    ; write stacks, if desired
+    if([stacks-yn].ne.0) then
+
+    cp
+    [temp_stack_incore]@@
+    [group_stacks][group-num]@@
+
+    endif
+    de
+    [temp_stack_incore]@@
+
+    ; close docs
+    sd ic copy
+    [temp_group_incore]
+    [group_particle_list][group-num]
+    sd ic e
+    [temp_group_incore]
+    SD /      APSHSLICE     MIC_SLICE     APSHGROUP      MICNUM       GLOBALNUM
+    [group_particle_list][group-num]
+    sd e
+    [group_particle_list][group-num]
+lb7
+; end group-loop
+
+; close docs
+[dummy] = -[group-num]
+sd [dummy], [num-parts]
+[group_list]
+SD /    GRPS   TOT_PARTS
+[group_list]
+sd ic copy
+[temp_combined_incore]
+[combined_parts]
+SD /       APSHSLICE     MIC_SLICE     APSHGROUP       MICNUM
+[combined_parts]
+sd e
+[combined_parts]
+sd ic e
+[temp_combined_incore]
+ud ice
+[temp_combined_rekey]  ; WAS [combined_parts]
+de
+[temp_combined_rekey]
+
+vm
+echo ; echo "Done, separated {*******[num-parts]} particles into {***[num-groups]} groups" ; date
+
+en d
+
+; Modified 2011-10-21
+@

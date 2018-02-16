@@ -1,0 +1,639 @@
+head	1.6;
+access;
+symbols
+	Pre_gold:1.5;
+locks;
+comment	@# @;
+
+
+1.6
+date	2016.06.28.15.11.10;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2013.11.08.19.26.38;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2012.05.17.19.30.44;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2012.05.08.16.40.49;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2011.06.22.16.15.38;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2010.09.21.18.53.11;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.6
+log
+@echo formatting
+@
+text
+@([mic],[zflag],[fflag],[deci],[nsam],[nrow],[keepspi])
+
+ ; <html><head><title>Converts a scanned file to SPIDER format</title></head><body><pre>
+ ;
+ ; SOURCE:   spider/docs/techs/recon/newprogs/load-mic.spi 
+ ;
+ ; PURPOSE:  Converts a scanned file to SPIDER format (usually incore).
+ ;
+ ; RECEIVED: [deci]    = Decimation factor
+ ;           [zflag]   = Zip flag (0:Unzipped,  1:Zipped) 
+ ;           [fflag]   = Format (0:SPIDER, 1:HISCAN TIF, 2:PERKINELMER, 3:ZI SCANNER)
+ ;
+ ;           [nsam]    = HiScan X dimension 
+ ;           [nrow]    = HiScan Y dimension        
+ ;           [keepspi] = Keep SPIDER decompressed file
+ ;
+ ; ----------- Input files --------------
+
+ FR                               ; Read from caller                                 
+   ? Micrograph template ?[micgr] ; Usually: ../Micrographs/raw{****[mic]}
+
+ ; ----------- Output files --------------
+
+ FR                               ; Read from caller, file usually incore!                                 
+   ? Spider output file ?[out]    ; SPIDER file       (output)
+
+ ; ----------- Temp file for Nikon & Hiscan only --------------
+
+ FR                               ; Read from caller, file usually incore!                                 
+   [?Temp scratch file?[temp]     ; SPIDER file       (output)
+
+ ; <b> -------------- END BATCH HEADER -------------------------- </b>
+
+ MD
+   TR OFF                       ; Loop info turned off
+ MD
+   VB OFF                       ; File info turned off
+
+ ; ----------- Check if files are gzip compressed ----------------
+
+ IF ( [fflag] > 0 ) THEN        ; TIF input file
+
+   IQ FI [exists]               ; See if TIF file exists
+     [micgr].tif
+
+   IF ( [exists] == 0 ) THEN    ; TIF file does not exist
+
+      IQ FI [exists]            ; See if gzip'd TIF file exists
+        [micgr].tif.gz
+
+      IF ( [exists]== 1 ) THEN  ; Have a gzip's TIF file
+         SYS                    ; Unzip the file  (input)
+           gunzip -c [micgr].tif.gz > [micgr].tif
+         SYS
+           echo "  Unzipped:           [micgr].tif.gz"
+      ENDIF
+   ENDIF
+ ELSE                           ; Not a TIF input
+   IQ FI [exists]               ; See if SPIDER file exists
+     [micgr]
+ 
+   IF ( [exists] == 0 ) THEN    ; SPIDER file does not exist
+      IQ FI [exists]            ; See if gzip'd SPIDER file exists
+        [micgr].$DATEXT.gz 
+
+      IF ([exists]==1) THEN     ; Have a gzip'ed SPIDER file
+         SYS                    ; Unzip the file  (input)
+           gunzip -c [micgr].$DATEXT.gz > [micgr].$DATEXT
+         SYS
+           echo "  Unzipped:           [micgr].$DATEXT.gz"
+      ENDIF
+   ENDIF
+ ENDIF
+
+ ; --------- Conversion based on scanner type ------------------
+
+ IF ( [fflag] == 0 ) THEN  ; Already is a Spider file --------------- SPIDER
+
+   IF ( [deci] > 1 ) THEN ; Reduce size of file
+      DC S                ; Decimate by summing neighboring pixels
+        [micgr]             ; Spider file        (input)
+        [out]               ; Spider file        (output)
+        [deci],[deci]       ; Decimation factor
+
+      FI H [x],[y]          ; Get dimensions of converted image
+        [out]               ; Micrograph image   (input)
+        NX,NY
+
+      SYS
+        echo "  Decimated {*[deci]}X:      [micgr].$DATEXT   To: [out]   -- {*****[x]} x {*****[y]} "
+           123456789 123456789 123456789 123456789 
+   ELSE
+      CP                    ; May want to move to incore file
+        [micgr]             ; Spider file        (input)
+        [out]               ; Spider file       (output)
+
+      FI H [x],[y]          ; Get dimensions of converted image
+        [out]               ; Micrograph image  (input)
+        NX,NY
+
+      SYS
+        echo "  Copied:             [micgr].$DATEXT   To: [out]   -- {*****[x]} x {*****[y]}"
+            123456789 123456789 123456789 123456789 
+   ENDIF
+
+
+ ELSEIF ([fflag] == 1) THEN
+ 
+   CP FROM RAW               ; Hiscan micrograph  -------------------- HISCAN
+     [micgr].tif             ; Hiscan file        (input) 
+     16                      ; Bits / pixel
+     [raw]                   ; File            (input)
+     [nsam],[nrow]           ; Size
+     342                     ; Header bytes
+     1                       ; Most significant byte (1 / 2)
+     N                       ; Fold negatives? 
+     [temp]                  ; Spider file     (output)
+
+   AR                        ; Scale file
+     [temp]                  ; Spider file     (input)
+     [out]                   ; Spider file     (output)
+     log(p1+1)               ; Scaling
+
+   IF ( [deci] > 1 ) THEN    ; Reduction
+      DC S                   ; Decimate image - Sum neighbours
+        [out]                ; Spider file     (input)
+        [temp]               ; Spider file     (output)
+        [deci],[deci]        ; Decimation factor
+
+      SYS
+        echo "  Decimated {*[deci]}X:     [micgr].tif By: {*[deci]}X  To: [out]"
+      CP                     ; Copy file
+        [temp]               ; Spider file     (input)
+        [out]                ; Spider file     (output)
+
+      SYS
+        echo "  Converted Hiscan:     [micgr].tif   To: [out]"
+   ENDIF 
+
+
+ ELSEIF ([fflag] == 3) THEN
+
+   SYS                      ; ZI tif file.  Overview always = 1 ---------- ZI
+     zi2spi [micgr].tif [micgr].$DATEXT 1
+
+   IF ([deci] > 1) THEN     ; Reduction
+      DC S                  ; Decimate - Sum neighbouring pixels
+        [micgr]             ; Spider file        (input)
+        [out]               ; Spider file        (output)
+        [deci],[deci]       ; Decimation factor
+
+      FI H [x],[y]          ; Get dimensions of converted image
+        [out]               ; Micrograph image    (input)
+      NX, NY
+
+      SYS
+      echo "  Decimated {*[deci]}X ZI:    [micgr].tif   To: [out]   -- {*****[x]} x {*****[y]}"
+   ELSE
+      CP                    ; Copy Spider temp file  
+        [micgr]             ; Micrograph        (input)
+        [out]               ; Spider file       (output)
+
+      FI H [x],[y]          ; Get dimensions of converted image
+        [out]               ; Micrograph image  (input)
+        NX,NY
+
+      SYS
+      echo "  Converted ZI:       [micgr].tif     To: [out]   -- {*****[x]} x {*****[y]}"
+   ENDIF 
+
+   DE                       ; Delete the Spider temp file
+     jnk-[micgr]            ;                 (removed)
+
+ ELSEIF ([fflag]==4) THEN     
+
+   IF ([deci] > 1 ) THEN    ; Reduction
+      CP FROM NIKON         ; Nikon Tif Scanner file ----------------- NIKON
+        [micgr].tif         ; Nikon tif file  (input)
+        [temp]              ; Spider file     (output)
+
+      DC S                  ; Decimate - sum neighboring pixels
+        [temp]              ; Spider file     (input)
+        [out]               ; Spider file     (output)
+        [deci],[deci]       ; Decimation factor
+
+      SYS
+        echo "  Decimated {*[deci]}X Nikon:   [micgr].tif   To: [out]"
+   ELSE
+      CP FROM NIKON         ; Nikon Tif Scanner file 
+        [micgr].tif           ; Nikon tif file  (input)
+        [out]                 ; Spider file     (output)
+
+      SYS
+        echo "  Converted Nikon:    [micgr].tif   To: [out]"
+   ENDIF 
+ ENDIF
+
+
+ RE
+
+
+
+ ; ----------- Undo zip source if necessary -----------( REMOVED, RISKY) 
+
+ IF ( [zflag]*[fflag] > 0) THEN ; Both tif & zip flags set
+   DE                           ; Remove the .tif file
+     [micgr].tif                ; File   (removed)
+   SYS   
+     echo "  Re-moved:           [micgr].tif"
+
+ ELSEIF ( [zflag]==1 ) THEN     ; Only zip flag
+   IF ( [keepspi] <= 0 ) THEN
+      DE                        ; Remove the de-zipped Spider file
+        [micgr]                 ; File   (removed)
+      SYS
+        echo "  Re-moved:           [micgr].$DATEXT"
+   ENDIF
+ ENDIF
+
+ RE
+ ; </body></pre></html>
+@
+
+
+1.5
+log
+@rewrite_syntax_filenames
+@
+text
+@d55 1
+a55 1
+           echo " Unzipped:           [micgr].tif.gz"
+d70 1
+a70 1
+           echo " Unzipped:           [micgr].$DATEXT.gz"
+d90 1
+a90 1
+        echo " Decimated {*[deci]}X:      [micgr].$DATEXT   To: [out]   -- {*****[x]} x {*****[y]} "
+d102 1
+a102 1
+        echo " Copied:             [micgr].$DATEXT   To: [out]   -- {*****[x]} x {*****[y]}"
+d131 1
+a131 1
+        echo " Decimated {*[deci]}X:     [micgr].tif By: {*[deci]}X  To: [out]"
+d137 1
+a137 1
+        echo " Converted Hiscan:     [micgr].tif   To: [out]"
+d157 1
+a157 1
+      echo " Decimated {*[deci]}X ZI:    [micgr].tif   To: [out]   -- {*****[x]} x {*****[y]}"
+d168 1
+a168 1
+      echo " Converted ZI:       [micgr].tif     To: [out]   -- {*****[x]} x {*****[y]}"
+d187 1
+a187 1
+        echo " Decimated {*[deci]}X Nikon:   [micgr].tif   To: [out]"
+d194 1
+a194 1
+        echo " Converted Nikon:    [micgr].tif   To: [out]"
+d209 1
+a209 1
+     echo " Re-moved:           [micgr].tif"
+d216 1
+a216 1
+        echo " Re-moved:           [micgr].$DATEXT"
+@
+
+
+1.4
+log
+@cosmetic
+@
+text
+@d3 35
+a37 35
+; <html><head><title>Converts a scanned file to SPIDER format</title></head><body><pre>
+;
+; PURPOSE:  Converts a scanned file to SPIDER format (usually incore).
+;
+; SOURCE:   spider/docs/techs/recon/newprogs/loadmic.spi 
+;
+; RECEIVED: [deci]    = Decimation factor
+;           [zflag]   = Zip flag (0:Unzipped,  1:Zipped) 
+;           [fflag]   = Format (0:SPIDER, 1:HISCAN TIF, 2:PERKINELMER, 3:ZI SCANNER)
+;
+;           [nsam]    = HiScan X dimension 
+;           [nrow]    = HiScan Y dimension        
+;           [keepspi] = Keep SPIDER decompressed file
+;
+; ----------- Input files --------------
+
+FR                             ; Read from caller                                 
+?Micrograph template?[micgr]   ; Usually: ../Micrographs/raw{****[mic]}
+
+; ----------- Output files --------------
+
+FR                             ; Read from caller, file usually incore!                                 
+?spider output file?[out]      ; SPIDER file       (output)
+
+; ----------- Temp file for Nikon & Hiscan only --------------
+
+FR                             ; Read from caller, file usually incore!                                 
+[?Temp scratch file?[temp]     ; SPIDER file       (output)
+
+; <b> -------------- END BATCH HEADER -------------------------- </b>
+
+MD
+  TR OFF                        ; Loop info turned off
+MD
+  VB OFF                        ; File info turned off
+d39 1
+a39 1
+; ----------- Check if files are gzip compressed ----------------
+d41 1
+a41 1
+IF ([fflag].GT.0) THEN          ; TIF input file
+d46 1
+a46 1
+   IF ([exists].EQ.0) THEN      ; TIF file does not exist
+d51 2
+a52 2
+      IF ([exists].EQ.1) THEN   ; Have a gzip's TIF file
+         VM                     ; Unzip the file  (input)
+d54 1
+a54 1
+         VM
+d58 1
+a58 1
+ELSE                            ; Not a TIF input
+d62 1
+a62 1
+   IF ([exists].EQ.0) THEN      ; SPIDER file does not exist
+d66 5
+a70 5
+      IF ([exists].EQ.1) THEN   ; Have a gzip'ed SPIDER file
+         VM                     ; Unzip the file  (input)
+         gunzip -c [micgr].$DATEXT.gz > [micgr].$DATEXT
+         VM
+         echo " Unzipped:           [micgr].$DATEXT.gz"
+d73 1
+a73 1
+ENDIF
+d75 1
+a75 1
+; --------- Conversion based on scanner type ------------------
+d77 1
+a77 1
+IF ([fflag] .EQ. 0) THEN    ; Already is a Spider file --------------- SPIDER
+d79 5
+a83 5
+   IF ([deci].GT.1) THEN    ; Reduce size of file
+      DC S                  ; Decimate by summing neighboring pixels
+      [micgr]               ; Spider file        (input)
+      [out]                 ; Spider file        (output)
+      [deci],[deci]         ; Decimation factor
+d86 2
+a87 2
+      [out]                 ; Micrograph image   (input)
+      NSAM,NROW
+d89 2
+a90 2
+      VM
+      echo " Decimated {*[deci]}X:      [micgr].$DATEXT   To: [out]   -- {*****[x]} x {*****[y]} "
+d94 2
+a95 2
+      [micgr]               ; Spider file        (input)
+      [out]                 ; Spider file       (output)
+d98 2
+a99 2
+      [out]                 ; Micrograph image  (input)
+      NSAM,NROW
+d101 2
+a102 2
+      VM
+      echo " Copied:             [micgr].$DATEXT   To: [out]   -- {*****[x]} x {*****[y]}"
+d107 1
+a107 1
+ELSEIF ([fflag] .EQ. 1) THEN
+d110 8
+a117 8
+   [micgr].tif               ; Hiscan file        (input) 
+   16                        ; Bits / pixel
+   [raw]                     ; File            (input)
+   [nsam],[nrow]             ; Size
+   342                       ; Header bytes
+   1                         ; Most significant byte (1 / 2)
+   N                         ; Fold negatives? 
+   [temp]                    ; Spider file     (output)
+d120 3
+a122 3
+   [temp]                    ; Spider file     (input)
+   [out]                     ; Spider file     (output)
+   log(p1+1)                 ; Scaling
+d124 1
+a124 1
+   IF ([deci].GT.1) THEN     ; Reduction
+d126 3
+a128 3
+      [out]                  ; Spider file     (input)
+      [temp]                 ; Spider file     (output)
+      [deci],[deci]          ; Decimation factor
+d130 2
+a131 2
+      VM
+      echo " Decimated {*[deci]}X:     [micgr].tif By: {*[deci]}X  To: [out]"
+d133 2
+a134 2
+      [temp]                 ; Spider file     (input)
+      [out]                  ; Spider file     (output)
+d136 2
+a137 2
+      VM
+      echo " Converted Hiscan:     [micgr].tif   To: [out]"
+d141 1
+a141 1
+ELSEIF ([fflag] .EQ. 3) THEN
+d143 2
+a144 2
+   VM                       ; ZI tif file.  Overview always = 1 ---------- ZI
+   zi2spi [micgr].tif [micgr].$DATEXT 1
+d146 1
+a146 1
+   IF ([deci].GT.1) THEN    ; Reduction
+d148 3
+a150 3
+      [micgr]               ; Spider file        (input)
+      [out]                 ; Spider file        (output)
+      [deci],[deci]         ; Decimation factor
+d153 2
+a154 2
+      [out]                 ; Micrograph image    (input)
+      NSAM,NROW
+d156 1
+a156 1
+      VM
+d160 2
+a161 2
+      [micgr]               ; Micrograph        (input)
+      [out]                 ; Spider file       (output)
+d164 2
+a165 2
+      [out]                 ; Micrograph image  (input)
+      NSAM,NROW
+d167 1
+a167 1
+      VM
+d172 1
+a172 1
+   jnk-[micgr]              ;                 (removed)
+d174 1
+a174 1
+ELSEIF ([fflag].EQ.4) THEN     
+d176 1
+a176 1
+   IF ([deci].GT.1) THEN    ; Reduction
+d178 2
+a179 2
+      [micgr].tif           ; Nikon tif file  (input)
+      [temp]                 ; Spider file     (output)
+d182 3
+a184 3
+      [temp]                ; Spider file     (input)
+      [out]                 ; Spider file     (output)
+      [deci],[deci]         ; Decimation factor
+d186 2
+a187 2
+      VM
+      echo " Decimated {*[deci]}X Nikon:   [micgr].tif   To: [out]"
+d190 2
+a191 2
+      [micgr].tif           ; Nikon tif file  (input)
+      [out]                 ; Spider file     (output)
+d193 2
+a194 2
+      VM
+      echo " Converted Nikon:    [micgr].tif   To: [out]"
+d196 1
+a196 1
+ENDIF
+d199 1
+a199 1
+RE
+a200 1
+; ----------- Undo zip source if necessary -----------( REMOVED, RISKY) 
+a201 5
+IF ([zflag]*[fflag] .GT. 0) THEN  ; Both tif & zip flags set
+   DE                             ; Remove the .tif file
+   [micgr].tif                    ; File   (removed)
+   VM   
+   echo " Re-moved:           [micgr].tif"
+d203 14
+a216 6
+ELSEIF ([zflag].eq.1) THEN        ; Only zip flag
+   IF ([keepspi].LE.0) THEN
+      DE                          ; Remove the de-zipped Spider file
+      [micgr]                     ; File   (removed)
+      VM
+      echo " Re-moved:           [micgr].$DATEXT"
+d218 1
+a218 1
+ENDIF
+d220 2
+a221 2
+RE
+; </body></pre></html>
+@
+
+
+1.3
+log
+@removed en (bad)
+@
+text
+@d12 1
+a12 1
+
+d35 1
+a35 3
+TR OFF                          ; Loop info turned off
+MD
+VB OFF                          ; File info turned off
+d37 1
+a37 1
+() OFF                          ; No need for () in DO loops          
+d44 1
+a44 1
+   [micgr].tif
+d49 1
+a49 1
+      [micgr].tif.gz
+d53 1
+a53 1
+         gunzip -c [micgr].tif.gz > [micgr].tif
+d55 1
+a55 1
+         echo " Unzipped:           [micgr].tif.gz"
+d60 1
+a60 1
+   [micgr]
+d64 1
+a64 1
+      [micgr].$DATEXT.gz 
+@
+
+
+1.2
+log
+@changed existance tests for gzip files.
+@
+text
+@a200 1
+en
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d10 1
+a10 1
+;           [zflag]   = Zip flag (0:Unzipped,  1:Zipped) (No longer needed)
+d43 3
+a45 2
+IF ([fflag].GT.0) THEN          ; Tif flags set
+   IQ FI [exists]               ; See if .tif exists
+d48 11
+a58 6
+   [exists]=[exists]+[zflag]
+   IF ([exists].EQ.0) THEN      ; Does not exist yet or redo
+      VM                        ; Unzip the file  (input)
+      gunzip -c [micgr].tif.gz > [micgr].tif
+      VM
+      echo " Unzipped:           [micgr].tif.gz"
+d60 2
+a61 2
+ELSE                            ; Zip, but not Tif, flag set
+   IQ FI [exists]               ; See if .tif exists
+d64 10
+a73 6
+   [exists]=[exists]+[zflag]
+   IF ([exists].EQ.0) THEN      ; Does not exist yet or redo
+      VM                        ; Unzip the file  (input)
+      gunzip -c [micgr].$DATEXT.gz > [micgr].$DATEXT
+      VM
+      echo " Unzipped:           [micgr].$DATEXT.gz"
+d200 5
+a204 1
+; ----------- Undo zip source if necessary -------------------
+@

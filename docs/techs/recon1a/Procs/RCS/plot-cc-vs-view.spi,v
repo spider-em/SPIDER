@@ -1,0 +1,761 @@
+head	1.13;
+access;
+symbols
+	Pre_gold:1.9;
+locks;
+comment	@# @;
+
+
+1.13
+date	2016.07.05.18.52.05;	author leith;	state Exp;
+branches;
+next	1.12;
+
+1.12
+date	2016.07.05.16.09.12;	author leith;	state Exp;
+branches;
+next	1.11;
+
+1.11
+date	2016.03.25.17.32.57;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2016.03.24.14.40.12;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2013.12.13.16.10.00;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2013.11.21.16.59.05;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2013.11.20.17.22.56;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2013.11.13.19.41.47;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2013.11.13.16.52.50;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2013.11.12.14.03.23;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2013.11.08.19.27.09;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2013.11.04.15.58.16;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2012.05.23.03.21.30;	author tapu;	state Exp;
+branches;
+next	;
+
+
+desc
+@new file -- computes CCRTO histogram of all particles, before classification-based verification
+@
+
+
+1.13
+log
+@good not Good
+@
+text
+@ ; <html><head><title>Compute histogram of particles' CC Value</title></head><body><pre>
+ ;
+ ; SOURCE:  spider/docs/techs/recon1/Procs/plot-cc-vs-view.spi    
+ ;
+ ; PURPOSE: Compute histogram of each view's particles CC value s
+ ;          <b>Selects  '*_good'input file if it exists otherwise selects: '*_all'.</b>
+ ;          Can display plot.
+ ;
+ ; ADAPTED FROM: histgoodccc.spi
+ ;
+ ; USAGE:        clean ; ./spider spi/dat @@plot-cc-vs-view
+ ;
+ ; ------------- Parameters -------------
+
+ [want-good-yn] = 1    ; Set to: 1  If you want to plot the 'good' verified ref views (not 'all')
+
+ [viewplot-yn]  = 1    ; Open Gnuplot automatically? (0 == no)
+
+ [num-bins]     = 128  ; Number of bins in histogram
+
+ ; -------------- Input files --------------
+
+ [ref_view_list]      = '[rec_dir]/sel_proj'              ; List of ref. projections (one)
+
+ [inlist]             = '[view_dir]/prj***/sel_part_byv'  ; Particle list        (one/view)
+
+ ; -------------- Outputs --------------
+
+ ;  VIEW_WIN  GLOBAL_NUM  GRP_WIN  CCROT      MIRROR  GRP_NUM    VIEW  MIC
+ [combined_part_list] = 'sel_part_combined' ; Combined list of particles (one)
+
+ [ccrot_hist]         = 'cc_vsview'         ; CCC histogram of particles (one)
+
+ [gnuplot]            = 'cc_vsview'         ; Gnuplot script             (one)
+
+ ; ---------- END BATCH HEADER ---------
+
+ MD                                ; Quiet
+   VB OFF
+ 
+ ; Set common filenames & parameters
+ @@verify-settings
+
+ ; Set temporary filenames
+
+ [one] = 1
+ IQ FI [goodexist]           ; See if this should access 'all' or 'good'
+   [inlist]_good[one]
+ [goodexist]
+
+ ; Select 'all' or 'good' for input
+ IF ( [goodexist] == 1 ) THEN
+    [in_allvsgood]  = '_good'
+    [allvsgood]     = 'good'
+    [out_allvsgood] = 'good'
+ ELSE
+    [in_allvsgood]  = '_sort'
+    [allvsgood]     = 'all'
+    [out_allvsgood] = 'all'
+  ENDIF
+
+ ; Concatenate name
+ [part_list_by_view]  = '[inlist][in_allvsgood]'
+ [plot]               = '[gnuplot]_[allvsgood].gnu'
+ [out]                = '[ccrot_hist]_[out_allvsgood]'
+ [out_combined]       = '[combined_part_list]_[out_allvsgood]' 
+
+ ; Temporary files
+ [temp_parts_by_view]           = 'tmp_partsbyview'
+
+ [temp_combined_parts_unsorted] = 'tmp_combined'
+
+ ; Generate view-selection list
+
+ ; Clean up
+ DE
+   [temp_parts_by_view]
+
+ ; Initialize counters
+ [view-counter] = 0
+
+ [dummy]        = 1
+
+ ; Get # of views
+ UD N [num-views]
+   [ref_view_list]              ; File          (input)
+
+ ; Loop through views
+ DO  [vkey] = 1,[num-views]      ; Loop through views ----------
+
+    ; Get reference-view #
+    UD IC [vkey],[view]
+      [ref_view_list]            ; File          (input)
+
+    ; Check if view list exists
+    IQ FI [list-exists]
+      [part_list_by_view][view]
+
+    IF ( [list-exists] == 1 ) THEN
+      [view-counter] = [view-counter] + 1
+
+      SD [view-counter], [view],[dummy]
+        [temp_parts_by_view]      ; File          (output)
+    ENDIF
+ ENDDO                            ; End view-loop ----------------
+
+ SD E
+   [temp_parts_by_view]
+
+ SYS
+   echo -n "  Making combined particle list   "; date
+
+ ; Combine selection lists for all reference views
+ DOC COMBINE
+   [part_list_by_view]             ; Doc files     (input)
+   [temp_parts_by_view]            ; File list     (input)
+   [temp_combined_parts_unsorted]  ; Doc file      (output)
+
+ DE
+   [out_combined]                  ; Doc file      (removed)
+ SD /      VIEW_WIN     GLOBAL_NUM     GRP_WIN         CCROT        MIRROR        GRP_NUM       VIEW        MIC
+   [out_combined]                  ; Doc file      (output)
+ SD E
+   [out_combined]                  ; Doc file      (closed)
+
+ DOC SORT A                        ; Sort doc file into existing labeled file
+   [temp_combined_parts_unsorted]  ; Doc files     (input)
+   [out_combined]                  ; Doc file      (output)
+   2                               ; Register to sort by: global particle #
+   Y                               ; Renumber
+
+ UD N [num-parts]
+   [out_combined]            ; Files         (input)
+
+ ; Delete pre-existing histogram
+ DE
+   [ccrot_hist]
+
+ ; Generate histogram of particle CCROTs
+ HD D
+   [temp_combined_parts_unsorted]
+   4                               ; Column to bin (CCROT)
+   [num-bins]                      ; Histogram bins
+   [ccrot_hist]                    ; File          (output)
+
+ ; Clean up
+ DE
+   [temp_parts_by_view]
+ DE
+   [temp_combined_parts_unsorted]
+
+ SYS
+   echo "  Done -- Combined particles: {%I0%[num-parts]}" ;
+
+
+ ; WRITE GNUPLOT SCRIPT
+
+ ; Delete pre-existing file
+ SYS
+   rm -f [plot]
+
+ ; Will use arbitrary numbers in case version <18.20
+ SYS
+   echo 'max_height = 1200' > [plot]
+ SYS
+   echo 'average    = 7500' >> [plot]
+ SYS
+   echo 'std_dev    = 1500' >> [plot]
+ SYS
+   echo 'histgood(x)=max_height*exp(-(x-average)**2/std_dev**2)' >> [plot]
+ SYS
+   echo 'plot  [][] \' >> [plot]
+ SYS
+   echo '"[ccrot_hist].$DATEXT" using 3:4 title "good" with boxes, \' >> [plot]
+ SYS
+   echo 'histgood(x) title "fitted good"' >> [plot]
+
+
+ ; Will attempt DOC SORT in case version >=18.20
+
+ ; Get CCROT stats
+ DOC STAT [dummy1],[dummy2],[dummy3],[dummy4],[cc-avg],[cc-stdev]
+   [out_combined]
+   4          ; Column # to analyze: CCROT
+
+ ; Get maximum #particles from histogram
+ DOC STAT [dummy1],[dummy2],[max-parts]
+   [ccrot_hist]
+   2     ; Column # to analyze: #parts
+
+ ; Delete pre-existing file
+ SYS
+   rm -f [plot]
+
+ ; Will use arbitrary numbers in case version <18.20
+ SYS
+   echo 'set xlabel "CCROT"' > [plot]
+ SYS
+   echo 'set ylabel "#Particles"' >> [plot]
+ SYS
+   echo 'max_height = {*****[max-parts]}' >> [plot]
+ SYS
+   echo 'max_height = {*****[max-parts]}' >> [plot]
+; SYS
+;   echo 'average    = {*****[cc-avg]}'    >> [plot]
+ SYS
+   echo 'average    = {%f6.2%[cc-avg]}'    >> [plot]
+ SYS
+   echo 'std_dev    = {%f6.2%[cc-stdev]}'  >> [plot]
+ SYS
+   echo 'histgood(x)=max_height*exp(-(x-average)**2/std_dev**2)' >> [plot]
+ SYS
+   echo 'plot  [][] \' >> [plot]
+ SYS
+   echo '"[ccrot_hist].$DATEXT" using 3:4 title "[out_allvsgood]" with boxes, \' >> [plot]
+ SYS
+   echo 'histgood(x) title "Fitted [out_allvsgood]"' >> [plot]
+
+ ; If requested, open Gnuplot
+ IF ( [viewplot-yn] .NE. 0 ) THEN
+    SYS
+       echo ; echo "  gnuplot -persist [plot]" ; echo
+    SYS
+       gnuplot -persist [plot]
+ ELSE
+    SYS
+       echo ; echo " Gnuplot usage: load '[plot]'" ; echo
+ ENDIF
+
+ EN D
+
+ ; Modified 2013-12-02
+ ;    2013-12-02 (trs) -- Gnuplot script changed to allow floats for avg & stdev
+ ;    2013-10-23 (agl) -- new file names, modernized syntax & cosmetic
+ ;    2012-05-10 (trs) -- optionally spawns Gnuplot
+ ;    2011-11-02 (trs) -- adapted from histgoodccc.spi
+ ;    2009-05-14 (trs) -- added parameter for number of bins
+ ;    2009-02-23 (trs) -- added view# to combinedgood output
+ ;    2008-12-22 (trs & djt) -- labelled COMBINEDGOOD columns
+ ;    2007-01-19 (trs) -- HD D now allows arbitrary #bins
+ ; </pre></body></html>
+@
+
+
+1.12
+log
+@Set common filenames & parameters
+@
+text
+@d23 1
+a23 1
+ [ref_view_list]      = '[rec_dir]/sel_proj'         ; List of ref. projections (one)
+d25 1
+a25 1
+ [inlist]             = 'views/prj***/sel_part_byv'  ; Particle list        (one/view)
+d54 2
+a55 2
+    [allvsgood]     = 'Good'
+    [out_allvsgood] = 'Good'
+d58 2
+a59 2
+    [allvsgood]     = 'All'
+    [out_allvsgood] = 'All'
+@
+
+
+1.11
+log
+@file name
+@
+text
+@d12 1
+a12 1
+
+d40 5
+d49 1
+a49 1
+[goodexist]
+d54 2
+a55 2
+    [allvsgood]     = 'good'
+    [out_allvsgood] = 'good'
+d58 2
+a59 2
+    [allvsgood]     = 'all'
+    [out_allvsgood] = 'all'
+d217 1
+a217 1
+   echo 'histgood(x) title "fitted [out_allvsgood]"' >> [plot]
+d222 1
+a222 1
+       echo ; echo " gnuplot -persist [plot]" ; echo
+@
+
+
+1.10
+log
+@echo msg formatting
+@
+text
+@d23 1
+a23 1
+ [ref_view_list]      = 'sel_proj'                   ; List of ref. projections (one)
+@
+
+
+1.9
+log
+@tapu: Gnuplot script changed to allow floats for avg & stdev
+@
+text
+@d106 1
+a106 1
+   echo -n " Making combined particle list   "; date
+d148 1
+a148 1
+   echo " Done -- Combined particles: {%I0%[num-parts]}" ;
+@
+
+
+1.8
+log
+@_all _good not -all
+@
+text
+@d199 2
+d202 1
+a202 1
+   echo 'average    = {*****[cc-avg]}'    >> [plot]
+d204 1
+a204 1
+   echo 'std_dev    = {*****[cc-stdev]}'  >> [plot]
+d227 2
+a228 1
+ ; Modified 2013-10-16
+@
+
+
+1.7
+log
+@bad file name
+@
+text
+@d59 1
+a59 1
+ [plot]               = '[gnuplot]-[allvsgood].gnu'
+@
+
+
+1.6
+log
+@using_settings
+@
+text
+@d25 1
+a25 1
+ [inlist]             = 'views/prj###/sel_part_byv'  ; Particle list        (one/view)
+@
+
+
+1.5
+log
+@using_settings
+@
+text
+@d6 1
+a7 3
+ ;          Selects input file for: '_good' or '_all'.
+ ;          Select  '*_good'input file if it exists otherwise 
+ ;          selects: '*_all'.
+d25 1
+a25 1
+ [inlist]             = 'views/prj***/sel_part_byv'  ; Particle list        (one/view)
+d29 1
+a29 2
+![combined_part_list] = 'combinedparts'     ; Combined list of particles (one)
+![combined_part_list] = 'combinedgood'      ; Combined list of particles (one)
+a30 1
+ ;  VIEW_WIN  GLOBAL_NUM  GRP_WIN  CCROT      MIRROR  GRP_NUM    VIEW  MIC
+d32 1
+a32 1
+ [ccrot_hist]         = 'cc_vs_view'        ; CCC histogram of particles (one)
+d34 1
+a34 1
+ [gnuplot]            = 'cc_vs_view'        ; Gnuplot script             (one)
+@
+
+
+1.4
+log
+@consolidated_filenames
+@
+text
+@a26 1
+![inlist           ]  = 'views/sel_sort_part_***'    ; Particle lists       (one/view)
+@
+
+
+1.3
+log
+@rewrite_syntax_filenames
+@
+text
+@d92 1
+a92 1
+    UD IC [vkey],[view-num]
+d97 1
+a97 1
+      [part_list_by_view][view-num]
+d102 1
+a102 1
+      SD [view-counter], [view-num],[dummy]
+@
+
+
+1.2
+log
+@merged histgoodcc.spi histallcc.spi  into: histcc.spi
+@
+text
+@d3 1
+a3 1
+ ; SOURCE:       spider/docs/techs/recon1/Procs/histcc.spi    
+d5 5
+a9 2
+ ; PURPOSE:      Compute histogram of particles' CC value
+ ;               Can select total or 'good' particles. Can display plot
+d13 1
+a13 1
+ ; USAGE:        clean ; ./spider spi/dat @@histcc
+d17 1
+a17 1
+ [want-good-yn] = 1    ; Set to: 1  if you want to plot the 'good' verified ref views (not 'all')
+d35 1
+a35 1
+ ;   VIEW_SLICE GLOBAL_NUM    GRP_SLICE       CCROT  MIRROR  GRP_NUM    VIEW
+d37 1
+a37 1
+ [ccrot_hist]         = 'histcc'            ; CCC histogram of particles (one)
+d39 1
+a39 1
+ [gnuplot]            = 'fit'               ; Gnuplot script             (one)
+d46 5
+d52 1
+a52 5
+ IF ( [want-good-yn] == 0 ) THEN
+    [in_allvsgood]  = '_sort'
+    [allvsgood]     = 'total'
+    [out_allvsgood] = 'all'
+ ELSE
+d56 5
+a60 1
+ ENDIF
+d68 1
+a72 1
+
+d115 3
+a117 3
+   [part_list_by_view]             ; Files         (input)
+   [temp_parts_by_view]            ; Files         (input)
+   [temp_combined_parts_unsorted]  ; File (output)
+d120 3
+a122 3
+   [out_combined]                  ; File          (removed)
+ SD /      VIEW_SLICE   GLOBAL_NUM     GRP_SLICE       CCROT        MIRROR        GRP_NUM       VIEW
+   [out_combined]                  ; Files         (input)
+d124 1
+a124 1
+   [out_combined]
+d127 2
+a128 2
+   [temp_combined_parts_unsorted]
+   [out_combined]            ; File          (output)
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d1 230
+a230 193
+; COMPUTE HISTOGRAM OF PARTICLES' CCROT
+; Adapted from histgoodccc.spi
+
+; ------------- Parameters -------------
+[viewplot-yn] = 1     ; open Gnuplot automatically? (0 == no)
+[num-bins]    = 128   ; number of bins in histogram
+
+; -------------- Inputs --------------
+fr l
+[ref_view_list]projlist  ; list of reference projections
+fr l
+[view_dir]Byview/prj***               ; directory template for selection files
+fr l
+[part_list_by_view]sortsel            ; particle list, in VIEW_DIR
+
+; -------------- Outputs --------------
+fr l
+[combined_part_list]combinedparts     ; combined list of particles
+;         VIEWSLICE    GLOBALNUM    GROUP_SLICE      CCROT        MIRROR       GROUP_NUM      VIEWNUM
+fr l
+[ccrot_hist]histcc-all                ; CCC histogram of particles
+fr l
+[gnuplot_script]fit.gnu               ; Gnuplot script
+
+; ---------- END BATCH HEADER ---------
+
+fr l
+[temp_parts_by_view]tmp_partsbyview
+fr l
+[temp_combined_parts_unsorted]tmp_combined
+
+
+; GENERATE VIEW-SELECTION LIST
+
+; clean up
+de
+[temp_parts_by_view]
+
+; initialize counters
+[view-counter] = 0
+[dummy]        = 1
+
+; get #views
+ud n [num-views]
+[ref_view_list]
+
+; loop through views
+do lb8 [view-key] = 1,[num-views]
+    ; get reference-view#
+    ud ic [view-key],[view-num]
+    [ref_view_list]
+
+    ; check if view list exists
+    iq fi [list-exists]
+    [view_dir][view-num]/[part_list_by_view]
+
+    if([list-exists].eq.1) then
+        [view-counter] = [view-counter] + 1
+
+        sd [view-counter], [view-num],[dummy]
+        [temp_parts_by_view]
+    endif
+lb8
+; end view-loop
+
+sd e
+[temp_parts_by_view]
+
+vm
+echo "Making combined particle list"; date
+
+; combine selection lists for all reference views
+doc combine
+[view_dir]/[part_list_by_view]
+[temp_parts_by_view]
+[temp_combined_parts_unsorted]
+
+doc sort
+[temp_combined_parts_unsorted]
+[combined_part_list]  ; OUTPUT
+(2)                   ; register to sort by: global-particle#
+Y                     ; renumber?
+
+SD /       VIEWSLICE    GLOBALNUM    GROUP_SLICE      CCROT        MIRROR       GROUP_NUM      VIEWNUM
+[combined_part_list]
+sd e
+[combined_part_list]
+
+ud n [num-parts]
+[combined_part_list]
+
+; delete pre-existing histogram
+de
+[ccrot_hist]
+
+; generate histogram of particle CCROTs
+hd d
+[temp_combined_parts_unsorted]
+(4)               ; column to bin (CCROT)
+[num-bins]
+[ccrot_hist]  ; OUTPUT
+
+; clean up
+de
+[temp_parts_by_view]
+de
+[temp_combined_parts_unsorted]
+
+vm
+echo "Done -- Combined particles: {******[num-parts]}" ;
+
+
+; WRITE GNUPLOT SCRIPT
+
+; delete pre-existing file
+vm
+rm -f [gnuplot_script]
+
+; Will use arbitrary numbers in case version <18.20
+vm
+echo 'max_height = 1200' > [gnuplot_script]
+vm
+echo 'average    = 7500' >> [gnuplot_script]
+vm
+echo 'std_dev    = 1500' >> [gnuplot_script]
+vm
+echo 'hist(x)=max_height*exp(-(x-average)**2/std_dev**2)' >> [gnuplot_script]
+vm
+echo 'plot  [][] \' >> [gnuplot_script]
+vm
+echo '"[ccrot_hist].$DATEXT" using 3:4 title "total" with boxes, \' >> [gnuplot_script]
+vm
+echo 'hist(x) title "fitted"' >> [gnuplot_script]
+
+
+; Will attempt DOC SORT in case version >=18.20
+
+; get CCROT stats
+doc stat [dummy1],[dummy2],[dummy3],[dummy4],[cc-avg],[cc-stdev]
+[combined_part_list]
+(4)   ; column# to analyze: CCROT
+
+; get maximum #particles from histogram
+doc stat [dummy1],[dummy2],[max-parts]
+[ccrot_hist]
+(2)   ; column# to analyze: #parts
+
+; delete pre-existing file
+vm
+rm -f [gnuplot_script]
+
+; Will use arbitrary numbers in case version <18.20
+vm
+echo 'set xlabel "CCROT"' > [gnuplot_script]
+vm
+echo 'set ylabel "#Particles"' >> [gnuplot_script]
+vm
+echo 'max_height = {*****[max-parts]}' >> [gnuplot_script]
+vm
+echo 'max_height = {*****[max-parts]}' >> [gnuplot_script]
+vm
+echo 'average    = {*****[cc-avg]}' >> [gnuplot_script]
+vm
+echo 'std_dev    = {*****[cc-stdev]}' >> [gnuplot_script]
+vm
+echo 'hist(x)=max_height*exp(-(x-average)**2/std_dev**2)' >> [gnuplot_script]
+vm
+echo 'plot  [][] \' >> [gnuplot_script]
+vm
+echo '"[ccrot_hist].$DATEXT" using 3:4 title "total" with boxes, \' >> [gnuplot_script]
+vm
+echo 'hist(x) title "fitted"' >> [gnuplot_script]
+
+; if requested, open Gnuplot
+if([viewplot-yn].ne.0) then
+    vm
+    echo ; echo "gnuplot -persist [gnuplot_script]" ; echo
+    vm
+    gnuplot -persist [gnuplot_script]
+else
+    vm
+    echo ; echo "gnuplot usage: load '[gnuplot_script]'" ; echo
+endif
+
+en d
+
+; Modified 2012-05-10
+;    2012-05-10 (trs) -- optionally spawns Gnuplot
+;    2011-11-02 (trs) -- adapted from histgoodccc.spi
+;    2009-05-14 (trs) -- added parameter for number of bins
+;    2009-02-23 (trs) -- added view# to combinedgood output
+;    2008-12-22 (trs & djt) -- labelled COMBINEDGOOD columns
+;    2007-01-19 (trs) -- HD D now allows arbitrary #bins
+@

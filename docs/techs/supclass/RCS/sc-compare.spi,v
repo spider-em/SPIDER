@@ -1,0 +1,212 @@
+head	1.1;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+1.1
+date	2017.01.19.16.36.09;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@; Calculates CCROT difference, creates histogram distribution of deltaCCROT
+
+; -------------------------- Parameter --------------------------
+[progress-interval] = 3                                         ; prints progress message every Nth defocus group
+
+; --------------------------- Inputs ---------------------------
+fr l
+[df_group_list]../Reconstruction/sel_group_cclim                ; list of defocus groups
+fr l
+[selection]../Reconstruction/sel_particles_{***[grp-num]}       ; particle selection list
+;        DF_SLICE
+fr l
+[realign_doc_1]../Alignment1/align_01_{***[grp-num]}_realigned  ; reference 1 alignment doc
+fr l
+[realign_doc_2]../Alignment2/align_01_{***[grp-num]}_realigned  ; reference 2 alignment doc
+
+; --------------------------- Outputs ---------------------------
+fr l
+[delta_ccrot_doc_bygrp]doc_delta_ccrot_{***[grp-num]}           ; for each def-grp, will use for next input
+fr l
+[delta_ccrot_doc_total]doc_delta_ccrot_total                    ; deltaCCROT for all particles
+fr l
+[mismatch_doc]docmismatch                                       ; list of particles still aligning to different projections
+fr l
+[delta_ccrot_hist]hist_delta_ccrot                              ; deltaCCROT histogram
+fr l
+[gnuplot_hist]plothist.gnu                                      ; Gnuplot deltaCCROT script (including extension)
+; USAGE:  gnuplot -persist plothist.gnu
+
+; ---------------------- END BATCH HEADER -----------------------
+
+md
+vb off
+
+; clean up pre-existing files
+DE 
+[delta_ccrot_hist]
+DE
+[delta_ccrot_doc_total]_unsort
+DE
+[delta_ccrot_doc_total]
+DE
+[mismatch_doc]
+
+vm
+echo "Calculating difference in cross-correlations"; date; echo
+
+; initialize counters
+[global-counter]   = 0
+[mismatch-counter] = 0
+
+; get #defocus-groups
+ud n,x76
+[df_group_list]
+
+; loop through defocus-groups
+do lb7 [grp-num]=1,x76
+    if (int([grp-num]/[progress-interval]).eq.[grp-num]/[progress-interval]) then
+        vm
+        echo "Working on defocus group #{***[grp-num]} out of {***x76}"
+    endif
+
+    DE  ; clean up pre-existing files
+    [delta_ccrot_doc_bygrp]
+
+    ; get number of particles (x50) in current defocus group
+    UD N,x50
+    [selection]
+
+
+    ; CALCULATE DELTA-ccrot
+
+    ; loop through particles (x50) for current defocus group
+    do lb1 x10=1,x50
+        ud ic x10, [slice]
+        [selection]
+
+        ; read alignment parameters
+        ud ic,[slice],x11,x12,x13,[refproj1],[slice1],x16,x17,x18,x19,x20,[ccrot1],x22,x23,x24,x25
+        [realign_doc_1]
+        ud ic,[slice],x51,x52,x53,[refproj2],[slice2],x56,x57,x58,x59,x60,[ccrot2],x62,x63,x64,x65
+        [realign_doc_2]
+
+        ; calculate deltaccrot
+        [delta-ccrot] = [ccrot2]-[ccrot1]  ; ref2 - ref1
+        
+        [global-counter] = [global-counter]+1
+
+        ; save to documents
+        sd [global-counter],[grp-num],[slice],[delta-ccrot],[ccrot1],[ccrot2],[refproj1],[refproj2]  ; ,[slice1],[slice2]
+        [delta_ccrot_doc_total]_unsort
+        sd x10,[slice],[delta-ccrot],[ccrot1],[ccrot2],[refproj1],[refproj2]  ; ,[slice1],[slice2]
+        [delta_ccrot_doc_bygrp]
+
+        ; if projections aren't the same, save to mismatch doc
+        IF([refproj1].ne.[refproj2]) then
+            [mismatch-counter] = [mismatch-counter] + 1
+
+            sd [mismatch-counter],[grp-num],[slice],[refproj1],[refproj2]  ; ,[slice1],[slice2]
+            [mismatch_doc]
+        endif
+    lb1
+
+    ; close documents
+    sd e
+    [delta_ccrot_doc_bygrp]
+    sd e 
+    [deltat_ccrot_doc_total]
+
+    ; clean up
+    SD /      SLICE_NUM   DELTACCROT     CCROT1       CCROT2      REFPROJ1     REFPROJ2
+    [delta_ccrot_doc_bygrp]
+    sd e
+    [delta_ccrot_doc_bygrp]
+    ud ice
+    [realign_doc_1]
+    ud ice
+    [realign_doc_2]
+    ud ice 
+    [selection]
+; end group-loop
+lb7
+
+; make total files for ALL defocus groups
+; This doesn't work - multiple df_grps have same slice number
+; this only sorts unique slice numbers
+DOC SORT 
+[delta_ccrot_doc_total]_unsort
+[delta_ccrot_doc_total]
+(3)  ; column# to sort: deltaCCROT
+Y    ; renumber key?
+
+
+if([mismatch-counter].gt.0) then
+    SD /       DF_GROUP    SLICE_NUM     REFPROJ1     REFPROJ2
+    [mismatch_doc]
+    sd e
+    [mismatch_doc]
+endif
+
+; clean up
+SD /       DF_GROUP    SLICE_NUM    DELTACCROT     CCROT1       CCROT2      REFPROJ1     REFPROJ2
+[delta_ccrot_doc_total]
+sd e
+[delta_ccrot_doc_total]
+DE
+[delta_ccrot_doc_total]_unsort
+
+;create histogram doc file of deltaccrot
+HD D
+[delta_ccrot_doc_total]
+(3)    ; column == deltaCCROT
+(128)  ; #bins
+[delta_ccrot_hist]
+
+; create Gnuplot script
+vm
+echo "Creating Gnuplot script:"
+vm
+rm -f [gnuplot_hist] 
+vm
+echo #!/bin/sh > [gnuplot_hist] 
+vm
+echo ' 'set ylabel \"# Particles\" >> [gnuplot_hist] 
+vm
+echo ' 'set xlabel \"deltaCCROT\" >> [gnuplot_hist] 
+vm
+echo ' 'set title \"Histogram of deltaCCROT\" >> [gnuplot_hist] 
+vm
+echo ' 'plot \'[delta_ccrot_hist].$DATEXT\' using 3:4 notitle  with boxes >> [gnuplot_hist] 
+vm
+cat [gnuplot_hist] 
+vm
+echo "USAGE:  gnuplot -persist plothist.gnu"
+
+vm m
+echo ; 
+echo "In {*******[global-counter]} particles, found {*******[mismatch-counter]} mismatches" ;
+echo "Done"; 
+date
+.
+en d
+
+; Modified 2009-08-20
+;    2009-04-17 (trs) -- added Gnuplot script as output
+;    2009-01-16 (trs) -- changed output of deltaccrot and mismatch docs
+;    2009-01-15 (trs & ty) -- assumes no global particle#, only dfgroup+slice#
+;    2007-11-28 (trs) -- input filename now sel_particles_
+;    2007-03-27 (DT)  -- run on individual def groups and then concatenate a total document
+@

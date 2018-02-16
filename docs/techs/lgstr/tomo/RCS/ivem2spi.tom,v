@@ -1,0 +1,274 @@
+head	1.3;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+1.3
+date	2005.01.21.18.16.11;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2005.01.05.20.48.27;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2005.01.05.20.38.53;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.3
+log
+@jamie's changes
+@
+text
+@; SOURCE: ivem2spi.tom                               2/11/03  M. Marko
+; Changes: 1/18/04  Added CE VS command and changed default thresh.jl 
+;
+; PURPOSE: Converts tilt-series files from the JEOL 4000 to SPIDER format
+;
+; Input  (typical):     1024x1024 16-bit raw files recorded using
+;                       Emispec autosave. 
+;                            
+; Output (typical):     SPIDER images: CCD defects removed, 
+;                       rotated to make tilt axis vertical,
+;                       padded to avoid wrapping after rotation.
+;
+; NOTE 1: If you want to check that the threshold for outlyers due
+;         to CCD defects is not cutting off any data, convert a test 
+;         image to SPIDER and use 'HI R' with the threshold you plan to 
+;         use for the series.  For typical cryo images with a mean
+;         below 1000, a threshold of 1500 is generous.
+;
+; NOTE 2: Column defects appear to be at x=423 and 424.  If lines are
+;         still seen in the output images, these positions might need 
+;         to be modified.  If blooming occurs, more lines may need to
+;         be filled in.
+;
+; NOTE 3: Images are automatically padded according to the angle of
+;         the tilt axis from vertical.  This avoids cutting off the
+;         corners of rotated images.  This procedure is only
+;         implemented for square images of 1024x1024 pixels.
+;
+
+x11 = 1                ; First image file number (usually 1)
+x12 = 122              ; Last image file number  (usually 61 or 122)
+
+x99 = 1500             ; Threshold for outlying pixels (usually 1500,7000)
+x97 = 3                ; Box size for CE VS. 0 = no filter,3,5,7
+x98 = 0                ; Rotation angle for vertical tilt axis
+
+; ----------------- Input files --------------------------------------------
+
+FR G                                     
+[input]rawinput/raw_            ; Raw input image filename prefix (adds ###)
+
+; ----------------- Output files ----------------------------
+FR L
+[warning]ChangedImagePixels     ; File retains # of pixels changed by CE VS
+FR G
+[output]rotated/rot_            ; Rotated windowed output prefix (adds ###)
+
+; ----------------- END BATCH HEADER ----------------------
+x42 =0  ;flag for one time warning of CE VS
+; For 1024x1024 Tietz images 
+x30 = 1024               ; Input size
+
+; ------ Convert from raw to SPIDER, adding leading zeros
+
+DO LB1 x13=x11,x12
+   IF (x13.LT.10) THEN   ; Convert binary filenames to SPIDER convention
+      VM
+      \cp [input]{*x13}.bin jnk_tmp.$DATEXT
+   ELSE
+      IF (x13.LT.100) THEN 
+         VM
+         \cp [input]{**x13}.bin jnk_tmp.$DATEXT
+      ELSE
+         VM
+         \cp [input]{***x13}.bin jnk_tmp.$DATEXT
+      ENDIF
+   ENDIF
+
+   CP FROM RAW          ; Convert image to SPIDER format
+   jnk_tmp              ; Raw input images  filename   (input)
+   (16)                 ; 16 Bits in image file format                    
+   (x30,x30)            ; Size
+   (0)                  ; Header offset 
+   (2)                  ; Endedness 
+   N                    ; Do not fold negatives
+   _1                   ; Temp. file                   (output)
+
+   ;-------- Remove column defect lines by replacing with adjacent
+
+   WI
+   _1                   ; SPIDER image                 (input)
+   _2                   ; Windowed line                (output)
+   (1,x30)              ; Window size
+   (423,1)              ; Window position
+
+   IN                   ; Put adjacent window in image
+   _2                   ; Windowed line                (output)
+   _1                   ; SPIDER image                 (input)
+   (424,1)              ; Position
+
+
+   WI
+   _1                   ; SPIDER image                 (input)
+   _2                   ; Windowed line                (output)
+   (1,x30)              ; Window size
+   (426,1)              ; Window position
+
+   IN                   ; Put adjacent window in image
+   _2                   ; Windowed line                (input)
+   _1                   ; SPIDER image                 (output)
+   (426,1)              ; Position
+
+   ;------- Remove bright outlyers due to single-pixel defects
+   TH
+   _1                   ; SPIDER image                   (input)
+   _2                   ; Thresholded SPIDER image       (output)
+   A
+   x99                  ; Thresholded level
+   
+  ;----added CE VS operation
+  IF(x97.GT.1)THEN
+    x41=0
+    CE VS x41
+    _2     ;input
+    _3     ;output
+    (x97,x97)
+    
+    ;---changed pixels?
+    IF(x41.GT.0)THEN
+      
+      ;---one time warning
+      IF(x42.EQ.0)THEN
+        VM
+        echo "CE VS has changed pixels, read [warning] "
+      
+        SD /key=image# reg1= #pixels changed
+        [warning]
+      
+        x42=3
+      ENDIF
+      
+      ;---print # of change pixels if any
+      SD x13,x41
+      [warning]
+      
+    ENDIF
+  
+    cp
+    _3
+    _2
+  ENDIF
+       
+  ;------- In case rotation is zero or ninety degrees
+  x22=ABS(x98)
+  IF (x98.EQ.0) THEN
+      CP                   ; Rotation is zero degrees
+      _2                   ; Thresholded SPIDER image       (input)
+      [output]{***x13}
+
+  ELSE 
+      IF (x22.EQ.90) THEN
+         RT                   ; Rotation is ninety degrees
+         _2                   ; Thresholded SPIDER image    (input)
+         [output]{***x13}     ; Rotated, thresholded image  (output)        
+         x98                  ; Angle
+
+      ELSE
+         ; Calculate size for padding based on tilt axis angle
+         x23 = ABS(x22-45)
+         x24 = 1.414*cos(x23)
+         x25 = x24*1024       ; padded image dimension
+         x26 = (x25-1024)/2   ; top left coordinate
+
+         PD                   ; Pad so rotation won't lose corners
+         _2                   ; Thresholded SPIDER image    (input)
+         _1
+         (x25,x25)            ; Padded image dimension
+         M
+         (x26,x26)            ; Top left coordinate
+
+         RT M                 ; Rotate so tilt axis is vertical
+         _1
+         [output]{***x13}     ; Rotated, thresholded image  (output)        
+         x98
+      ENDIF
+   ENDIF
+
+   FS
+   [output]{***x13}     ; Rotated, thresholded image        (output)        
+LB1
+
+; Clean up temp files
+DE
+_1
+DE  
+_2
+DE
+jnk_tmp.jnk
+
+EN
+
+
+
+@
+
+
+1.2
+log
+@*** empty log message ***
+@
+text
+@d2 1
+d33 3
+a35 2
+x99 = 7000             ; Threshold for outlying pixels (usually 1500)
+x98 = 0                ; Rotation angle for vertical tilt axis (usually -60) ?
+d43 2
+a44 1
+
+d49 1
+a49 1
+
+d109 34
+a142 1
+
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@a28 2
+;<b>------------ Edit next 4  Input parameters ------------------------------ 
+
+d38 1
+a38 1
+[input]raw_            ; Raw input image filename prefix (will add ###)
+d40 1
+a40 1
+; ----------------- Output files -------------------------------------------------
+d43 1
+a43 1
+[output]rot_            ; Rotated windowed output file prefix (will add ###)
+d45 1
+a45 1
+; ----------------- END BATCH HEADER ------------------------------------------- </b>
+d154 1
+a154 1
+RE
+@

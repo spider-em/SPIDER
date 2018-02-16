@@ -1,0 +1,792 @@
+head	1.11;
+access;
+symbols
+	GPL_update:1.10
+	pre_rewrite_2010:1.8
+	pre_more_stack:1.8
+	best-code:1.7
+	no-named-regs:1.7
+	pre_GPL:1.7
+	tag_version1_0:1.7;
+locks; strict;
+comment	@:: @;
+
+
+1.11
+date	2013.04.05.14.34.46;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2010.02.04.20.12.21;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2010.01.19.18.51.59;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2006.04.14.18.28.09;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2005.07.06.21.16.04;	author bbaxter;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2005.07.01.18.26.04;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2005.02.02.16.28.12;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2004.08.10.12.21.48;	author bbaxter;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2004.08.09.12.46.41;	author bbaxter;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2004.04.19.18.57.39;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2003.07.29.20.16.31;	author bbaxter;	state Exp;
+branches;
+next	;
+
+
+desc
+@spider batch file for creating display of angular data
+@
+
+
+1.11
+log
+@comments
+@
+text
+@; <html><head><title>Makes view of angular distribution of projections used in reconstruction</title></head><body><pre>
+;
+; SOURCE:  spider/docs/techs/recon/newprogs/angdisp.spi 
+;                Added lower hemisphere   Feb 2005 al
+;                VAR                      Feb 2010 al
+;
+; Purpose: Makes SPIDER image views of angular data output from refinement.
+;          Creates two side by side images showing the angular direction 
+;          assigned to each of the sample images in the reconstruction.
+;          Left hemisphere is for projections from above and right hemisphere
+;          is for projections from the lower direction. These are
+;          essentially polar coordinate plots. Both plots are viewed 
+;          from above on the sphere.
+;          For a given defocus group, makes maps for each refinement iteration.
+;          User may select which defocus groups to compute.
+;          DEFAULT: does all iterations for 1st defocus group.
+;
+; I/O PARAMETERS AND FILES ARE SET HERE:
+;
+; <b> ----------- Input Parameters ---------------------------------------
+
+[g1] = 1       ; First defocus group
+[g2] = 1       ; Last defocus group (-1 = do all groups)
+
+[i1] = 1       ; First iteration
+[i2] = -1      ; Last iteration (-1 = do all iterations) 
+
+;  ----------- Input files ---------------------------------------
+
+[angles] = 'final/align_{**[iter]}_{***[grp]}'   ; Expects psi,theta,phi in register 1,2,3
+
+; --------------- Output files  -------------------------------------
+
+[dir]    = 'display'                       ; Output directory
+
+[disp]   = 'disp_{**[iter]}_{***[grp]}'    ; Output image file name template
+
+; -------------- END BATCH HEADER ------------------------------</b>
+
+[r1]    = 2                         ; Radius of the small circles in plot
+[siz]   = 607                       ; Single image size
+[sizm1] = [siz] - 2                 ; Single image size - 1 pixel border
+[rp]    = 303                       ; Plot radius
+[dfs]   = 2 * [siz]                 ; Double frame size
+
+VM                                  ; Make output directory if necessary
+mkdir -p [dir]
+
+[out] = '[dir]/[disp]'              ; Create output file names
+
+
+IF ([g2].EQ.-1) [g2] = 1000         ; Do all defocus groups
+
+DO [grp] = [g1],[g2]                ; Loop over defocus groups
+
+   [iter] = [i1]                    ; First iteration number
+
+   IQ FI [exists]                   ; See if passed last defocus group
+   [angles]
+
+   IF ([exists].NE.1) EXIT          ; Quit loop if def group not found
+
+   IF ([i2].EQ.-1) [i2] = 1000      ; Do all iterations
+
+   DO [iter] = [i1],[i2]            ; Loop over refinement iterations
+
+      IQ FI [exists]                ; see if passed last iteration number
+      [angles]
+
+      IF ([exists].NE.1)  EXIT      ; Quit inner loop if iteration not found
+
+      BL                            ; Create a blank image
+      _1
+      ([dfs],[siz])                 ; Dual frame size
+      N
+      (0.0)
+
+      PT                            ; Draw large circle on left frame
+      _1
+      CL
+      ([rp],[rp])
+      (302)
+      N
+
+      [v1] = [rp] + [siz]
+      PT                            ; Draw large circle on right frame
+      _1
+      CL
+      ([v1],[rp])
+      (302)
+      N
+
+      PT                            ; Draw axes lines on left frame
+      _1
+      L
+      (1,[rp])
+      ([sizm1],[rp])
+      Y
+      L
+      ([rp],1)
+      ([rp],[sizm1])
+      N
+
+      [v1] = [rp] + [siz]
+      [v2] = [sizm1] + [siz]
+      PT                            ; Draw axes lines on right frame
+      _1
+      L
+      (1,[rp])
+      ([v2],[rp])
+      Y
+      L
+      ([v1],1)
+      ([v1],[sizm1])
+      N
+
+      UD N [npr]                    ; Get number of projections in this group
+      [angles]
+
+      [rit] = 0                     ; Projections on right frame hemisphere
+
+      DO                            ; Loop over projections in the group
+         UD NEXT [k],[a],[b],[c]    ; Doc file with  angles
+         [angles]                   ; Angle file      (input) 
+         IF ([k] .LE. 0) EXIT       ; End of angles file
+
+         [rfo] = 0
+         IF ([b] .GT. 90.0) THEN    ; Lower hemisphere projection
+            [b] = 180.0 - [b]
+
+            IF ([c] .GT. 360.0) [c] = [c] - 360.0
+            [rfo] = [siz]           ; Right frame offset
+            [rit] = [rit] + 1       ; Projections on right frame hemisphere
+         ENDIF
+
+         [v61] = [b]/90
+         [v61] = [v61]*300
+         [v81] = cos([c])
+         [v82] = sin([c])
+         [v81] = [v81]*[v61]
+         [v82] = [v82]*[v61]
+         [v81] = [v81]+[rp]+[rfo]   ; Location plus frame offset
+         [v82] = [v82]+[rp]
+   
+         PT                         ; Mark location in image 
+         _1                         ; Image file
+         CL                         ; Circle (Looks like square due to small radius)
+         [v81],[v82]                ; Center coordinates
+         [r1]                       ; Radius
+         N                          ; No more 
+      ENDDO
+
+      UD ICE
+      [angles]
+
+      FS                           ; Get max/min
+      _1
+
+      NEG                          ; Reverse contrast
+      _1
+      _2
+
+      CP
+      _2
+      [out]                         ; Output image file
+
+
+     VM
+     echo " Iteration: {**[iter]}, Group: {***[grp]} Images: {*****[npr]} Lower hemisphere: {*****[rit]}"
+
+   ENDDO
+ENDDO
+
+EN
+; </body></pre></html>
+@
+
+
+1.10
+log
+@VAR, UD NEXT bug
+@
+text
+@d11 3
+a13 3
+;          is for any projections from the lower direction. These are
+;          essentially polar coordinate plots. Both plots are viewed from above
+;          on the sphere.
+@
+
+
+1.9
+log
+@simplify-rewrite
+@
+text
+@d3 4
+a6 2
+; SOURCE:  angdisp.spi                 Added lower hemisphere   Feb 2005 al
+; 
+a17 2
+; MASTER COPY: spider/docs/techs/recon/newprogs/
+;
+d34 1
+a34 1
+[dir] = 'display'                        ; Output directory
+d36 1
+a36 1
+[disp] = 'disp_{**[iter]}_{***[grp]}'    ; Output image file name template
+d49 1
+a49 2
+FR L                                ; Create output file names
+[out][dir]/[disp]
+d70 1
+a70 1
+      IF ([exists].NE.1) GOTO EXIT  ; Quit inner loop if iteration not found
+d117 1
+a117 1
+      UD N, [npr]                   ; Get number of projections in this group
+d122 4
+a125 1
+      DO [k]=1,[npr]                ; Loop over projections in the group
+a126 3
+         UD IC [k] ,[a],[b],[c]     ; Doc file with  angles
+         [angles]
+   
+d169 1
+a169 1
+     echo "  Iteration: {**[iter]}, Group: {***[grp]} Images: {*****[npr]} Lower hemisphere: {*****[rit]}"
+@
+
+
+1.8
+log
+@FR L on [out] moved out of loop
+@
+text
+@d16 1
+a16 1
+; MASTER COPY: /net/bali/usr1/spider/docs/techs/recon/newprogs/
+d22 2
+a23 2
+x28 = 1       ; First defocus group
+x29 = 1       ; Last defocus group (-1 = do all groups)
+d25 2
+a26 2
+x21 = 1       ; First iteration
+x22 = -1      ; Last iteration (-1 = do all iterations) 
+d30 1
+a30 2
+FR G
+[angles]final/align_{**x76}_{***x20}   ; Expects psi,theta,phi in register 1,2,3
+d34 1
+a34 2
+FR G
+[dir]display                           ; Output directory
+d36 1
+a36 2
+FR G
+[disp]disp_{**x76}_{***x20}            ; Output image file name template
+d40 5
+a44 6
+x72 = 2                             ; Radius of the small circles in plot
+x73 = 607                           ; Single image size
+x74 = x73 - 2                       ; Single image size - 1 pixel border
+x71 = 303                           ; Plot radius
+x70 = x71 - 1                       ; Plot radius - 1
+x75 = 2 * x73                       ; Double frame size
+d53 1
+a53 1
+IF (x29.EQ.-1) x29 = 1000           ; Do all defocus groups
+d55 1
+a55 1
+DO LB13 x20 = x28,x29               ; Loop over defocus groups
+d57 1
+a57 1
+   x76 = x21                        ; first iteration number
+d59 1
+a59 1
+   IQ FI x27                        ; see if passed last defocus group
+d62 1
+a62 1
+   IF (x27.NE.1) GOTO LB14          ; quit loop if def group not found
+d64 1
+a64 1
+   IF (x22.EQ.-1) x22 = 1000        ; do all iterations
+d66 1
+a66 1
+   DO LB12 x76 = x21,x22            ; Loop over refinement iterations
+d68 1
+a68 1
+      IQ FI x27                     ; see if passed last iteration number
+d71 1
+a71 1
+      IF (x27.NE.1) GOTO LB13       ; quit inner loop if iteration not found
+d75 1
+a75 1
+      (x75,x73)                     ; Dual frame size
+d82 1
+a82 1
+      (x71,x71)
+d86 1
+a86 1
+      x11 = x71 + x73
+d90 1
+a90 1
+      (x11,x71)
+d94 1
+a94 1
+      PT                             ; Draw axes lines on left frame
+d97 2
+a98 2
+      (1,x71)
+      (x74,x71)
+d101 2
+a102 2
+      (x71,1)
+      (x71,x74)
+d105 2
+a106 2
+      x11 = x71 + x73
+      x12 = x74 + x73
+d110 2
+a111 2
+      (1,x71)
+      (x12,x71)
+d114 2
+a115 2
+      (x11,1)
+      (x11,x74)
+d118 1
+a118 1
+      UD N, x50                     ; Get number of projections in this group
+d121 1
+a121 1
+      x14 = 0                       ; Projections on right frame hemisphere
+d123 1
+a123 1
+      DO LB1 x91=1,x50              ; Loop over projections in the group
+d125 1
+a125 1
+         UD IC x91 ,x51,x52,x53     ; Doc file with  angles
+d128 7
+a134 7
+         x13 = 0
+         IF (x52 .GT. 90.0) THEN    ; Lower hemisphere projection
+            x52 = 180.0 - x52
+
+            IF (x53 .GT. 360.0) x53 = x53 - 360.0
+            x13 = x73               ; Right frame offset
+            x14 = x14 + 1           ; Projections on right frame hemisphere
+d137 8
+a144 8
+         x61 = x52/90
+         x61 = x61*300
+         x81 = cos(x53)
+         x82 = sin(x53)
+         x81 = x81*x61
+         x82 = x82*x61
+         x81 = x81+x71+x13          ; Location plus frame offset
+         x82 = x82+x71
+d149 2
+a150 2
+         x81,x82                    ; Center coordinates
+         x72                        ; Radius
+d152 1
+a152 1
+      LB1
+d170 1
+a170 1
+     echo "  Iteration: {**x76}, Group: {***x20} Images: {*****x50} Lower hemisphere: {*****x14}"
+d172 2
+a173 4
+   LB12
+LB13
+
+LB14
+@
+
+
+1.7
+log
+@By default, now it does all iterations for specified defocus groups. Removed order_select_sort, since this did not cause desired defocus groups to be processed.
+@
+text
+@d53 4
+a76 3
+      FR L                          ; Create output file names
+      [out][dir]/[disp]
+
+a134 1
+            ;;x53 = x53 + 180.0
+@
+
+
+1.6
+log
+@'image is twice as big  & display dir'
+@
+text
+@d12 3
+a14 2
+;          Loops over specified refinement iterations, making views for the
+;          defocus groups listed in the defocus group selection file.
+d22 2
+a23 2
+x21 = 1                               ; Starting iteration
+x22 = 1                               ; Last iteration
+d25 3
+d31 1
+a31 4
+[angles]final/align_{**x76}_{***x77}   ; Expects psi,theta,phi in register 1,2,3
+
+FR G
+[def_group_sel]input/order_select_sort ; Defocus group selection file
+d53 5
+a57 2
+UD N x29                            ; Get number of defocus groups
+[def_group_sel]
+d59 2
+a60 1
+DO LB13 x20 = 1,x29                 ; Loop over defocus groups
+d62 1
+d64 1
+a64 2
+   UD S x20 ,x77                    ; Get defocus group number from list  
+   [def_group_sel]
+d68 5
+d172 1
+d174 1
+a174 1
+     echo "  Iteration: {**x76}, Group: {***x77} Images: {*****x50} Lower hemisphere: {*****x14}"
+d178 2
+@
+
+
+1.5
+log
+@double hemisphere coverage now (now mirrored coverage)
+@
+text
+@d3 1
+a3 1
+; SOURCE:  angdisp.spi                 Added lower hemisphere Feb 2005 al
+a25 2
+;;FR G
+;;[angles]final/align_{**x76}_{***x77}   ; Expects psi,theta,phi in register 1,2,3
+d35 1
+a35 1
+[dir]displayjnk                        ; Output directory
+d68 1
+a68 1
+      (x75,x75)                     ; Dual frame size
+@
+
+
+1.4
+log
+@looks for align files in final directory
+@
+text
+@d1 1
+a1 1
+; <html><head><title>Makes view of angular data output from Refinement</title></head><body><pre>
+d3 11
+a13 1
+; angdisp.spi
+a14 2
+; Purpose: Makes view of angular data output from Refinement.
+;
+d19 1
+a19 1
+; For a given defocus group, make maps for each refinement iteration
+d21 2
+a22 2
+x18 = 1   ; start defocus group
+x19 = 3   ; end defocus group
+d24 1
+a24 2
+x21 = 1   ; start iteration
+x22 = 7   ; last iteration
+d26 4
+a29 1
+; <b> ----------- Input files ---------------------------------------
+d32 1
+a32 1
+[angles]final/align_{**x23}_{***x20}  ; expects psi,theta,phi in columns 1,2,3
+d37 1
+a37 1
+[dir]display       ; output directory
+d40 1
+a40 1
+[disp]disp_{**x23}_{***x20}          ; output image
+d44 8
+a51 1
+VM                          ; Make output directory
+d54 2
+a55 1
+; loop over defocus groups
+d57 1
+a57 1
+DO LB13 x20 = x18, x19
+a58 1
+; loop over refinement iterations
+d60 2
+a61 1
+DO LB12 x23 = x21,x22      
+d63 52
+a114 28
+FR L
+[out][dir]/[disp]
+
+BL     ; create a blank image
+_1
+(607,607)
+N
+(0.0)
+
+PT     ; Draw the large circles
+_1
+CL
+(303,303)
+(302)
+n
+
+PT     ; Draw lines
+_1
+L
+(1,303)
+(605,303)
+Y
+L
+(303,1)
+(303,605)
+N
+
+; '''''''''''''''''''''''''''''''''''''''''''''''''''''
+d116 1
+a116 2
+UD N, x50
+[angles]
+d118 1
+a118 1
+DO LB1 x91=1,x50
+d120 21
+a140 2
+   UD IC,x91,x51,x52,x53      ; doc file with  angles
+   [angles]
+d142 21
+a162 3
+   IF(x52.le.90.0) GOTO LB2
+   x52=180.0-x52
+   x53=x53+180.0
+d164 2
+a165 2
+   IF(x53.lt.360.0) GOTO LB2
+   x53=x53-360.0
+d167 2
+a168 19
+   LB2
+
+   x61=x52/90
+   x61=x61*300
+   x81=cos(x53)
+   x82=sin(x53)
+   x81=x81*x61
+   x82=x82*x61
+   x81=x81+303
+   x82=x82+303
+
+   x72 = 2  ; radius of the small circles
+
+   PT
+   _1
+   CL
+   x81,x82
+   x72
+   N
+d170 1
+a170 24
+   LB1
+
+   UD ICE
+   [angles]
+
+   FS
+   _1
+
+   NEG
+   _1
+   _2
+
+   CP
+   _2
+   [out]    ; the output file
+
+  VM
+  echo iteration {**x23}, defocus group {***x20}
+
+LB7
+
+LB12
+LB13
+EN D
+@
+
+
+1.3
+log
+@added loop over iterations
+@
+text
+@d22 1
+a22 1
+[angles]align_{**x23}_{***x20}     ; expects psi,theta,phi in columns 1,2,3
+@
+
+
+1.2
+log
+@cosmetic
+@
+text
+@d3 1
+a3 1
+; angdisp.bat
+d11 8
+d22 1
+a22 1
+[angles]angles001     ; expects psi,theta,phi in columns 1,2,3
+d27 4
+a30 1
+[out]disp001          ; output image
+d34 14
+d111 3
+d125 3
+d130 3
+a132 1
+EN 
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d1 12
+d14 3
+a16 1
+<angles>angles001     ; expects psi,theta,phi in colums 1,2,3
+d19 1
+a19 1
+<out>disp001       ; output image
+d21 1
+d29 1
+a29 1
+PT     ; draw the large circles
+d36 1
+a36 1
+PT     ; draw lines
+d50 1
+a50 1
+<angles>
+d54 42
+a95 42
+UD IC,x91,x51,x52,x53      ; doc file with  angles
+<angles>
+
+IF(x52.le.90.0) GOTO LB2
+x52=180.0-x52
+x53=x53+180.0
+
+IF(x53.lt.360.0) GOTO LB2
+x53=x53-360.0
+
+LB2
+
+x61=x52/90
+x61=x61*300
+x81=cos(x53)
+x82=sin(x53)
+x81=x81*x61
+x82=x82*x61
+x81=x81+303
+x82=x82+303
+
+x72 = 2  ; radius of the small circles
+
+PT
+_1
+CL
+x81,x82
+x72
+N
+
+LB1
+
+FS
+_1
+
+NEG
+_1
+_2
+
+CP
+_2
+<out>    ; the output file
+d99 2
+a100 1
+EN D
+@

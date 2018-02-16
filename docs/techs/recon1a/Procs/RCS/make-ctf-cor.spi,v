@@ -1,0 +1,1156 @@
+head	1.13;
+access;
+symbols
+	Pre_gold:1.10;
+locks;
+comment	@# @;
+
+
+1.13
+date	2016.06.30.17.30.38;	author leith;	state Exp;
+branches;
+next	1.12;
+
+1.12
+date	2016.06.30.14.49.40;	author leith;	state Exp;
+branches;
+next	1.11;
+
+1.11
+date	2016.06.30.14.35.39;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2015.11.30.18.16.33;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2015.11.18.19.28.00;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2015.10.22.14.13.21;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2015.03.03.14.58.21;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2013.12.13.16.32.21;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2013.11.22.15.34.50;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2013.11.20.19.09.22;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2013.11.20.16.21.50;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2013.11.08.19.26.38;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2012.05.23.02.21.22;	author tapu;	state Exp;
+branches;
+next	;
+
+
+desc
+@new file
+@
+
+
+1.13
+log
+@*** empty log message ***
+@
+text
+@ ; <html><head><title>Generates CTF correction profiles and files for micrographs</title></head><body><pre>
+ ;
+ ; PURPOSE:  Generates CTF correction profiles and files for micrographs based on defocus, etc.
+ ;
+ ; SOURCE:   spider/techs/recon1/Procs/make-ctf-cor.spi
+ ;
+ ; USAGE:    clean ; spider spi/dat @@make-ctf-cor
+
+ ; --------------- Parameters ---------------
+
+ [wantplots-yn]   = 1         ; Want doc files for plotting CTF's? (0 == No)
+
+ [viewplot-yn]    = 1         ; Open Gnuplot automatically?        (0 == No)
+
+ [mic2plot]       = -1        ; Micrograph # to plot (<= 0 for highest defocus)
+
+ [progress]       = 1         ; Prints progress message to screen every Nth micrograph
+
+ ; ----------------- Inputs -----------------
+
+ [parameter_doc]  = '../params'                  ; Parameter doc file                (one)
+
+ [defocus_doc]    = 'defocus'                    ; Defocus doc file lists defocus    (one)
+
+ [calc_power]     = 'power/roo_doc_****'         ; 1D calculated power spectrum      (one/micrograph)
+                                                 ; Only need if plotting             (one/micrograph)
+
+ ; ----------------- Outputs -----------------
+
+ [ctf_dir]        = 'power'                      ; Output directory                  (one)
+
+ [ctf_cor]        = '[ctf_dir]/flipctf_****'     ; Phase-flipped CTF correction file (one/micrograph)
+
+ [ctf_cor_doc]    = '[ctf_dir]/flipctf_doc_****' ; Phase-flipped CTF doc file        (one/micrograph, if wantplots)
+
+ [gnuplot_script] = 'viewtrap.gnu'               ; Gnuplot script                    (one, if wantplots)
+
+ ; ------------- END BATCH HEADER -------------
+
+ ; Set temporary filenames
+ [temp_defocus_renumbered] = 'tmpdocdefocus-renum'
+ [temp_defocus_sorted]     = 'tmpdocdefocus-sort'
+ [temp_ctf_nohead]         = 'tmpdocctf-nohead'
+
+ ; Get parameters
+ UD IC  5,[sp_pixsiz]
+   [parameter_doc]
+ UD IC  7,[sp_sph_abb]
+   [parameter_doc]
+ UD IC  8,[sp_sourcesiz]       
+   [parameter_doc]
+ UD IC  9,[sp_def_spread]
+   [parameter_doc]
+ UD IC 10,[sp_astig]
+   [parameter_doc]
+ UD IC 11,[sp_az_astig]
+   [parameter_doc]
+ UD IC 12,[sp_acr]
+   [parameter_doc]
+ UD IC 13,[sp_geh]
+   [parameter_doc]
+ UD IC 14,[sp_lambda]
+   [parameter_doc]
+ UD IC 15,[sp_max_spfreq]
+   [parameter_doc]
+ UD IC 17,[sp_winsiz]
+   [parameter_doc]
+ UD ICE                                  ; Close document
+   [parameter_doc]
+
+ SYS                                     ; Create output directory
+   mkdir -p [ctf_dir]
+
+ SYS 
+   echo " Generating CTF correction files" ;  echo ' '
+
+ DOC REN                                 ; Renumber in case keys are not-consecutive
+   [defocus_doc]                         ; Lists defocus for micrographs  (input)
+   [temp_defocus_renumbered]             ; Renumbered: [defocus_doc]      (output) 
+
+ ; Get number of micrographs
+ UD N [num-mics]                         ; Get number
+   [temp_defocus_renumbered]             ; Renumbered: [defocus_doc]      (input)
+
+ ; Loop through micrographs
+ DO [mic-key] = 1,[num-mics]
+    ; Get micrograph#, defocus value
+    UD IC [mic-key],[mic-num],[defocus-angst]
+      [temp_defocus_renumbered]   ; Renumbered: [defocus_doc]      (input)
+
+    IF ( INT([mic-key]/[progress]) == [mic-key]/[progress] ) then
+        SYS 
+          echo " Processing micrograph: {%I4%[mic-num]} ({%I4%[mic-key]}th out of {%I4%[num-mics]})"
+    ENDIF
+
+    ; Delete old files
+    DE
+      [ctf_cor][mic-num]
+    DE
+      [ctf_cor_doc][mic-num]
+    DE
+      [ctf_cor][mic-num]
+
+    ; Generate phase flipping CTF file for this micrograph
+    TF CT                                ; Generate phase flipping transfer function
+      [ctf_cor][mic-num]                 ; CTF correction file           (output)
+      [sp_sph_abb]                       ; Spherical abberation (MM)
+      [defocus-angst],[sp_lambda]        ; Defocus(A), Lambda(A)
+      [sp_winsiz], [sp_winsiz]           ; Number of spatial freq. points
+      [sp_max_spfreq]                    ; Maximum spatial frequency(1/A)
+      0,[sp_def_spread]                  ; Source size(unused), Defocus spread
+      [sp_astig], [sp_az_astig]          ; Astigmatism(A), Astigmatism azimuth(DEG)
+      [sp_acr]                           ; ACR  
+      -1                                 ; Sign
+
+    IF ([wantplots-yn] == 0) CYCLE       ; Skip plot file creation
+
+    ; Generate phase flipping CTF doc file for this micrograph
+    ; For plot only.  Do not use with 'FD' for phase flipping 
+    TF LIS                               ; Generate straight & flipped CTF profiles
+      [ctf_cor_doc][mic-num]             ; CTF doc file                  (output)
+      [sp_sph_abb]                       ; Spherical abberation (MM)
+      [defocus-angst], [sp_lambda]       ; Defocus(A), Lambda(A)
+      [sp_winsiz]                        ; Number of spatial freq. points
+      [sp_pixsiz]                        ; Pixel size
+      0, [sp_def_spread]                 ; Source size as in 'TF CT', Defocus spread
+      [sp_acr], 0                        ; ACR, Gaussian env halfwidth as used by 'TF CT' 
+
+ ENDDO                                   ; End micrograph-loop
+
+ IF ([wantplots-yn] == 0) THEN           ; Skip plot file creation
+    RE
+ ENDIF
+
+ ; Sort defocus docs file columns
+ DOC SORT                                ; Sort 
+   [defocus_doc]                         ; Defocus doc file            (input)
+   [temp_defocus_sorted]                 ; Sorted defocus doc file     (output)
+   2                                     ; Column # to sort: defocus
+   Y                                     ; Renumber?
+
+ ; Get highest defocus if micrograph # not specified
+ IF ( [mic2plot] <= 0 ) THEN
+    UD [num-mics], [mic2plot]
+      [temp_defocus_sorted]
+    UD E
+ ENDIF
+
+ ; Find scaling constant for graphing power spectrum
+ DOC STAT [nval],[min],[max] 
+   [calc_power][mic2plot]
+   1                                     ; Column 
+
+ [maxstr] = ' {%f9.4%[max]}'                ; Scaling for power spectrum
+ [constr] = '(\00443 / [maxstr])'           ; Scaling for power spectrum
+
+ !sys
+ !  echo " Max: {%f9.3%[max]}   constr: [constr] "
+
+ SYS 
+   echo ; echo " Generating Gnuplot script for micrograph: {%I0%[mic2plot]}" 
+
+ ; Clean up
+ DE   
+   [temp_defocus_sorted]
+ SYS 
+   rm -f [gnuplot_script] [temp_ctf_nohead]
+
+ ; Remove header comments of doc file
+ SYS                                       
+   tail +10 [ctf_cor_doc][mic2plot].$DATEXT > [temp_ctf_nohead] 
+
+ SYS 
+   echo 'set xzeroaxis' > [gnuplot_script]
+ SYS 
+   echo 'set xlabel "Resolution (1/Pixels)"'  >> [gnuplot_script]
+ SYS 
+   echo 'plot  \' >> [gnuplot_script]
+  
+ SYS 
+   echo -ne '"[calc_power][mic2plot].$DATEXT"  using  5:[constr] ' >> [gnuplot_script]  
+ SYS 
+   echo 'title "[calc_power][mic2plot].$DATEXT" with lines, \'     >> [gnuplot_script] 
+
+ SYS 
+   echo '"[temp_ctf_nohead]" using  3:6 title "-Straight CTF" with lines, \' >> [gnuplot_script]
+ SYS 
+   echo '"[temp_ctf_nohead]" using  3:7 title "Flipped CTF"  with lines, \' >> [gnuplot_script]
+ SYS 
+   echo '"[temp_ctf_nohead]" using  3:8 title "Trapped CTF"  with lines'    >> [gnuplot_script]
+
+ ; If requested, open Gnuplot
+ IF ( [viewplot-yn] .NE. 0 ) THEN
+    SYS 
+      echo " Gnuplot usage: gnuplot -persist [gnuplot_script]" ; echo
+    SYS 
+      gnuplot -persist [gnuplot_script]
+ ELSE
+    SYS 
+      echo ; echo " gnuplot usage: load '[gnuplot_script]'" ; echo
+ ENDIF
+
+ EN
+
+ ; Modified 2016-06-29
+ ;     2016-06-29 (agl) -- Fixed plot
+ ;     2015-11-16 (agl) -- Use operation 'TF CT' for phase flipping!!
+ ;     2013-10-16 (agl) -- Modernized syntax, changed filenames, cosmetic
+ ;     2012-05-09 (trs) -- Optionally spawns gnuplot, plotting by default highest-defocus micrograph
+ ;     2004-02-24 (trs) -- Added padding factor to allow for oversampled FT's
+ ; </body></pre></html>
+@
+
+
+1.12
+log
+@*** empty log message ***
+@
+text
+@d34 1
+a34 1
+ [ctf_cor_doc]    = '[ctf_dir]/flipctf_doc****'  ; Phase-flipped CTF doc file        (one/micrograph, if wantplots)
+@
+
+
+1.11
+log
+@*** empty log message ***
+@
+text
+@d23 1
+a23 1
+ [defocus_doc]    = 'defocus'                    ; Defocus doc file lists defocus    (one/micrograph)
+@
+
+
+1.10
+log
+@added Source size(unused) Gaussian env halfwidth defaults for 'TF CT' use
+@
+text
+@d43 1
+d116 1
+a116 1
+    IF (want_plots == 0) CYCLE           ; Skip plot file creation
+d131 1
+a131 1
+ IF (want_plots == 0) THEN               ; Skip plot file creation
+d135 1
+a135 1
+ ; Sort defocus docs
+d149 11
+d167 5
+a171 1
+   rm -f [gnuplot_script]
+d176 4
+a179 1
+   echo 'set xlabel "Resolution, Angstroms^-1"'     >> [gnuplot_script]
+d181 1
+a181 1
+   echo 'plot [0:{%f6.4%[sp_max_spfreq]}][-1.1:1.75] \' >> [gnuplot_script]
+d183 2
+a184 1
+   echo '"[calc_power][mic2plot].$DATEXT"      using  5:3 title "[calc_power][mic2plot].$DATEXT" with lines, \' >> [gnuplot_script]
+d186 1
+a186 1
+   echo '"[ctf_cor_doc][mic2plot].$DATEXT" using  5:5 title "Straight CTF" with lines, \' >> [gnuplot_script]
+d188 1
+a188 1
+   echo '"[ctf_cor_doc][mic2plot].$DATEXT" using  5:6 title "Flipped CTF"  with lines, \' >> [gnuplot_script]
+d190 1
+a190 1
+   echo '"[ctf_cor_doc][mic2plot].$DATEXT" using  5:7 title "Trapped CTF"  with lines'    >> [gnuplot_script]
+d205 2
+a206 1
+ ; Modified 2015-11-16
+@
+
+
+1.9
+log
+@ctf correction using 'TF CT'
+@
+text
+@d49 1
+a49 1
+ UD IC  8,[sp_source_siz]       
+d51 1
+a51 1
+ UD IC  9,[sp_defocus_spread]
+d108 1
+a108 1
+      [sp_winsiz],[sp_winsiz]            ; Number of spatial freq. points
+d110 3
+a112 3
+      [sp_source_siz],[sp_def_spread]    ; Source size(1/A), Defocus spread
+      [sp_astig],0,[sp_az_astig]         ; Astigmatism(A), Astigmatism azimuth(DEG)
+      [sp_acr],[sp_geh]                  ; ACR, Gaussian env halfwidth 
+d119 1
+a119 1
+    TF L FLIP                            ; Generate straight & flipped CTF profiles
+d122 1
+a122 1
+      [defocus-angst],[sp_lambda]        ; Defocus(A), Lambda(A)
+a123 3
+      [sp_max_spfreq]                    ; Maximum spatial frequency(1/A)
+      [sp_sourcesiz],[sp_defocus_spread] ; Source size(1/A), Defocus spread
+      [sp_acr],[sp_geh]                  ; ACR, Gaussian env halfwidth
+d125 2
+d186 1
+a186 2
+ ;     2015-10-16 (agl) -- Use operation 'TF CT' for phase flipping!!
+ ;     2015-10-16 (agl) -- Use new operation 'TF L FLIP'
+@
+
+
+1.8
+log
+@Use new operation 'TF L FLIP'
+@
+text
+@d1 1
+a1 1
+ ; <html><head><title>Generates CTF correction profiles for micrographs</title></head><body><pre>
+d3 1
+a3 1
+ ; PURPOSE:  Generates CTF correction profiles for micrographs
+d11 1
+a11 1
+ [envelope-yn]     = 0      ; Use envelope function? (0==no, 1==get source size from parameter file)
+d13 1
+a13 1
+ [padding-factor]  = 2      ; Padding factor (e.g., 2 pads into double sized box)
+d15 1
+a15 1
+ [viewplot-yn]     = 1      ; Open Gnuplot automatically? (0 == No)
+d17 1
+a17 3
+ [mic2plot]        = -1     ; Micrograph # to plot (<= 0 for highest defocus)
+
+ [progress]        = 1      ; Prints progress message to screen every Nth micrograph
+d21 1
+a21 1
+ [parameter_doc]    = '../params'                  ; Parameter doc file                   (one)
+d23 1
+a23 1
+ [defocus_doc]      = 'defocus'                    ; Defocus doc file lists defocus       (one/micrograph)
+d25 2
+a26 1
+ [calc_power]       = 'power/roo_doc_****'         ; 1D calculated power spectrum         (one/micrograph)
+d30 3
+a32 1
+ [ctf_dir]          = 'power'                      ; Output directory                     (one)
+d34 1
+a34 1
+ [flipped_ctf_doc]  = '[ctf_dir]/flipctf_****'     ; Phase-flipped CTF profile doc file   (one/micrograph)
+d36 1
+a36 1
+ [gnuplot_script]   = 'viewtrap.gnu'               ; Gnuplot script                         (one)
+d45 3
+a47 1
+ UD IC 5,[sp_pixsiz]
+d49 1
+a49 1
+ UD IC 7,[sp_sph_abb]
+d51 1
+a51 1
+ UD IC 8,[sp_sourcesiz]                         ; Might be overridden below
+d53 3
+a55 1
+ UD IC 9,[sp_defocus_spread]
+d59 1
+a59 1
+ UD IC 13,[sp_env_halfwidth]
+d67 1
+a67 1
+ UD ICE        ; Close document
+d70 1
+a70 6
+ ; Check whether to use envelope function
+ IF ( [envelope-yn] == 0 ) [sp_sourcesiz] = 0
+
+ [padded-dim] = [sp_winsiz]*[padding-factor]  ; For filtering, we'll pad into a larger box
+
+ SYS 
+d74 1
+a74 1
+   echo " Generating CTF profiles" ;  echo ' '
+d76 3
+a78 3
+ DOC REN                         ; Renumber in case keys are not-consecutive
+   [defocus_doc]                 ; Lists defocus for micrographs  (input)
+   [temp_defocus_renumbered]     ; Renumbered: [defocus_doc]      (output) 
+d81 2
+a82 2
+ UD N [num-mics]                 ; Get number
+   [temp_defocus_renumbered]     ; Renumbered: [defocus_doc]      (input)
+d97 5
+a101 1
+      [flipped_ctf_doc][mic-num]
+d103 24
+a126 8
+    ; Generate straight and flipped CTF doc file
+    TF L FLIP
+      [sp_sph_abb]
+      [defocus-angst],[sp_lambda]
+      [padded-dim]
+      [sp_max_spfreq]
+      [sp_sourcesiz],[sp_defocus_spread]
+      [sp_acr],[sp_env_halfwidth]
+a127 2
+      S                                  ; Straight CTF 
+      [flipped_ctf_doc][mic-num]
+d131 3
+a133 1
+ ; Generate Gnuplot script
+d136 5
+a140 5
+ DOC SORT
+   [defocus_doc]
+   [temp_defocus_sorted]
+   2                                      ; Column# to sort: defocus
+   Y                                      ; Renumber?
+d165 1
+a165 1
+   echo '"[calc_power][mic2plot].$DATEXT"       using 5:3 title "[calc_power][mic2plot].$DATEXT" with lines, \' >> [gnuplot_script]
+d167 1
+a167 1
+   echo '"[flipped__ctf_doc][mic2plot].$DATEXT" using 5:3 title "straight CTF" with lines, \' >> [gnuplot_script]
+d169 1
+a169 1
+   echo '"[flipped_ctf_doc][mic2plot].$DATEXT"  using 5:3 title "flipped CTF" with lines, \'  >> [gnuplot_script]
+d171 1
+a171 1
+   echo '"[flipped__ctf_doc][mic2plot].$DATEXT" using 5:3 title "trapped CTF" with lines'     >> [gnuplot_script]
+d186 2
+a187 1
+ ; Modified 2015-10-16
+@
+
+
+1.7
+log
+@sp_ param names
+@
+text
+@d11 1
+a11 1
+ [envelope-yn]      = 0      ; Use envelope function? (0==no, 1==get source size from parameter file)
+d13 1
+a13 1
+ [padding-factor]   = 2      ; Padding factor (e.g., 2 pads into double sized box)
+d15 1
+a15 1
+ [viewplot-yn]      = 1      ; Open Gnuplot automatically? (0 == No)
+d17 1
+a17 1
+ [mic2plot]         = -1     ; Micrograph # to plot (<= 0 for highest defocus)
+d19 1
+a19 1
+ [progress]         = 1      ; Prints progress message to screen every Nth micrograph
+a34 6
+ [straight_ctf_doc] = '[ctf_dir]/straightctf_****' ; Straight CTF profile doc file        (one/micrograph)
+
+ [trapped_ctf_doc]  = '[ctf_dir]/trapctf_****'     ; Low-frequency preserving CTF profile doc file (one/micrograph)
+
+ [first_min_doc]    = '[ctf_dir]/firstmin'         ; First extrema to determine trap radius (one)
+
+a40 1
+ [temp_unlabeled_ctf_doc]  = 'tmpdocctf_unlabeled'
+d66 1
+a66 1
+ IF ([envelope-yn] == 0) [sp_sourcesiz] = 0
+a72 6
+ ; Prepare list of first minima
+ DE
+   [first_min_doc]
+ SD /     MICROGRAPH    DEFOCUS     FIRSTMIN,A  FIRST_ZERO,A
+   [first_min_doc]
+
+d87 1
+a87 1
+    UD IC [mic-key],[mic-num],[defocus-angs]
+d90 1
+a90 1
+    IF (int([mic-key]/[progress]).EQ.[mic-key]/[progress]) then
+d95 1
+a95 5
+    ; Clean old files
+    DE
+      [straight_ctf_doc][mic-num]
+    DE
+      [trapped_ctf_doc][mic-num]
+d99 2
+a100 2
+    ; Generate straight-CTF doc file
+    TF L
+d102 1
+a102 1
+      [defocus-angs],[sp_lambda]
+d107 3
+a109 105
+      S                                      ;  Straight CTF
+      [temp_unlabeled_ctf_doc]
+
+    ; Get number of Fourier bins
+    UD N [num-bins]
+      [temp_unlabeled_ctf_doc]               ; Doc file   (input)
+
+    ; Initialize first min., abs. min.
+    UD IC 1,[prev-ctf]
+      [temp_unlabeled_ctf_doc]               ; CTF     (input)
+
+    [first-min]        = 1                   ; Radius for first min.
+    [firstmin-radius]  = -1                  ; Initialize first-min. Radius
+    [firstzero-radius] = -1                  ; First-zero Radius
+
+    ; Loop through Fourier radii to find first minimum, first zero,
+    DO [radius-key6]=2,[num-bins]            ; Loop through Fourier radii -----
+        UD IC [radius-key6],[curr-ctf],[radius-px]
+          [temp_unlabeled_ctf_doc]                     ; Doc file (input)
+
+        ; Check for first local min
+        IF ([firstmin-radius] < 0) THEN
+            IF([curr-ctf] > [prev-ctf]) THEN
+                [first-min]       = [radius-key6]-1    ; Radius to end trap (used later)
+                [firstmin-radius] = [sp_pixsiz]/[radius-px]
+            ENDIF
+        ENDIF
+
+        ; Find first zero
+        IF ([firstzero-radius] < 0) THEN
+            ; look for when CTF crosses origin
+            IF([curr-ctf]*[prev-ctf] <= 0) [firstzero-radius] = [sp_pixsiz]/[radius-px]
+        ENDIF
+
+        [prev-ctf] = [curr-ctf]  ; New, previous CTF value==current CTF value
+
+    ENDDO                               ; End radius-loop
+
+    ; Write Radii (in Angstroms) to doc file
+    ; NOTE: it would be more accurate to interpolate, bi-linearly perhaps, 
+    ;       so these values will be on average 1/2 Fourier pixel off
+
+    SD [mic-key],[mic-num],[defocus-angs],[firstmin-radius],[firstzero-radius]
+      [first_min_doc]                   ; Doc file   (output)
+
+    ; Loop through Fourier radii
+    DO [radius-key7]=1,[num-bins]       ; Loop through Fourier radii --------
+
+        ; Get original values
+        UD IC [radius-key7],[ctf-value],[radius-px]
+          [temp_unlabeled_ctf_doc]      ; WAS [straight_ctf_doc]tmp   (input)
+
+        ; Flip sign
+        [trapped-ctf] = -[ctf-value]    ; For trapped CTF
+        [straght-ctf] = -[ctf-value]    ; For untrapped CTF
+
+        ; Trap for low resolution
+        IF ([radius-key7].LT.[first-min]) [trapped-ctf] = 1
+
+        [radius-angs] = [radius-px]/[sp_pixsiz]
+
+        ; Write to straight-CTF doc
+        SD [radius-key7],[straght-ctf],[radius-px],[radius-angs]
+          [straight_ctf_doc][mic-num]           ; Doc file   (output)
+
+        ; Write to trapped-CTF doc
+        SD [radius-key7],[trapped-ctf],[radius-px],[radius-angs],[straght-ctf]
+          [trapped_ctf_doc][mic-num]           ; Doc file   (output)
+
+        ; Write phase-corrected doc
+        IF ([straght-ctf] == 0) [flipped-ctf] = 0
+        IF ([straght-ctf].NE.0) [flipped-ctf] = ABS([straght-ctf])/[straght-ctf]
+
+        SD [radius-key7],[flipped-ctf],[radius-px],[radius-angs],[straght-ctf]
+          [flipped_ctf_doc][mic-num]           ; Doc file   (output)
+
+    ENDDO                                      ; End radius-loop
+
+    ; Close documents
+    SD /      TRANSFER      R,PX^-1      R,A**-1
+      [trapped_ctf_doc][mic-num]               ; Doc file   (output)
+    SD E
+      [trapped_ctf_doc][mic-num]               ; Doc file   (closed)
+    SD /     TRANSFER      R,PX^-1      R,A**-1
+      [flipped_ctf_doc][mic-num]               ; Doc file   (output)
+    SD E
+      [flipped_ctf_doc][mic-num]               ; Doc file   (closed)
+    SD /      TRANSFER      R,PX^-1      R,A**-1
+      [straight_ctf_doc][mic-num]              ; Doc file   (output)
+    SD E
+      [straight_ctf_doc][mic-num]              ; Doc file   (closed)
+    UD ICE
+      [temp_unlabeled_ctf_doc]  ;              ; Doc file   (closed)
+    DE
+      [temp_unlabeled_ctf_doc]  ;              ; Doc file   (deleted) 
+
+ ENDDO                           ; End micrograph-loop
+
+ ; Close docs
+ UD ICE
+   [temp_defocus_renumbered]
+ DE
+   [temp_defocus_renumbered]
+ SD E
+   [first_min_doc]
+d111 1
+d113 1
+a113 1
+ ; GENERATE GNUPLOT SCRIPT
+d115 1
+a115 1
+ ; Sort defocus doc
+d119 2
+a120 2
+   2                            ; Column# to sort: defocus
+   Y                            ; Renumber?
+d147 1
+a147 1
+   echo '"[straight_ctf_doc][mic2plot].$DATEXT" using 5:3 title "straight CTF" with lines, \' >> [gnuplot_script]
+d151 1
+a151 1
+   echo '"[trapped_ctf_doc][mic2plot].$DATEXT"  using 5:3 title "trapped CTF" with lines'     >> [gnuplot_script]
+d161 1
+a161 1
+      echo ; echo "gnuplot usage: load '[gnuplot_script]'" ; echo
+d166 3
+a168 2
+ ; Modified 2013-10-16
+ ;    2013-10-16 (agl) -- modernized syntax, changed filenames, cosmetic
+@
+
+
+1.6
+log
+@plot [0:{%f6.4%[max-spfreq]}][-1.1:1.75]
+@
+text
+@d51 1
+a51 1
+ UD IC 5,[pixel-size]
+d53 1
+a53 1
+ UD IC 7,[spher-aberration]
+d55 1
+a55 1
+ UD IC 8,[source-size]                         ; Might be overridden below
+d57 1
+a57 1
+ UD IC 9,[defocus-spread]
+d59 1
+a59 1
+ UD IC 12,[amp-contrast]
+d61 1
+a61 1
+ UD IC 13,[env-halfwidth]
+d63 1
+a63 1
+ UD IC 14,[wavelength-lambda]
+d65 1
+a65 1
+ UD IC 15,[max-spfreq]
+d67 1
+a67 1
+ UD IC 17,[img-dim]
+d73 1
+a73 1
+ IF ([envelope-yn] == 0) [source-size] = 0
+d75 1
+a75 1
+ [padded-dim] = [img-dim]*[padding-factor]  ; For filtering, we'll pad into a larger box
+d118 2
+a119 2
+      [spher-aberration]
+      [defocus-angs],[wavelength-lambda]
+d121 3
+a123 3
+      [max-spfreq]
+      [source-size],[defocus-spread]
+      [amp-contrast],[env-halfwidth]
+d148 1
+a148 1
+                [firstmin-radius] = [pixel-size]/[radius-px]
+d155 1
+a155 1
+            IF([curr-ctf]*[prev-ctf].LE.0) [firstzero-radius] = [pixel-size]/[radius-px]
+d183 1
+a183 1
+        [radius-angs] = [radius-px]/[pixel-size]
+d261 1
+a261 1
+   echo 'plot [0:{%f6.4%[max-spfreq]}][-1.1:1.75] \' >> [gnuplot_script]
+@
+
+
+1.5
+log
+@cosmetic
+@
+text
+@d261 1
+a261 1
+   echo 'plot [0:{%f6.4%[max-spfreq]}][-1.1:1.4] \' >> [gnuplot_script]
+@
+
+
+1.4
+log
+@*** empty log message ***
+@
+text
+@d23 1
+a23 1
+ [parameter_doc]    = '../params'                  ; Parameter doc file
+d25 1
+a25 1
+ [defocus_doc]      = 'defocus'                    ; Defocus doc file lists defocus for each micrograph
+d27 1
+a27 1
+ [calc_power]       = 'power/roo_doc_****'         ; 1D calculated power spectrum for each micrograph
+d31 1
+a31 1
+ [ctf_dir]          = 'power'                      ; Output directory
+d33 1
+a33 1
+ [flipped_ctf_doc]  = '[ctf_dir]/flipctf_****'     ; Phase-flipped CTF profile doc file
+d35 1
+a35 1
+ [straight_ctf_doc] = '[ctf_dir]/straightctf_****' ; Straight CTF profile doc file
+d37 1
+a37 1
+ [trapped_ctf_doc]  = '[ctf_dir]/trapctf_****'     ; Low-frequency preserving CTF profile doc file
+d39 1
+a39 1
+ [first_min_doc]    = '[ctf_dir]/firstmin'         ; First extrema used to determine trap radius
+d41 1
+a41 1
+ [gnuplot_script]   = 'viewtrap.gnu'               ; Gnuplot script
+@
+
+
+1.3
+log
+@cosmetic
+@
+text
+@d17 1
+a17 1
+ [mic2plot]         = -1     ; Micrograph# to plot (<= 0 for highest defocus)
+@
+
+
+1.2
+log
+@rewrite_syntax_filenames
+@
+text
+@d11 1
+a11 1
+ [envelope-yn]       = 0      ; Use envelope function? (0==no, 1==get source size from parameter file)
+d13 1
+a13 1
+ [padding-factor]    = 2      ; Padding factor (e.g., 2 pads into double sized box)
+d15 1
+a15 1
+ [viewplot-yn]       = 1      ; Open Gnuplot automatically? (0 == No)
+d17 1
+a17 1
+ [mic2plot]          = -1     ; Micrograph# to plot (<= 0 for highest defocus)
+d19 1
+a19 1
+ [progress]          = 1      ; Prints progress message to screen every Nth micrograph
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d1 150
+a150 1
+; GENERATES VARIOUS CTF PROFILES
+d152 5
+a156 147
+; --------------- Parameters ---------------
+
+[envelope-yn]       = 0      ; use envelope function? (0==no, 1==get source size from parameter doc)
+[padding-factor]    = 2      ; padding factor (e.g., 2-->130x130 image padded into 260x260 box)
+[viewplot-yn]       = 1      ; open Gnuplot automatically? (0 == no)
+[mic2plot]          = 700    ; micrograph# to plot (le.0 == highest defocus)
+[progress-interval] = 4      ; prints progress message to screen every Nth micrograph
+
+; ----------------- Inputs -----------------
+fr l
+[parameter_doc]../params                     ; parameter doc
+fr l
+[defocus_doc]../Power_Spectra/defocus        ; defocus value for each micrograph
+;       MICROGRAPH    DEFOCUS
+;          used        used
+fr l
+[calc_power]../Power_Spectra/power/roo****   ; 1D calculated power spectra
+
+; ----------------- Outputs -----------------
+fr l
+[ctf_dir]power                               ; output directory
+fr l
+[straight_ctf_doc][ctf_dir]/straightctf****  ; straight CTF profile
+;       TRANSFER      R,PX^-1      R,A**-1
+fr l
+[flipped_ctf_doc][ctf_dir]/flipctf****       ; phase-flipped CTF profile
+fr l
+[trapped_ctf_doc][ctf_dir]/trapctf****       ; CTF profile preserving low-frequency terms
+fr l
+[first_min_doc][ctf_dir]/firstmin            ; first extrema used to determine trap radius
+; (hopefully, if the trap is picked incorrectly, you'd see it here)
+;       MICROGRAPH    DEFOCUS     FIRSTMIN,A  FIRST_ZERO,A
+fr l
+[gnuplot_script]viewtrap.gnu                 ; Gnuplot script
+
+; ------------- END BATCH HEADER -------------
+
+; set temporary filenames
+fr l
+[temp_defocus_renumbered]tmpdocdefocus-renum
+fr l
+[temp_unlabeled_ctf_doc]tmpdocctf_unlabeled
+fr l
+[temp_defocus_sorted]tmpdocdefocus-sort
+
+; get parameters
+ud ic 5,[pixel-size]
+[parameter_doc]
+ud ic 7,[spher-aberration]
+[parameter_doc]
+ud ic 8,[source-size]   ; might be overridden below
+[parameter_doc]
+ud ic 9,[defocus-spread]
+[parameter_doc]
+ud ic 12,[amp-contrast]
+[parameter_doc]
+ud ic 13,[env-halfwidth]
+[parameter_doc]
+ud ic 14,[wavelength-lambda]
+[parameter_doc]
+ud ic 15,[max-spfreq]
+[parameter_doc]
+ud ic 17,[img-dim]
+[parameter_doc]
+ud ice        ; close document
+[parameter_doc]
+
+; check whether to use envelope function
+if([envelope-yn].eq.0) [source-size]=0
+
+[padded-dim]=[img-dim]*[padding-factor]  ; for filtering, we'll pad into a larger box
+
+vm
+echo "if(! -d [ctf_dir]) mkdir [ctf_dir]"|csh
+
+; prepare list of first minima
+de
+[first_min_doc]
+SD /     MICROGRAPH    DEFOCUS     FIRSTMIN,A  FIRST_ZERO,A
+[first_min_doc]
+
+vm
+echo "Generating CTF profiles" ; date ; echo
+
+doc ren
+[defocus_doc]
+[temp_defocus_renumbered]   ; WAS [defocus_doc]
+; (In case keys from mrcctf.spi are non-consecutive)
+
+; get number of micrographs
+ud n [num-mics]
+[temp_defocus_renumbered]   ; WAS [defocus_doc]  ; WAS [micrograph_list]
+
+; loop through micrographs
+do lb8 [mic-key] = 1,[num-mics]
+    ; get micrograph#, defocus value
+    ud ic [mic-key],[mic-num],[defocus-angs]
+    [temp_defocus_renumbered]   ; WAS [defocus_doc]
+
+    if (int([mic-key]/[progress-interval]).eq.[mic-key]/[progress-interval]) then
+        vm
+        echo "Working on micrograph #{****[mic-num]} ({****[mic-key]}th out of {****[num-mics]})"
+    endif
+
+    ; clean old files
+    de
+    [straight_ctf_doc][mic-num]
+    de
+    [trapped_ctf_doc][mic-num]
+    de
+    [flipped_ctf_doc][mic-num]
+
+    ; generate straight-CTF doc
+    tf l
+    [spher-aberration]
+    [defocus-angs],[wavelength-lambda]
+    [padded-dim]
+    [max-spfreq]
+    [source-size],[defocus-spread]
+    [amp-contrast],[env-halfwidth]
+    S        ; _S_traight CTF
+    [temp_unlabeled_ctf_doc]
+
+    ; get number of Fourier bins
+    ud n,[num-bins]
+    [temp_unlabeled_ctf_doc]
+
+    ; initialize first min., abs. min.
+    ud ic,1,[prev-ctf]
+    [temp_unlabeled_ctf_doc]
+
+    [first-min]=1          ; radius for first min.
+    [firstmin-radius]=-1   ; initialize first-min. Radius
+    [firstzero-radius]=-1  ; first-zero Radius
+
+    ; loop through Fourier radii to find first minimum, first zero,
+    do lb6 [radius-key6]=2,[num-bins]
+        ud ic,[radius-key6],[curr-ctf],[radius-px]
+        [temp_unlabeled_ctf_doc]
+
+        ; check for first local min
+        if([firstmin-radius].lt.0) then
+            if([curr-ctf].gt.[prev-ctf]) then
+                [first-min]=[radius-key6]-1    ; Radius to end trap (used later)
+                [firstmin-radius]=[pixel-size]/[radius-px]
+            endif
+        endif
+d158 1
+a158 5
+        ; find first zero
+        if([firstzero-radius].lt.0) then
+            ; look for when CTF crosses origin
+            if([curr-ctf]*[prev-ctf].le.0)[firstzero-radius]=[pixel-size]/[radius-px]
+        endif
+d160 1
+a160 3
+        [prev-ctf]=[curr-ctf]  ; new, previous CTF value==current CTF value
+    lb6
+    ; end radius-loop
+d162 1
+a162 1
+    ; write Radii (in Angstroms) to doc file
+a164 2
+    sd [mic-key],[mic-num],[defocus-angs],[firstmin-radius],[firstzero-radius]
+    [first_min_doc]
+d166 18
+a183 30
+    ; loop through Fourier radii
+    do lb7 [radius-key7]=1,[num-bins]
+        ; get original values
+        ud ic,[radius-key7],[ctf-value],[radius-px]
+        [temp_unlabeled_ctf_doc]  ; WAS [straight_ctf_doc]tmp
+
+        ; flip sign
+        [trapped-ctf]=-[ctf-value]  ; for trapped CTF
+        [straght-ctf]=-[ctf-value]  ; for untrapped CTF
+
+        ; trap for low resolution
+        if([radius-key7].lt.[first-min])[trapped-ctf]=1
+
+        [radius-angs]=[radius-px]/[pixel-size]
+
+        ; write to straight-CTF doc
+        sd [radius-key7],[straght-ctf],[radius-px],[radius-angs]
+        [straight_ctf_doc][mic-num]
+
+        ; write to trapped-CTF doc
+        sd [radius-key7],[trapped-ctf],[radius-px],[radius-angs],[straght-ctf]
+        [trapped_ctf_doc][mic-num]
+
+        ; write phase-corrected doc
+        if([straght-ctf].eq.0)[flipped-ctf]=0
+        if([straght-ctf].ne.0)[flipped-ctf]=abs([straght-ctf])/[straght-ctf]
+        sd [radius-key7],[flipped-ctf],[radius-px],[radius-angs],[straght-ctf]
+        [flipped_ctf_doc][mic-num]
+    lb7
+    ; end radius-loop
+d185 22
+a206 9
+    ; close documents
+    SD /     TRANSFER      R,PX^-1      R,A**-1
+    [trapped_ctf_doc][mic-num]
+    sd e
+    [trapped_ctf_doc][mic-num]
+    SD /     TRANSFER      R,PX^-1      R,A**-1
+    [flipped_ctf_doc][mic-num]
+    sd e
+    [flipped_ctf_doc][mic-num]
+d208 81
+a288 75
+    [straight_ctf_doc][mic-num]
+    sd e
+    [straight_ctf_doc][mic-num]
+    ud ice
+    [temp_unlabeled_ctf_doc]  ; WAS [straight_ctf_doc]tmp
+    de
+    [temp_unlabeled_ctf_doc]  ; WAS [straight_ctf_doc]tmp
+lb8
+; end micrograph-loop
+
+; close docs
+ud ice
+[temp_defocus_renumbered]
+de
+[temp_defocus_renumbered]
+sd e
+[first_min_doc]
+
+
+; GENERATE GNUPLOT SCRIPT
+
+; sort defocus doc
+doc sort
+[defocus_doc]
+[temp_defocus_sorted]
+(2)   ; column# to sort: defocus
+Y     ; renumber?
+
+; get highest defocus if micrograph# not specified
+if([mic2plot].le.0) then
+    ud [num-mics], [mic2plot]
+    [temp_defocus_sorted]
+    ud e
+endif
+
+vm
+echo ; echo "Generating Gnuplot script to plot micrograph {****[mic2plot]}" ; echo
+
+; clean up
+de   
+[temp_defocus_sorted]
+vm
+rm -f [gnuplot_script]
+
+vm
+echo 'set xzeroaxis' > [gnuplot_script]
+vm
+echo 'set xlabel "Resolution, Angstroms^-1"' >> [gnuplot_script]
+vm
+echo 'plot [0:{%f6.4%[max-spfreq]}][-1.1:1.4] \' >> [gnuplot_script]
+vm
+echo '"[calc_power][mic2plot].$DATEXT" using 5:3 title "[calc_power][mic2plot].$DATEXT" with lines, \' >> [gnuplot_script]
+vm
+echo '"[straight_ctf_doc][mic2plot].$DATEXT" using 5:3 title "straight CTF" with lines, \' >> [gnuplot_script]
+vm
+echo '"[flipped_ctf_doc][mic2plot].$DATEXT" using 5:3 title "flipped CTF" with lines, \' >> [gnuplot_script]
+vm
+echo '"[trapped_ctf_doc][mic2plot].$DATEXT" using 5:3 title "trapped CTF" with lines' >> [gnuplot_script]
+
+; if requested, open Gnuplot
+if([viewplot-yn].ne.0) then
+    vm
+    echo ; echo "gnuplot -persist [gnuplot_script]" ; echo
+    vm
+    gnuplot -persist [gnuplot_script]
+else
+    vm
+    echo ; echo "gnuplot usage: load '[gnuplot_script]'" ; echo
+endif
+
+en d
+
+; Modified 2012-05-10
+;     2012-05-09 (trs) -- now optionally spawns gnuplot, plotting by default highest-defocus micrograph
+;     2004-02-24 (trs) -- added padding factor to allow for oversampled FT's
+@

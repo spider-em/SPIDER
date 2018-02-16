@@ -1,0 +1,370 @@
+head	1.1;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+1.1
+date	2017.01.19.16.33.04;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@; COMPARE ALIGNMENT PARAMETERS FROM 3 OR MORE REFERENCES
+;
+; NOTE: Currently, symbolic links to Alignment/ directories must be created 
+;       for a loop-able format, in this case, following the "Inputs" section.
+
+; ----------------------- Parameters -----------------------
+
+[num-refs]      = 5  ; number of alignment directories (max: 9?)
+[progress-grps] = 4  ; print progress every Nth defocus group
+
+; ------------------------- Inputs -------------------------
+fr l
+[df_list]../Reconstruction/sel_group                       ; list of defocus groups
+fr l
+[align_dir]Aligndir                                        ; alignment-directory prefix (see VM M command below)
+fr l
+[align_doc]align_01_***                                    ; alignment doc template, in [align_dir]***
+fr l
+[group2mic_table]../Alignment/sel_particles_***         ; group-to-micrograph lookup table
+;        DF_SLICE     MICSLICE     DF_GROUP    MICROGRAPH
+;          used         used                      used
+fr l
+[mic2global_table]../Particles/coords/mic2global****    ; (optional) micrograph-to-global lookup table
+; KEY=MIC_SLICE /  COLUMN1=GLOBAL_PART 
+
+; SET UP SYMBOLIC LINES TO ALIGNMENT DIRECTORIES
+vm m
+ln -sf ../70S/Alignment    [align_dir]001 ;
+ln -sf ../30S/Alignment    [align_dir]002 ;
+ln -sf ../50S/Alignment    [align_dir]003 ;
+ln -sf ../dimer/Alignment  [align_dir]004;
+ln -sf ../trimer/Alignment [align_dir]005
+.
+
+; ------------------------ Outputs ------------------------
+fr l
+[df_dir]Bydf/df                                            ; output directory prefix for intermediate by-reference selection lists
+;                                                          ; directory can be deleted
+fr l
+[byref_align_doc]align-byref_01_***                        ; compared-alignment doc
+                                                           ; (reference-projection number is replaced by reference number)
+fr l
+[best_align_doc]align-bestprj_01_***                       ; compared-alignment doc
+                                                           ; (reference-projection to best reference is retained)
+fr l
+[by_ref_list]byref***                                      ; intermediate particle-list template, for each reference, in DF_DIR
+;        DF_SLICE      CC_ROT
+fr l
+[how_many]howmany-byref                                    ; particle-per-reference doc, in DF_DIR***
+fr l
+[recon_dir][align_dir]{***[ref-num]}/../Reconstruction     ; Reconstruction directory, corresponding to each Alignment directory
+fr l
+[df_particle_list][recon_dir]/comparedparticles_           ; particle-list prefix, for each defocus group and combined
+;       DF_SLICE
+fr l
+[summary_doc]summary-compare3plus                          ; summary doc file
+
+; -------------------- END BATCH HEADER --------------------
+
+; set temporary filenames
+fr l
+[temp_byref_align_doc_incore]tmp_byref_align_doc_incore
+fr l
+[temp_best_align_doc_incore]tmp_best_align_doc_incore
+fr l
+[temp_grp_compare]tmp_group_compare_incore
+
+de
+[summary_doc]
+SD /       REFNUM      NUMPARTS
+[summary_doc]
+
+; get #defocus-groups
+ud n [num-grps]
+[df_list]
+
+md
+vb off
+; (Reduces size of results file by ~1/2.)
+
+vm
+echo "Separating particles by reference for each defocus group"; date
+
+; loop through defocus-groups
+do lb71 [grp-num] = 1,[num-grps]
+    if (int([grp-num]/[progress-grps]).eq.[grp-num]/[progress-grps]) then
+        vm
+        echo "On group #{***[grp-num]} out of {***[num-grps]}"
+    endif
+
+    [ref-num] = 1  ; dummy register
+
+    ; get #particles in alignment doc
+    ud n [num-parts]
+    [align_dir]{***[ref-num]}/[align_doc][grp-num]
+
+    ; initialize in-core alignment docs
+    sd ic new
+    [temp_byref_align_doc_incore]
+    (15,[num-parts])  ; #columns, max.key
+    sd ic new
+    [temp_best_align_doc_incore]
+    (15,[num-parts])  ; #columns, max.key
+
+    ; loop through particles
+    do lb51 [part-num] = 1,[num-parts]
+        ; initialize maximum CCROT, directory# with maximum
+        [max-ccrot] = -999
+
+        ; loop through references
+        do lb61 [ref-num] = 1,[num-refs]
+            ; read alignment parameters
+            ud ic [part-num], x11,x12,x13,[ref-proj],[df-slice],x16,x17,x18,x19,x20,[ccrot],x22,x23,x24,[mirror-flag]
+            [align_dir]{***[ref-num]}/[align_doc][grp-num]
+
+            ; if CCROT greater than maximum, then update, in dummy alignment doc
+            if([ccrot].gt.[max-ccrot]) then
+                [max-ccrot] = [ccrot]
+
+                sd ic [part-num], x11,x12,x13,[ref-num],[df-slice],x16,x17,x18,x19,x20,[ccrot],x22,x23,x24,[mirror-flag]
+                [temp_byref_align_doc_incore]
+                ; (I'm going to create a fake ailgnment doc file and then run VO MQ to separate particles.)
+                ; (I think I need at least 11 registers for it to be recognized as an AP SH doc file.)
+
+                sd ic [part-num], x11,x12,x13,[ref-proj],[df-slice],x16,x17,x18,x19,x20,[ccrot],x22,x23,x24,[mirror-flag]
+                [temp_best_align_doc_incore]
+                ; (This doc file stores the best reference-projection.)
+            endif
+        lb61
+        ; end reference-loop
+    lb51
+    ; end particle-loop
+
+    ; loop through directories (to close in-core alignment docs)
+    do lb60 [ref-num] = 1,[num-refs]
+        ud ice
+        [align_dir]{***[ref-num]}/[align_doc][grp-num]
+    lb60
+    ; end directory-loop
+
+    sd ic copy
+    [temp_byref_align_doc_incore]
+    [byref_align_doc][grp-num]
+    sd ic e
+    [temp_byref_align_doc_incore]
+    sd ic copy
+    [temp_best_align_doc_incore]
+    [best_align_doc][grp-num]
+    sd ic e
+    [temp_best_align_doc_incore]
+
+    ; create directories if needed
+    vm
+    echo "if(! -d [df_dir]{***[grp-num]}) mkdir -p [df_dir]{***[grp-num]}"|csh
+
+    ; delete pre-existing files (VO MQ appends)
+    [ref-num] = 1
+    de a
+    [df_dir]{***[grp-num]}/[by_ref_list][ref-num]
+
+    ; separate by view
+    vo mq
+    (0)  ; CCROT threshold
+    [byref_align_doc][grp-num]
+    [num-refs]
+    [df_dir]{***[grp-num]}/[by_ref_list]
+    [df_dir]{***[grp-num]}/[how_many]
+lb71
+; end group-loop
+
+
+; WRITE SELECTION FILES TO RECONSTRUCTION/ DIRECTORY AND
+; (OPTIONALLY) ADD GLOBAL PARTICLE NUMBERS
+
+vm
+echo ; echo "Combining groups and (optionally) adding global particle numbers" ; date
+
+; initialize
+[particle-counter] = 0
+[checked-global] = 0
+
+; loop through references
+do lb62 [ref-num] = 1,[num-refs]
+    vm
+    echo "Working on reference #{*[ref-num]}"
+
+    vm
+    echo "if(! -d [recon_dir]) mkdir -p [recon_dir]"|csh
+
+    de
+    [recon_dir]/[df_particle_list]
+
+    ; loop through defocus-groups
+    do lb72 [grp-num] = 1,[num-grps]
+        ; create directory if needed
+;        vm
+;        echo "if(! -d [recon_df_dir]{***[grp-num]}) mkdir -p [recon_df_dir]{***[grp-num]}"|csh
+
+        ; get #particles under reference in defocus group
+        ud n [num-parts]
+        [df_dir]{***[grp-num]}/[by_ref_list][ref-num]
+
+        ; initialize in-core doc file
+        sd ic new
+        [temp_grp_compare]
+        (3,[num-parts])  ; #columns, max.key
+
+        ; loop through particles
+        do lb52 [part-key] = 1,[num-parts]
+            ; read group-slice#, CCROT
+            ud ic [part-key], [df-slice],[ccrot]
+            [df_dir]{***[grp-num]}/[by_ref_list][ref-num]
+
+            ; if hasn't been checked already, check if group-to-global doc exists
+            if([checked-global].eq.0) then
+                ; read micrograph#
+                ud [df-slice], x99,x99,x99,[mic-num]
+                [group2mic_table][grp-num]
+                ud e
+
+;;                iq fi [global-exists]
+;;                [dfslice2global_table][grp-num]
+
+                iq fi [global-exists]
+                [mic2global_table][mic-num]
+
+                if([global-exists].eq.1) then
+                    vm
+                    echo "Will look up global particle numbers"
+
+                    [prev-mic] = -999
+                else
+                    vm
+                    echo "Will not look up global particle numbers"
+                    [one] = 1  ; dummy register
+                endif
+
+                [checked-global] = 1
+            endif
+
+            if([global-exists].eq.1) then
+;;                ; read global-particle#
+;;                ud ic [df-slice], [global-part]
+;;                [dfslice2global_table][grp-num]
+
+                ; read micrograph info
+                ud ic [df-slice], x99,[mic-slice],x99,[mic-num]
+                [group2mic_table][grp-num]
+
+                ; if different from previous micrograph, then close in-core file
+                if([mic-num].ne.[prev-mic]) then
+                    ud ice
+                    [mic2global_table][prev-mic]
+
+                    ; update previous micrograph#
+                    [prev-mic] = [mic-num]
+                endif
+
+                ; read global#
+                ud ic [mic-slice],[global-part]
+                [mic2global_table][mic-num]
+
+                ; write to in-core doc file, in goodparticles format
+                sd ic [part-key], [df-slice],[global-part],[ccrot]
+                [temp_grp_compare]
+            else
+                ; write to in-core doc file, in goodparticles format
+                sd ic [part-key], [df-slice],[ccrot],[one]
+                [temp_grp_compare]
+            endif
+
+        lb52
+        ; end particle-loop
+
+        ; close docs
+        ud ice
+        [df_dir]{***[grp-num]}/[by_ref_list][ref-num]
+;;        ud ice
+;;        [dfslice2global_table][grp-num]
+        ud ice
+        [group2mic_table][grp-num]
+        sd ic copy
+        [temp_grp_compare]
+        [df_particle_list]{***[grp-num]}  ; WAS [recon_df_dir]{***[grp-num]}/[df_particle_list]
+        sd ic e
+        [temp_grp_compare]
+
+        ; label, depending on columns
+        if([global-exists].eq.1) then
+            SD /      DF_SLICE   GLOBAL_PART     CC_ROT
+            [df_particle_list]{***[grp-num]}  ; WAS [recon_df_dir]{***[grp-num]}/[df_particle_list]
+        else
+            SD /      DF_SLICE      CC_ROT
+            [df_particle_list]{***[grp-num]}  ; WAS [recon_df_dir]{***[grp-num]}/[df_particle_list]
+        endif
+
+        sd e  ; close doc
+        [df_particle_list]{***[grp-num]}  ; WAS [recon_df_dir]{***[grp-num]}/[df_particle_list]
+    lb72
+    ; end group-loop
+
+    ; combine
+    doc combine
+    [df_particle_list]***  ; WAS [recon_df_dir]***/[df_particle_list]  ; INPUT
+    [df_list]
+    [df_particle_list]tot  ; WAS [recon_dir]/[df_particle_list]        ; OUTPUT
+
+    ; label columns
+    if([global-exists].eq.1) then
+        SD /      DF_SLICE   GLOBAL_PART     CC_ROT
+        [df_particle_list]tot  ; WAS [recon_dir]/[df_particle_list]  ; OUTPUT
+    else
+        SD /      DF_SLICE      CC_ROT
+        [df_particle_list]tot  ; WAS [recon_dir]/[df_particle_list]  ; OUTPUT
+    endif
+
+    sd e  ; close doc
+    [df_particle_list]tot  ; WAS [recon_dir]/[df_particle_list]  ; OUTPUT
+
+    ; get #particles combined under reference
+    ud n [ref-parts]
+    [df_particle_list]tot  ; WAS [recon_dir]/[df_particle_list]
+
+    ; write to summary
+    sd [ref-num], [ref-num],[ref-parts]
+    [summary_doc]
+
+    ; increment counter
+    [particle-counter] = [particle-counter] + [ref-parts]
+lb62
+; end reference-loop
+
+[dummy] = -[num-refs]
+SD /      NUM_REFS     TOTPARTS
+[summary_doc]
+sd [dummy], [num-refs],[particle-counter]
+[summary_doc]
+
+vm
+echo ; echo "Done" ; date
+
+en d
+
+; Modified 2012-02-16
+;    2010-09-10 (trs) -- reads particle number from mic2global instead of stack2particle
+;    2009-11-20 (trs) -- writes out alignment doc with projection from best reference
+
+@

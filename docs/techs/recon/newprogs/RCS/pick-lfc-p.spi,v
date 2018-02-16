@@ -1,0 +1,858 @@
+head	1.1;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+1.1
+date	2016.02.08.14.20.25;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@tapus changes
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@([numPeaksDoc],[peakCounter])
+
+ ; <html><head><title>Picks particles from a micrograph </title></head><body><pre>
+ ;
+ ; SOURCE:  spider/docs/techs/recon1/Procs/pick-lfc-p.spi     BIMAL RATH : FEB 2003
+ ;
+ ; PURPOSE: Picks particles from a micrograph. Inputs are a micrograph and the 3D volume
+ ;          of the particle that we are searching for its projection inside the micrograph.
+ ;          Uses a non-isotropic mask. Used Alan Roseman's formulation for calculating 
+ ;          local cross-correlation coefficients (Ultramicroscopy 2003).
+ ;
+
+ ; Make sure that both the micrograph and the 3D volume of the particle 
+ ; are of same magnification (1 PIXEL = "N" NANOMETER) 
+
+ ; Read input files
+
+ FR 
+   ?MICROGRAPH FILE (INPUT) NAME ?[micfile]
+
+ FR 
+   ?PARTICLE VOLUME (INPUT) NAME ?[partvol]
+
+ FR
+   ?NOISE FILE (INPUT, USED FOR NORMALIZATION) ?[noisefile] 
+
+ FR 
+   ?WINDOWED PARTICLE SERIES (OUTPUT) TEMPLATE ?[winpart]
+
+ RR [firstPartNum]
+   ?STARTING PARTICLE NUMBER ?
+
+ ; File with eulerian angles and info from peak search file
+ FR 
+   ?OUTPUT DOCUMENT FILE (PARTICLE POSITION INFO.) NAME ?[posdoc]
+
+ ; Find if a selection doc file is used.
+ RR [useSelFileYN]
+   ? DO YOU WANT TO USE A SELECTION FILE (NO = 0, YES = 1) ?
+
+ ; Ask for selection doc file with eulerian angles
+ FR 
+   ?SELECTION DOC_FILE ?[sel_doc]
+
+ ; Ask if an average of the projections is to be used as search template.
+ RR [useAvgYN]
+   ? USE AVERAGE OF THE PROJECTIONS AS SEARCH TEMPLATE (NO = 0, YES = 1) ?
+      
+ ; Eulerian angles begining and endvalues 
+ ; PHI ([phiStart]-[phiEnd]), THETA([thetaStart]-[thetaEnd]), PSI([psiStart]-[psiEnd])
+ ; NOTE: Keep endvalues always +ve
+ 
+ RR [phiStart]
+   ?PHI, START ANGLE ?
+ RR [phiEnd]
+   ?PHI, END ANGLE (+VE) ?
+ RR [phiStep]
+   ?PHI, SEARCH STEP SIZE (+VE) ?
+
+ RR [thetaStart]
+   ?THETA, START ANGLE ?
+ RR [thetaEnd]
+   ?THETA, END ANGLE (+VE) ?
+ RR [thetaStep]
+   ?THETA, SEARCH STEP SIZE (+VE) ?
+
+ RR [psiStart]
+   ?PSI, START ANGLE ?
+ RR [psiEnd]
+   ?PSI, END ANGLE (+VE) ?
+ RR [psiStep]
+   ?PSI, SEARCH STEP SIZE (+VE) ?
+
+ ; Interpolation factor 
+ RR [shrinkFactor] 
+   ?INTERPOLATION FACTOR (NO INTERPOLATION = 1, ELSE, ENTER DESIRED NUMBER ) ?
+
+ ; # of peaks to be searched 
+ RR [numPeaksUser] 
+   ? No. OF PEAKS TO BE SEARCHED ?
+
+ ; Neighbourhood distance for exclusion 
+ RR [neighborDistance] 
+   ?NEIGHBOURHOOD DISTANCE FOR PEAK EXCLUSION ?
+
+ ; Find if a symmetric mask will be used.
+ RR [symmetricYN]
+   ? DO YOU WANT TO USE A SYMMETRIC MASK FOR LCCC CALCULATION (NO = 0, YES = 1) ?
+
+ ; Pixel value for masking 
+ RR [refThresh]
+   ? PIXEL VALUE FOR MASKING (VALUES < ENTERED VALUE = 0, REST = 1) ?
+ 
+ ; Pixel value for masking 
+ RR [ccThresh]
+   ? CROSS-CORRELATION THRESHOLD FOR PARTICLES TO BE WINDOWED ?
+ 
+; ------------------------- END BATCH HEADER -------------------------
+
+; ----- Temporary files -----
+[temp_vol_incore]         = '_1'
+[temp_mic_incore]         = '_99'
+[temp_ref]                = '_2'
+[temp_refproj]            = 'PRJ_DELETED_'
+[temp_peak_doc]           = 'DOC_DELETED_5'
+[temp_var]                = '_40'
+[temp_ref_thresh]         = '_4'
+[temp_vol_thresh]         = '_30'
+[temp_vol_prj]            = '_31'
+[temp_ref_thresh_pad]     = '_51'
+[temp_ref_pad_ft]         = '_6'
+[temp_mic_ft]             = '_86'
+[temp_conjugate]          = '_81'
+[temp_conj_inv_ft]        = '_91'
+[temp_conj_inv_norm]      = '_10'
+[temp_conj_inv_sqr]       = '_11'
+[temp_mic_sqr]            = '_87'
+[temp_mic_sqr_ft]         = '_88'
+[temp_mic_sqr_ref_ft]     = '_71'
+[temp_mic_sqr_ref]        = '_82'
+[temp_mic_sqr_ref_norm]   = '_92'
+[temp_sigma_sqr]          = '_12'
+[temp_sigma_sqr_thresh]   = '_80'
+[temp_sigma]              = '_32'
+[temp_sigma_noedge]       = '_52'
+[temp_ref_sqr]            = '_72'
+[temp_ref_norm]           = '_83'
+[temp_ref_norm_pad]       = '_93'
+[temp_ref_norm_pad_ft]    = '_60'
+[temp_norm_conjugate]     = '_62'
+[temp_norm_conj_inv_edge] = '_13'
+[temp_norm_conj_inv]      = '_33'
+[temp_norm_conj_inv_norm] = '_73'
+[temp_lcf]                = '_84'
+[temp_lcf_max]            = '_97'
+[temp_lcf_max_new]        = '_98'
+[temp_noise_incore]       = '_27'
+[temp_circular_mask]      = '_26'
+[temp_circular_mask_inv]  = '_28'
+[temp_win_unramp]         = '_29'
+[temp_win_ramped]         = '_22'
+
+
+; Sanity checks
+
+; Avoid division by zero
+IF ( [phiStep] .EQ. 0) THEN
+    [phiStep] = 1
+ENDIF
+IF ([thetaStep].EQ.0) THEN
+    [thetaStep] = 1
+ENDIF
+IF ([psiStep].EQ.0) THEN
+    [psiStep] = 1
+ENDIF
+
+IF ([ccThresh] .GT. 1) [ccThresh]=1
+; (Peaks can be negative.)
+
+ ; Find nsam and nrow of the micrograph
+ FI [micXDim],[micYDim]
+   [micfile]
+   12,2
+
+ ; Find nsam,nrow and nslice of the particle volume
+ FI [volXDim],[volYDim],[zdim]
+   [partvol]
+   12,2,1
+
+ ; Copy images into memory so that it can be accessed quickly a number of times
+ ; in the following loops 
+
+IF ([shrinkFactor] .EQ. 1) THEN
+   CP 
+     [partvol]
+     [temp_vol_incore]
+ 
+   CP 
+     [micfile]
+     [temp_mic_incore]
+   
+ ELSE
+   [neighborDistance] = [neighborDistance]/[shrinkFactor]
+
+   ; Shrink reference volume
+   [shrunkVolXDim] = INT([volXDim]/[shrinkFactor])
+   [shrunkVolYDim] = INT([volYDim]/[shrinkFactor])
+   [shrunkVolZDim] = INT([zdim]/[shrinkFactor])
+      
+   IP
+     [partvol]
+     [temp_vol_incore]
+     [shrunkVolXDim],[shrunkVolYDim],[shrunkVolZDim]
+   ; (DC S is probably better)
+
+   ; Shrink micrograph
+   [shrunkMicXDim] = INT([micXDim]/[shrinkFactor])
+   [shrunkMicYDim] = INT([micYDim]/[shrinkFactor])
+  
+   IP
+     [micfile]
+     [temp_mic_incore]
+     [shrunkMicXDim],[shrunkMicYDim] 
+   ; (DC S is probably better)
+ ENDIF
+
+ DE A
+   [temp_refproj]001
+ DE
+   [posdoc]
+ DE
+   [temp_peak_doc]
+
+ ; Find nsam and nrow of the interpolated micrograph
+ ; kept the same variable name as above
+ FI [micXDim],[micYDim]
+  [temp_mic_incore]
+  12,2
+
+ ; Find nsam, nrow and nslice of the interpolated particle volume
+ ; Kept the same variable name as above
+ FI [volXDim],[volYDim]   ; NOT USED [volZDim]
+  [temp_vol_incore]
+  12,2   ; NOT USED 1
+
+ ; Find the minimum of nsam and nrow of small volume
+
+ IF ([volXDim].LT.[volYDim]) THEN 
+   [shortDim] = [volXDim]
+ ELSE 
+   [shortDim] = [volYDim]
+ ENDIF
+
+ [prjRad] = INT([shortDim]/2)-1
+
+ [micXDimNoEdge] = [micXDim]-[volXDim]+1
+ [micYDimNoEdge] = [micYDim]-[volYDim]+1
+
+ [volXCenter] = INT([volXDim]/2)+1
+ [volYCenter] = INT([volYDim]/2)+1
+
+ 
+ ; Euler angle search is done here
+
+ ; PJ 3 doesn't give correct results if some pixel values are -ve
+ ;AR SCA
+ ;[partvol]
+ ;[temp_vol_incore]
+ ;0,100
+        
+ IF ([useSelFileYN] .LT. 0.5) THEN
+   ; END VALUES FOR LOOPS         
+   [numPhi]   = (([phiEnd]-[phiStart])/[phiStep])+1
+   [numTheta] = (([thetaEnd]-[thetaStart])/[thetaStep])+1
+   [numPsi]   = (([psiEnd]-[psiStart])/[psiStep])+1  
+   
+   IF ([useAvgYN] .GE. 0.5) THEN
+     SYS
+       echo " WARNING: Need selection file to average references.  Continuing..." ; echo
+     
+     [useAvgYN] = 0
+     ; (Doesn't make sense to average the references if no selection file is used)
+   ENDIF
+   
+ ELSE   ; If using selfile 
+   UD N [numRefs]
+     [sel_doc]
+   
+   [psiStart]   = 0
+   [thetaStart] = 0
+   [phiStart]   = 0
+   
+   [numPhi]   = [numRefs]
+   [numTheta] = 1
+   [numPsi]   = 1
+   
+   [phiStep]   = 1
+   [thetaStep] = 1
+   [psiStep]   = 1
+   
+   ; If average of projections is used for template
+   IF ([useAvgYN] .GE. 0.5) THEN   
+      [numPhi] = 1
+   ENDIF     
+   
+ ENDIF
+
+ MD
+   VB OFF
+
+ [counter] = 0
+ 
+ DO [keyPsi] = 1, [numPsi]
+   [psi] = [psiStart] + ([keyPsi] - 1)*[psiStep] 
+   
+   DO [keyTheta] = 1, [numTheta]
+      [theta] = [thetaStart] + ([keyTheta]-1)*[thetaStep]
+      
+      DO [keyPhi] = 1, [numPhi]  
+         [phi] = [phiStart] + ([keyPhi]-1)*[phiStep]   
+                 
+         IF  ([useSelFileYN]. GE. 0.5) THEN
+            UD IC, [keyPhi],[phi],[theta],[psi]
+              [sel_doc]
+         ENDIF
+
+         ; LOOP#
+         [counter] = [counter] + 1
+         ;;;[counter] = ([keyPsi]-1)*[numPhi]*[numTheta] + ([keyTheta]-1)*[numPhi] + [keyPhi]        
+
+         ; Average of projections is not used as template
+         IF ([useAvgYN] .LT. 0.5) THEN 
+         
+            ; MAKE A PROJECTION
+            PJ 3
+              [temp_vol_incore]
+              [volXDim],[volYDim]
+              [temp_ref]
+              [phi],[theta]
+              [psi]
+            
+         ; Average of projections is used as template
+         ; (I think we don't need to be in these loops for this.)
+         ELSE  
+             
+            PJ 3Q
+              [temp_vol_incore]   ; INPUT
+              [prjRad]
+              1-[numRefs]
+              [sel_doc]
+              [temp_refproj]***   ; OUTPUT
+      
+            AS R
+              [temp_refproj]***
+              1-[numRefs] 
+              A
+              [temp_ref] 
+              [temp_var]                    
+             
+         ENDIF
+
+         IF ([symmetricYN] .LT. 0.5) THEN
+            ; Asymmetric mask
+            
+            ; If average of projections is used as template
+            IF ([useAvgYN] .GE. 0.5) THEN  
+               ; Make sure that [refThresh] is the correct masking value for the average of the projections
+               TH M
+                 [temp_ref]          ; INPUT (overwritten): 2D reference
+                 [temp_ref_thresh]   ; INPUT: mask
+                 B                   ; threshold _B_elow
+                 [refThresh]          
+            ELSE             
+            
+               ; Can't just use thresholding since the pixel values change for each projection.
+               ; so I am making a mask of the 3D structure and then using PJ 3 to project
+               ; and then using standard deviation value to threshold.
+               ; I have verified it works quite O.K., but may not be perfect.
+               ; To get the perfect result one may need to change  the threshold value
+               ; and use it directly on [temp_ref]
+               ; (no need to create the binary mask and get a projection from it 
+               ; and then do thresholding using standard deviation value) 
+               
+               IF ([counter] .EQ. 1) THEN
+                  ; Do only once
+                  TH M
+                    [temp_vol_incore]   ; INPUT
+                    [temp_vol_thresh]
+                    B
+                    [refThresh]
+               ENDIF   
+            
+               PJ 3
+                 [temp_vol_thresh]
+                 [volXDim],[volYDim]
+                 [temp_vol_prj]
+                 [phi],[theta]
+                 [psi]
+
+               FS [v98],[v99],[v88],[stdev]
+                 [temp_vol_prj]
+         
+               ; THRESHOLD THE PROJECTION
+               TH M
+                 [temp_vol_prj]
+                 [temp_ref_thresh]
+                 B
+                 [stdev]
+            ENDIF                       
+         ELSE        
+            ; Symmetric mask
+            ; Make a circular mask. pixels outside the radius = 0 
+            ; Pixels inside = 1        
+
+            ; Do it only once
+            IF ([counter] .EQ. 1) THEN
+               ; IF [temp_ref_thresh] exists then delete it. 
+               ; command pt won't ask for nsam and nrow inputs if the file exists. 
+               ; when pickparticle procedure is called inside another procedure it will cause error
+               
+               DE
+                 [temp_ref_thresh]
+            
+               PT
+                 [temp_ref_thresh]
+                 [volXDim],[volYDim]
+                 C
+                 [volXCenter],[volYCenter]
+                 [shortDim]/2
+                 N
+            ENDIF  
+         ENDIF 
+
+         FS [v80],[v81],[maskAvg],[v82]
+           [temp_ref_thresh]
+         
+         ; Total number of non-zero pixels inside the mask
+         [maskAvg] = [maskAvg]*[volXDim]*[volYDim]
+
+         ; In asymmetric case set [sdYN] = 1 for all loops
+         ; In symmetric  case set [sdYN] = 1 only for the first loop
+         IF ([symmetricYN] .EQ. 0) THEN
+            [sdYN] = 1
+         ELSE 
+            [sdYN] = 0
+         ENDIF
+
+         IF ([counter] .EQ. 1) THEN
+            [sdYN] = 1
+         ENDIF
+
+         ; Calculate local standard deviation only once in symmetric case
+         ; Calculate local standard deviation for each orientation in asymmetric case
+
+         IF ( [sdYN] .EQ. 1) THEN
+            ; CREATE A BLANK IMAGE, SAME SIZE AS LARGE IMAGE
+            MO 
+              [temp_ref_thresh_pad]
+              [micXDim],[micYDim]
+              B
+              (0)
+
+            ; INSERT THE MASK INSIDE THE BLANK IMAGE
+            IN
+              [temp_ref_thresh]
+              [temp_ref_thresh_pad]
+              (1,1)
+
+            ; DO FT ON BLANK IMAGE(WITH THE MASK INSERTED)
+            FT
+              [temp_ref_thresh_pad]
+              [temp_ref_pad_ft]
+
+            DE
+              [temp_ref_thresh_pad]
+            
+            ; DO IT ONLY ONCE
+            IF ([counter] .EQ. 1) THEN
+               ; DO FT ON LARGE IMAGE
+               FT
+               [temp_mic_incore]
+               [temp_mic_ft]
+            ENDIF   
+
+            ; Multiply ft of large image with complex conjugate 
+            ; of ft of blank image
+            MU M
+              [temp_mic_ft]
+              [temp_ref_pad_ft]
+              [temp_conjugate]
+              *
+
+            ; Do inverse ft
+            FT
+              [temp_conjugate]
+              [temp_conj_inv_ft]
+
+            ; Normalize 
+            AR
+              [temp_conj_inv_ft]
+              [temp_conj_inv_norm]
+              P1/[maskAvg]
+              ;;;(P1+0)/([maskAvg])  ; (Old notation)
+
+            SQ
+              [temp_conj_inv_norm]
+              [temp_conj_inv_sqr]
+
+            ; Do it only once
+            IF ( [counter] .EQ. 1) THEN
+               SQ
+                 [temp_mic_incore]
+                 [temp_mic_sqr]
+         
+               ; Do ft on square of the large image
+               FT
+                 [temp_mic_sqr]
+                 [temp_mic_sqr_ft]
+            ENDIF   
+  
+            ; Multiply ft of square of large image with complex conjugate 
+            ; of ft of blank image
+            MU M
+              [temp_mic_sqr_ft]
+              [temp_ref_pad_ft]
+              [temp_mic_sqr_ref_ft]
+              *
+
+            ; Do inverse FT
+            FT
+              [temp_mic_sqr_ref_ft]
+              [temp_mic_sqr_ref]
+
+            ; Normalize
+            AR
+              [temp_mic_sqr_ref]
+              [temp_mic_sqr_ref_norm]   ; OUTPUT
+              (P1+0)/([maskAvg])
+
+            SU
+              [temp_mic_sqr_ref_norm]
+              [temp_conj_inv_sqr]
+              [temp_sigma_sqr]   ; OUTPUT
+              *
+              ; (This output corresponds to equation 10 in Roseman, 2003)
+
+            ; Get rid of sqrt of -ve # and division by zero(while dividing the 
+            ; CCF by local standard deviation)
+            TH M
+              [temp_sigma_sqr]
+              [temp_sigma_sqr_thresh]
+              B
+              (0)
+            
+            MM
+              [temp_sigma_sqr_thresh]
+              [temp_sigma_sqr]  ; (overwritten)
+              (9E+20)
+  
+            ; Local standard deviation
+            WU
+              [temp_sigma_sqr]
+              [temp_sigma]
+           
+            WI
+              [temp_sigma]
+              [temp_sigma_noedge]                        
+              [micXDimNoEdge],[micYDimNoEdge]         
+              (1,1)
+
+         ENDIF
+
+         ; Prepare the reference image such that the average inside 
+         ; the mask = 0 and the standard deviation inside the mask = 1
+         MM
+           [temp_ref_thresh]
+           [temp_ref]
+           (0)
+   
+         ; Find average
+         FS [v60],[v61],[refAvg],[v63]
+           [temp_ref]
+         
+         ; SUM
+         [refSum] = [refAvg]*([volXDim]*[volYDim])
+         
+         SQ
+           [temp_ref]
+           [temp_ref_sqr]   ; OUTPUT
+               
+         ; Find average
+         FS [v60],[v61],[refSqrAvg],[v63]
+           [temp_ref_sqr]
+
+         ; Sum
+         [refSqr] = [refSqrAvg]*([volXDim]*[volYDim])
+
+         ; SD inside mask        
+         [sdMask] = SQRT(([refSqr] -(([refSum]*[refSum])/[maskAvg]))/([maskAvg]-1))
+
+         ; AVG inside mask         
+         [avgUnderMask]  =  [refSum]/[maskAvg]    
+         
+         ;Normalize
+         AR
+           [temp_ref]
+           [temp_ref_norm]   ; OUTPUT
+           (P1-[avgUnderMask])/[sdMask]
+
+         MM
+           [temp_ref_thresh]
+           [temp_ref_norm]
+           (0)
+
+         ; Create an empty image of dimension = micrograph dimension 
+         ; and paste the prepared refernce image at the left
+         ; corner of this empty image           
+         MO 
+           [temp_ref_norm_pad]   ; OUTPUT
+           [micXDim],[micYDim]
+           B
+           (0)
+
+         IN
+           [temp_ref_norm]
+           [temp_ref_norm_pad]
+           (1,1)
+
+         ; Find cross correlation function of the above image with
+         ; with the large image
+                          
+         FT
+         [temp_ref_norm_pad]
+         [temp_ref_norm_pad_ft]
+        
+        
+        ; Set F(0,0) element = zero. 
+        ; Done in order to perform similar normalization as done in real space 
+        RP
+        [temp_ref_norm_pad_ft]
+        (1,1)
+        (0)
+        RP
+        [temp_ref_norm_pad_ft]
+        (2,1)
+        (0)
+
+        FT
+        [temp_mic_incore]
+        [temp_mic_ft]
+        ; (Already did it before)
+        
+        ; Don't change order of input in the following operation
+        MU M
+        [temp_mic_ft]
+        [temp_ref_norm_pad_ft]
+        [temp_norm_conjugate]	 
+        *
+        
+        ; Do inverse FFT	 
+        FT
+        [temp_norm_conjugate]
+        [temp_norm_conj_inv_edge]   ; OUTPUT
+        
+        WI
+        [temp_norm_conj_inv_edge]
+        [temp_norm_conj_inv]   ; OUTPUT
+        [micXDimNoEdge],[micYDimNoEdge]
+        1,1              
+
+         ; Divide the cc function with total number of non-zero pixels
+         ; inside the mask         
+         AR
+           [temp_norm_conj_inv]
+           [temp_norm_conj_inv_norm]   ; OUTPUT
+           P1/[maskAvg]
+
+         ; Divide the  above result with corresponding element of 
+         ; the local standard deviation array 
+         MU D
+           [temp_norm_conj_inv_norm]
+           [temp_sigma_noedge]
+           [temp_lcf]   ; OUTPUT
+           *
+         ; (NOTE: Old operation, replaced by DIV)
+        
+         ; Compare the cross-correlation file in each loop and create an
+         ; output file with the highest pixel value 
+ 
+         IF ([counter] .EQ. 1) THEN
+            ; For first loop, copy the file
+            CP
+              [temp_lcf]
+              [temp_lcf_max]
+         ELSE
+            ; For more than one loop compare the cross-correlation files
+            MX
+             [temp_lcf]
+             [temp_lcf_max]
+             [temp_lcf_max_new]
+   
+           ; Copy the output file so that it becomes one of the input files
+           ; for the next loop
+           CP
+             [temp_lcf_max_new]
+             [temp_lcf_max]
+         ENDIF                                                                           
+      ENDDO
+   ENDDO
+ ENDDO 
+
+ ; Do restricted peak search                 
+ PK DR
+   [temp_lcf_max]
+   ([numPeaksUser],1)
+   (1,1)
+   [neighborDistance]
+   [temp_peak_doc]
+
+ ; Find max key no.
+ UD N [numPeaksDoc]   ; NOT USED ,[v92]
+   [temp_peak_doc]
+
+ ;Insert comments
+ SD /         X           Y       PARTICLE NO.   PEAK HT
+   [posdoc]
+
+ [peakCounter] = 0
+ 
+ ; Write xy positions and peak height value to file [posdoc]
+ DO [keyPeak] = 1,[numPeaksDoc]
+   UD IC [keyPeak], [xcoordShrunkWin],[ycoordShrunkWin],[peakHeight]
+     [temp_peak_doc]
+            
+   IF ([peakHeight] .GE. [ccThresh]) THEN
+   
+     [peakCounter] = [peakCounter] + 1
+     
+     ; Correct for the center of the peak with respect to large image.
+     ; The peak height determined in peak search step is
+     ; with respect to the image created by
+     ; subtracting the dimension of reference image from the large image.
+     ; Factor of NSAM/2+1, NROW/2+1 and NSLICE/2+1 are addded
+     [xcoordShrunk] = [xcoordShrunkWin] + [volXCenter]
+     [ycoordShrunk] = [ycoordShrunkWin] + [volYCenter]
+     [xcoord] = [xcoordShrunk]*[shrinkFactor] + 1
+     [ycoord] = [ycoordShrunk]*[shrinkFactor] + 1           
+            
+     [partNum] = ([firstPartNum]-1) + [keyPeak]      
+     SD [peakCounter], [xcoord],[ycoord],[partNum],[peakHeight]
+       [posdoc] 
+   ENDIF
+     
+ ENDDO
+        
+ UD ICE
+   [temp_peak_doc]
+ DE
+   [temp_peak_doc]             
+ SD E
+   [posdoc]
+ 
+ 
+ ; WINDOW PARTICLES FROM THE INPUT MICROGRAPH 
+ 
+ UD N [numParts]   ; NOT USED ,[v39]
+   [posdoc]
+ UD E
+
+ ; FIND NSAM,NROW AND NSLICE OF THE PARTICLE VOLUME
+ ; NEED TO BE DONE AGAIN BECAUSE THE VARIABLES HAVE BEEN CHANGED AFTER
+ ; INTERPOLATION IS DONE
+
+ FI [volXDim],[volYDim]
+   [partvol]
+   12,2
+
+ [volXCenter] = INT([volXDim]/2)+1
+ [volYCenter] = INT([volYDim]/2)+1
+
+ ; Copy noise file to memory
+ CP
+   [noisefile]
+   [temp_noise_incore]
+
+ ; Find radius of mask file
+ IF ([volXDim].LT.[volYDim]) THEN 
+   [shortDim] = [volXDim]
+ ELSE 
+   [shortDim] = [volYDim]
+ ENDIF
+ 
+ [prjRad] = INT([shortDim]/2) - 1
+
+ ; Make a mask file
+ MO
+   [temp_circular_mask]
+   [volXDim],[volYDim]
+   C
+   [prjRad]
+
+ ; Pixels those are part of the particle are excluded from normalization
+ AR
+   [temp_circular_mask]
+   [temp_circular_mask_inv]
+   (P1-1)*(-1)
+
+ DO [keyPart] = 1,[numParts]
+
+   UD IC [keyPart], [xcenter],[ycenter],[partNum],[v97]
+     [posdoc]
+
+   [xtopleft] = [xcenter] - [volXCenter]
+   [ytopleft] = [ycenter] - [volYCenter]
+   
+   WI
+     [micfile]
+     [temp_win_unramp]
+     [volXDim],[volYDim]
+     [xtopleft],[ytopleft]
+
+   RA
+     [temp_win_unramp]
+     [temp_win_ramped]
+
+   ; Normalize as per histogram
+   CE FIT
+     [temp_noise_incore]
+     [temp_win_ramped]
+     [temp_circular_mask_inv]
+     [winpart]{******[partNum]}
+
+ ENDDO
+
+ UD ICE
+   [posdoc]
+
+ DE A
+   [temp_refproj]001
+
+; CP
+; [temp_ref]
+; test/tstref
+ 
+ RE
+ 
+ ; Modified 2016-02-05
+ ;    2016-02-05 (trs) -- added peak CC threshold
+ ;    2016-02-05 (trs) -- removed conditionals from parameter/filename input
+ ;    2016-02-05 (trs) -- added annotation
+ 
+ ; </pre></body></html>
+
+
+@

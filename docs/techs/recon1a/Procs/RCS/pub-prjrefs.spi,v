@@ -1,0 +1,466 @@
+head	1.10;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+1.10
+date	2016.06.13.14.05.25;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2016.06.02.15.16.58;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2016.05.31.18.33.21;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2016.05.25.13.38.55;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2016.05.19.15.40.42;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2016.03.28.19.11.11;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2016.02.24.17.09.51;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2016.02.19.15.19.59;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2016.02.19.14.57.39;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2016.02.09.20.28.46;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@ci -mGold_standard pub-refine-fix1.spi
+ci -mGold_standard pub-refine-fix.spi
+ci -mGold_standard pub-refine.spi
+ci -mGold_standard pub-refine-start.spi
+ci -mGold_standard pub-ref-loop-clone.spi
+ci -mGold_standard pub-ref-loop-declone.spi
+ci -mGold_standard pub-submit.spi
+ci -mGold_standard refine-bp.spi
+ci -mGold_standard refine-inseries.spi
+ci -mGold_standard refine-loop.spi
+ci -mGold_standard refine-merge.spi
+ci -mGold_standard refine-prepare.spi
+ci -mGold_standard refine-prjloop.spi
+ci -mGold_standard refine-refangles.spi
+ci -mGold_standard refine-settings.spi
+ci -mGold_standard refine-smangloop.spi
+ci -mGold_standard refine-sphdecon.spi
+ci -mGold_standard restack.spi
+ci -mGold_standard show-r2.spi
+@
+
+
+1.10
+log
+@*** empty log message ***
+@
+text
+@ ([iter],[num-grps],[prj-radius],[qsub])
+
+ ; <html><head><title>Creates reference projections on parallel cluster</title></head><body><pre>
+ ;
+ ; SOURCE: spider/docs/techs/recon1/Procs/pub-prjrefs.spi
+ ;         Reference projections parallelized   ArDean Leith  Jan 2016
+ ;
+ ; PURPOSE: Create stacks stacks of reference projections ('PJ 3F') from both subset reference volumes 
+ ;          in parallel. Waits for all subscribing nodes to finish their projections. 
+
+ ; I/O Registers & files are set in: <a href="refine-settings.spi">refine-settings.spi</a>
+ ;
+ ; INPUT REGISTERS:
+ ;   [iter]               Current iteration
+ ;   [num-grps]           Number of parallel groups 
+ ;   [prj-radius]         Projection radius 
+ ;   [qsub]               Queing system (PBS vs PubSub) 
+ ;
+ ; INPUT FILES: (##' denotes iteration,  '%' denotes subset, and '***' denotes group)
+ ;   [iter_refangs]       work/ref_angs_##            Reference angles doc file       (one/iter)      
+ ;   [vol_s]              final/vol_##_s%             Current subset reference volume (two/iter) 
+ ;
+ ; OUTPUT FILES: 
+ ;   [ref_projs_s]        work/ref_projs_##_s%        Reference projections stacks (two/iter)
+ ;
+ ; PROCEDURES CALLED:
+ ;   pub-submit           <a href="pub-submit.spi">       pub-submit.spi</a>
+ ;   .. publish/qsub      <a href="qsub.pbs">             qsub.pbs</a>
+ ;   .. pub-refine-start  <a href="pub-refine-start.spi"> pub-refine-start</a>          
+ ;   .... refine-settings <a href="refine-settings.spi">  refine-settings.spi</a>            
+ ;   .... refine-prjloop  <a href="refine-prjloop.spi">   refine-prjloop.spi</a>            
+ ;
+ ; -------------------------------- END BATCH HEADER ----------------------------
+
+ ; Create stacks holding projections from both current reference volumes in parallel.
+
+ UD N [num-angs]                ; Get number of reference images used
+   [iter_refangs]               ; Reference images angles doc. file    (input)
+
+ SYS
+   echo  "  Iteration: {%I0%[iter]}  Projecting: [vol]_s1 and [vol]_s2  Angles: {%I0%[num-angs]}" 
+
+ IF ( [num-grps] <= 1 ) THEN  
+   ; No need for parallel jobs just use a single projection per subvolume and return
+
+   DO [s] = 1,2                 ; Loop over subvolumes
+     PJ 3F                      ; Projection operation
+       [vol_s]                  ; Current reference volume             (input) 
+       [prj-radius]             ; Radius of object
+       1-[num-angs]             ; Reference angles used    
+       [iter_refangs]           ; Reference angles doc file            (input)
+       [ref_projs_s]@@******     ; Reference projection stack template  (output) 
+   ENDDO                        ; End of: Loop over subvolumes
+
+ ELSE
+
+   ; Project reference volumes in parallel and wait for all parallel jobs to finish
+
+   [task] = 2                  ; pub-refine-start will start: refine-prjloop 
+   [run1] = './spider $PRJEXT/$DATEXT @@pub-refine-start '
+ 
+   @@pub-submit([iter],[num-grps],[task],[qsub])
+      [run1]                   ; Script that runs projection in parallel
+
+   SYS
+     echo "  Consolidate group reference projection stacks into single stack for each subvolume"
+
+   DO [s] = 1,2                ; Loop over subvolumes
+     CP TO STK                 ; Merge stacks into single stack
+       [ref_projs_s]_***@@      ; Template for reference stacks       (input) 
+       1-[num-grps]            ; File numbers   
+       1                       ; Initial image in output stack
+       [ref_projs_s]@@          ; Combined stack                      (output)
+   ENDDO                       ; End of: Loop over subvolumes
+ ENDIF
+
+ RE
+ ; </pre></body></html>
+
+
+
+
+ 
+@
+
+
+1.9
+log
+@comments
+@
+text
+@d63 1
+a63 1
+     [prjMem] [run1]            ; Script that runs projection in parallel
+@
+
+
+1.8
+log
+@[prjMem] [run1]            ; Script that runs
+@
+text
+@d28 1
+a28 1
+ ;   .. publish/qsub      <a href="publish.perl">         publish.perl</a>
+a75 1
+
+@
+
+
+1.7
+log
+@consolidating simplified
+@
+text
+@d43 1
+a43 4
+ [num-grpst] = [num-grps]
+ IF ( [iter] == 1) [num-grpst] = 1   ;!!!!!!!!!!!!!!!
+
+ IF ( [num-grpst] <= 1 ) THEN  
+d53 1
+a53 1
+   ENDDO                        ; End of: DO  [s] = 1,2
+d63 1
+a63 1
+     [run1]                    ; Script that runs projection in parallel
+d74 1
+a74 1
+   ENDDO                       ; End of: DO  [s] = 1,2
+@
+
+
+1.6
+log
+@qsub in parameters
+@
+text
+@d11 1
+a11 1
+ ; I/O Registers & files are set in: <a href="./refine-settings.spi">refine-settings.spi</a>
+a23 1
+ ;   [iter_refangs_grp]   work/ref_angs_##_***        Reference angles doc file    (one/group)      
+a24 1
+ ;   [ref_projs_s_grp]    work/ref_projs_##_s%_***@@   Temp ref projections stack   (two/iter/group) Deleted  
+d28 1
+a28 1
+ ;   .. publish           <a href="publish.perl">         publish.perl</a>
+d37 2
+a38 2
+ UD N [num-angs]                 ; Get number of reference images used
+   [iter_refangs]                ; Reference images angles doc. file    (input)
+d43 2
+a44 2
+ IF ( [num-grps] <= 1 ) THEN
+   ; No need for parallel jobs just use a single projection and return
+d46 2
+a47 15
+   [s] = 1                       ; Subset
+   PJ 3F                         ; Projection operation
+     [vol_s]                     ; Current reference volume             (input) 
+     [prj-radius]                ; Radius of object
+     1-[num-angs]                ; Reference angles used    
+     [iter_refangs]              ; Reference angles doc file            (input)
+     [ref_projs_s]@@******        ; Reference projection stack template  (output) 
+
+   [s] = 2                       ; Subset
+   PJ 3F                         ; Projection operation
+     [vol_s]                     ; Current reference volume             (input) 
+     [prj-radius]                ; Radius of object
+     1-[num-angs]                ; Reference angles used    
+     [iter_refangs]              ; Reference angles doc file            (input)
+     [ref_projs_s]@@******        ; Reference projection stack template  (output) 
+d49 8
+a56 4
+   RE                            ; Return now
+ ENDIF
+
+ ; Project reference volume in parallel and wait for all parallel jobs to finish
+d58 1
+a58 5
+ [task] = 2                      ; pub-refine-start will start: refine-prjloop 
+ [run1] = './spider $PRJEXT/$DATEXT @@pub-refine-start '
+ 
+ @@pub-submit([iter],[num-grps],[task],[qsub])
+    [run1]                      ; Script that runs projection in parallel
+d60 1
+a60 2
+ SYS
+    echo "  Merging group reference projection stacks into single stack for each subvolume "
+d62 2
+a63 18
+ DO [grp] = 1,[num-grps]         ; Loop over all projection groups ----------------
+
+   MD                           
+     RESULTS OFF                 ; Discard further results file info
+   DO                            ; Loop over all projections in group 
+     UD NEXT [in],[psi],[theta],[phi],[out],[igo],[iend]
+       [iter_refangs_grp]        ; Reference projection angles doc file   (input)
+     IF ( [in] == 0 ) EXIT
+
+     [s] = 1
+     CP
+       [ref_projs_s_grp]{****[in]}; Template for ref. projections          (input) 
+       [ref_projs_s]@@*****[out]   ; Template for ref. projections          (output)
+ 
+     [s] = 2
+     CP
+       [ref_projs_s_grp]{****[in]}; Template for ref. projections          (input) 
+       [ref_projs_s]@@*****[out]   ; Template for ref. projections          (output)
+d65 2
+a66 10
+     !IF ( [in] == 1 ) THEN
+     !  [s] = 1
+     !  SYS
+     !    echo "  Copy: [ref_projs_s_grp]{****[in]} -->  [ref_projs_s]@@{*****[out]}"
+     !  [s] = 2
+     !  SYS
+     !    echo "  Copy: [ref_projs_s_grp]{****[in]} -->  [ref_projs_s]@@{*****[out]}"
+     !ENDIF
+
+   ENDDO                         ; End of:  DO   Loop over all projections 
+d68 2
+a69 2
+   MD                           
+     RESULTS ON                  ; Save further results file info
+d71 8
+a78 2
+   UD NEXT END                   ; Close doc file
+     [iter_refangs_grp]          ; Reference projection angles doc file   (input)
+a79 1
+ ENDDO                           ; End of: DO [grp] = 1,[num-grps] ----------------
+@
+
+
+1.5
+log
+@refproj --> ref_projs filename
+@
+text
+@d1 1
+a1 1
+ ([iter],[num-grps],[prj-radius])
+d17 1
+a68 1
+ [qsub] = 1                      ; pub-refine-start will start job using PBS 
+@
+
+
+1.4
+log
+@gold
+@
+text
+@d19 2
+a20 2
+ ;   [iter_refangs]       work/ang_refs_##          Reference angles doc file       (one/iter)      
+ ;   [vol_s]              final/vol_##_s%           Current subset reference volume (two/iter) 
+d23 3
+a25 3
+ ;   [iter_refangs_grp]   work/ang_refs_##_***      Reference angles doc file    (one/group)      
+ ;   [ref_projs_s]        work/refproj_##_s%        Reference projections stacks (two/iter)
+ ;   [ref_projs_s_grp]    work/refproj_##_s%_***@@   Temp ref projections stack   (two/iter/group) Deleted  
+@
+
+
+1.3
+log
+@PBS, no progress echo, qsub parameter
+@
+text
+@d5 1
+a5 1
+ ; SOURCE: spider/docs/techs/recon1/Procs/gold/pub-prjrefs.spi
+d8 3
+a10 3
+ ; PURPOSE: Procedure for creating reference projections on parallel cluster.
+ ;          Each data group uses one parallel process.
+ ;
+d19 2
+a20 2
+ ;   [iter_refangs]        work/ang_refs_##        Reference angles doc file       (one/iter)      
+ ;   [vol_s]              final/vol_##_s%         Current subset reference volume (two/iter) 
+d23 3
+a25 3
+ ;   [iter_refangs_grp]   work/ang_refs_##_***    Reference angles doc file    (one/group)      
+ ;   [ref_projs_s]        work/refproj_##_s%      Reference projections stacks (two/iter)
+ ;   [ref_projs_s_grp]    work/refproj_##_s%_***@@ Temp ref projections stack   (two/iter/group) Deleted  
+@
+
+
+1.2
+log
+@removed copy echo
+@
+text
+@d14 3
+a16 3
+ ;   [iter]                Current iteration
+ ;   [num-grps]            Number of parallel groups 
+ ;   [prj-radius]          Projection radius 
+d20 1
+a20 1
+ ;   [vol_s]               final/vol_##_s%         Current subset reference volume (two/iter) 
+d23 3
+a25 3
+ ;   [iter_refangs_grp]    work/ang_refs_##_***    Reference angles doc file    (one/group)      
+ ;   [ref_projs_s]         work/refproj_##_s%      Reference projections stacks (two/iter)
+ ;   [ref_projs_s_grp]     work/refproj_##_s%_***@@ Temp ref projections stack   (two/iter/group) Deleted  
+d28 5
+a32 5
+ ;   pub-submit            <a href="pub-submit.spi">       pub-submit.spi</a>
+ ;   .. publish            <a href="publish.perl">         publish.perl</a>
+ ;   .. pub-refine-start   <a href="pub-refine-start.spi"> pub-refine-start</a>          
+ ;   .... refine-settings  <a href="refine-settings.spi">  refine-settings.spi</a>            
+ ;   .... refine-prjloop   <a href="refine-prjloop.spi">   refine-prjloop.spi</a>            
+d44 1
+a44 1
+ IF ( [num-grps] <= 1) THEN
+d66 1
+a66 3
+ ; Project reference volume in parallel and wait for all subscriber jobs to finish
+ [task]   = 2                      ; pub-refine-start will start: refine-prjloop 
+ [script] = 'publish ./spider $PRJEXT/$DATEXT @@pub-refine-start'
+d68 6
+a73 2
+ @@pub-submit([iter],[num-grps],[task])
+    [script]                      ; Script that runs projection in parallel
+d97 8
+a104 8
+     IF ( [in] == 1 ) THEN
+       [s] = 1
+       SYS
+         echo "  Copy: [ref_projs_s_grp]{****[in]} -->  [ref_projs_s]@@{*****[out]}"
+       [s] = 2
+       SYS
+         echo "  Copy: [ref_projs_s_grp]{****[in]} -->  [ref_projs_s]@@{*****[out]}"
+     ENDIF
+@
+
+
+1.1
+log
+@Gold_standard
+@
+text
+@d14 3
+a16 3
+ ;   [iter]               Current iteration
+ ;   [num-grps]           Number of parallel groups 
+ ;   [prj-radius]         Projection radius 
+d20 1
+a20 1
+ ;   [vol_s]              final/vol_##_s%         Current subset reference volume (two/iter) 
+d23 3
+a25 3
+ ;   [iter_refangs_grp]   work/ang_refs_##_***    Reference angles doc file    (one/group)      
+ ;   [ref_projs_s]        work/refproj_##_s%      Reference projections stacks (two/iter)
+ ;   [ref_projs_s_grp]    work/refproj_##_s%_***@@ Temp ref projections stack   (two/iter/group) Deleted  
+d28 5
+a32 5
+ ;   pub-submit           <a href="pub-submit.spi">       pub-submit.spi</a>
+ ;   .. publish           <a href="publish.perl">         publish.perl</a>
+ ;   .. pub-refine-start  <a href="pub-refine-start.spi"> pub-refine-start</a>          
+ ;   .... refine-settings <a href="refine-settings.spi">  refine-settings.spi</a>            
+ ;   .... refine-prjloop  <a href="refine-prjloop.spi">   refine-prjloop.spi</a>            
+d44 1
+a44 1
+ IF ( [num-grps] <= 1 ) THEN
+d95 8
+a102 8
+     !IF ( [in] == 1 ) THEN
+     !  [s] = 1
+     !  SYS
+     !    echo "  Copy: [ref_projs_s_grp]{****[in]} -->  [ref_projs_s]@@{*****[out]}"
+     !  [s] = 2
+     !  SYS
+     !    echo "  Copy: [ref_projs_s_grp]{****[in]} -->  [ref_projs_s]@@{*****[out]}"
+     !ENDIF
+@

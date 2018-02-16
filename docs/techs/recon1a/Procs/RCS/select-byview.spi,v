@@ -1,0 +1,858 @@
+head	1.15;
+access;
+symbols
+	Pre_gold:1.12;
+locks;
+comment	@# @;
+
+
+1.15
+date	2016.07.05.15.58.55;	author leith;	state Exp;
+branches;
+next	1.14;
+
+1.14
+date	2016.03.25.16.34.16;	author leith;	state Exp;
+branches;
+next	1.13;
+
+1.13
+date	2016.03.24.14.41.29;	author leith;	state Exp;
+branches;
+next	1.12;
+
+1.12
+date	2014.04.10.15.50.47;	author leith;	state Exp;
+branches;
+next	1.11;
+
+1.11
+date	2013.11.19.20.20.57;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2013.11.19.19.37.57;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2013.11.19.19.14.36;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2013.11.13.19.41.47;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2013.11.13.16.52.50;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2013.11.12.14.03.23;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2013.11.08.19.28.14;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2012.05.23.22.07.07;	author tapu;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2012.05.23.22.00.39;	author tapu;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2012.05.23.21.36.11;	author tapu;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2012.05.23.03.04.31;	author tapu;	state Exp;
+branches;
+next	;
+
+
+desc
+@new file -- separates particles according to orientation
+@
+
+
+1.15
+log
+@cosmetic
+@
+text
+@
+ ; <html><head><title>Make selection doc files reference views</title></head><body><pre>
+ ;
+ ; SOURCE:   spider/docs/techs/recon/Procs/select-byview.spi
+ ;
+ ; PURPOSE:  Make selection doc files for reference views
+ ;
+ ; USAGE:    clean ; ./spider spi/dat @@select-byview
+
+ ; REQUIRES: spider/docs/techs/recon/Procs/verify-settings.spi
+ ;
+ ; INPUT FILES: ([win_dir] denotes input directory, 
+ ;               [rec_dir] denotes reconstruction output directory and '***' denotes group)
+ ;   [sel_group]      [win_dir]/sel_group               Group selection doc file      (one)
+ ;   [sel_part]       [win_dir]/sel_part_***            Particle selection doc file   (one/group)
+ ;   [iter_refangs]   [rec_dir]/ref_angs_01             Reference angles doc file     (one)                  
+ ;   [align_doc]      [rec_dir]/align_01_***            Particle alignment doc files  (one/group)
+ ;
+ ; OUTPUTS:   (Where ### denotes projection view)
+ ;   [view_list]        views/prj###/sel_part_byv       By-view particle list         (one/view)
+ ;   [sorted_particles] views/prj###/sel_part_byv_sort  Particle list sorted by CCROT (one/view)
+ ;   [parts_vsview]     views/parts_vsview_all          List of particles per view    (one)
+ ;
+ ;
+ ; ----------- END BATCH HEADER ----------------
+
+ MD
+   SET MP
+   0 
+ MD
+   VB OFF
+
+ ;[view-progress] = 1
+
+
+ ; Set common filenames & parameters
+ @@verify-settings
+
+ UD N [num-views]
+   [ref_view_list]                ; Reference view angles (input)
+ SYS
+   echo "  Separating particles for: {%I0%[num-views]} reference views" ; echo
+
+ SYS                                 ; Make sure output dir. present
+   mkdir -p [view_dir] 
+
+ ; Merge alignment parameter doc files into overall file
+
+ DE                                  ; So can not append to any pre-existing file
+   [parts_vsview]                    ; # particles / view summary file   (removed)
+ ; Lable summary file
+ SD /   #-OF-PARTS 
+   [parts_vsview]                    ; # particles / view summary file   (output)
+ 
+ ; Initialize variables
+ [max-imgs]       = -1
+ [min-imgs]       = 9999999
+ [combined-parts] = 0
+ 
+ DO  [view] = 1,[num-views]          ; Loop over all view numbers ----------------------
+
+   SYS
+     mkdir -p [prj_dir][view]
+
+   [view-parts] = 0
+
+   DO                                ; Loop over all groups ----------------------------
+     UD NEXT [gkey], [grp]
+       [sel_group]                   ; Group selection file (input)
+     IF ( [gkey] <= 0 ) EXIT
+
+     DO                              ; Loop over particles in this group --------------
+       UD NEXT [pkey],[grp-win], [mic],[mic-win],[glo-num] 
+         [sel_part][grp]             ; Particle selection file     (input)
+       IF ( [pkey] <= 0 ) EXIT
+
+       UD IC [grp-win], [r1],[r2],[r3],[ref],[exp],[r6],[r7],[r8],[r9],[r10],[r11],[ccrot],[r13],[r14],[mir]
+         [align_doc][grp]            ; Particle alignment doc files  (input)
+
+       IF ( [ref] == [view] ) THEN
+         ; Particle uses this view
+
+         IF ( [view-parts] == 0 ) THEN
+           ; First partilcle for this view, clean existing files and lable headers
+
+           DE                         ; Delete
+             [view_list][view]        ; Particle selection for view doc file (output)
+           ; First particle in view, label columns
+           SD /           NUM       GLO_NUM      GRP_WIN        CCROT      MIRROR_FLAG    GRP_NUM        VIEW        MIC
+             [view_list][view]        ; Particle selection for view doc file (output)
+           SD E
+             [view_list][view]        ; Particle selection for view doc file (closed)
+
+           DE                         ; Delete
+             [sorted_particles][view] ; Particle selection for view doc file (output)
+           SD /           NUM       GLO_NUM      GRP_WIN        CCROT      MIRROR_FLAG    GRP_NUM        VIEW        MIC
+             [sorted_particles][view] ; Sorted particle selection for view doc file (output)
+           SD E
+             [sorted_particles][view] ; Sorted particle selection for view doc file (closed)
+           
+         ENDIF
+
+         [view-parts] = [view-parts] + 1
+
+         ; Set mirror flag
+         [mirror] = 0
+         IF ( [mir] < 0 ) [mirror] = -1
+        
+         ; Write to view list doc file
+         SD  [view-parts], [view-parts],[glo-num],[grp-win],[ccrot],[mirror],[grp],[view],[mic]
+           [view_list][view]         ; Particle selection for view doc file (output)
+         
+       ENDIF
+     ENDDO                           ; End: Loop over particles in this group --------------
+
+     ; Close documents
+     UD NEXT E
+       [sel_part][grp]               ; Particle selection file      (closed)
+     UD IC E
+       [align_doc][grp]              ; Particle alignment doc files (closed)
+     SD E
+      [view_list][view]              ; Particle selection for view doc file (closed)
+
+     ; Update min, max
+     IF ( [view-parts] > [max-imgs] ) [max-imgs] = [view-parts]
+     IF ( [view-parts] < [min-imgs] ) [min-imgs] = [view-parts]
+
+
+   ENDDO                             ; End: Loop over all groups ---------------------------
+
+   UD NEXT E
+       [sel_group]                   ; Group selection file (closed)
+
+   ; Check if particle-list exists
+   IQ FI [list-exists]
+      [view_list][view]              ; Particle selection for view doc file (input)
+
+   IF ( [list-exists] == 1) THEN
+      ; Skip if particle-list does not exist
+
+      ; Sort by CC
+      DOC SORT A                     ; Sort doc file & append to existing lable
+        [view_list][view]            ; Particle selection for view doc file  (input)
+        [sorted_particles][view]     ; Particle selection for view doc file  (output)
+        -4                           ; Column # to sort by CCROT, Reverse order
+        Y                            ; Renumber the keys
+   ENDIF
+ 
+   IF ( [view-parts] > 0 ) THEN   
+     ; Update  combined counter
+     [combined-parts] = [combined-parts] + [view-parts]
+
+     ; Write to summary
+     SD [view], [view-parts]
+        [parts_vsview]               ; # particles / view summary file   (output)
+   ENDIF
+
+   IF ( int( [view]/[view-progress] ) == [view]/[view-progress] ) THEN
+      SYS
+        echo "  View: {%I3%[view]}   Particles: {%I6%[view-parts]}"
+   ENDIF
+
+ ENDDO                              ; End: Loop over all view numbers ------------------
+  
+ ; Finish summary file
+ SD /   #VIEWS  TOTPARTS       MAXIMGS       MINIMGS
+    [parts_vsview]          ; # particles / view summary file   (output)
+ [dummy] = -[num-views]
+ SD [dummy], [combined-parts],[max-imgs],[min-imgs]
+    [parts_vsview]          ; # particles / view summary file   (output)
+ SD E
+    [parts_vsview]          ; # particles / view summary file   (closed)
+
+ SYS
+   echo ; echo -n "  Done    "; date
+
+ EN
+
+ ; Modified 2016-3-25
+ ;    2016-03-25 (agl) -- New file names, MODERNIZED SYNTAX & COSMETIC
+ ;    2013-10-23 (agl) -- New file names, modernized syntax & cosmetic
+ ;    2012-04-11 (trs) -- Prints min & max populated views in HOW_MANY file
+ ;    2012-04-10 (trs) -- uses combined alignment doc as input
+ ;    2012-04-06 (trs) -- Adapted from selectbyviewall.spi
+ ;    2011-11-02 (trs) -- Added output: combined HOW_MANY file
+ ;    2011-10-21 (trs) -- Do not need reversedoc_7col anymore 
+ ;    2011-10-21 (trs) -- Updated to named registers
+ ;    2009-04-22 (trs) -- Using 'SD IC'
+ ;    2009-04-21 (trs) -- Added version of select/sel sorted by CCROT
+ ;    2009-02-23 (trs) -- Added view# to select/sel output
+ ;    2008-04-24 (trs) -- Number of reference projections now an input parameter
+ ;    2008-01-30 (trs) -- Last angle in refangles not necessarily redundant
+ ;    2007-08-07 (trs) -- Reflects changes to input doc file sel_part
+ ;    2007-06-06 (trs) -- Bug fix cleaning out pre-existing files, format change
+ ;    2007-05-30 (trs) -- Reflects changes to input doc file sel_part
+ ;    2007-03-27 (trs) -- Reflects changes to input doc file sel_part
+ ;    2007-02-20 (trs & djt) -- Projlist now an output
+ ;    2007-02-20 (trs & djt) -- Bug fix: group directories not correctly created
+
+ ; </pre></body></html>
+@
+
+
+1.14
+log
+@*** empty log message ***
+@
+text
+@a11 2
+ ; PARAMETERS FROM spider/docs/techs/recon/Procs/:
+ ;
+d40 1
+a40 1
+   [ref_image_angles]                ; Reference view angles (input)
+d175 1
+a175 1
+   echo ; echo -n " Done    "; date
+@
+
+
+1.13
+log
+@echo msg formatting,  view-progess bug fixed
+@
+text
+@d14 6
+a19 5
+ ; INPUTS:  (Where *** denotes image group)
+ ;   [sel_group]        = '../Alignment/sel_group'           ; Group selection doc file      (one)
+ ;   [sel_part]         = '../Alignment/sel_part_***'        ; Particle selection doc file   (one/group)
+ ;   [ref_image_angles] = '../Alignment/refangles'           ; Reference view angles         (one)
+ ;   [align_doc]        = '../Alignment/output/align_01_***' ; Particle alignment doc files  (one/group)
+d22 3
+a24 3
+ ;   [view_list]        = 'views/prj###/sel_part_byv'        ; By-view particle list         (one/view)
+ ;   [sorted_particles] = 'views/prj###/sel_part_byv_sort'   ; Particle list sorted by CCROT (one/view)
+ ;   [parts_vsview]     = 'views/parts_vsview_all'           ; List of particles per view    (one)
+a60 1
+
+d181 4
+a184 3
+ ; Modified 2013-10-16
+ ;    2013-10-23 (agl) -- new file names, modernized syntax & cosmetic
+ ;    2012-04-11 (trs) -- prints min & max populated views in HOW_MANY file
+d186 15
+a200 15
+ ;    2012-04-06 (trs) -- adapted from selectbyviewall.spi
+ ;    2011-11-02 (trs) -- added output: combined HOW_MANY file
+ ;    2011-10-21 (trs) -- do not need reversedoc_7col anymore (needs SPIDER v18.19+)
+ ;    2011-10-21 (trs) -- updated to named registers
+ ;    2009-04-22 (trs) -- using SD IC
+ ;    2009-04-21 (trs) -- added version of select/sel sorted by CCROT
+ ;    2009-02-23 (trs) -- added view# to select/sel output
+ ;    2008-04-24 (trs) -- number of reference projections now an input parameter
+ ;    2008-01-30 (trs) -- last angle in refangles not necessarily redundant
+ ;    2007-08-07 (trs) -- reflects changes to input doc file sel_part
+ ;    2007-06-06 (trs) -- bug fix cleaning out pre-existing files, format change
+ ;    2007-05-30 (trs) -- reflects changes to input doc file sel_part
+ ;    2007-03-27 (trs) -- reflects changes to input doc file sel_part
+ ;    2007-02-20 (trs & djt) -- projlist now an output
+ ;    2007-02-20 (trs & djt) -- bug fix: group directories were not correctly created
+@
+
+
+1.12
+log
+@output formatting
+@
+text
+@d34 3
+d43 1
+a43 1
+   echo " Separating particles for: {%I0%[num-views]} reference views" ; echo
+d162 1
+a162 1
+        echo " View: {%I3%[view]}   Particles: {%I6%[view-parts]}"
+@
+
+
+1.11
+log
+@sorted_view_list --> sorted_particles
+@
+text
+@d1 1
+d4 1
+a4 1
+ ; SOURCE:   spider/docs/techs/recon1/Procs/select-byview.spi
+d10 1
+a10 1
+ ; REQUIRES: spider/docs/techs/recon1/Procs/verify-settings.spi
+d12 1
+a12 1
+ ; PARAMETERS FROM spider/docs/techs/recon1/Procs/:
+d24 2
+a25 5
+ 
+ ; ---------------- Parameters ----------------
+ 
+  [view-progress] = 1                ; Prints progress message every Nth reference view
+
+d40 1
+a40 1
+   echo -n " Separating particles for: {%I0%[num-views]} reference views    "; date ; echo
+d159 1
+a159 1
+        echo " View: {%I3%[view]} Out of: {%I3%[num-views]}    Particles: {%I6%[view-parts]}"
+@
+
+
+1.10
+log
+@no longer makes: ../Averages/sel_proj
+@
+text
+@d21 1
+a21 1
+ ;   [sorted_view_list] = 'views/prj###/sel_part_byv_sort'   ; Particle list sorted by CCROT (one/view)
+d96 1
+a96 1
+             [sorted_view_list][view] ; Particle selection for view doc file (output)
+d98 1
+a98 1
+             [sorted_view_list][view] ; Sorted particle selection for view doc file (output)
+d100 1
+a100 1
+             [sorted_view_list][view] ; Sorted particle selection for view doc file (closed)
+d145 1
+a145 1
+        [sorted_view_list][view]     ; Particle selection for view doc file  (output)
+@
+
+
+1.9
+log
+@###
+@
+text
+@d9 1
+a9 1
+ ; REQUIRES:     spider/docs/techs/recon1/Procs/verify-settings.spi
+a19 1
+ ;   [ref_view_list]    = 'sel_proj'                         ; List of reference views       (one)
+a47 6
+
+ ; Generate view-list
+ DOC CREATE
+   [ref_view_list]                   ; View list doc file    (output)
+   1                                 ; Column to be filled
+   1-[num-views]                     ; Numbers to put in column
+@
+
+
+1.8
+log
+@using_settings
+@
+text
+@d19 1
+a19 1
+ ; OUTPUTS:   (Where *** denotes projection view)
+d21 2
+a22 2
+ ;   [view_list]        = 'views/prj***/sel_part_byv'        ; By-view particle list         (one/view)
+ ;   [sorted_view_list] = 'views/prj***/sel_part_byv_sort'   ; Particle list sorted by CCROT (one/view)
+@
+
+
+1.7
+log
+@using_settings
+@
+text
+@a20 2
+ ;   [parts_vsview]     = 'views/parts_vsview_all'           ; List of particles per view    (one)
+ ;   [prj_dir]          = 'views/prj***'                     ; View sub-directories          (one/view)
+d23 1
+@
+
+
+1.6
+log
+@consolidated_filenames
+@
+text
+@d9 17
+d27 2
+a28 30
+
+ [num-views]        = 83     ; Number of reference projections
+
+ [view-progress]    = 1      ; Prints progress message every Nth reference view
+
+ ; ---------------- Input files --------------
+
+ [in_dir]           = '../Alignment/output'          ; Input directory               (one)
+
+ [sel_group]        = '../Alignment/sel_group'       ; Group selection doc file      (one)
+
+ [sel_part]         = '../Alignment/sel_part_***'    ; Particle selection doc file   (one/group)
+
+ [align_doc]        = '[in_dir]/align_01_***'        ; Particle alignment doc files  (one/group)
+
+ ; ---------------- Output files --------------
+
+ [ref_view_list]    = 'sel_proj'                      ; List of reference views       (one)
+
+ [view_dir]         = 'views'                         ; Directory                     (one)
+
+ [prj_dir]          = '[view_dir]/prj***'             ; View sub-directories          (one/view)
+
+
+ [view_list]        = '[prj_dir]/sel_part_byv'        ; By-view particle list         (one/view)
+
+ [sorted_view_list] = '[prj_dir]/sel_part_byv_sort'   ; Particle list sorted by CCROT (one/view)
+
+![summary_parts_vsview] = '[view_dir]/how_many_all'       ; List of particles per view    (one)
+ [summary_parts_vsview] = '[view_dir]/parts_per_view_all' ; List of particles per view    (one)
+d38 5
+a48 1
+
+d58 1
+a58 1
+   [summary_parts_vsview]        ; # particle/ view summary file   (removed)
+d61 1
+a61 1
+   [summary_parts_vsview]        ; # particle/ view summary file   (output)
+d138 1
+a138 1
+   ENDDO                             ; End: Loop over all groups -----------------------
+d145 1
+a145 1
+      [view_list][view]             ; Particle selection for view doc file (input)
+d147 1
+a147 1
+   IF ( [list-exists] == 0 ) THEN
+a148 3
+      SYS
+        echo " No particles in view: {%I3%[view]} "
+    ELSE
+d157 9
+a165 7
+    
+   ; Update  combined counter
+   [combined-parts] = [combined-parts] + [view-parts]
+
+   ; Write to summary
+   SD [view], [view-parts]
+      [summary_parts_vsview]         ; # particle/ view summary file   (output)
+d172 1
+a172 1
+ ENDDO                              ; End: Loop over all view numbers -----------------
+d176 1
+a176 1
+    [summary_parts_vsview]          ; # particle/ view summary file   (output)
+d179 1
+a179 1
+    [summary_parts_vsview]          ; # particle/ view summary file   (output)
+d181 1
+a181 1
+    [summary_parts_vsview]          ; # particle/ view summary file   (closed)
+@
+
+
+1.5
+log
+@rewrite_syntax_filenames
+@
+text
+@d27 1
+a27 1
+ [sel_views]        = 'sel_proj'                      ; List of reference views       (one)
+d38 2
+a39 2
+![summary_doc]      = '[view_dir]/how_many_all'       ; List of particles per view    (one)
+ [summary_doc]      = '[view_dir]/parts_per_view_all' ; List of particles per view    (one)
+d50 1
+a50 1
+   echo -n " Separating particles for: {%I0%[num-views]} reference views    "; date
+d60 1
+a60 1
+   [sel_views]                       ; View list doc file    (output)
+d65 1
+a65 1
+   [summary_doc]                     ; # particle/ view summary file   (removed)
+d68 1
+a68 1
+   [summary_doc]                     ; # particle/ view summary file   (output)
+d70 1
+a70 1
+; Initialize variables
+d155 1
+a155 1
+      ; Skip if particle-list doesn't exist
+d173 1
+a173 1
+      [summary_doc]                 ; # particle/ view summary file   (output)
+d184 1
+a184 1
+    [summary_doc]                   ; # particle/ view summary file   (output)
+d187 1
+a187 1
+    [summary_doc]                   ; # particle/ view summary file   (output)
+d189 1
+a189 1
+    [summary_doc]                   ; # particle/ view summary file   (closed)
+d202 1
+a202 1
+ ;    2011-10-21 (trs) -- don't need reversedoc_7col anymore (needs SPIDER v18.19+)
+@
+
+
+1.4
+log
+@removed stray carriage return
+@
+text
+@d1 166
+a166 130
+; MAKE SELECTION DOC FILES FOR EACH REFERENCE VIEW
+;
+; Requires at least SPIDER v18.19
+;
+; Adapted from selectbyviewall.spi
+
+; ---------------- Parameters ----------------
+
+[num-views]      = 83   ; number of reference-projections
+[view-progress]  = 10   ; prints progress message every Nth reference view
+
+; ---------------- Input files --------------
+FR L
+[align_doc]../Alignment/align_01_all          ; total-particle alignment-doc, for each group
+FR L
+[global2group_lut]../Alignment/global2group   ; particle-to-group lookup table
+;KEY=GLOBAL / APSHSLICE     MIC_SLICE     APSHGROUP      MICNUM       GLOBALNUM
+
+; ---------------- Output files --------------
+FR L
+[ref_view_list]../Alignment/projlist          ; list of reference views
+FR L
+[view_dir]Views                               ; output directories, one for each group and one combined
+fr g
+[prj_dir][view_dir]/prj{***[view-num]}        ; output subdirectory prefix, for each reference-view
+FR L
+[by_view_list]sel***                          ; by-view list, in VIEW_DIR
+; /     VIEWSLICE   GLOBAL_NUM    GRPSLICE      CC_ROT       MIRROR      GROUPNUM       VIEW
+FR L
+[sorted_view_list]sortsel                     ; by-view list, sorted by CCROT, in PRJ_DIR
+FR L
+[summary_doc]how_many-total                   ; particles per view
+
+; ----------- END BATCH HEADER ----------------
+
+; set temporary filenames
+fr l
+[temp_view_list][view_dir]/tmpsel***
+fr l
+[temp_view2group_lut]tmp_view2grp_lut_incore
+
+md
+set mp
+(0)
+md
+vb off
+
+; generate view-list
+doc create
+[ref_view_list]
+(1)              ; column to be filled
+(1-[num-views])  ; numbers to put in column
+
+VM
+echo "Separating particles for {***[num-views]} reference views"; date
+
+; Make sure output dir. present
+vm
+echo "if(! -d [view_dir]) mkdir [view_dir]"|csh
+
+de
+[summary_doc]
+; (VO MQ appends to pre-existing file.)
+
+; split by view
+vo mq
+(0)          ; CCC threshold
+[align_doc]
+[num-views]  ; #reference-projections
+[temp_view_list]  ; WAS [group_dir]/[view_dir]/[by_view_list]
+[summary_doc]
+
+vm
+echo "Adding group information"; date ; echo
+
+; initialize variables
+[max-imgs]       = -1
+[min-imgs]       = 9999999
+[combined-parts] = 0
+
+; loop through reference-views
+do lb8 [view-num] = 1,[num-views]
+    if (int([view-num]/[view-progress]).eq.[view-num]/[view-progress]) then
+        vm
+        echo "Working on view #{***[view-num]} out of {***[num-views]}"
+    endif
+
+    vm
+    echo "if(! -d [prj_dir]) mkdir [prj_dir]"|csh
+
+    ; get #particles in view
+    ud n [view-parts]
+    [temp_view_list][view-num]  ; WAS [group_dir]/[view_dir]/[by_view_list][view-num]
+
+    ; update min, max
+    if([view-parts].gt.[max-imgs]) [max-imgs]=[view-parts]
+    if([view-parts].lt.[min-imgs]) [min-imgs]=[view-parts]
+
+    ; skip if empty
+    if([view-parts].eq.0)goto lb7
+
+    sd ic new
+    [temp_view2group_lut]
+    (7,[view-parts])
+
+    ; loop through particles
+    do lb6 [part-key6] = 1,[view-parts]
+        ; get particle#, CCROT, mirror-flag
+        ud ic [part-key6], [global-num6],[ccrot],[mirror]
+        [temp_view_list][view-num]  ; WAS [group_dir]/[view_dir]/[by_view_list][view-num]
+
+        ; get group-slice, group#
+        ud ic [global-num6], [grp-slice6],[mic-slice],[grp-num],[mic-num]
+        [global2group_lut]  ; [stack2particle_lut][grp-num]
+
+        ; write to view doc
+        sd ic [part-key6], [part-key6],[global-num6],[grp-slice6],[ccrot],[mirror],[grp-num],[view-num]
+        [temp_view2group_lut]
+    lb6
+    ; end particle-loop
+
+    ; close documents
+    ud ice
+    [temp_view_list][view-num]
+    ; close documents
+    sd ic copy
+    [temp_view2group_lut]
+    [view_dir]/[by_view_list][view-num]  ; WAS [view_dir]/[view_slice_lut][view-num]
+    sd ic e
+    [temp_view2group_lut]
+d168 2
+a169 19
+    ; check if particle-list exists
+    iq fi [list-exists]
+    [view_dir]/[by_view_list][view-num]  ; WAS [temp_view_list]
+    ; (will not exist if no particles in view)
+
+    ; skip if particle-list doesn't exist
+    if([list-exists].eq.0) then
+        vm
+        echo "No particles in view #{***[view-num]} -- Skipping..."
+
+        goto lb3
+    endif
+
+    ; sort by CC
+    doc sort
+    [view_dir]/[by_view_list][view-num]  ; INPUT
+    [prj_dir]/[sorted_view_list]  ; WAS [temp_view_list_unreversed]          ; OUTPUT
+    (-4)                                 ; column# to sort: CCROT
+    Y                                    ; renumber?
+d171 44
+a214 4
+    lb3  ; jump here if no particles in view
+    
+    ; updated combined counter
+    [combined-parts] = [combined-parts] + [view-parts]
+d216 1
+a216 53
+    ; label columns
+    SD /      VIEWSLICE   GLOBPARTICLE    GRP_SLICE       CCROT      MIRROR_FLAG    GROUP_NUM      VIEWNUM
+    [prj_dir]/[sorted_view_list]
+    sd e
+    [prj_dir]/[sorted_view_list]
+
+    SD /      VIEWSLICE   GLOBPARTICLE    GRP_SLICE       CCROT      MIRROR_FLAG    GROUP_NUM      VIEWNUM
+    [view_dir]/[by_view_list][view-num]
+    sd e
+    [view_dir]/[by_view_list][view-num]
+
+    ; clean up
+    de
+    [temp_view_list][view-num]
+lb8
+; end view-loop
+
+; close doc
+ud ice
+[global2group_lut]  ; WAS [stack2particle_lut][grp-num]
+
+; finish summary file
+SD /   #VIEWS  TOTPARTS       MAXIMGS       MINIMGS
+[summary_doc]
+[dummy] = -[num-views]
+sd [dummy], [combined-parts],[max-imgs],[min-imgs]
+[summary_doc]
+sd e
+[summary_doc]
+
+vm
+echo "Done"; date
+
+EN D
+
+; Modified 2012-04-27
+;    2012-04-11 (trs) -- prints min & max populated views in HOW_MANY file
+;    2012-04-10 (trs) -- uses combined alignment doc as input
+;    2012-04-06 (trs) -- adapted from selectbyviewall.spi
+;    2011-11-02 (trs) -- added output: combined HOW_MANY file
+;    2011-10-21 (trs) -- don't need reversedoc_7col anymore (needs SPIDER v18.19+)
+;    2011-10-21 (trs) -- updated to named registers
+;    2009-04-22 (trs) -- using SD IC
+;    2009-04-21 (trs) -- added version of select/sel sorted by CCROT
+;    2009-02-23 (trs) -- added view# to select/sel output
+;    2008-04-24 (trs) -- number of reference projections now an input parameter
+;    2008-01-30 (trs) -- last angle in refangles not necessarily redundant
+;    2007-08-07 (trs) -- reflects changes to input doc file sel_particles
+;    2007-06-06 (trs) -- bug fix cleaning out pre-existing files, format change
+;    2007-05-30 (trs) -- reflects changes to input doc file sel_particles
+;    2007-03-27 (trs) -- reflects changes to input doc file sel_particles
+;    2007-02-20 (trs & djt) -- projlist now an output
+;    2007-02-20 (trs & djt) -- bug fix: group directories were not correctly created
+@
+
+
+1.3
+log
+@needed combined alignment doc file rather than group alignment doc files as input
+@
+text
+@a182 1
+
+@
+
+
+1.2
+log
+@removed stray backslash
+@
+text
+@d14 1
+a14 1
+[align_doc]../Alignment/align_01_***          ; total-particle alignment-doc, for each group
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d97 1
+a97 1
+    if([view-parts].lt.[min-imgs]) [min-imgs]=[view-parts]\
+@

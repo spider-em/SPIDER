@@ -1,0 +1,493 @@
+head	1.5;
+access;
+symbols
+	Pre_gold:1.5;
+locks;
+comment	@# @;
+
+
+1.5
+date	2015.03.03.15.43.18;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2015.03.03.15.31.18;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2013.11.08.19.28.14;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2012.07.19.18.32.36;	author tapu;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2012.05.23.02.47.05;	author tapu;	state Exp;
+branches;
+next	;
+
+
+desc
+@new file -- windows images using coordinates doc file input
+@
+
+
+1.5
+log
+@deci
+@
+text
+@ ; <html><head><title>Repicks particles from micrographs</title></head><body><pre>
+ ;
+ ; SOURCE:   spider/docs/techs/recon1/Procs/rewindow.spi
+ ;
+ ; ORIGIN:   Adapted from lfc_pick.spi, pickparticle.spi    
+ ;
+ ; PURPOSE:  Repicks particles from micrographs
+ ;
+ ; REQUIRES: convert-p.spi
+ ;
+ ; USAGE:    clean ; spider spi/mrf @@rewindow
+
+ ; ----------- Parameters --------------
+
+ [deci] = 0  ; Decimation factor (0 = get value from  param file)
+
+ ; [deci] = Decimation factor for 'DC S' operation
+ ;      0 = Get value from param file
+ ;      1 = full sized image
+ ;      2 = 1/2 size
+ ;      4 = 1/4 size
+
+ ; ----------- Input files --------------
+
+ [params]  = '../params'                     ; Parameter file                 (one)
+
+ [sel_mic] = '../sel_micrograph'             ; Micrograph selection doc file  (one)    
+
+ [micgr]   = '../Micrographs/mic{****[mic]}' ; Micrograph images
+
+![sndc]    = 'coords/sndc_{****[mic]}'       ; Window center coordinates doc file
+ [sndc]    = 'coords/pkcoor_{****[mic]}'     ; Window center coordinates doc file
+
+ [noise]   = '../Particles/noise'            ; Noise file                    (one)
+
+ ; ----------- Output files --------------
+
+ [win_dir] = 'win'                               ; Output directory for particle images
+
+![ser]     = '[win_dir]/winser_{****[mic]}@@'     ; Particle image stacks
+ [ser]     = '[win_dir]/data_bymic_{****[mic]}@@' ; Particle image stacks
+
+ ; ----------- END BATCH HEADER -----------
+
+
+ [temp_circle_mask]    = '_26'
+
+ [temp_inverted_mask]  = '_28'
+
+ [temp_noise_incore]   = '_27'
+
+ [temp_windowed]       = '_29'
+
+ [temp_ramp_corrected] = '_22'
+
+ MD                        ; Use all available processors
+   SET MP
+   0 
+ MD                        ; Skip unnecessary output 
+   VB OFF
+ MD                        ; Skip unnecessary output 
+   TR OFF
+ MY FL
+
+ [out] = 'out{****[mic]}'  ; Temp. SPIDER file for conversions
+
+
+ ; Get window size from parameter file
+ UD 17, [sp_winsiz]          ; Get window size
+   [params]
+
+ ; Calculate center-to-top-left distance
+ [half-xdim]   = INT([sp_winsiz]/2)+1
+ [half-ydim]   = INT([sp_winsiz]/2)+1
+ [mask-radius] = INT([sp_winsiz]/2)-1
+
+ ; Initialize particle-counter
+ [part] = 0  
+
+ ; Create directory if necessary
+ SYS
+    echo mkdir -p [win_dir]
+ 
+
+ MY FL
+
+ ; Loop over all micrographs ----------------------------------------------------
+ DO  
+   UD NEXT [key],[mic] ; Get micrograph number
+     [sel_mic]
+   IF ( [key] <= 0 ) EXIT
+
+   @@convert-p([deci])
+     [params]          ; Parameter file
+     [micgr]           ; Input micrograph
+     [out]             ; Template for output SPIDER file
+
+   UD N  [n]           ; Get number of particles in this micrograph
+     [sndc]
+   
+   ; Make a mask file
+   MO
+     [temp_circle_mask]
+     [sp_winsiz],[sp_winsiz]
+     C
+     [mask-radius]
+   
+   ; Pixels those are part of the particle are excluded from normalization
+   AR
+     [temp_circle_mask]
+     [temp_inverted_mask]
+     (P1-1)*(-1)
+   
+   ; Copy noise file to memory
+   CP
+     [noise]
+     [temp_noise_incore]
+   
+   ; Loop through particles
+   DO  [part-key] = 1,[n]
+      ; read x-coord, y-coord
+      UD IC [part-key], [xcenter],[ycenter]   ; [mic-slice],[peak-height]   ; (last 2 not used)
+        [sndc]
+      
+      [x-topleft] = [xcenter] - [half-xdim]
+      [y-topleft] = [ycenter] - [half-ydim]
+      
+      WI
+        [out]
+        [temp_windowed]
+        [sp_winsiz],[sp_winsiz]
+        [x-topleft],[y-topleft]  ; Top-left coordinates
+      
+      RA
+        [temp_windowed]
+        [temp_ramp_corrected]
+      
+      ; Normalize as per histogram
+      CE FIT
+        [temp_noise_incore]      ; (input)
+        [temp_ramp_corrected]    ; (input)
+        [temp_inverted_mask]     ; (input)
+        [ser]{******[part-key]}
+   ENDDO
+   
+   UD ICE
+     [sndc]
+
+   [part] = [part]+[n]  ; Increment the particle counter
+
+   DE                 ; Delete the temporary SPIDER file
+     [out]
+
+   SYS
+     echo ' 'Picked:  {%I5%[n]} images from micrograph: {%I5%[mic]}
+ ENDDO
+
+ SYS
+   echo ' 'Total picked particles:  {%I0%[part]}; echo ' '
+
+ EN D
+
+ ; Modified 2013-10-16
+ ;    2013-10-16 (agl) -- modernized
+ ;    2012-07-19 (trs) -- creates output directory if needed
+ ;    2012-05-03 (trs) -- convert-p no longer uses micrograph# as an input
+
+ ; </pre></body></html>
+@
+
+
+1.4
+log
+@sp_ params
+@
+text
+@d7 1
+a7 1
+ ; PURPOSE: Repicks particles from micrographs
+d15 1
+a15 1
+ [decimate] = 0  ; Decimation factor (0 = get value from  param file)
+d17 5
+a21 5
+ ; [decimate] = Decimation factor for 'DC S' operation
+ ;    0 = get value from param file
+ ;    1 = full sized image
+ ;    2 = 1/2 size
+ ;    4 = 1/4 size
+d93 1
+a93 1
+   @@convert-p([decimate])
+@
+
+
+1.3
+log
+@rewrite_syntax_filenames
+@
+text
+@d69 1
+a69 1
+ UD 17, [windiam]          ; Get window size
+d73 3
+a75 3
+ [half-xdim]   = INT([windiam]/2)+1
+ [half-ydim]   = INT([windiam]/2)+1
+ [mask-radius] = INT([windiam]/2)-1
+d104 1
+a104 1
+     [windiam],[windiam]
+d131 1
+a131 1
+        [windiam],[windiam]
+@
+
+
+1.2
+log
+@creates directories if needed
+@
+text
+@d1 99
+a99 98
+; <html><head><title>Repicks particles from micrographs</title></head><body><pre>
+;
+; SOURCE:  Adapted from lfc_pick.spi, pickparticle.spi    
+;
+; CALLS:   convert_p.spi
+
+; ----------- Parameters --------------
+
+[decimate] = 0  ; Decimation factor (0 = get value from  param file)
+
+; [decimate] = decimation factor for 'DC S' operation
+;    0 = get value from param file
+;    1 = full sized image
+;    2 = 1/2 size
+;    4 = 1/4 size
+
+; ----------- Input files --------------
+
+FR G
+[params]../params                      ; Parameter file 
+
+FR G
+[sel_mic]../sel_micrograph             ; Micrograph file numbers
+
+FR G
+[micgr]../Micrographs/mic{****[mic]}   ; Micrograph images
+
+FR G
+[sndc]coords/sndc{****[mic]}           ; Template for doc file with coordinates
+
+FR G
+[noise]../Particles/noise              ; Noise file 
+
+; ----------- Output files --------------
+FR G
+[win_dir]win                           ; Output directory for particle image stacks
+FR G
+[ser][win_dir]/winser_{****[mic]}@@     ; Template for particle image stacks
+
+; ----------- END BATCH HEADER -----------
+
+fr l
+[temp_circle_mask]_26
+fr l
+[temp_inverted_mask]_28
+fr l
+[temp_noise_incore]_27
+fr l
+[temp_windowed]_29
+fr l
+[temp_ramp_corrected]_22
+
+MD                      ; Use all available processors
+SET MP
+0 
+
+MD                      ; Skip unnecessary output 
+VB OFF
+MD                      ; Skip unnecessary output 
+TR OFF
+MY FL
+
+FR G
+[out]out{****[mic]}     ; Temporary spider file for converting from other formats
+
+; Get window size from parameter file
+UD 17, [windiam]        ; Get window diameter
+[params]
+
+; initialize particle-counter
+[part] = 0  
+
+; create directory if necessary
+vm
+echo "if(! -d [win_dir]) mkdir -p [win_dir]"|csh
+
+
+MY FL
+
+; Loop over all micrographs ----------------------------------------------------
+DO  
+   UD NEXT [key],[mic]  ; Get micrograph number
+   [sel_mic]
+   IF ([key].LE. 0) EXIT
+
+;   @@convert_p([mic],[decimate])
+   @@convert_p([decimate])
+   [params]           ; Parameter file
+   [micgr]            ; Input micrograph
+   [out]              ; Template for output SPIDER file
+
+   UD N  [n]          ; Get number of particles in this micrograph
+   [sndc]
+
+   ; calculate center-to-top-left distance
+   [half-xdim]   = INT([windiam]/2)+1
+   [half-ydim]   = INT([windiam]/2)+1
+   [mask-radius] = INT([windiam]/2)-1
+d101 1
+a101 1
+   ; MAKE A MASK FILE
+d103 4
+a106 4
+   [temp_circle_mask]
+   [windiam],[windiam]
+   C
+   [mask-radius]
+d108 1
+a108 1
+   ; PIXELS THOSE ARE PART OF THE PARTICLE ARE EXCLUDED FROM NORMALIZATION
+d110 3
+a112 3
+   [temp_circle_mask]
+   [temp_inverted_mask]
+   (P1-1)*(-1)
+d114 1
+a114 1
+   ; COPY NOISE FILE TO MEMORY
+d116 2
+a117 2
+   [noise]
+   [temp_noise_incore]
+d119 2
+a120 2
+   ; loop through particles
+   DO LB2 [part-key] = 1,[n]
+d123 1
+a123 1
+      [sndc]
+d129 4
+a132 4
+      [out]
+      [temp_windowed]
+      [windiam],[windiam]
+      [x-topleft],[y-topleft]  ; top-left coordinates
+d135 2
+a136 2
+      [temp_windowed]
+      [temp_ramp_corrected]
+d138 1
+a138 1
+      ; NORMALIZE AS PER HISTOGRAM
+d140 5
+a144 5
+      [temp_noise_incore]     ; INPUT
+      [temp_ramp_corrected]   ; INPUT
+      [temp_inverted_mask]    ; INPUT
+      [ser]{******[part-key]}
+   LB2
+d147 1
+a147 1
+   [sndc]
+d149 1
+a149 1
+   [part]=[part]+[n]  ; Increment the particle counter
+d152 1
+a152 1
+   [out]
+d154 3
+a156 3
+   VM
+   echo ' 'Picked:  {*****[n]} images from micrograph: {*****[mic]}
+ENDDO
+d158 2
+a159 4
+VM
+echo ' 'Total picked particles:  {*******[part]}
+VM
+echo ' '
+d161 1
+a161 1
+EN D
+d163 4
+a166 3
+; Modified 2012-07-19
+;    2012-07-19 (trs) -- creates output directory if needed
+;    2012-05-03 (trs) -- convert_p no longer uses micrograph# as an input
+d168 1
+a168 1
+; </body></pre></html>
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d7 1
+a7 1
+; ------------- Parameters ----------------
+d17 1
+a17 1
+; ------------- Input files ----------------
+d20 1
+a20 1
+[params]../params                          ; Parameter file 
+d23 1
+a23 1
+[sel_mic]../sel_micrograph                 ; Micrograph file numbers
+d26 1
+a26 1
+[micgr]../Micrographs/mic{****[mic]}       ; Micrograph images
+d29 1
+a29 1
+[sndc]coords/sndc{****[mic]}               ; Template for doc file with coordinates
+d32 1
+a32 1
+[noise]../Particles/noise                  ; Noise file 
+d34 1
+a34 1
+; ------------ Output files ---------------
+d36 3
+a38 1
+[ser]../Particles/win/winser_{****[mic]}@@  ; Template for particle image stacks
+d40 1
+a40 1
+; ------------ END BATCH HEADER ------------
+d73 5
+d164 2
+a165 1
+; Modified 2012-05-17
+a168 1
+
+@

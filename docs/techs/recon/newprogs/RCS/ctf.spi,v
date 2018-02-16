@@ -1,0 +1,898 @@
+head	1.11;
+access;
+symbols
+	GPL_update:1.11
+	pre_rewrite_2010:1.11
+	pre_more_stack:1.8
+	best-code:1.8
+	no-named-regs:1.8
+	pre_GPL:1.8
+	tag_version1_0:1.8;
+locks; strict;
+comment	@:: @;
+
+
+1.11
+date	2007.03.22.12.58.07;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2007.02.01.20.26.45;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2007.01.17.16.35.44;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2005.04.04.13.52.45;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2004.08.07.18.45.13;	author bbaxter;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2004.08.07.17.40.54;	author bbaxter;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2004.06.04.12.48.59;	author bbaxter;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2004.05.28.15.21.38;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2004.04.19.14.39.30;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2003.10.24.13.06.07;	author bbaxter;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2003.07.24.18.15.42;	author bbaxter;	state Exp;
+branches;
+next	;
+
+
+desc
+@ spider batch file
+@
+
+
+1.11
+log
+@made Refinement/input dir
+@
+text
+@; <html><head><title> Apply CTF correction</title></head><body><pre>
+;
+; SOURCE:   ctf.spi
+;
+; PURPOSE: Apply CTF correction to all the defocus group odd/even volumes,
+;          then compute the FSC resolution curve for the combined data set.
+;
+;          This batch file produces the initial volume, vol001, which is 
+;          copied to the Refinement/input  directory.
+;
+; I/O PARAMETERS AND FILES ARE SET HERE:
+;
+; <b> ----------------- I/O PARAMETERS --------------------------------
+
+x73 = 3                  ; SNR for CTF correction (TF CTS)
+
+;  -------------------- Input files -----------------------------------
+
+FR G
+[params]../params          ; Parameter file
+
+FR G
+[defgrps]sel_group_cclim   ; Selection file for defocus groups
+
+FR G
+[voleven]vol001_even       ; "even" volumes
+
+FR G
+[volodd]vol001_odd         ; "odd" volumes
+
+; -------------------------- Output files ---------------------------
+
+FR G
+[ctf]ctf/ctf               ; Ctf file stem
+
+FR G
+[res]combires              ; Resolution curve for combined output
+
+FR G
+[vol]vol001                ; CTF-corrected volume of combined data set
+
+FR G
+[volcopy]../Refinement/input/vol01  ; Copy of volume used for refinement
+
+; -------------- END BATCH HEADER ------------------------------</b>
+
+MD
+SET MP
+0              ; Use all processors available
+
+VM             ; Make the ctf output directory
+mkdir -p ctf  
+VM             ; Make the Refinement directory
+mkdir -p ../Refinement  
+VM             ; Make the Refinement/input directory
+mkdir -p ../Refinement/input  
+
+FR G                    
+[tmp]tmpres88  ; Temp. file (deleted)
+
+DE
+[res]
+
+; Get parameters
+UD 5,x41                 ; Pixel size
+[params]
+UD 6,[kv]                ; KV
+[params]
+UD 7,[cs]                ; Cs
+[params]
+UD 8,[ss]                ; Source size
+[params]
+UD 9,[defspr]            ; Defocus spread
+[params]
+UD 12,[acr]              ; ACR
+[params]
+UD 13,[genv]             ; Gaussian envelope
+[params]
+UD 17,[winsiz]           ; Window size
+[params]
+
+[lambda] = 12.398 / SQR([kv] * (1022.0 + [kv])) ; Lambda
+[maxspf] = 1.0 / (2.0 * x41)                    ; Max. spatial. freq.
+
+;  Create CTF file for each defocus group
+
+UD N,[numgrps]           ; Find number of defocus groups
+[defgrps]                ;                                 (input)
+
+DO LB1 [numgrp] = 1,[numgrps]   ; Loop over all defocus groups
+
+   UD [numgrp],[grp],[numparts],[def]  ; Get current group number 
+   [defgrps]             ; Group selection file            (input)
+
+   TF C3                 ; Create a model CTF (3D, complex)
+   [ctf]{***[grp]}       ; Output file                     (output)
+   [cs]                  ; Cs
+   [def],[lambda]        ; Defocus, lambda
+   [winsiz]              ; Dimension of volume
+   [maxspf]              ; Max. spatial freq.
+   [ss],[defspr]         ; Source size, defocus spread
+   (0,0)                 ; Astigmatism, azimuth
+   [acr],[genv]          ; Amplitude contrast ratio, Gaussian halfwidth
+   (-1)                  ; Sign
+LB1
+
+; The 'TF CTS' command works on all defocus groups at once
+TF CTS                   ; CTF correction
+df***/[voleven]          ; Template for image file       (input)
+[defgrps]                ; Group selection file          (input)
+[ctf]***                 ; Template for ctf file         (input)
+x73                      ; SNR
+_1                       ; Temp. inline file             (output)
+
+TF CTS
+df***/[volodd]           ; Template for image file       (input)
+[defgrps]                ; Group selection file          (input)
+[ctf]***                 ; Template for ctf file         (input)
+x73                      ; SNR
+_2                       ; Temp. inline file             (output)
+
+; Add the odd and even volumes together to make combined volume
+AD       
+_1
+_2
+[vol]                    ; Volume                        (output) 
+*
+
+; Compute the combined resolution curve
+DE
+[tmp]
+
+RF 3                     ; Compute resolution curve
+_1                       ; First input volume
+_2                       ; Second input volume 
+(0.5)                    ; Ring width 
+(0.2,2.0)                ; Lower, upper scale factors
+C                        ; C = missing cone    
+(90.0)                   ; Max. tilt angle
+(3)                      ; Factor for noise comparison
+[tmp]                    ; Output doc file              (output)
+
+DOC REN                  ; Renumber the doc file
+[tmp]
+[tmp]                    ; Doc file                    (output)
+
+UD N,[nline]             ; Determine number of lines in doc file
+[tmp]                    ; Doc file                    (input)
+
+SD /    NORM'D FREQ    DPR        FSC        FSCCRIT     VOXELS
+[res]                     ; Doc file                   (output)
+
+DO LB2 [line] = 1,[nline]
+   UD [line], [v62],[v63],[v64],[v65],[v66]
+   [tmp]                  ; Doc file                    (input)
+   SD [line], [v62],[v63],[v64],[v65],[v66]
+   [res]                  ; Doc file                    (output)
+LB2
+
+DE
+[tmp]
+
+CP                        ; Copy initial volume to refinement dir
+[vol]                     ; Volume                     (output)
+[volcopy]                 ; Volume                     (output)
+
+VM                                      
+echo ' 'Created CTF-corrected volume of combined data set: [vol] 
+VM                                      
+echo ' '
+
+EN
+; </body></pre></html>
+
+@
+
+
+1.10
+log
+@sel_group_cclim for output
+@
+text
+@d8 2
+a9 4
+;          This batch file produces the initial volume, vol001, which is copied 
+;          to the Refinement directory.
+;
+; MASTER COPY: /net/bali/usr1/spider/docs/techs/recon/newprogs/
+d20 1
+a20 1
+[params]../params        ; Parameter file
+d23 1
+a23 1
+[defgrps]sel_group_cclim ; Selection file for defocus groups
+d26 1
+a26 1
+[voleven]vol001_even     ; "even" volumes
+d29 1
+a29 1
+[volodd]vol001_odd       ; "odd" volumes
+d34 1
+a34 1
+[ctf]ctf/ctf             ; Ctf file stem
+d37 1
+a37 1
+[res]combires            ; Resolution curve for combined output
+d40 1
+a40 1
+[vol]vol001              ; CTF-corrected volume of combined data set
+d53 4
+d65 1
+a65 1
+UD 5,x41       ; Pixel size
+d67 1
+a67 1
+UD 6,[kv]      ; KV
+d69 1
+a69 1
+UD 7,[cs]      ; Cs
+d71 1
+a71 1
+UD 8,[ss]      ; Source size
+d73 1
+a73 1
+UD 9,[defspr]  ; Defocus spread
+d75 1
+a75 1
+UD 12,[acr]    ; ACR
+d77 1
+a77 1
+UD 13,[genv]   ; Gaussian envelope
+d79 1
+a79 1
+UD 17,[winsiz] ; Window size
+d83 1
+a83 1
+[maxspf] = 1.0 / (2.0 * x41)                    ; Max. spat. freq.
+d88 1
+a88 1
+[defgrps]                ;                                  (input)
+d93 1
+a93 1
+   [defgrps]        ; Group selection file                  (input)
+d95 10
+a104 10
+   TF C3            ; Create a model CTF (3D, complex)
+   [ctf]{***[grp]}  ; Output file                           (output)
+   [cs]             ; Cs
+   [def],[lambda]   ; Defocus, lambda
+   [winsiz]         ; Dimension of volume
+   [maxspf]         ; Max. spatial freq.
+   [ss],[defspr]    ; Source size, defocus spread
+   (0,0)            ; Astigmatism, azimuth
+   [acr],[genv]     ; Amplitude contrast ratio, Gaussian halfwidth
+   (-1)             ; Sign
+d108 6
+a113 6
+TF CTS              ; CTF correction
+df***/[voleven]     ; Template for image file              (input)
+[defgrps]           ; Group selection file                 (input)
+[ctf]***            ; Template for ctf file                (input)
+x73                 ; SNR
+_1                  ; Temp. inline file                    (output)
+d116 5
+a120 5
+df***/[volodd]      ; Template for image file              (input)
+[defgrps]           ; Group selection file               (input)
+[ctf]***            ; Template for ctf file              (input)
+x73                 ; SNR
+_2                  ; Temp. inline file                  (output)
+d126 1
+a126 1
+[vol]               ; Volume                             (output) 
+d133 9
+a141 9
+RF 3          ; Compute resolution curve
+_1            ; First input volume
+_2            ; Second input volume 
+(0.5)         ; Ring width 
+(0.2,2.0)     ; Lower, upper scale factors
+C             ; C = missing cone    
+(90.0)        ; Max. tilt angle
+(3)           ; Factor for noise comparison
+[tmp]         ; Output doc file                          (output)
+d143 1
+a143 1
+DOC REN       ; Renumber the doc file
+d145 1
+a145 1
+[tmp]         ; Doc file                                 (output)
+d147 2
+a148 2
+UD N,[nline]  ; Determine number of lines in doc file
+[tmp]         ; Doc file                                 (input)
+d151 1
+a151 1
+[res]          ; Doc file                                (output)
+d155 1
+a155 1
+   [tmp]       ; Doc file                                (input)
+d157 1
+a157 1
+   [res]       ; Doc file                                (output)
+d163 3
+a165 3
+CP             ; Copy initial volume to refinement directory
+[vol]          ; volume                                 (output)
+[volcopy]      ; volume                                 (output)
+@
+
+
+1.9
+log
+@added stacks, named variables
+@
+text
+@d25 1
+a25 1
+[defgrps]sel_group     ; Defocus groups selection file
+@
+
+
+1.8
+log
+@update
+@
+text
+@d3 1
+a3 1
+; SOURCE: ctf.spi
+d25 1
+a25 1
+[order]order_defocus     ; List of defocus groups
+a38 3
+[select]dfselect         ; Selection doc file for TF CTS command
+
+FR G
+d45 1
+a45 1
+[volcopy]../Refinement/input/vol01   ; Copy of volume used for refinement
+d49 5
+a53 1
+VM                       ; make the ctf output directory
+d57 1
+a57 5
+[tmp]tmpres88            ; Temp. file (deleted)
+
+MD
+SET MP
+0      ; Use all processors available
+a59 2
+[select]
+DE
+d63 1
+a63 1
+UD 5,x41    ; Pixel size
+d65 1
+a65 1
+UD 6,x42    ; KV
+d67 1
+a67 1
+UD 7,x43    ; Cs
+d69 1
+a69 1
+UD 8,x44    ; Source size
+d71 1
+a71 1
+UD 9,x45    ; Defocus spread
+d73 1
+a73 1
+UD 12,x46   ; ACR
+d75 1
+a75 1
+UD 13,x47   ; Gaussian envelope
+d77 1
+a77 1
+UD 17,x48   ; Window size
+d80 2
+a81 2
+x72 = 12.398 / SQR(x42 * (1022.0 + x42))   ; lambda
+x49 = 1.0 / (2.0 * x41)                    ; max.spat.freq.
+d85 2
+a86 2
+UD N,x50           ; Get number of defocus groups
+[order]
+d88 1
+a88 1
+DO LB6 x77=1,x50   ; Loop over all defocus groups
+d90 2
+a91 2
+   UD IC,x77,x51,x52,x71   ; x71 is the defocus value
+   [order]
+d93 11
+a103 17
+   TF C3           ; create a model CTF (3D, complex)
+   [ctf]{***x77}   ; output file
+   x43             ; Cs
+   x71,x72         ; defocus, lambda
+   x48             ; dimension of volume
+   x49             ; max. spatial freq.
+   x44,x45         ; source size, defocus spread
+   (0,0)           ; astigmatism, azimuth
+   x46,x47         ; amplitude contrast ratio, Gaussian envelope halfwidth
+   (-1)            ; sign
+LB6
+
+; make selection doc file for 'TF CTS' command
+DO LB7 x77=1,x50
+   SD x77,x77
+   [select]
+LB7
+d106 6
+a111 6
+TF CTS             ; CTF correction
+df***/[voleven]  ; Template for image file
+[select]           ; Selection doc file
+[ctf]***           ; Template for ctf file
+x73                ; SNR
+_1                 ; Output file
+d114 5
+a118 5
+df***/[volodd]  ; Template for image file
+[select]          ; Selection doc file
+[ctf]***          ; Template for ctf file
+x73               ; SNR
+_2                ; Output file
+d124 1
+a124 1
+[vol]
+d131 9
+a139 9
+RF 3       ; Compute resolution curve
+_1         ; First input volume
+_2         ; Second input volume 
+(0.5)      ; Ring width 
+(0.2,2.0)  ; Lower, upper scale factors
+C          ; C = missing cone    
+(90.0)     ; Max. tilt angle
+(3)        ; Factor for noise comparison
+[tmp]      ; Output doc file 
+d141 1
+a141 2
+DOC REN
+[tmp]
+d143 1
+d145 2
+a146 2
+UD N,x60
+[tmp]
+d149 1
+a149 1
+[res]
+d151 5
+a155 5
+DO LB2 x61 = 1,x60
+   UD x61,x62,x63,x64,x65,x66
+   [tmp]
+   SD x61,x62,x63,x64,x65,x66
+   [res]
+d161 8
+a168 3
+CP         ; Copy initial volume to refinement directory
+[vol]
+[volcopy]
+@
+
+
+1.7
+log
+@changed vol001 to vol01 (copy used for refinement)
+@
+text
+@d172 1
+a172 1
+CP         ; copy the initial volume to refinement directory
+d176 1
+a176 1
+EN D
+@
+
+
+1.6
+log
+@ changed extension .bat -> .spi
+@
+text
+@d48 1
+a48 1
+[volcopy]../Refinement/input/[vol]   ; Copy of voluem
+@
+
+
+1.5
+log
+@added VM to make output directory; moved tmp file out of batch header
+@
+text
+@d3 1
+a3 1
+; SOURCE: ctf.bat
+d176 1
+a176 1
+EN
+@
+
+
+1.4
+log
+@ap sh
+@
+text
+@d50 5
+a56 2
+
+; -------------- END BATCH HEADER ------------------------------</b>
+@
+
+
+1.3
+log
+@cosmetic
+@
+text
+@d1 1
+a1 1
+; <html><head><title>List number of particles in each defocus group</title></head><body><pre>
+d3 1
+a3 1
+; ctf.bat
+d5 1
+a5 1
+; Purpose: Apply CTF correction to all the defocus group odd/even volumes,
+a9 1
+
+d11 1
+a11 1
+; MASTER COPY: /net/bali/usr1/spider/docs/techs/recon/programs/
+d17 1
+a17 1
+x77 = 3   ; SNR for CTF correction (TF CTS)
+d19 1
+a19 1
+; --------------- Input files ---------------------------------------
+d22 1
+a22 1
+[params]../params        ; parameter file
+d25 1
+a25 1
+[order]order_defocus     ; list of defocus groups
+d28 1
+a28 1
+[df]df                   ; defocus group directories
+d31 3
+a33 1
+[voleven]volume1even     ; "even" volumes
+d36 1
+a36 1
+[volodd]volume1odd       ; "odd" volumes
+a37 1
+; ----------- Output files --------------
+d39 2
+a40 1
+[ctf]ctf/ctf      ; ctf files
+d42 2
+a43 1
+[select]dfselect  ; selection doc file for TF CTS command
+d45 2
+a46 1
+[res]combires   ; resolution curve for combined output
+d48 4
+a51 1
+[vol]vol001     ; CTF-corrected volume of combined data set
+d57 1
+a57 1
+0      ; use all processors available
+d64 2
+a65 2
+; get parameters
+UD 5,x41   ; pixel size
+d67 1
+a67 1
+UD 6,x42   ; kV
+d69 1
+a69 1
+UD 7,x43   ; Cs
+d71 1
+a71 1
+UD 8,x44   ; source size
+d73 1
+a73 1
+UD 9,x45   ; defocus spread
+d79 1
+a79 1
+UD 17,x48   ; window size
+d83 1
+a83 1
+x49 = 1.0 / (2.0 * x41)    ; max.spat.freq.
+d87 1
+a87 1
+UD N,x50
+d90 1
+a90 1
+DO LB6 x21=1,x50
+d92 1
+a92 1
+   UD IC,x21,x51,x52,x71   ; x71 is the defocus value
+d96 1
+a96 1
+   [ctf]{***x21}   ; output file
+d107 3
+a109 3
+; make selection doc file for TF CTS command
+DO LB7 x21=1,x50
+   SD x21,x21
+d113 1
+a113 1
+; The TF CTS command works on all defocus groups at once
+d115 5
+a119 5
+[df]***/[voleven]  ; template for image file
+[select]           ; selection doc file
+[ctf]***           ; template for ctf file
+x77                ; SNR
+_1                 ; output file
+d122 5
+a126 5
+[df]***/[volodd]  ; template for image file
+[select]          ; selection doc file
+[ctf]***          ; template for ctf file
+x77               ; SNR
+_2                ; output file
+d128 1
+a128 1
+; add the odd and even volumes together to make combined volume
+d135 1
+a135 3
+; compute the combined resolution curve
+FR G
+[tmp]tmpres88
+d139 9
+a147 9
+RF 3       ; compute resolution curve
+_1         ; first input volume
+_2         ; second input volume 
+(0.5)      ; ring width 
+(0.2,2.0)  ; lower, upper scale factors
+C          ; c = missing cone    
+(90.0)     ; max. tilt angle
+(3)        ; factor for noise comparison
+[tmp]      ; output doc file 
+d168 2
+a169 1
+CP   ; copy the initial volume
+d171 1
+a171 1
+../Refinement/input/[vol]
+d173 1
+a173 1
+EN D
+@
+
+
+1.2
+log
+@changed  SET MP = 0 : use all processors available
+@
+text
+@d1 9
+a9 1
+; ctf.bat (formerly b28.ctf)
+d11 4
+a14 2
+; Apply CTF correction to all the defocus group odd/even volumes,
+; then compute the FSC resolution curve for the combined data set.
+d16 1
+a16 2
+; This batch file produces the initial volume, vol001, which is copied 
+; to the Refinement directory.
+d18 1
+a18 3
+MD
+SET MP
+0      ; use all processors available
+d20 1
+a20 1
+x77 = 3   ; SNR for CTF correction (TF CTS)
+a21 1
+; ----------- Input files --------------
+d23 2
+a24 1
+<params>../params   ; parameter file
+d26 2
+a27 1
+<order>order_defocus     ; list of defocus groups
+d29 2
+a30 1
+<df>df               ; defocus group directories
+d32 2
+a33 1
+<voleven>volume1even ; "even" volumes
+d35 1
+a35 1
+<volodd>volume1odd ; "odd" volumes
+d39 1
+a39 1
+<ctf>ctf/ctf      ; ctf files
+d41 1
+a41 1
+<select>dfselect  ; selection doc file for TF CTS command
+d43 1
+a43 1
+<res>combires   ; resolution curve for combined output
+d45 3
+a47 1
+<vol>vol001     ; CTF-corrected volume of combined data set
+d49 3
+a51 1
+; -------------- END BATCH HEADER --------------------------
+d54 1
+a54 1
+<select>
+d56 1
+a56 1
+<res>
+d60 1
+a60 1
+<params>
+d62 1
+a62 1
+<params>
+d64 1
+a64 1
+<params>
+d66 1
+a66 1
+<params>
+d68 1
+a68 1
+<params>
+d70 1
+a70 1
+<params>
+d72 1
+a72 1
+<params>
+d74 1
+a74 1
+<params>
+d82 1
+a82 1
+<order>
+d87 1
+a87 1
+   <order>
+d90 1
+a90 1
+   <ctf>{***x21}   ; output file
+d104 1
+a104 1
+   <select>
+d109 3
+a111 3
+<df>***/<voleven>  ; template for image file
+<select>           ; selection doc file
+<ctf>***           ; template for ctf file
+d116 3
+a118 3
+<df>***/<volodd>  ; template for image file
+<select>          ; selection doc file
+<ctf>***          ; template for ctf file
+d126 1
+a126 1
+<vol>
+d131 1
+a131 1
+<tmp>tmpres88
+d133 1
+a133 1
+<tmp>
+d143 1
+a143 1
+<tmp>      ; output doc file 
+d146 2
+a147 2
+<tmp>
+<tmp>
+d150 1
+a150 1
+<tmp>
+d153 1
+a153 1
+<res>
+d157 1
+a157 1
+   <tmp>
+d159 1
+a159 1
+   <res>
+d163 1
+a163 1
+<tmp>
+d165 2
+a166 2
+<vol>
+../Refinement/input/<vol>
+d169 2
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d11 1
+a11 1
+4
+@

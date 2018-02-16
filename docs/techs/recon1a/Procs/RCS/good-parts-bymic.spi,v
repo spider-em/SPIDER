@@ -1,0 +1,316 @@
+head	1.2;
+access;
+symbols
+	Pre_gold:1.2;
+locks;
+comment	@# @;
+
+
+1.2
+date	2014.08.13.19.47.23;	author tapu;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2013.11.08.17.48.36;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.2
+log
+@renumbers defocus doc in case of nonconsecutive keys
+@
+text
+@ ; <html><head><title>Plots number of particles vs_defocus</title></head><body><pre>
+ ;
+ ; SOURCE:   spider/docs/techs/recon1/Procs/good-parts-bymic.spi
+ ;
+ ; PURPOSE:  Sorts particles by micrograph and thus defocus. 
+ ;           Tabulates number of particles versus defocus level.
+ ;           Plots number of particles vs_defocus
+ ; USAGE:    clean ; ./spider spi/dat @@good-parts-bymic
+
+ ; ----------------- Parameters -----------------
+
+ [viewplot-yn]        = 1       ; Open Gnuplot automatically? (0 == no)
+
+ [progress-interval]  = 100     ; Print progress message to screen every Nth particle
+
+ ;  ------------------- Inputs -------------------
+
+![sel_part_combined] = 'combinedgood'                      ; Combined list of good particles (one)
+ [sel_part_combined] = 'sel_part_combined_good'            ; Combined list of good particles (one)
+ ;   VIEW_SLICE GLOBAL_NUM    GRP_SLICE  CCROT   MIRROR      GRP_NUM    VIEW
+ ;                 used
+
+ [global2grp_lut]     = '../Alignment/global2group'        ; Particle look-up table        (one)
+ ; KEY=GLOBAL#  GRPSLICE  MICSLICE   GROUPNUM  MICROGRAPH
+
+ [mic_defoci]         = '../Power_Spectra/defocus'         ; Defocus doc file            (one/micrograph)
+ ;        MICROGRAPH     DEFOCUS
+
+![old_mic_part_doc]   = '../Particles/good/ngood****'      ; Particle selection doc file (one/micrograph)
+ [old_mic_part_doc]   = '../Particles/good/sel_part_****'  ; Particle selection doc file (one/micrograph)
+
+ ; ------------------- Outputs -------------------
+
+ [goodmic_dir]        = 'Micrographs'                       ; Output directory            (one)
+
+ [mic_good_list]      = '[goodmic_dir]/sel_part_bymic_****' ; Particle selection doc file (one/micrograph)
+ ;        MICSLICE     GLOBAL_PART
+
+ [summary_doc]        = 'summary_good_parts_bymic'          ; Summary doc file            (one)
+
+ [gnuplot_script]     = 'parts_vs_defocus.gnu'              ; Gnuplot script              (one)
+
+ ; -------------- END BATCH HEADER --------------
+
+ [temp_sorted_defocus_doc] = 'tmpdocdefocus_sorted'
+
+ SYS
+    echo -n " Making good particle list for each micrograph    "; date
+
+ ; Make directory, if necessary
+ SYS
+   mkdir -p [goodmic_dir]
+
+ ; Clean up pre-existing files, may be gap > 10 so DE A will not work
+
+ ; Sort micrographs by defocus
+ DOC SORT
+   [mic_defoci]
+   [temp_sorted_defocus_doc]
+   2                      ; Column # to sort by: defocus value
+   Y                      ; Renumber 
+
+ ; Get # micrographs
+ UD N [num-mics]
+   [temp_sorted_defocus_doc]  ; WAS [mic_defoci]
+
+ DO  [mic-key6] = 1,[num-mics]
+    ; Read micrograph#
+    UD IC [mic-key6], [mic-num6]
+      [temp_sorted_defocus_doc]  ; [mic_defoci]
+    
+    DE
+      [mic_good_list][mic-num6]
+ ENDDO
+
+ ; Close doc
+ UD ICE
+   [mic_defoci]
+
+
+ ; SEPARATE PARTICLES BY MICROGRAPH
+
+ ; Initialize previous mic #
+ [prev-mic] = -1
+
+ ; Initialize particle-counter
+ [part-counter] = 0
+
+ ; Get # of particles
+ UD N [num-parts]
+   [sel_part_combined]
+ 
+ ; Loop through particles
+ DO  [part-key] = 1,[num-parts]   ; Loop through particles ----------------
+    ; Read global#
+    UD IC [part-key], [v99],[global-part]
+     [sel_part_combined]
+ 
+    ; Print progress message
+    IF (int([part-key]/[progress-interval]) == [part-key]/[progress-interval] ) THEN
+        SYS
+         echo " Working on {%I6%[part-key]}th particle out of {%I6%[num-parts]}"    
+    ENDIF
+     
+    ; Read mic#, mic-slice, etc.
+    UD IC [global-part], [grp-slice],[mic-slice],[grp-num5],[mic-num5]
+     [global2grp_lut]
+
+    ; If new group, close & update previous group #
+     IF ([mic-num5] .NE. [prev-mic]) THEN
+        SD E
+          [mic_good_list][prev-mic]
+          [prev-mic] = [mic-num5]
+    ENDIF
+
+    ; Write to doc
+    [part-counter] = [part-counter] + 1
+
+    SD [part-counter], [mic-slice],[global-part]
+      [mic_good_list][mic-num5]
+    ; (keys will be renumbered below)
+ ENDDO                        ; End particle-loop --------------------------
+
+ ; Close docs
+ UD ICE
+   [sel_part_combined]
+ UD ICE
+   [global2grp_lut]
+ SD E
+   [mic_good_list][mic-num5]
+
+ SYS
+   echo " Separated {%I7%[part-counter]} particles from {%I7%[num-parts]} in [sel_part_combined].$DATEXT" ; echo
+
+
+ ; GET NEW GROUP STATS
+
+ SYS
+   echo " Generating summary"
+
+ ; Delete pre-existing file
+ DE
+   [summary_doc]
+ SD /       GRP_NUM     PARTS_AFTER   PARTSBEFORE     DEFOCUS
+   [summary_doc]
+
+ ; Initialize counters
+ [mic-counter]     = 0
+ [totparts-before] = 0
+ [totparts-after]  = 0
+
+ ; Get #groups
+ UD N [num-mics]
+   [temp_sorted_defocus_doc]
+
+ ; Loop through groups
+
+ DO  [mic-key] = 1,[num-mics]         ; Loop through groups ----------------------
+
+    ; Read micrograph#, defocus
+    UD IC [mic-key], [mic-num7],[defocus]
+      [temp_sorted_defocus_doc]
+
+    ; Read #orig-particles
+    UD N [parts-before]
+      [old_mic_part_doc][mic-num7]
+    
+    ; Check if new micrograph-particle list exists
+    IQ FI [miclist-exists]
+       [mic_good_list][mic-num7]
+
+    ; If it doesn't exist, print warning and proceed to next group
+    IF ( [miclist-exists] == 0) THEN
+        SYS
+          echo " No particles for micrograph: {%I4%[mic-num7]}, but: {%I4%[parts-before]} particles found initially"
+        
+        [parts-after] = 0
+    ELSE
+        ; Renumber keys
+        DOC REN
+          [mic_good_list][mic-num7]
+          [mic_good_list][mic-num7]
+        
+        SD /      MIC_SLICE     GLOBALNUM
+          [mic_good_list][mic-num7]
+        SD E
+          [mic_good_list][mic-num7]
+
+        ; Get #new-particles
+        UD N [parts-after]
+          [mic_good_list][mic-num7]
+
+ ;      SYS
+ ;        echo " Micrograph {%I4%[mic-num7]} -- Kept {%I6%[parts-after]} particles out of {%I6%[parts-before]}"
+    ENDIF
+
+    ; Write to summary doc
+    [mic-counter] = [mic-counter] + 1
+    SD [mic-counter], [mic-num7],[parts-after],[parts-before], [defocus]
+      [summary_doc]
+    
+    ; Increment cumulative particle counters
+    [totparts-before] = [totparts-before] + [parts-before]
+    [totparts-after]  = [totparts-after]  + [parts-after]
+ ENDDO                                  ; end micrograph-loop ---------------------
+
+ SYS
+   echo ; echo " Assigned: {%I0%[totparts-after]} particles out of: {%I0%[totparts-before]} initial particles" 
+
+ ; Close docs
+ UD ICE
+   [temp_sorted_defocus_doc]
+ DE
+   [temp_sorted_defocus_doc]
+ [dummy] = -[num-mics]
+ SD [dummy], [totparts-after],[totparts-before]
+   [summary_doc]
+ SD /  NUMMICS   CURRENT      INITIAL
+   [summary_doc]
+ SD E
+   [summary_doc]
+
+
+ ; GENERATE GNUPLOT SCRIPT
+
+ ; Delete pre-existing file
+ SYS
+   rm -f [gnuplot_script]
+
+ ; Will use arbitrary numbers in case version <18.20
+ SYS
+   echo 'set xlabel "Micrograph (sorted by defocus)"' > [gnuplot_script]
+ SYS
+   echo 'set ylabel "#Particles"' >> [gnuplot_script]
+ SYS
+   echo 'plot \' >> [gnuplot_script]
+ SYS
+   echo '"[summary_doc].$DATEXT" using 1:5 title "initial" with boxes, \' >> [gnuplot_script]
+ SYS
+   echo '"[summary_doc].$DATEXT" using 1:4 title "final" with boxes' >> [gnuplot_script]
+
+ ; If requested, open Gnuplot
+ IF ( [viewplot-yn] .NE. 0 ) THEN
+    SYS
+      echo ; echo "gnuplot -persist [gnuplot_script]" ; echo
+    SYS
+      gnuplot -persist [gnuplot_script]
+ ELSE
+    SYS
+      echo ; echo "gnuplot usage: load '[gnuplot_script]'" ; echo
+ ENDIF
+
+ EN D
+
+ ; Modified 2014-08-13
+ ;    2014-08-13 (trs) -- micrograph keys do not need to be consecutive
+ ;    2013-10-23 (agl) -- new file names, modernized syntax & cosmetic
+ ;    2012-05-10 (trs) -- optionally spawns Gnuplot
+ ;    2012-04-30 (trs) -- adapted from goodpartsbygroup.spi
+
+ ; </pre></body></html>
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d56 7
+d65 1
+a65 1
+   [mic_defoci]
+d70 1
+a70 1
+      [mic_defoci]
+a151 7
+ ; Sort micrographs by defocus
+ DOC SORT
+   [mic_defoci]
+   [temp_sorted_defocus_doc]
+   2                      ; Column # to sort by: defocus value
+   Y                      ; Renumber 
+
+d255 2
+a256 1
+ ; Modified 2013-10-13
+@

@@ -1,0 +1,217 @@
+head	1.1;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+1.1
+date	2012.05.23.03.21.10;	author tapu;	state Exp;
+branches;
+next	;
+
+
+desc
+@new file -- computes CCROT histogram
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@; COMPUTE HISTOGRAM OF PARTICLES' CCROT
+; Adapted from histgoodccc.spi
+
+; ------------- Parameters -------------
+[viewplot-yn] = 1     ; open Gnuplot automatically? (0 == no)
+[num-bins]    = 128   ; number of bins in histogram
+
+; -------------- Inputs --------------
+fr l
+[ref_view_list]projlist  ; list of reference projections
+fr l
+[view_dir]Byview/prj***               ; directory template for selection files
+fr l
+[part_list_by_view]goodsel            ; particle list, in VIEW_DIR
+
+; -------------- Outputs --------------
+fr l
+[combined_part_list]combinedgood      ; combined list of particles
+;         VIEWSLICE    GLOBALNUM    GROUP_SLICE      CCROT        MIRROR       GROUP_NUM      VIEWNUM
+fr l
+[ccrot_hist]histcc-good               ; CCC histogram of particles
+fr l
+[gnuplot_script]fit-good.gnu          ; Gnuplot script
+
+; ---------- END BATCH HEADER ---------
+
+fr l
+[temp_parts_by_view]tmp_partsbyview
+fr l
+[temp_combined_parts_unsorted]tmp_combined
+
+
+; GENERATE VIEW-SELECTION LIST
+
+; clean up
+de
+[temp_parts_by_view]
+
+; initialize counters
+[view-counter] = 0
+[dummy]        = 1
+
+; get #views
+ud n [num-views]
+[ref_view_list]
+
+; loop through views
+do lb8 [view-key] = 1,[num-views]
+    ; get reference-view#
+    ud ic [view-key],[view-num]
+    [ref_view_list]
+
+    ; check if view list exists
+    iq fi [list-exists]
+    [view_dir][view-num]/[part_list_by_view]
+
+    if([list-exists].eq.1) then
+        [view-counter] = [view-counter] + 1
+
+        sd [view-counter], [view-num],[dummy]
+        [temp_parts_by_view]
+    endif
+lb8
+; end view-loop
+
+sd e
+[temp_parts_by_view]
+
+vm
+echo "Making combined particle list"; date
+
+; combine selection lists for all reference views
+doc combine
+[view_dir]/[part_list_by_view]
+[temp_parts_by_view]
+[temp_combined_parts_unsorted]
+
+doc sort
+[temp_combined_parts_unsorted]
+[combined_part_list]  ; OUTPUT
+(2)                   ; register to sort by: global-particle#
+Y                     ; renumber?
+
+SD /       VIEWSLICE    GLOBALNUM    GROUP_SLICE      CCROT        MIRROR       GROUP_NUM      VIEWNUM
+[combined_part_list]
+sd e
+[combined_part_list]
+
+ud n [num-parts]
+[combined_part_list]
+
+; delete pre-existing histogram
+de
+[ccrot_hist]
+
+; generate histogram of particle CCROTs
+hd d
+[temp_combined_parts_unsorted]
+(4)               ; column to bin (CCROT)
+[num-bins]
+[ccrot_hist]  ; OUTPUT
+
+; clean up
+de
+[temp_parts_by_view]
+de
+[temp_combined_parts_unsorted]
+
+vm
+echo "Done -- Combined particles: {******[num-parts]}" ;
+
+
+; WRITE GNUPLOT SCRIPT
+
+; delete pre-existing file
+vm
+rm -f [gnuplot_script]
+
+; Will use arbitrary numbers in case version <18.20
+vm
+echo 'max_height_good = 1200' > [gnuplot_script]
+vm
+echo 'average_good    = 7500' >> [gnuplot_script]
+vm
+echo 'std_dev_good    = 1500' >> [gnuplot_script]
+vm
+echo 'histgood(x)=max_height_good*exp(-(x-average_good)**2/std_dev_good**2)' >> [gnuplot_script]
+vm
+echo 'plot  [][] \' >> [gnuplot_script]
+vm
+echo '"[ccrot_hist].$DATEXT" using 3:4 title "good" with boxes, \' >> [gnuplot_script]
+vm
+echo 'histgood(x) title "fitted good"' >> [gnuplot_script]
+
+
+; Will attempt DOC SORT in case version >=18.20
+
+; get CCROT stats
+doc stat [dummy1],[dummy2],[dummy3],[dummy4],[cc-avg],[cc-stdev]
+[combined_part_list]
+(4)   ; column# to analyze: CCROT
+
+; get maximum #particles from histogram
+doc stat [dummy1],[dummy2],[max-parts]
+[ccrot_hist]
+(2)   ; column# to analyze: #parts
+
+; delete pre-existing file
+vm
+rm -f [gnuplot_script]
+
+; Will use arbitrary numbers in case version <18.20
+vm
+echo 'set xlabel "CCROT"' > [gnuplot_script]
+vm
+echo 'set ylabel "#Particles"' >> [gnuplot_script]
+vm
+echo 'max_height_good = {*****[max-parts]}' >> [gnuplot_script]
+vm
+echo 'max_height_good = {*****[max-parts]}' >> [gnuplot_script]
+vm
+echo 'average_good    = {*****[cc-avg]}' >> [gnuplot_script]
+vm
+echo 'std_dev_good    = {*****[cc-stdev]}' >> [gnuplot_script]
+vm
+echo 'histgood(x)=max_height_good*exp(-(x-average_good)**2/std_dev_good**2)' >> [gnuplot_script]
+vm
+echo 'plot  [][] \' >> [gnuplot_script]
+vm
+echo '"[ccrot_hist].$DATEXT" using 3:4 title "good" with boxes, \' >> [gnuplot_script]
+vm
+echo 'histgood(x) title "fitted good"' >> [gnuplot_script]
+
+; if requested, open Gnuplot
+if([viewplot-yn].ne.0) then
+    vm
+    echo ; echo "gnuplot -persist [gnuplot_script]" ; echo
+    vm
+    gnuplot -persist [gnuplot_script]
+else
+    vm
+    echo ; echo "gnuplot usage: load '[gnuplot_script]'" ; echo
+endif
+
+en d
+
+; Modified 2012-05-10
+;    2012-05-10 (trs) -- optionally spawns Gnuplot
+;    2011-11-02 (trs) -- adapted from histgoodccc.spi
+;    2009-05-14 (trs) -- added parameter for number of bins
+;    2009-02-23 (trs) -- added view# to combinedgood output
+;    2008-12-22 (trs & djt) -- labelled COMBINEDGOOD columns
+;    2007-01-19 (trs) -- HD D now allows arbitrary #bins
+@

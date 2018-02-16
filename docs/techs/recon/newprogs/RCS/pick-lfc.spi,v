@@ -1,0 +1,231 @@
+head	1.1;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+1.1
+date	2016.02.08.14.20.42;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@tapus changes
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@ ; <html><head><title>Pick particles from micrographs</title></head><body><pre>
+ ;
+ ; PURPOSE: Uses local fast correlation algorithm to pick particles from 
+ ;          input micrographs.  Requires a reference volume.  
+ ;
+ ; SOURCE:  spider/docs/techs/recon1/Procs/pick-lfc.spi    
+ ;
+ ; REQUIRES:  convert-p.spi    &  pick-lfc-p.spi
+ ;
+ ; USAGE:   clean ; spider spi/dat @@pick-lfc
+
+ [firstPart]   = 1       ; First particle number (e.g., 1 or next particle number) 
+ [numMics]     = -1      ; Number of micrographs (useful for testing, -1 == All)
+
+; [decimate]   = 0       ; Decimation factor (0 = get value from  param file)
+;                        ;  0 = get value from param file
+;                        ;  1 = full sized image
+;                        ;  2 = 1/2 size
+;                        ;  4 = 1/4 size
+
+![ccthresh]    = 0.061   ; CC threshold for particles to be windowed (-1 == All)
+ [ccthresh]    = 0.0     ; CC threshold for particles to be windowed (-1 == All)
+                         ; Correlations can be negative
+                         
+ [sep]         = 0.62    ; Separation distance (fraction of window size) al feb 2007
+ ; Peak separation distance (e.g., 75% of window size) may be changed such 
+ ;    that [sep]*[sp_winsiz] ~ size of particle, where [sp_winsiz]= side of the window   
+
+ [useSelectYN] = 0       ; Use Euler angle doc file? (0 == No, 1 == Yes)
+                         ; If No, projections will be computed from angle start/end/step set below
+                         
+ [phiStart]    = 0       ; Starting phi    (unused with selection file)
+ [phiEnd]      = 0       ; Ending phi      (unused with selection file)
+ [phiStep]     = 0       ; Phi increment   (unused with selection file)
+ [thetaStart]  = 0       ; Starting theta  (unused with selection file)
+ [thetaEnd]    = 0       ; Ending theta    (unused with selection file)
+ [thetaStep]   = 0       ; Theta increment (unused with selection file)
+ [psiStart]    = 0       ; Starting psi    (unused with selection file)
+ [psiEnd]      = 0       ; Ending psi      (unused with selection file)
+ [psiStep]     = 0       ; Psi increment   (unused with selection file)
+ 
+ [useAvgYN]    = 0       ; Use average projection? (1 == Yes, only with Euler angle doc)
+ 
+ [shrink]      = 2       ; Interpolation factor (for speed only, doesn't shrink outputs)
+ [peaks]       = 20000   ; Number of peaks to search
+                         ; In case of a large number, the separation-distance parameter or CC threshold will be limiting
+ 
+ [symmMaskYN]  = 1       ; Use a circular mask? (for local st.dev. calculation)
+ [maskThresh]  = 0       ; Masking threshold (if not using a circular mask)
+ 
+ [numProcs]    = 0       ; Number of processors to use (0 == All)
+
+ ; ----------- Input files --------------
+
+ [params]     = '../params'                          ; Parameter file           (one)
+
+ [sel_mic]    = '../sel_micrograph'                    ; Micrograph file numbers  (one)
+
+ [micgr]      = '../Micrographs/flip{****[mic]}'     ; Raw micrograph images      (one / micrograph)
+
+ [refvol]     = '../reference_volume'                ; Reference volume           (one / micrograph)
+
+ [noise]      = 'noise'                              ; Noise file 
+ 
+ [angles_doc] = '../Alignment/refangles'             ; (Optional) Euler angle doc (one)
+
+ ; ----------- Output files --------------
+
+ [win_dir]     = 'win'                                ; Directory for particle images
+
+ [coor_dir]    = 'coords'                             ; Directory for coordinates
+
+ [ser]         = '[win_dir]/data_bymic_{****[mic]}@@'  ; Particle image stacks                 (one / micrograph)
+
+ [sel_doc]     = '[win_dir]/sel_part_{****[mic]}'     ; Particle selection doc files          (one / micrograph)
+
+ [sndc]        = '[coor_dir]/pkcoor_{****[mic]}'      ; Particle center coordinates doc files (one / micrograph)
+ 
+ [summary_doc] = 'summary-pick-lfc'                   ; Summary doc file
+
+
+ ; -------------- END BATCH HEADER --------------------------
+
+;;; [out]        = 'jnktmp{****[mic]}'                  ; Temp file for converting from other formats (Deleted)
+
+ MD
+   SET MP
+   [numProcs]
+
+ MD                      ; Skip unnecessary output 
+   VB OFF
+ MD                      ; Skip unnecessary output 
+   TR OFF
+ MY FL
+                                                               
+ UD 5, [sp_pixsiz]       ; Get pixelsize 
+   [params]
+
+ ; Get window size from parameter file. If zero, compute 
+ UD 17, [sp_winsiz]      ; Get window diameter
+   [params]
+
+ ; For ribosomes, actual size = 250 A, window = 368 A
+ IF ( [sp_winsiz] < 1 ) [sp_winsiz]  = INT(368/[sp_pixsiz])
+
+ ; Compute peak separation distance ([sep] is x% of window size)
+ [peaksep] = [sep] * [sp_winsiz]
+ [peaksep]               ; Echo to results file
+
+ ; Create directories if necessary
+ SYS
+   mkdir -p [win_dir]
+ SYS
+   mkdir -p [coor_dir]
+ DE
+   [summary_doc]
+ SD /       MIC_NUM      NUM_PARTS     NUM_PEAKS
+   [summary_doc]
+
+ MY FL
+
+ [part] = [part] - 1
+ 
+ DO                    ; Loop over all micrographs ------------------
+
+   UD NEXT [key],[mic] ; Get micrograph number
+     [sel_mic]
+   IF ([key] <= 0) EXIT
+
+;   @@convert-p([decimate])
+;     [params]          ; Parameter file
+;     [micgr]           ; Input micrograph
+;     [out]             ; Template for output SPIDER file
+
+   DE
+     [sndc]            ; Delete any old output document files
+
+   @@pick-lfc-p([numPeaks],[pickedParts])
+     [micgr]   ; WAS [out]             ; Input micrograph 
+     [refvol]          ; Reference volume                    (input)
+     [noise]           ; Noise image for normalization of particles
+     [ser]             ; Template for windowed particles     (output)
+     [firstPart]       ; Starting particle number 
+     [sndc]            ; Doc file with particle co-ordinates (output)
+     [useSelectYN]     ; Use selection file
+     [angles_doc]      ; Selection file                      (input)
+     [useAvgYN]        ; Use average projection?             (with selection file only)
+     [phiStart]        ; PHI start value                     (unused with selection file)
+     [phiEnd]          ; PHI end value                       (unused with selection file)
+     [phiStep]         ; PHI step size                       (unused with selection file)
+     [thetaStart]      ; THETA start value                   (unused with selection file)
+     [thetaEnd]        ; THETA end value                     (unused with selection file)
+     [thetaStep]       ; THETA step size                     (unused with selection file)
+     [psiStart]        ; PSI start value                     (unused with selection file)
+     [psiEnd]          ; PSI end value                       (unused with selection file)
+     [psiStep]         ; PSI step size                       (unused with selection file)
+     [shrink]          ; Interpolation factor
+     [peaks]           ; No of peaks to be searched          (arbitrary)
+     [peaksep]         ; Peak separation distance
+     [symmMaskYN]      ; Use symmetric mask?                 (0 == no)
+     [maskThresh]      ; Pixel threshold for asymmetric mask (unused for symmetric mask)
+     [ccthresh]        ; Threshold for CC peaks
+
+   UD N  [n]           ; Get number of particles in this micrograph
+     [sndc]  
+
+   [part] = [part]+[n] ; Increment the particle counter
+
+;;   DE                  ; Delete the temporary SPIDER file
+;;     [out]
+
+   SYS
+     echo ' 'Picked {%I0%[pickedParts]} images out of {%I0%[numPeaks]} peaks from micrograph [micgr]; echo ' '
+
+   SD [key], [mic],[pickedParts],[numPeaks]
+   [summary_doc]
+   
+   DOC CREATE          ; Make selection doc file
+     [sel_doc]         ; Doc file                         (output)
+     1                 ; First register
+     1-[n]             ; Image numbers
+
+   [micCounter] = [key]
+   ; ([key] will be reset to 0 when loop is complete)
+   
+   IF ([micCounter] .EQ. [numMics]) EXIT
+   
+ ENDDO
+
+ [dummy] = -[micCounter]
+ SD [dummy], [part]
+   [summary_doc]
+ SD /     MIC     PARTS
+   [summary_doc]
+ SD E
+   [summary_doc]
+ SYS
+   echo ' 'Total picked particles: {%I0%[part]} from {%I0%[micCounter]} micrographs; echo ' '
+
+ EN
+ 
+ ; Modified 2016-02-05
+ ;    2016-02-05 (trs) -- added peak CC threshold
+ ;    2016-02-03 (trs) -- no longer converts micrograph, should exist in SPIDER format already
+ 
+ ; </pre></body></html>
+
+@

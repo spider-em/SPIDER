@@ -1,0 +1,176 @@
+head	1.1;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+1.1
+date	2005.01.05.20.38.53;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@; SOURCE: beadtracker.tom     Author: Chris Renken
+;
+; PURPOSE:  Bead (Marker) tracker for SPIDER 
+
+;<b>------------------- Edit next 3  Input parameters ----------------- 
+
+x97 = 1                  ; First tilt file number
+x90 = 31                 ; Zero tilt file number
+x91 = 62                 ; Last tilt file number
+
+x89 = 10                 ; Number of Markers
+x80 = 8                  ; Marker diameter (pixels)
+x88 = 1                  ; Density (1 light, 0 Dark)?
+
+; ----------------------- Input files ---------------------------------
+
+FR G
+[in]rot_***              ; Tilted image file template              
+
+FR G                                     
+[mrk]d_rot***            ; Template for marker doc files
+
+FR G
+[ang]ang001              ; Tilt angle doc file 
+
+; ---------------------- Output files --------------------------------------------
+
+FR G                                     
+[mrk]d_rot***            ; Template for marker doc files
+
+; ----------------- END BATCH HEADER ------------------------------ </b>
+
+x81 = x80/2
+x82 = 1/x80
+x24 = 0
+
+FI x10,x11                    ; Get NSAM & NROW
+[in]x90
+(12,2)
+
+;BEGIN THE MARKER SELECTION
+DO LB12 j=1,2                 ; Divides into plus and minus branches
+   x21 = 2*x0-3               ; Toggles between -1 and 1
+
+   IF(x21.LT.0)THEN 
+      x19 = x90-1             ; Number of images below reference
+   ELSE
+      x19 = x91-x90           ; Number of images above reference
+   ENDIF
+
+   x11 = x21+x90              ; 1st working image number
+   x10 = x90                  ; Starting reference image number
+
+
+   DO LB13 i=x97,x19          ; Specifles File number
+
+      UD x11,x23,x40          ; Get tilt angle
+      [ang]
+
+      SD -1,x24,x40,x24       ; Write tilt angle into marker file
+      [mrk]x11
+
+      ;Accentuate markers in the current image
+      FQ
+      [in]x11
+      _4 
+      (1)
+      x82
+
+      ;Accentuate markers in the refence file      
+      FQ
+      [in]x10
+      _3 
+      (1)
+      x82
+
+      ; BEGIN SEARCHING FOR ALL MARKERS ON AN IMAGE
+      DO LB14 x20=1,x89          ; Specify marker number
+         UD x20,x13,x14          ; GET MARKER COORDINATES
+         [mrk]x10
+
+         x15 = x13-25            ; TOP-LEFT X COORDINATE FOR WINDOWING
+         x16 = x14-25            ; TOP-LEFT Y COORDINATE FOR WINDOWING
+
+         ; WINDOW THE REFERENCE IMAGE
+         WI
+         _3 
+         _2
+         (50,50)
+         (x15,x16)
+
+         ; WINDOW THE WORKING IMAGE
+         WI
+         _4
+         _1
+         (50,50)
+         (x15,x16)
+
+         ; CROSS-CORRELATE THE WINDOWED IMAGES
+         CC
+         _1
+         _2
+         _5
+
+         ; DETERMINE THE RELATIVE SHIFT
+         PK M x45,x46,x47,x48,x49
+         _5
+
+         ; Keep Blank
+         IF (x88.EQ.0) THEN
+            NEG
+            _1
+            _9
+            GOTO LB10 
+         ENDIF
+
+         CP
+         _1
+         _9
+
+         LB10
+
+         MA                 ; Mask
+         _9
+         _2
+         x81
+         D
+         A
+         x45,x46
+
+         PK M x45,x46,x47,x48,x49
+         _2
+
+         ; Keep Blank
+         ;UPDATE THE MARKER COORDINATES
+         x17 = x47+x13
+         x18 = x48+x14
+
+         ; SAVE TO THE NEW MARKER FILE
+         SD x20,x17,x18
+         [mrk]x11
+
+      LB14
+
+      x10 = x11         ; WORKING IMAGE BECOMES NEW REFERENCE
+      x11 = x11 + x21     ; WORKING IMAGE UPDATED
+   LB13
+
+   x97 = 1
+
+LB12
+
+EN
+@

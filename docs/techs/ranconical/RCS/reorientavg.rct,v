@@ -1,0 +1,328 @@
+head	1.1;
+access;
+symbols;
+locks;
+comment	@# @;
+
+
+1.1
+date	2012.12.21.14.33.58;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@;----------------------------------------------------------------------------------------!
+; Adapted from b04.fed/hbf : - check last cycle of reference free alignment with respect 
+;                            - to horizontal and/or vertical orientation
+;----------------------------------------------------------------------------------------!
+
+; --------------- Parameters ---------------
+[reduce-factor] = 1   ; downsampling factor applied to input images
+[inner-radius]  = 5   ; inner radius for alignment, pixels
+[label-yn]      = 1   ; label images (0==N)
+
+; -------------- Input files --------------
+fr l
+[parameter_doc]params                      ; parameter doc file
+fr l
+[align_dir]Zerodegr/Pairwise               ; alignment input-output directory
+fr l
+[aligned_avg][align_dir]/rfreeavg001       ; reference-free alignment average
+
+; -------------- Output files --------------
+fr l
+[align_solution][align_dir]/solalign***    ; two solutions final images
+fr l
+[doc_align_solution][align_dir]/dsolalign  ; doc file with the two solutions
+fr l
+[MONTAGE][align_dir]/malign                ; montage of the intermediate images
+
+; ------------ END BATCH HEADER ------------
+
+; lean up pre-existing docfile
+de
+[doc_align_solution]
+
+; get window dimension
+ud 17,[idim]
+[parameter_doc]
+ud e
+
+; divide by decimation factor
+[idim]=[idim]/[reduce-factor]
+
+;-----------------------------------------------------------------------------!
+; check alignment of the last reference free image with its mirror inversion
+;-----------------------------------------------------------------------------!
+
+; Copy average into memory
+cp
+[aligned_avg]
+scr001
+
+; Compute the mirror inverted copy of this image 
+mr
+scr001
+scr002
+Y  ; mirror about y-axis
+
+; Compute the autocorrelation of the original image
+ac
+scr001  ; INPUT: average
+scr003
+
+; Compute the autocorrelation of the mirror inverted image
+ac
+scr002  ; INPUT: mirrored-average
+scr004
+
+; calculate power-spectrum radius
+[pw-radius] = [idim]/2 - 3
+[ring-step] = 1
+
+; Angular cross-correlation of the two autocorrelation functions
+or r [alignment-angle],[peak-ht]
+scr004      ; INPUT: ACF of mirrored-average
+scr003      ; INPUT: ACF of average
+[inner-radius],[pw-radius],[ring-step]
+F           ; _F_ull circle alignment
+(1)         ; #peaks 
+
+;;or 2,[alignment-angle],[peak-ht]
+;;scr004        ; INPUT: ACF of mirrored-average
+;;scr003        ; INPUT: ACF of average
+;;[inner-radius],[pw-radius]
+;;[ring-step]   ; step-size
+;;F             ; _F_ull circle alignment
+
+
+;-----------------------------------------------------------------------------!
+; TWO ACF SOLUTIONS CAN BE FOUND TO GET THE DESIRED ORIENTATION OF YOUR IMAGES 
+; BY ALIGNING THE ACFs:
+; Solution No.1 : apply a half rotation angle -[alignment-angle]/2.
+; Solution No.2 : apply solution No.1 + 90 degrees 
+;-----------------------------------------------------------------------------!
+
+[solution-counter] = 1   ; alignment #1
+
+; Apply a rotation of -[alignment-angle]/2. => Y axis = cylinder axis )
+[rotation-angle] = -[alignment-angle]/2.
+rt
+[aligned_avg]
+scr005
+[rotation-angle]
+
+; Search the new center of gravity of the rotated average
+cg ph x21,x22,[x-shift],[y-shift]
+scr005  ; INPUT: rotated-average
+
+[x-shift] = -[x-shift]
+[y-shift] = -[y-shift]
+
+;   rotation and translation of the first solution 
+rt sq
+[aligned_avg]
+[align_solution][solution-counter]
+[rotation-angle]
+[x-shift],[y-shift]
+
+;  save rotation and X Y shifts for solution No.1
+sd [solution-counter], [rotation-angle],[x-shift],[y-shift]
+[doc_align_solution]
+
+;-----------------------------------------------------------------------------!
+; Solution No.2 : apply solution No.1 + 90 degrees 
+;-----------------------------------------------------------------------------!
+[solution-counter] = [solution-counter] + 1   ; alignment #2
+
+[rotation-angle2] = [rotation-angle] + 90.  
+
+rt
+[aligned_avg]
+scr006
+[rotation-angle2]
+
+;   Search the new center of gravity of the rotated average
+cg ph x21,x22,[x-shift],[y-shift]
+scr006  ; INPUT: solution #2
+
+[x-shift] = -[x-shift]
+[y-shift] = -[y-shift]
+
+;   rotation and translation of the +90 degree solution
+rt sq
+[aligned_avg]
+[align_solution][solution-counter]
+[rotation-angle2]
+[x-shift],[y-shift]
+
+;  save rotation and X Y shifts for solution No.2
+sd [solution-counter], [rotation-angle2],[x-shift],[y-shift]
+[doc_align_solution]
+
+;-----------------------------------------------------------------------------!
+; TWO MORE SOLUTIONS CAN BE FOUND TO GET THE DESIRED ORIENTATION OF YOUR IMAGES 
+; BY ALIGNING IN REAL SPACE :
+; Solution No.3 : apply a half rotation angle -[alignment-angle]/2.
+; Solution No.4 : apply solution No.1 + 90 degrees 
+;-----------------------------------------------------------------------------!
+
+; get particle dimension
+ud 18, [part-diam]
+[parameter_doc]
+ud e
+
+; divide by decimation factor ([reduce-factor])
+[part-diam] = [part-diam]/[reduce-factor]
+
+; calculate particle radius
+[part-radius] = [part-diam]/2
+
+; Angular cross-correlation of the two autocorrelation functions
+or r [alignment-angle],[peak-ht]
+scr002      ; INPUT: mirrored-average
+scr001      ; INPUT: average
+[inner-radius],[part-radius],[ring-step]
+F           ; _F_ull circle alignment
+(1)         ; #peaks 
+
+[solution-counter] = [solution-counter] + 1   ; alignment #3
+
+; Apply a rotation of -[alignment-angle]/2. => Y axis = cylinder axis )
+[rotation-angle] = -[alignment-angle]/2.
+rt
+[aligned_avg]
+scr015
+[rotation-angle]
+
+; Search the new center of gravity of the rotated average
+cg ph x21,x22,[x-shift],[y-shift]
+scr015  ; INPUT: rotated-average
+
+[x-shift] = -[x-shift]
+[y-shift] = -[y-shift]
+
+;   rotation and translation of the first solution 
+rt sq
+[aligned_avg]
+[align_solution][solution-counter]
+[rotation-angle]
+[x-shift],[y-shift]
+
+;  save rotation and X Y shifts for solution No.3
+sd [solution-counter], [rotation-angle],[x-shift],[y-shift]
+[doc_align_solution]
+
+;-----------------------------------------------------------------------------!
+; Solution No.4 : apply solution No.1 + 90 degrees 
+;-----------------------------------------------------------------------------!
+[solution-counter] = [solution-counter] + 1   ; alignment #4
+
+[rotation-angle2] = [rotation-angle] + 90
+
+rt
+[aligned_avg]
+scr016
+[rotation-angle2]
+
+;   Search the new center of gravity of the rotated average
+cg ph x21,x22,[x-shift],[y-shift]
+scr016  ; INPUT: solution #2
+
+[x-shift] = -[x-shift]
+[y-shift] = -[y-shift]
+
+;   rotation and translation of the +90 degree solution
+rt sq
+[aligned_avg]
+[align_solution][solution-counter]
+[rotation-angle2]
+[x-shift],[y-shift]
+
+;  save rotation and X Y shifts for solution No.4
+sd [solution-counter], [rotation-angle2],[x-shift],[y-shift]
+[doc_align_solution]
+
+; label images
+if([label-yn].ne.0) then
+    la
+    scr001
+    scr007
+    AVG
+
+    la
+    scr002
+    scr008
+    MIRROR
+
+    la
+    scr003
+    scr009
+    ACF(AVG)
+
+    la
+    scr004
+    scr010
+    ACF(MIR)
+
+    la
+    scr005
+    scr011
+    SOLN 1
+
+    la
+    scr006
+    scr012
+    SOLN 2
+    
+    la
+    scr015
+    scr013
+    SOLN 3
+    
+    la
+    scr016
+    scr014
+    SOLN 4
+endif
+
+
+;-----------------------------------------------------------------------------!
+; Creates a montage with intermediate images of 
+; solution No.1 left  column of the montage
+; solution No.2 right column of the montage
+;-----------------------------------------------------------------------------!
+
+; Create montage file with two columns
+mn s
+scr***
+7-14  ; image range
+2,2   ; images/row, margin-width
+2.    ; margin-value
+[MONTAGE]
+
+; remove intermediate images
+de a
+scr001
+
+; close align doc
+SD /      ROT_ANGLE      XSHIFT        YSHIFT
+[doc_align_solution]
+sd e
+[doc_align_solution]
+
+en d
+
+; Modified 2012-12-11
+;    2012-09-30 (trs) -- Added options to align in real space
+;    2012-09-26 (trs) -- Replaced obsolete OR 2 call with OR R
+@

@@ -1,0 +1,297 @@
+head	1.1;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+1.1
+date	2017.01.19.16.35.39;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@([grp-num])
+
+; FORCES ALIGNMENT TO SAME VIEW FROM EACH REFERENCE
+; USES OR SH INSTEAD OF AP SH
+
+@@realign-settings([first-ring],[last-ring],[search-range],[step-size],x65)
+; ----------------------- Parameters -----------------------
+; [first-ring]              first ring, for 2D alignment
+; [last-ring]               last ring, for 2D alignment (-1==calculated later)
+; [search-range]            translation search range, for 2D alignment
+; [step-size]               translation step size, for 2D alignment
+; ------------------------- Inputs -------------------------
+; [df_group_list]           list of defocus groups
+; [params]                  parameter doc file, only needed if last ring for AP SH is unspecified
+; [selection]               selection file, for each defocus group
+; [ref_1_dir]               input-output directory for reference #1
+; [ref_2_dir]               input-output directory for reference #2
+; [reference_angles_doc]    Euler angles of the reference-projections
+; [unaligned_images]        unaligned particle stacks
+; [align_doc]               alignment docs, in both REF_1_DIR and REF_2_DIR
+; [ref_proj_template]       reference projections, in both REF_1_DIR and REF_2_DIR
+; ------------------------ Outputs ------------------------
+; [realigned_align_doc_1]   realignment doc file, reference 1
+; [realigned_align_doc_2]   realignment doc file, reference 2
+; [dummy_wait_file]         dummy file create when defocus-goup done copying
+; -------------------- END BATCH HEADER --------------------
+
+
+; COPY STACK INTO MEMORY, POSSIBLY AFTER WAITING
+
+; wait for previous defocus-group
+@@realign-wait([num-grps],[grp-rank])
+[grp-num]        ; INPUT REGISTER: defocus-group number
+[df_group_list]  ; INPUT: defocus-group list
+; ------------------ Output Parameters -----------------
+; [num-grps]     ; number of groups
+; [grp-rank]     ; order within groups
+; ------------------ END BATCH HEADER ------------------
+
+vm
+echo "Group #{***[grp-num]} ({***[grp-rank]}th out of {***[num-grps]}) starting to copy stacks"; date; echo
+
+fi [num-slices]
+[unaligned_images]
+(26)  ; header position for maxim
+
+my fl
+
+md
+vb off
+md
+set mp
+(0)
+
+cp
+[unaligned_images]
+_8@@
+[num-slices]  ; #images
+
+vm
+echo "Group #{***[grp-num]} ({***[grp-rank]}th out of {***[num-grps]}) finished copying stacks"; date
+
+my fl
+
+; If not last-ranked defocus-group, create temporary file
+if([grp-rank].ne.[num-grps]) then
+   vm
+   touch [dummy_wait_file][grp-num].$DATEXT
+endif
+
+
+; NOW, PERFORM ALIGNMENT
+
+;vm
+;echo "Comparing alignment parameters"; date
+
+;fr l
+;[temp_align_fromref1]tmpapsh1
+;fr l
+;[temp_align_fromref2]tmpapsh2
+
+IF ([last-ring].LT.0) THEN
+    ; get particle diameter (in pixels) from params
+    UD 18,x39
+    [params] 
+    [last-ring] = INT((x39/2)*1.1)
+ENDIF
+
+; get image dimensions
+ud 17, [img-dim]
+[params]
+ud e  ; close doc
+
+; check outer alignment radius
+[check-radius] = int([img-dim]/2) - [last-ring] - [search-range]
+
+; fix outer alignment radius, if necessary
+if([check-radius].lt.3) [last-ring] = int([img-dim]/2) - [search-range] - 4
+
+;; get #defocus-groups
+;ud n,x76
+;[df_group_list]
+
+; clean up
+;DE
+;[temp_align_fromref1]
+;DE
+;[temp_align_fromref2]
+DE
+[realigned_align_doc_1]
+DE
+[realigned_align_doc_2]
+SD /                 PSI        THETA         PHI         REFNUM      SLICENUM    CUM_INPLANE  CUM_XSHIFT   CUM_YSHIFT     NPROJ       ANGDIFF       CCROT       INPLANE       XSHIFT       YSHIFT       MIRROR
+[realigned_align_doc_1]
+SD /                 PSI        THETA         PHI         REFNUM      SLICENUM    CUM_INPLANE  CUM_XSHIFT   CUM_YSHIFT     NPROJ       ANGDIFF       CCROT       INPLANE       XSHIFT       YSHIFT       MIRROR
+[realigned_align_doc_2]
+; The headers don't all fit within the character limit, but it's here for reference.
+
+; get number of particles (x50) in current defocus group
+UD N,x50
+[selection]
+
+; loop through particles (x50)
+do lb1 x10=1,x50
+    ud ic,x10,[slice]
+    [selection]
+
+    ; get projection #s, slice #s, CCROTs
+    ud ic,[slice],x11,x12,x13,[prj-ref1],[slice-ref1],x16,x17,x18,x19,x20,[ccrot-ref1],x22,x23,x24,x25
+    [ref_1_dir]/[align_doc]
+    ud ic,[slice],x51,x52,x53,[prj-ref2],[slice-ref2],x56,x57,x58,x59,x60,[ccrot-ref2],x62,x63,x64,x65
+    [ref_2_dir]/[align_doc]
+
+    ; if aligned to same projection, then save to unchanged docs
+    IF([prj-ref1].eq.[prj-ref2]) then
+        sd [slice-ref1],x11,x12,x13,[prj-ref1],[slice-ref1],x16,x17,x18,x19,x20,[ccrot-ref1],x22,x23,x24,x25
+        [realigned_align_doc_1]
+        sd [slice-ref2],x51,x52,x53,[prj-ref2],[slice-ref2],x56,x57,x58,x59,x60,[ccrot-ref2],x62,x63,x64,x65
+        [realigned_align_doc_2]
+        ; Can't replace all of the old registers by named ones, because there's a character limit that these lines would exceed
+
+    ; if didn't align to same projection, then...
+    ELSE
+        ; if CCC1 > CCC2 then...
+        IF ([ccrot-ref1].GE.[ccrot-ref2]) then
+            [nproj] = 1
+            ; the NPROJ value in the new alignment doc will signify whether a particle has been realigned
+
+            ; save to different-but-higher doc 1
+            sd [slice-ref1],x11,x12,x13,[prj-ref1],[slice-ref1],x16,x17,x18,[nproj],x20,[ccrot-ref1],x22,x23,x24,x25
+            [realigned_align_doc_1]
+
+            ; force projection# > 0
+            [prj-ref1] = ABS([prj-ref1])
+
+            ; force alignment to ([prj-ref1])th projection of reference2
+            or sh x76,x77,x78,x86,x81
+            [ref_2_dir]/[ref_proj_template][prj-ref1]
+            [search-range],[step-size]
+            [first-ring],[last-ring]
+            _8@@{*****[slice-ref1]}  ; WAS [unaligned_images]{*****[slice-ref1]}
+            (1)  ; check mirrored positions
+            ; x76==inplane-angle, x77==xshift, x78==yshift, x86==mirror-flag, x81==ccrot
+
+            ; change mirror-flag to AP SH convention
+            if (x86.eq.1) [mirror]=-1  ; mirroring required
+            if (x86.eq.0) [mirror]=1   ; mirroring not required
+
+; 1     2     3      4         5           6            7          8         9       10       11       12      13      14      15
+;PSI, THETA, PHI, REF_NUM, SLICE_NUM, CUM_INPLANE, CUM_XSHIFT, CUM_YSHIFT, NPROJ, ANG_DIFF, CC_ROT, INPLANE, XSHIFT, YSHIFT, MIRROR
+
+            ; carry some parameters from reference #1
+            x71=x11  ; psi
+            x72=x12  ; theta
+            x73=x13  ; phi
+
+            [nproj] = -1  ; to signify experimental image was realigned
+
+            ; set incremental parameters to be equal to the cumulative parameters from OR SH
+            x82=x76  ; in-plane angle
+            x83=x77  ; x-shift
+            x84=x78  ; y-shift
+
+            sd    [slice-ref1],x71,x72,x73,[prj-ref1],[slice-ref1],x76,x77,x78,[nproj],x20,x81,x82,x83,x84,[mirror]
+            [realigned_align_doc_2]
+
+        ; if CCC2 > CCC1 then...
+        ELSE
+            [nproj] = 1
+            ; the NPROJ value in the new alignment doc will signify whether a particle has been realigned
+
+            ; save to different-but-higher doc 2
+            sd [slice-ref2],x51,x52,x53,[prj-ref2],[slice-ref2],x56,x57,x58,[nproj],x60,[ccrot-ref2],x62,x63,x64,x65
+            [realigned_align_doc_2]
+
+            ; force projection# > 0
+            [prj-ref2] = ABS([prj-ref2])
+
+            ; force alignment to ([prj-ref2])st projection of reference1
+            or sh x76,x77,x78,x86,x81
+            [ref_1_dir]/[ref_proj_template][prj-ref2]
+            [search-range],[step-size]
+            [first-ring],[last-ring]
+            _8@@{*****[slice-ref2]}  ; WAS [unaligned_images]{*****[slice-ref2]}
+            (1)  ; check mirrored positions
+            ; x76==inplane-angle, x77==xshift, x78==yshift, x86==mirror-flag, x81==ccrot
+
+            ; change mirror-flag to AP SH convention
+            if (x86.eq.1) [mirror]=-1  ; mirroring required
+            if (x86.eq.0) [mirror]=1   ; mirroring not required
+
+            ; carry some parameters from reference #2
+            x71=x51  ; psi
+            x72=x52  ; theta
+            x73=x53  ; phi
+
+            [nproj] = -1  ; to signify experimental image was realigned
+
+            ; set incremental parameters to be equal to the cumulative parameters from OR SH
+            x82=x76  ; in-plane angle
+            x83=x77  ; x-shift
+            x84=x78  ; y-shift
+
+            sd [slice-ref1],x71,x72,x73,[prj-ref2],[slice-ref2],x76,x77,x78,[nproj],x20,x81,x82,x83,x84,[mirror]
+            [realigned_align_doc_1]
+        ENDIF
+    ENDIF
+lb1
+; end particle-loop
+
+; clean up
+sd e
+[realigned_align_doc_1]
+sd e
+[realigned_align_doc_2]
+ud ice 
+[realigned_align_doc_1]
+ud ice
+[realigned_align_doc_2]
+ud ice
+[selection]
+ud ice
+[ref_1_dir]/[align_doc]
+ud ice
+[ref_2_dir]/[align_doc]
+;DE
+;[temp_align_fromref1]
+;DE
+;[temp_align_fromref2]
+de
+_8@@
+
+vm
+echo "Group #{***[grp-num]} ({***[grp-rank]}th out of {***[num-grps]}) done"; date ; echo
+
+re
+
+; Modified 2012-12-12
+;    TO DO: use SD IC
+;    2012-12-11 (trs & tmb) -- reduced maximum outer radius a bit more
+;    2011-05-05 (trs) -- bug fix: needed to delete in-core stack explicitly for non-parallel version
+;    2010-02-08 (trs) -- fits outer alignment radius to image
+;    2009-04-17 (trs) -- added annotations
+;    2009-04-17 (trs) -- Linux flag not used anymore
+;    2007-11-28 (trs, pd) -- input filename now sel_particles
+;    2007-04-05 (DT)  -- uses stack files and eliminates several unnecessary files
+;    2007-03-23 (trs) -- reflects use of stacks in initial reconstruction
+;    2006-08-29 (trs) -- reference projections now stacks
+;    2005-01-20 (trs, pd) -- bug fix
+;    2005-01-13 (trs) -- adapted for AP SH
+;    2005-01-13 (trs) -- made search range, step size user-defined
+;    2005-01-12 (trs) -- added flag to handle Linux-specific differences
+;    2005-01-11 (trs) -- altered labels, added comments
+;    2004-05-18 (trs) -- adapted from K. Mitra
+@

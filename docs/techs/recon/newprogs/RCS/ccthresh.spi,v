@@ -1,0 +1,920 @@
+head	1.14;
+access;
+symbols
+	GPL_update:1.14
+	pre_rewrite_2010:1.12
+	pre_more_stack:1.9
+	best-code:1.9
+	no-named-regs:1.9
+	pre_GPL:1.9
+	tag_version1_0:1.9;
+locks; strict;
+comment	@:: @;
+
+
+1.14
+date	2010.01.28.14.45.47;	author bbaxter;	state Exp;
+branches;
+next	1.13;
+
+1.13
+date	2010.01.19.18.52.24;	author leith;	state Exp;
+branches;
+next	1.12;
+
+1.12
+date	2008.02.19.20.07.44;	author leith;	state Exp;
+branches;
+next	1.11;
+
+1.11
+date	2007.02.01.19.59.38;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2007.01.17.16.35.43;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2005.04.01.21.05.40;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2004.08.06.19.35.52;	author bbaxter;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2004.06.03.16.19.29;	author bbaxter;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2004.05.25.19.09.46;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2004.04.20.14.26.47;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2004.04.20.14.16.21;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2004.04.20.14.15.23;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2003.08.05.12.45.23;	author bbaxter;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2003.07.24.18.12.33;	author bbaxter;	state Exp;
+branches;
+next	;
+
+
+desc
+@spider batch file
+@
+
+
+1.14
+log
+@added condition for cutoff=0
+@
+text
+@; <html><head><title>Determine and test threshold for the cross correlation</title></head><body><pre>
+;
+; SOURCE: spider/docs/techs/recon/newprogs/ccthresh.spi
+;                       Merged with dftotals.spi     Nov 2006 ArDean Leith
+;                       Selection bugs               Feb 2008 Magali
+;                       Reject file                  Jan 2010 ArDean Leith
+;
+; PURPOSE: Given a threshold for the % of files in each group that should be
+;           eliminated, determines the corresponding threshold for the cross 
+;          correlation value and stores threshold in a doc file. 
+;          Applies the theshold to the coreelation values from the aligned particles 
+;          and creates partilcel selection files listing particles with 
+;          correlation values above the theshold. Also makes a listing of rejected
+;          particles sorted by correlation value.
+;
+; NOTE:     Particle totals are approximate due to binning of data in histograms.
+;
+; I/O PARAMETERS AND FILES ARE SET HERE:
+;
+; <b> ------------ Parameters ---------------------------------------
+
+[cutoff]  = 0.15                                      ; Percentage of particles to eliminate
+
+;    ------------ Input files ---------------------------------------
+
+[defgrps] = '../Alignment/sel_group'               ; Defocus groups selection file
+
+[docapsh] = '../Alignment/align_01_{***[grp]}'     ; Document file created by 'AP SH'
+
+[cchist]  = 'hist/cchist{***[grp]}'                ; Histogram doc files 
+
+; --------------- Output files  -------------------------------------
+
+[thresh]        = 'thresh'                         ; Doc file with CC thresholds
+
+[sel_particles] = 'hist/sav_particles_{***[grp]}'  ; Contains sorted particle numbers whose   
+                                                   ;   correlation values are above threshold
+
+[rej_particles] = 'hist/rej_particles_{***[grp]}'  ; Contains sorted rejected particle numbers    
+
+; -------------- END BATCH HEADER ---------------------------------</b>
+
+MD
+TR OFF                               ; Decrease results file output
+MD
+VB OFF                               ; Decrease results file output
+
+DE                                   ; Remove any existing output doc file
+[thresh]
+
+SD /    CC_THRESH,   N_ABOVE_THR,   N_BELOW_THR,   N_TOTAL
+[thresh]
+
+VM
+echo  ' 'Correlation cutoff: {%f5.2%[cutoff]} ; echo  ' '     
+
+[all]   = 0
+[saved] = 0
+
+DO                                  ; Loop over all defocus group(s) ---------
+   UD NEXT [k],[grp],[numparts]     ; Get current group number and particles
+   [defgrps]                        ; Group selection doc file    (input)
+   IF ([k] .LE. 0) EXIT             ; End of groups in doc file
+
+   ; Determines the number of particles below the percent cutoff ([cutoff]),
+   ; [cutoff] = Percent cutoff
+   ; [grp]    = Defocus group
+   ; Gets the total number of particles (from column 2 in histogram),
+   ; Determines the number of particles below the percent cutoff,
+   ; Finds the corresponding CC value (column 1 in histogram).
+
+   [ncum]    = 0                    ; Cumulative no. of particles
+   [Nbelow]  = 0     
+   [nbad]    = [cutoff]*[numparts]  ; Number of particles to eliminate
+
+   UD N [nbins]                     ; Find number of bins in histogram
+   [cchist]                         ; Histogram doc file      (input)  
+
+   DO [key] = 1,[nbins]             ; Loop over all bins
+
+      UD [key],[CC_threshold],[parts]
+      [cchist]                      ; Histogram doc file      (input)
+
+      [ncum] = [ncum] + [parts]     ; Number of particles below cuttof
+
+      IF ([ncum].GT.[nbad]) THEN
+         [cuttoffbin] = [key]
+         IF ([key].NE.1) [cuttoffbin] = [key]-1     ; Last bin to discard
+
+         UD [cuttoffbin],[CC_threshold]  ; Get the cuttoff
+         [cchist]                        ; Histogram doc file     (input)
+
+         EXIT                       ; Leave the loop now
+      ENDIF
+
+      [Nbelow] = [ncum]             ; No. of particles from previous bins
+   ENDDO
+
+   [Nabove] = [numparts] - [Nbelow] ; Number above threshold
+
+   ; Save [CC_threshold], N_above_threshold, N_below_threshold, total_N
+   SD [grp],[CC_threshold],[Nabove],[Nbelow],[numparts]
+   [thresh]
+
+   [all]   = [all] + [numparts]
+   [saved] = [saved] + [Nabove]]
+
+   ; Create selection file
+   [key]    = 0
+   [rejkey] = 0
+
+   DE                                 ; Remove any existing output doc file
+   [sel_particles]                    ; Selection file                 
+   DE                                 ; Remove any existing output doc file
+   [rej_particles]                    ; Selection file                 
+
+   SD /    PART_NUMBER,   CC_VALUE
+   [sel_particles]                    ; Selection file             (output)               
+   SD /    PART_NUMBER,   CC_VALUE
+   [rej_particles]                    ; Selection file              (output)               
+
+   DO [part]=1,[numparts]             ; Loop over particles in this group -----
+
+      ;            PHI,THE,PSI, REF#,IMG#,INPLANE,  SX,SY,NPROJ, DIFF,CCROT,INPLANE,SX,SY
+      UD IC [part], [d],[d],[d], [d],[img],[d],     [d],[d],[d],  [d],[cc]
+      [docapsh]                       ; Alignment parameter file  (input)
+
+      IF ([cc].GE.[CC_threshold])THEN ; CC above threshold for this particle
+         [key]=[key]+1                ; Increment new particle counter
+
+         SD [key],[img],[cc]          ; Save: Particle #, CC value
+         [sel_particles]              ; Selection file                 (output)
+
+      ELSE
+         [rejkey]=[rejkey]+1          ; Increment new particle counter y
+
+         SD [rejkey],[img],[cc]       ; Save: Particle #, CC value
+         [rej_particles]              ; Selection file                 (output)
+
+      ENDIF
+   ENDDO
+
+   UD ICE                            ; Free doc file pointer
+   [docapsh]     
+   SD E                              ; Free doc file pointer
+   [sel_particles]     
+   SD E                              ; Free doc file pointer
+   [rej_particles] 
+
+   DOC SORT                          ; Saved doc file sorting
+   [sel_particles]                   ; Saved selection doc file          (input)
+   [sel_particles]                   ; Sorted saved selection doc file   (output)
+   (2)                               ; Sort column = CC value
+   Yes                               ; Renumber keys
+
+   IF ([cutoff].ne.0) THEN
+
+   DOC SORT                          ; Reject doc file sorting
+   [rej_particles]                   ; Reject selection doc file        (input)
+   [rej_particles]                   ; Sorted reject selection doc file (output)
+   (2)                               ; Sort column = CC value
+   Yes                               ; Renumber keys
+
+   ENDIF
+
+   VM
+   echo ' 'Saved: {******[Nabove]} in: [sel_particles]'   'Rejected: {******[Nbelow]} in [rej_particles]
+
+ENDDO
+
+VM
+echo  ' '; echo ' 'Overall keeping: {******[saved]} Out of: {******[all]} ; echo  ' '
+    
+EN
+; </body></pre></html>
+
+@
+
+
+1.13
+log
+@simplify-rewrite
+@
+text
+@d87 2
+a88 1
+         [cuttoffbin] = [key]-1     ; Last bin to discard
+d156 2
+d164 2
+@
+
+
+1.12
+log
+@Selection list was every particle!
+@
+text
+@d1 1
+a1 1
+; <html><head><title>Determine and apply threshold for the cross correlation</title></head><body><pre>
+d3 12
+a14 3
+; SOURCE: ccthresh.spi
+;                       Merged with dftotals.spi       Nov 2006 ArDean Leith
+;                       Selection bugs                 Feb 2008 Magali
+d16 1
+a16 3
+; PURPOSE: Creates selection files by applying cutoff
+;          Determines a threshold for the cross correlation value by 
+;          specifying a percentage of particles to eliminate.
+a17 4
+; NOTE: Particle totals are approximate due to binning of data in histograms.
+;
+; MASTER COPY: /net/bali/usr1/spider/docs/techs/recon/newprogs/
+;
+d22 1
+a22 1
+[cutoff]      = 0.15           ; Percentage of particles to eliminate
+a23 2
+[make_select] = 0              ; >0 uses cutoff to create selection files
+
+d26 1
+a26 2
+FR G                                     
+[defgrps]sel_group                        ; Defocus groups selection file
+d28 1
+a28 2
+FR G
+[docapsh]../Alignment/align_01_{***[grp]} ; Document file created by 'AP SH'
+d30 1
+a30 2
+FR G
+[cchist]hist/cchist{***[grp]}             ; Histogram doc files (IF: [make_select]>0)
+d34 4
+a37 2
+FR G
+[thresh]thresh                          ; Doc file with CC thresholds
+d39 1
+a39 4
+FR G
+[sel_particles]sel_particles_{***[grp]} ; Output file (one for each defocus group)
+;                                       ;   Contains the particle numbers whose   
+;                                       ;   correlation coeffs. are greater than threshold
+d44 1
+a44 1
+TR OFF                          ; Decrease results file output
+d46 1
+a46 1
+VB OFF                          ; Decrease results file output
+d48 2
+a49 2
+UD N,[numgrps]                  ; Get number of groups 
+[defgrps]                       ; Group selection doc file      (input)
+d51 1
+a51 1
+DE                              ; Remove any existing output doc file
+d54 2
+a55 2
+SD /    CC_THRESH   N_ABOVE_THR   N_BELOW_THR   N_TOTAL
+[thresh]
+d57 2
+a58 2
+IF ([cutoff].LE.0) THEN
+   ; ***** The threshold = 0 case : keep using  all particles *************
+d60 4
+a63 2
+   [zero] = 0.0
+   DO LB1 [numgrp]=1,[numgrps]        ; Loop over all defocus group(s)
+d65 6
+a70 2
+      UD [numgrp],[grp],[numparts]    ; Get current group number and particles 
+      [defgrps]                       ; Group selection doc file     (input)
+d72 3
+a74 25
+      SD [grp],[zero],[numparts],[zero],[numparts] ; Make threshold file entry
+      [thresh]                        ; Threshold file               (output)
+
+      IF ([make_select].GT.0) THEN
+         ; Create selection file
+         DE                           ; Remove any existing output doc file
+         [sel_particles]              ; Selection file                 
+         SD/    PARTICLE #   CC VALUE  
+         [sel_particles]              ; Selection file               (output)                
+                                             
+         DO LB2 [part]=1,[numparts]   ; Loop over particles in this defocus group
+
+            ;            PHI,THE,PSI, REF#,IMG#,INPLANE, SX,SY,NPROJ, DIFF,CCROT,INPLANE,SX,SY
+            UD IC [part], [d],[d],[d], [d],[d],[d],      [d],[d],[d], [d],[cc]
+            [docapsh]
+
+            SD [part],[part],[cc]     ; Save: Particle #, CC value
+            [sel_particles]           ; Selection file                 (output)
+         LB2
+         SD E                         ; Free doc file pointer
+         [sel_particles]
+      ENDIF
+   LB1
+   SD E                               ; Free doc file pointer
+   [thresh]
+d76 2
+a77 4
+ELSE
+   ; ********* Apply cuttoff  threshold  **********************************
+   VM
+   echo  ' 'Cutoff: {%f5.2%[cutoff]}    
+d79 1
+a79 2
+   [all] = 0
+   [saved]=0
+d81 2
+a82 3
+   DO LB3 [numgrp]=1,[numgrps]          ; Loop over all defocus group(s)
+      UD [numgrp],[grp],[numparts]      ; Get current group number and particles 
+      [defgrps]                         ; Group selection doc file    (input)
+d84 1
+a84 6
+      ; Determines the number of particles below the percent cutoff ([cutoff]),
+      ; [cutoff] = Percent cutoff
+      ; [grp]    = Defocus group
+      ; Gets the total number of particles (from column 2 in histogram),
+      ; Determines the number of particles below the percent cutoff,
+      ; Finds the corresponding CC value (column 1 in histogram).
+d86 2
+a87 3
+      [ncum]    = 0                    ; Cumulative no. of particles
+      [Nbelow] = 0     
+      [nbad]    = [cutoff]*[numparts]  ; Number of particles to eliminate
+d89 2
+a90 2
+      UD N,[nbins]                     ; Find number of bins in histogram
+      [cchist]                         ; Histogram doc file      (input)  
+d92 2
+a93 1
+      DO LB4 [key] = 1,[nbins]         ; Loop over all bins
+d95 2
+a96 2
+         UD [key],[CC_threshold],[parts]
+         [cchist]                      ; Histogram doc file      (input)
+d98 1
+a98 1
+         [ncum] = [ncum] + [parts]     ; Number of particles below cuttof
+d100 3
+a102 2
+         IF ([ncum].GT.[nbad]) THEN
+            [cuttoffbin] = [key]-1     ; Last bin to discard
+d104 2
+a105 2
+            UD [cuttoffbin],[CC_threshold]  ; Get the cuttoff
+            [cchist]                   ; Histogram doc file     (input)
+d107 3
+a109 2
+            GOTO LB5                   ; Leave the loop now
+         ENDIF
+d111 4
+a114 2
+         [Nbelow] = [ncum]             ; No. of particles from previous bins
+      LB4
+d116 4
+a119 2
+      LB5
+      [Nabove] = [numparts] - [Nbelow] ; Number above threshold
+d121 1
+a121 3
+      ; Save [CC_threshold], N_above_threshold, N_below_threshold, total_N
+      SD [grp],[CC_threshold],[Nabove],[Nbelow],[numparts]
+      [thresh]
+d123 3
+a125 2
+      VM
+      echo ' 'Group: {****[grp]} Saved: {******[Nabove]} Out of: {******[numparts]}  
+d127 2
+a128 2
+      [all]   = [all] + [numparts]
+      [saved] = [saved] + [Nabove]]
+d130 2
+a131 3
+      IF ([make_select].GT.0) THEN
+         ; Create selection file
+         [key]=0
+d133 2
+a134 2
+         DE                             ; Remove any existing output doc file
+         [sel_particles]                ; Selection file                 
+d136 2
+a137 1
+         DO LB6 [part]=1,[numparts]     ; Loop over particles in this defocus group
+d139 2
+a140 3
+            ;            PHI,THE,PSI, REF#,IMG#,INPLANE,  SX,SY,NPROJ, DIFF,CCROT,INPLANE,SX,SY
+            UD IC [part], [d],[d],[d], [d],[img],[d],     [d],[d],[d],  [d],[cc]
+            [docapsh]
+d142 18
+a159 2
+            IF ([cc].GE.[CC_threshold])THEN ; CC above threshold for this particle
+               [key]=[key]+1                ; Increment new particle counter = key
+a160 10
+               SD [key],[img],[cc]          ; Save: Particle #, CC value
+               [sel_particles]              ; Selection file                 (output)
+            ENDIF
+         LB6
+         UD ICE
+         [docapsh]
+         SD E                               ; Free doc file pointer
+         [sel_particles]
+      ENDIF
+   LB3
+d162 3
+a164 2
+   echo  ' '; echo ' 'Overall saved: {******[saved]} Out of: {******[all]}  
+ENDIF
+d167 1
+a167 1
+echo  ' '
+d169 1
+a169 1
+EN D
+@
+
+
+1.11
+log
+@cosmetic
+@
+text
+@d1 1
+a1 1
+; <html><head><title>Determine and apply threshold for the cross correlation & </title></head><body><pre>
+d5 1
+d7 3
+a9 2
+; PURPOSE: Creates selection files by applying cutoffDetermine a threshold for the cross correlation value by specifying
+;          a percentage of particles to eliminate. .
+d141 1
+a141 1
+      [Nabove] = [numparts] - [Nbelow]    ; Number above threshold
+d163 1
+a163 1
+            UD IC [part], [d],[d],[d], [d],[d],[d],       [d],[d],[d],  [d],[cc]
+d166 2
+a167 2
+            IF ([cc].GE.[ccthresh])THEN ; CC above threshold for this particle
+               [key]=[key]+1            ; Increment new particle counter = key
+d169 2
+a170 2
+               SD [key],[part],[cc]     ; Save: Particle #, CC value
+               [sel_particles]          ; Selection file                 (output)
+d175 1
+a175 1
+         SD E                           ; Free doc file pointer
+@
+
+
+1.10
+log
+@added stacks, named variables
+@
+text
+@d6 2
+a7 3
+; PURPOSE: Determine a threshold for the cross correlation value by specifying
+;          a percentage of particles to eliminate. Optionally creates
+;          selection files by applying cutoff.
+d24 1
+a24 1
+[defgrps]sel_group                      ; Defocus groups selection file
+d27 1
+a27 1
+[docapsh]../Alignment/align_01_{***[grp]} ; Output document file from 'AP SH' command
+d30 1
+a30 1
+[cchist]hist/cchist{***[grp]}             ; Histogram doc files
+d35 1
+a35 1
+[thresh]thresh                   ; Output doc file with CC thresholds
+d39 2
+a40 2
+;                                       ; Contains the particle numbers whose   
+;                                       ; correlation coeffs. are greater than the threshold
+@
+
+
+1.9
+log
+@*** empty log message ***
+@
+text
+@d1 1
+a1 1
+; <html><head><title>Determine threshold for the cross correlation</title></head><body><pre>
+d4 1
+d7 2
+a8 1
+;          a percentage of particles to eliminate.
+d10 1
+a10 16
+; INPUTS:
+;    percentage    : To eliminate 40%, use 0.40
+;    order_defocus : To count defocus groups.
+;    hist/cchist   : Histogram doc files (one for each defocus group)
+;
+; OUTPUTS:
+;    thresh : OUtput doc file with CC thresholds.
+;
+; 4 columns in output:
+;    0) key = defocus group
+;    1) CC threshold
+;    2) No. particles above threshold
+;    3) No. particles below threshold
+;    4) Total no. particles
+;
+; Particle totals are approximate due to binning of data in histograms.
+d18 3
+a20 1
+x30 = 0.15                    ; Percentage of particles to eliminate
+d24 3
+d28 1
+a28 1
+[order]order_defocus           ; List of defocus groups
+d31 1
+a31 1
+[cchist]hist/cchist{***x77}   ; Histogram doc files
+d36 6
+a41 1
+[thresh]thresh                ; Output doc file with CC thresholds
+d45 9
+a53 1
+DE
+a55 2
+IF (x30.EQ.0) GOTO LB10
+
+d59 8
+a66 2
+UD N, x12  ; Get number of defocus groups = x12
+[order]
+d68 30
+a97 1
+DO LB1 x77=1,x12
+d99 2
+a100 5
+   ; x30 = percent cutoff
+   ; x77 = line number for doc file (defocus group)
+   ; Gets the total number of particles (from column 2 in histogram),
+   ; Determines the number of particles below the percent cutoff (x30),
+   ; Finds the corresponding CC value (column 1 in histogram).
+d102 3
+a104 2
+   ; Find the total number of particles (x20)
+   x20 = 0
+d106 6
+a111 2
+   UD N,x28              
+   [cchist]
+d113 3
+a115 3
+   DO LB2 x21 = 1,x28
+      UD x21,x22,x23
+      [cchist]
+d117 2
+a118 2
+      x20 = x20 + x23
+   LB2
+d120 1
+a120 1
+   x25 = x30 * x20        ; Number of particles to eliminate
+d122 2
+a123 2
+   x40 = 0                ; Cumulative no. of particles
+   x41 = 0     
+d125 1
+a125 4
+   DO LB4 x21 = 1,x28
+      UD x21,x22,x23
+      [cchist]
+      x40 = x40 + x23
+d127 2
+a128 2
+      IF (x40.GT.x25) THEN
+         x21 = x21-1
+d130 2
+a131 2
+         UD x21,x22,x23    ; Get the previous bin
+         [cchist]
+d133 2
+a134 2
+         GOTO LB3
+      ENDIF
+d136 2
+a137 2
+      x41 = x40           ; Cumulative no. of particles from previous bin
+   LB4
+d139 2
+a140 1
+   LB3
+d142 3
+a144 1
+   x32 = x20 - x41        ; N_above = total - N_below
+d146 2
+a147 4
+   ; Save CC_threshold, N_above_threshold, N_below_threshold, total_N
+   SD x77,x22,x32,x41,x20
+   [thresh]
+LB1
+d149 2
+a150 1
+GOTO LB11
+d152 3
+a154 1
+; ***** the threshold = 0 case : use all particles
+d156 2
+a157 1
+LB10
+d159 1
+a159 2
+SD /    CC_THRESH
+[thresh]
+d161 3
+a163 2
+UD N, x12  ; Get number of defocus groups = x12
+[order]
+d165 2
+a166 1
+x70 = 0.0
+d168 17
+a184 4
+DO LB11 x77=1,x12
+   SD x77,x70
+   [thresh]
+LB11
+@
+
+
+1.8
+log
+@using slightly different names for histogram files
+@
+text
+@d44 1
+a44 1
+[thresh]thresh   ; Output doc file with CC thresholds
+d56 1
+a56 2
+; Get number of defocus groups = x12
+UD N, x12
+d76 1
+d114 1
+d117 1
+a117 1
+SD /    CC_THRESH 
+@
+
+
+1.7
+log
+@added code to deal with the case of a zero threshold
+@
+text
+@d3 1
+a3 1
+; SOURCE: ccthresh.bat
+d39 1
+a39 1
+[cchist]hist/cchist_{***x77}   ; Histogram doc files
+d53 1
+a53 1
+SD /    CC_THRESH   N_ABOVE_THR N_BELOW_THR   N_TOTAL
+d128 1
+a128 1
+EN
+@
+
+
+1.6
+log
+@ap sh
+@
+text
+@d31 1
+a31 1
+x30 = 0.15                     ; Percentage of particles to eliminate
+d51 2
+d63 1
+a63 1
+   ; x77 = line enumber for doc file (defocus group)
+d111 17
+@
+
+
+1.5
+log
+@cosmetic
+@
+text
+@d1 1
+a1 1
+; <html><head><title>Determine a threshold for the cross correlation</title></head><body><pre>
+d3 1
+a3 1
+; ccthresh.bat
+d8 1
+a8 1
+; Inputs:
+d13 1
+a13 1
+; Outputs:
+d31 1
+a31 1
+x30 = 0.15             ; Percentage to eliminate
+d36 1
+a36 1
+[order]order_defocus  ; List of defocus groups
+d39 1
+a39 1
+[cchist]hist/cchist   ; Histogram doc files
+d44 1
+a44 1
+[thresh]thresh   ; output doc file with CC thresholds
+a47 4
+; Get number of defocus groups
+UD N, x12
+[order]
+
+d54 53
+a106 4
+DO LB1 x11=1,x12
+   @@ccthresh_p[x30, x11]
+   [cchist]{***x11}       ; Input 
+   [thresh]               ; Output (all output goes into the same file)
+@
+
+
+1.4
+log
+@typo
+@
+text
+@d1 1
+a1 1
+; <html><head><title>List number of particles in each defocus group</title></head><body><pre>
+@
+
+
+1.3
+log
+@cosmetic
+@
+text
+@d39 1
+a39 1
+<cchist]hist/cchist   ; Histogram doc files
+@
+
+
+1.2
+log
+@changed default threshold from 40% to 15% (particles to eliminate)
+@
+text
+@d1 2
+d5 2
+a6 2
+; Determine a threshold for the cross correlation value by specifying
+; a percentage of particles to eliminate.
+d9 3
+a11 3
+;    percentage    : to eliminate 40%, use 0.40
+;    order_defocus : to count defocus groups.
+;    hist/cchist   : histogram doc files (one for each defocus group)
+d14 1
+a14 1
+;    thresh : output doc file with CC thresholds.
+d22 1
+d24 8
+d33 1
+a33 1
+x30 = 0.15   ; percentage to eliminate
+a34 1
+; ----------- Input files --------------
+d36 2
+a37 1
+<order>order_defocus  ; list of defocus groups
+d39 3
+a41 1
+<cchist>hist/cchist   ; histogram doc files
+a42 1
+; ----------- Output files --------------
+d44 1
+a44 1
+<thresh>thresh   ; output doc file with CC thresholds
+d46 1
+a46 1
+; -------------- END BATCH HEADER --------------------------
+d48 1
+a48 1
+; get the number of defocus groups
+d50 1
+a50 1
+<order>
+d53 2
+a54 1
+<thresh>
+d56 1
+a56 1
+<thresh>
+d59 4
+d64 2
+a65 5
+@@ccthresh_p[x30, x11]
+<cchist>{***x11}       ; input 
+<thresh>               ; output (all output goes into the same file)
+ 
+LB1
+a66 1
+EN D
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d22 1
+a22 1
+x30 = 0.40   ; percentage to eliminate
+@

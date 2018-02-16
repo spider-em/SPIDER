@@ -1,0 +1,966 @@
+head	1.14;
+access;
+symbols
+	Pre_gold:1.13
+	GPL_update:1.8
+	pre_rewrite_2010:1.7
+	pre_more_stack:1.6
+	best-code:1.6
+	no-named-regs:1.6
+	pre_GPL:1.6
+	tag_version1_0:1.6;
+locks;
+comment	@:: @;
+
+
+1.14
+date	2016.06.30.14.54.05;	author leith;	state Exp;
+branches;
+next	1.13;
+
+1.13
+date	2015.03.03.15.41.22;	author leith;	state Exp;
+branches;
+next	1.12;
+
+1.12
+date	2015.03.03.15.36.49;	author leith;	state Exp;
+branches;
+next	1.11;
+
+1.11
+date	2015.03.03.14.24.53;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2013.11.08.19.26.29;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2011.06.22.17.00.44;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2010.01.19.18.52.30;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2009.10.19.14.16.56;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2004.11.24.17.41.58;	author bbaxter;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2004.11.24.16.02.35;	author bbaxter;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2004.08.05.14.08.49;	author bbaxter;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2004.04.06.15.35.02;	author bbaxter;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2003.07.29.15.55.52;	author bbaxter;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2003.07.24.18.06.17;	author bbaxter;	state Exp;
+branches;
+next	;
+
+
+desc
+@spider procedure
+@
+
+
+1.14
+log
+@echo
+@
+text
+@ ([deci]) 
+
+ ; <html><head><title>Converts a scanned file to a SPIDER format</title></head><body><pre>
+     
+ ; SOURCE: spider/docs/techs/recon1/Procs/convert-p.spi
+
+ ; PURPOSE: Converts a scanned file to a SPIDER format.
+ ;
+ ; [deci] = decimation factor for 'DC S' command
+ ;  0 = Get value from param file (key=16)
+ ;  1 = Full sized image
+ ;  2 = 1/2 size
+ ;  4 = 1/4 size
+
+ FR
+   ?Parameter file? [params]
+
+ FR
+   ?Input micrograph? [raw]
+
+ FR
+   ?SPIDER output file? [spider]
+
+ ;  -----  Get zip & format flags from parameter file -----------------
+ UD 1, [sp_zflag]
+   [params]
+ UD 2, [sp_fflag]
+   [params]
+
+ ; ----------- Checks if files are gzip compressed -------------------
+
+ IF ( [sp_zflag]*[sp_fflag] > 0) THEN
+    SYS                          ; Both tif & zip flags set
+      gunzip [raw].gz
+    SYS               
+      echo "  Unzipped: [raw].gz"
+
+ ELSEIF ( [sp_zflag] > 0 ) THEN 
+    SYS                          ; Zip, but not tif, flag set
+      echo "  Unzipping file "
+    SYS
+      gunzip [raw].$DATEXT.gz
+    SYS               
+      echo "  Unzipped: [raw].$DATEXT.gz"
+
+ ENDIF
+
+ ; ----------- Conversion based on scanner type -------------------
+
+ IF ( [sp_fflag] == 0 ) THEN
+   CP                 ; Already a SPIDER file, put in output file
+     [raw]            ; File   (input)
+     [spider]         ; File   (output)
+
+   SYS
+     echo "  Copied SPIDER file: [raw]   To: [spider]"
+
+ ELSEIF ( [sp_fflag] == 1 ) THEN
+    UD 3,[sp_nx]      ; HiScan raw file, Get X,Y size parameters 
+      [params]        ; Params file    (input)
+    UD 4,[sp_ny]      ;         
+      [params]
+
+    CP FROM RAW
+      16              ; Bits / pixel
+      [raw]           ; File (input)
+      [sp_nx],[sp_ny] ; Size
+      342             ; Header bytes
+      1
+      N
+      _1              ; File  (output)
+
+    AR
+      _1              ; File   (input)
+      [spider]        ; File   (output)
+      P1*(-1)+5
+
+    SYS
+      echo "  Converted Hiscan: [raw]   To: [spider]"
+
+ ELSEIF ( [sp_fflag] == 3 ) THEN     
+    SYS              ; ZI tif file.  Overview should always = 1
+      zi2spi [raw] [spider].$DATEXT 1
+
+    SYS
+      echo "  Converted ZI file: [raw]   To: [spider].$DATEXT"
+
+ ELSEIF ( [sp_fflag] == 4) THEN     
+    CP FROM NIKON   ; Nikon Tif Scanner file
+      [raw] 
+      [spider]
+
+    SYS
+      echo "  Converted Nikon TIF: [raw]   To: [spider]"
+
+ ELSE     
+    SYS               ; 
+      echo "  Unsupported input format: {***[sp_fflag]}"
+
+ ENDIF
+
+; ----------- Rezip if necessary -------------------
+
+ IF ( [sp_zflag]*[sp_fflag] > 0) THEN   
+    SYS                          ; Both tif & zip flags set
+      gzip [raw]
+
+    SYS               
+      echo "  Re-zipped: [raw]"
+ 
+ ELSEIF ([sp_zflag] == 1) THEN        ;
+    SYS                          ; Recompress the file
+      gzip [raw].$DATEXT
+
+    SYS               
+      echo "  Re-zipped: [raw].$DATEXT"
+ ENDIF
+
+ ; ----------- Size reduction, if any -------------------
+
+
+ IF ( [deci] < 1) THEN
+    UD 16,[sp_deci]        ; Get reduction factor from param file
+      [params]             ; Param file   (input)
+    [deci] = [sp_deci]
+ ENDIF
+
+ IF ( [deci] > 1) THEN     ; Reduction
+
+   DC S                    ; Reduce size
+     [spider]
+     _1                    ; File  (input)
+     [deci],[deci]         ; Reduction
+
+   CP                      ; Copy
+     _1                    ; File  (input)
+     [spider]              ; File  (output)
+
+    SYS               
+      echo "  Decimated: [raw]   By: {**[deci]}"
+ ENDIF
+
+ RE
+ ; </pre></body></html>
+@
+
+
+1.13
+log
+@deci not sp_deci
+@
+text
+@d36 1
+a36 1
+      echo " Unzipped: [raw].gz"
+d40 1
+a40 1
+      echo " Unzipping file "
+d44 1
+a44 1
+      echo " Unzipped: [raw].$DATEXT.gz"
+d56 1
+a56 1
+     echo " Copied SPIDER file: [raw]   To: [spider]"
+d79 1
+a79 1
+      echo " Converted Hiscan: [raw]   To: [spider]"
+d86 1
+a86 1
+      echo " Converted ZI file: [raw]   To: [spider].$DATEXT"
+d94 1
+a94 1
+      echo " Converted Nikon TIF: [raw]   To: [spider]"
+d98 1
+a98 1
+      echo " Unsupported input format: {***[sp_fflag]}"
+d109 1
+a109 1
+      echo " Re-zipped: [raw]"
+d116 1
+a116 1
+      echo " Re-zipped: [raw].$DATEXT"
+d140 1
+a140 1
+      echo " Decimated: [raw]   By: {**[deci]}"
+@
+
+
+1.12
+log
+@cosmetic
+@
+text
+@d1 1
+a1 1
+ ([sp_deci]) 
+d9 1
+a9 1
+ ; [sp_deci] = decimation factor for 'DC S' command
+d122 1
+a122 1
+ IF ( [sp_deci] < 1) THEN
+d125 1
+d128 1
+a128 1
+ IF ( [sp_deci] > 1) THEN  ; Reduction
+d133 1
+a133 1
+     [sp_deci],[sp_deci]   ; Reduction
+d140 1
+a140 1
+      echo " Decimated: [raw]   By: {**[sp_deci]}"
+@
+
+
+1.11
+log
+@sp_ for params
+@
+text
+@d51 3
+a53 3
+   CP             ; Already a SPIDER file, put in output file
+     [raw]        ; File   (input)
+     [spider]     ; File   (output)
+d69 1
+a69 1
+      (1)
+d134 3
+a136 3
+   CP                  ; Copy
+     _1                ; File  (input)
+     [spider]          ; File  (output)
+@
+
+
+1.10
+log
+@rewrite_syntax_filenames
+@
+text
+@d1 1
+a1 1
+ ([dec]) 
+d9 1
+a9 1
+ ; [dec] = decimation factor for 'DC S' command
+d25 1
+a25 1
+ UD 1, [zip]
+d27 1
+a27 1
+ UD 2, [format]
+d32 1
+a32 1
+ IF ( [zip]*[format] > 0) THEN
+d38 1
+a38 1
+ ELSEIF ( [zip] > 0 ) THEN 
+d50 1
+a50 1
+ IF ( [format] == 0 ) THEN
+d58 4
+a61 4
+ ELSEIF ( [format] == 1 ) THEN
+    UD 3,[nsam]   ; HiScan raw file, Get X,Y size parameters 
+      [params]    ; Params file    (input)
+    UD 4,[nrow]   ;         
+d65 4
+a68 4
+      16            ; Bits / pixel
+      [raw]         ; File (input)
+      [nsam],[nrow] ; Size
+      342           ; Header bytes
+d71 1
+a71 1
+      _1            ; File  (output)
+d74 2
+a75 2
+      _1            ; File   (input)
+      [spider]      ; File   (output)
+d81 1
+a81 1
+ ELSEIF ( [format] == 3 ) THEN     
+d88 1
+a88 1
+ ELSEIF ( [format] == 4) THEN     
+d98 1
+a98 1
+      echo " Unsupported input format: {***[format]}"
+d104 1
+a104 1
+ IF ( [zip]*[format] > 0) THEN   
+d111 1
+a111 1
+ ELSEIF ([zip].EQ.1) THEN        ;
+d122 3
+a124 3
+ IF ( [dec] < 1) THEN
+    UD 16,[dec]        ; Get reduction factor from param file
+      [params]           ; Param file   (input)
+d127 1
+a127 1
+ IF ( [dec] > 1) THEN   ; Reduction
+d129 1
+a129 1
+   DC S                ; Reduce size
+d131 2
+a132 2
+     _1                ; File  (input)
+     [dec],[dec]       ; Reduction
+d139 1
+a139 1
+      echo " Decimated: [raw]   By: {**[dec]}"
+@
+
+
+1.9
+log
+@bugs on extension of file
+@
+text
+@d1 3
+a3 1
+([dec]) 
+d5 1
+a5 1
+; SOURCE: spider/docs/techs/recon/newprogs/convert_p.spi
+d7 38
+a44 38
+; PURPOSE: Converts a scanned file to a SPIDER format.
+;
+; [dec] = decimation factor for 'DC S' command
+;  0 = Get value from param file (key=16)
+;  1 = Full sized image
+;  2 = 1/2 size
+;  4 = 1/4 size
+
+FR
+?Parameter file? [params]
+
+FR
+?Input micrograph? [raw]
+
+FR
+?SPIDER output file? [spider]
+
+;  -----  Get zip & format flags from parameter file -----------------
+UD 1,[zip]
+[params]
+UD 2,[format]
+[params]
+
+; ----------- Checks if files are gzip compressed -------------------
+
+IF ([zip]*[format].GT.0) THEN
+    VM                          ; Both tif & zip flags set
+    gunzip [raw].gz
+    VM               
+    echo " Unzipped: [raw].gz"
+
+ELSEIF ([zip].GT.0) THEN 
+    VM                          ; Zip, but not tif, flag set
+    echo " Unzipping file "
+    VM
+    gunzip [raw].$DATEXT.gz
+    VM               
+    echo " Unzipped: [raw].$DATEXT.gz"
+d46 1
+a46 1
+ENDIF
+d48 1
+a48 1
+; ----------- Conversion based on scanner type -------------------
+d50 1
+a50 1
+IF ([format].EQ.0) THEN
+d52 2
+a53 2
+   [raw]          ; File   (input)
+   [spider]       ; File   (output)
+d55 2
+a56 2
+   VM
+   echo " Copied SPIDER file: [raw]   To: [spider]"
+d58 1
+a58 1
+ELSEIF ([format].EQ.1) THEN
+d60 1
+a60 1
+    [params]      ; Params file    (input)
+d62 1
+a62 1
+    [params]
+d65 7
+a71 7
+    16            ; Bits / pixel
+    [raw]         ; File (input)
+    [nsam],[nrow] ; Size
+    (342)         ; Header bytes
+    (1)
+    N
+    _1            ; File  (output)
+d74 3
+a76 3
+    _1            ; File   (input)
+    [spider]      ; File   (output)
+    P1*(-1)+5
+d78 2
+a79 2
+    VM
+    echo " Converted Hiscan: [raw]   To: [spider]"
+d81 3
+a83 3
+ELSEIF ([format].EQ.3) THEN     
+    VM              ; ZI tif file.  Overview should always = 1
+    zi2spi [raw] [spider].$DATEXT 1
+d85 2
+a86 2
+    VM
+    echo " Converted ZI file: [raw]   To: [spider].$DATEXT"
+d88 1
+a88 1
+ELSEIF ([format].EQ.4) THEN     
+d90 2
+a91 2
+    [raw] 
+    [spider]
+d93 2
+a94 2
+    VM
+    echo " Converted Nikon TIF: [raw]   To: [spider]"
+d96 3
+a98 3
+ELSE     
+    VM              ; 
+    echo " Unsupported input format: {***[format]}"
+d100 1
+a100 1
+ENDIF
+d104 3
+a106 3
+IF ([zip]*[format].GT.0) THEN   
+    VM                          ; Both tif & zip flags set
+    gzip [raw]
+d108 2
+a109 2
+    VM               
+    echo " Re-zipped: [raw]"
+d111 3
+a113 3
+ELSEIF ([zip].EQ.1) THEN        ;
+    VM                          ; Recompress the file
+    gzip [raw].$DATEXT
+d115 3
+a117 3
+    VM               
+    echo " Re-zipped: [raw].$DATEXT"
+ENDIF
+d119 1
+a119 1
+; ----------- Size reduction, if any -------------------
+d122 1
+a122 1
+IF ([dec].LT.1) THEN
+d124 2
+a125 2
+    [params]           ; Param file   (input)
+ENDIF
+d127 1
+a127 1
+IF ([dec].GT.1) THEN   ; Reduction
+d130 3
+a132 3
+   [spider]
+   _1                  ; File  (input)
+   [dec],[dec]         ; Reduction
+d135 2
+a136 2
+   _1                  ; File  (input)
+   [spider]            ; File  (output)
+d138 3
+a140 3
+    VM               
+    echo " Decimated: [raw]   By: {**[dec]}"
+ENDIF
+d142 2
+a143 1
+RE
+@
+
+
+1.8
+log
+@simplify-rewrite
+@
+text
+@d34 1
+a34 1
+    echo " Unzipped: [raw].gz
+d36 1
+a36 1
+ESLEIF ([zip].GT.0) THEN 
+d42 1
+a42 1
+    echo " Unzipped: [raw].$DATEXT.gz
+d48 1
+a48 1
+IF ([format].eq.0) THEN
+d56 1
+a56 1
+ELSEIF ([format].eq.1) THEN
+d79 1
+a79 1
+ELSEIF ([format].eq.3) THEN     
+d83 3
+d96 1
+a96 1
+    echo " Unsupported input format: {***[format]}
+d107 1
+a107 1
+    echo " Re-zipped: [raw]
+d114 1
+a114 1
+    echo " Re-zipped: [raw].$DATEXT
+d137 1
+a137 1
+    echo " Decimated: [raw]   By: {**[dec]}
+@
+
+
+1.7
+log
+@added Nikon & rewrite
+@
+text
+@d1 4
+a4 1
+([dec])       
+d6 1
+a14 1
+; params
+a17 1
+; raw{****[num]}
+a20 1
+; mic
+d33 2
+d41 2
+d53 3
+d76 2
+a77 5
+ELSEIF ([format].eq.2) THEN
+    AR              ; Perkin Elmer scanned file
+    _1              ; File   (output)
+    [spider]
+    LOG(P1+1)       ; Scaling
+a79 1
+
+d88 7
+d102 3
+d109 3
+d133 2
+@
+
+
+1.6
+log
+@changed decimation factor from key 21 -> key 16
+@
+text
+@d1 7
+a7 3
+[x12,x33]       
+; x12 : micrograph number
+; x33 : decimation factor (1=full size, 2=half size, etc, 0 = use param file)
+d9 2
+a10 2
+fr
+?the parameter file? [params]
+d12 7
+a18 5
+fr
+?input micrograph? [raw]
+; raw{****x12}
+fr
+?output spider file? [spider]
+d21 2
+a22 2
+; get zip (x80) and format (x81) flags from parameter file
+ud 1,x80
+d24 1
+a24 1
+ud 2,x81
+d27 1
+a27 7
+; ----------- checks if files are gzipped -------------------
+
+IF (x80*x81.GT.0) THEN     ; both tif & zip flags set
+    vm
+    gunzip [raw].tif.gz
+    GOTO LB3
+ENDIF
+d29 7
+a35 1
+IF (x80.GT.0) THEN     ; zip, but not tif, flag set
+a36 2
+    echo "unzipping file "
+    vm
+d38 1
+a38 1
+    GOTO LB3
+d41 1
+a41 1
+LB3
+d43 9
+a51 16
+; ----------- conversion based on scanner type -------------------
+
+; it is already a spider file, put in output file
+IF (x81.eq.0) THEN
+   CP
+   [raw]
+   [spider]
+
+   GOTO LB5
+ENDIF
+	    
+; if HiScan tif, get X,Y size parameters 
+IF (x81.eq.1) THEN
+    UD 3,x51    
+    [params]
+    UD 4,x52          
+d54 5
+a58 5
+    cp from raw
+    (16)
+    [raw].tif
+    x51,x52
+    (342)
+d60 2
+a61 2
+    n
+    _1
+d63 8
+a70 2
+    ar
+    [raw]
+d72 1
+a72 1
+    p1*(-1)+5
+d74 1
+a74 1
+ENDIF 
+d76 6
+a81 4
+; if from Perkin Elmer
+IF (x81.eq.2) THEN
+    ar
+    _1
+d83 1
+a83 1
+    log(p1+1)
+d86 1
+a86 3
+; if it's a ZI tif, extract overview 
+; NB OVERVIEW SHOULD ALWAYS = 1, USE DC S TO REDUCE SIZE
+IF (x81.eq.3) THEN     
+d88 7
+a94 3
+    VM
+    zi2spi [raw].tif [spider].$DATEXT 1
+
+d97 1
+a97 1
+LB5
+a98 6
+; rezip if necessary
+IF (x80*x81.GT.0) THEN     ; both tif & zip flags set
+    vm
+    gzip [raw].tif
+	GOTO LB4
+ENDIF
+d100 3
+a102 4
+IF (x80.eq.1) THEN     ; only zip flag
+    vm
+    gzip [raw].$DATEXT
+    GOTO LB4
+d105 1
+a105 1
+LB4
+d107 4
+a110 2
+; size reduction, if any
+IF (x33.EQ.1) GOTO LB7   ; no reduction
+d112 3
+a114 3
+IF (x33.LT.1) THEN
+   ud 16,x33   ; get reduction factor from param file
+   [params]
+a115 1
+   IF (x33.LE.1) GOTO LB7
+a116 11
+
+DC S
+[spider]
+_1
+x33,x33
+
+CP
+_1
+[spider]
+
+LB7
+@
+
+
+1.5
+log
+@converted from overview number to decimation factor
+@
+text
+@d111 1
+a111 1
+   ud 21,x33   ; get reduction factor from param file
+@
+
+
+1.4
+log
+@switched code for HiScan and Prkin Elmr to their correct places.
+@
+text
+@d3 2
+a4 1
+; x33 : overview number (for ZI files)
+d6 1
+a6 1
+?the parameter file? <1>
+d9 1
+a9 1
+?input micrograph? <2>
+d12 1
+a12 1
+?output spider file? <3>
+d17 1
+a17 1
+<1>
+d19 1
+a19 1
+<1>
+d25 1
+a25 1
+    gunzip <2>.tif.gz
+d33 1
+a33 1
+    gunzip <2>.$DATEXT.gz
+d44 2
+a45 2
+   <2>
+   <3>
+d53 1
+a53 1
+    <1>
+d55 1
+a55 1
+    <1>
+d59 1
+a59 1
+    <2>.tif
+d67 2
+a68 2
+    <2>
+    <3>
+d77 1
+a77 1
+    <3>
+d81 2
+a82 1
+; if it's a ZI tif, extract overview
+d86 1
+a86 1
+    zi2spi <2>.tif <3>.$DATEXT {**x33}
+d95 1
+a95 1
+    gzip <2>.tif
+d101 1
+a101 1
+    gzip <2>.$DATEXT
+d106 21
+@
+
+
+1.3
+log
+@rewrote to set number of asterisks in calling program (convert.bat)
+@
+text
+@d66 1
+a66 1
+    _1
+d68 1
+a68 1
+    log(p1+1)
+d75 1
+a75 1
+    <2>
+d77 1
+a77 1
+    p1*(-1)+5
+@
+
+
+1.2
+log
+@changed slightly so it can be used by both particle picking procedures
+@
+text
+@d9 1
+a9 1
+; raw
+d24 1
+a24 1
+    gunzip <2>{***x12}.tif.gz
+d30 1
+a30 1
+    echo "unzipping file {***x12}"
+d32 1
+a32 1
+    gunzip <2>{***x12}.$DATEXT.gz
+d43 2
+a44 2
+   <2>{***x12}
+   <3>{***x12}
+d58 1
+a58 1
+    <2>{***x12}.tif
+d67 1
+a67 1
+    <3>{***x12}
+d75 2
+a76 2
+    <2>{***x12}
+    <3>{***x12}
+d84 1
+a84 1
+    zi2spi <2>{***x12}.tif <3>{***x12}.$DATEXT {**x33}
+d93 1
+a93 1
+    gzip <2>{***x12}.tif
+d99 1
+a99 1
+    gzip <2>{***x12}.$DATEXT
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d29 2
+d40 5
+a44 3
+; it is already a spider file, go home
+IF (x81.eq.0) GOTO LB5	    
+                                                                      
+d46 3
+d89 15
+@

@@ -1,0 +1,297 @@
+head	1.6;
+access;
+symbols
+	Pre_gold:1.6;
+locks;
+comment	@# @;
+
+
+1.6
+date	2014.05.14.16.14.35;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2014.03.14.15.50.18;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2013.12.13.16.36.08;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2013.11.08.19.26.29;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2012.06.14.20.26.15;	author tapu;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2012.05.23.02.58.38;	author tapu;	state Exp;
+branches;
+next	;
+
+
+desc
+@new file -- serial version of reconstruction
+@
+
+
+1.6
+log
+@cosmetic
+@
+text
+@ ; <html><head><title>Calculate reconstructions</title></head><body><pre>
+ ;
+ ; SOURCE: spider/docs/techs/recon1/Procs/bp-inseries.spi   
+ ;
+ ; PURPOSE: Calculate two half-set reconstructions for each group
+ ;          Merge half-set reconstructions into overall reconstruction
+ ;          Create output volume by backprojection
+ ;          Apply matched filter to output volume
+ ;
+ ; USAGE:       clean ; ./spider spi/dat @@bp-inseries
+ 
+; --------------------- END BATCH HEADER ---------------------
+
+ ; Set parameter and file names
+ @@bp-settings([stk-opt],[r-fsc],[bp-type],[r-bpn],[cg-err],[cg-chi], [cg-iter],[cg-mode],[cg-lam],[rp-lam],[rp-cor],[rp-iter], [sp_pixsiz],[incore-yn])
+
+ ; Temporary files
+
+ IF ( [bp-type] == 1 ) THEN
+   SYS
+     echo " Backprojection using: 'BP CG'"
+ ELSEIF ( [bp-type] == 2 ) THEN
+   SYS
+     echo " Backprojection using: 'BP 32F'"
+ ELSEIF ( [bp-type] == 3 ) THEN
+   SYS
+     echo " Backprojection using: 'BP RP'"
+ ELSEIF ( [bp-type] ==  4 ) THEN
+   SYS
+     echo " Backprojection using: 'BP 3N'"
+ ENDIF
+
+ ; Put label in new resolution doc file
+ DE
+   [resol_doc]                 ; Resolution doc file    (removed)
+ SD / '      GROUP,    NORM-FREQ,    RESOL.(ANG.)  MASKED-RESOL.  (CUTOFF=50%)' 
+   [resol_doc]                 ; Resolution doc file    (output)
+
+ [num-grps] = 0
+ 
+ DO                            ; ------  Loop over all groups ----------
+
+   UD NEXT [key],[grp]         ; Get group from selection file
+     [sel_group]               ; Group selection file       (input)
+   IF ([key] <= 0) EXIT        ; End of groups in selection file
+
+   [num-grps] = [num-grps] + 1 ; Increment
+
+   @@bp-main                    ; Call main procedure for this group
+      [grp]                    ; Group number read by bp-main
+    
+ ENDDO                         ; End group-loop --------------------------
+ 
+
+ ; If more than one group, sum and compute resolution
+ IF ( [num-grps] > 1 ) THEN
+   @@bp-merge([num-grps])
+
+   SYS
+     echo -n " Back projections merged   "; date '+ TIME: %x  %X' ; echo
+ ENDIF
+
+ ; Create matched filter
+ @@make-matched-filt           ; Create filter doc file
+
+ ; Apply matched filter to output volume
+ @@matched-filt                ; Filter to specified resolution
+
+ SYS
+   echo -n " Done          " ; date '+ TIME: %x  %X' ; echo
+
+ EN
+ ; </pre></body></html>
+
+@
+
+
+1.5
+log
+@cosmetic
+@
+text
+@d64 1
+a64 1
+ @@make-matched-filt              ; Create filter doc file
+d67 1
+a67 1
+ @@matched-filt                 ; Filter to specified resolution
+@
+
+
+1.4
+log
+@batch header -- tapu
+@
+text
+@d19 1
+a19 1
+ IF ( [bp-type] == 1 ) then
+@
+
+
+1.3
+log
+@rewrite_syntax_filenames
+@
+text
+@d12 2
+@
+
+
+1.2
+log
+@using sorted group list
+corrected a few bugs
+@
+text
+@d1 72
+a72 90
+; CALCULATE TWO HALF-SET RECONSTRUCTIONS FOR EACH GROUP
+;
+; Adapted from bpodd.bat (formerly b24.bpo)
+
+@@bps-settings([stk-opt],[rad-fsc],[bp-method],[rad-recon],[cg-error],[cg-chisqr],[cg-iter],[cg-mode],[cg-lambda],[rp-lambda],[rp-correct],[rp-iter],[max-wait])
+
+; Temporary files
+fr l
+[temp_sorted_groups]tmpsel_grps_sorted
+;;fr l
+;;[temp_var]_3  ; variance map (not saved)
+
+de
+[summary_doc]
+;SD /      GROUP_NUM    UNMASKEDRES    MASKEDRES
+;[summary_doc]
+
+
+; SORT GROUPS BY #PARTICLES
+; (This step is superfluous in series, but bps-wait may be executed depending on [stk-opt].)
+
+; sort by #particles
+doc sort
+[group_list]
+[temp_sorted_groups]
+(2)   ; column# to sort: #particles
+Y     ; renumber keys?
+
+; get #groups
+UD N,[num-grps]
+[temp_sorted_groups]   ; WAS [group_list]
+
+; loop through groups
+DO LB1 [grp-key] = 1,[num-grps]
+    ; read from end
+    [grp-rank] = [num-grps] - [grp-key] + 1
+
+    ; Get current group number
+    UD IC [grp-rank],[grp]  ; ,[numparts]
+    [temp_sorted_groups]   ; WAS [group_list]             ; Group selection file            (input)
+
+    ; write to sorted doc file
+    sd [grp-key],[grp]
+    [sorted_group_list]
+    sd e
+    [sorted_group_list]
+
+    @@bps-main([grp])
+LB1
+; end group-loop
+
+; close docs
+UD ICE
+[temp_sorted_groups]
+de
+[temp_sorted_groups]
+doc ren
+[sorted_group_list]
+[sorted_group_list]
+
+; remove the header lines
+doc sort
+[summary_doc]_temp
+[summary_doc]
+0  ; column# to sort: 0==key (group#)
+N  ; renumber keys?
+
+; clean up doc files
+de
+[summary_doc]_temp
+;SD /      MASKEDRES    UNMASKEDRES    NUM_PARTS
+SD /      GROUP_NUM    UNMASKEDRES    MASKEDRES
+[summary_doc]
+sd e
+[summary_doc]
+
+; if more than one group, sum and compute resolution
+if([num-grps].ge.2) then
+    @@bps-combine
+endif
+
+vm
+echo "Done"; date
+
+EN
+
+; Modified 2012-06-13
+;    2012-06-13 (trs) -- sorts GROUP_LIST
+;    2012-05-14 (trs) -- reformatted summary doc to comply with plotres.spi
+;    2011-11-04 (trs) -- adapted from realign-pubsub.spi
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@a0 2
+([grp])
+
+d7 3
+d15 13
+a27 3
+;SD /     MASKED_RES  UNMASKED_RES   NUMPARTS
+SD /      GROUP_NUM    UNMASKEDRES    MASKEDRES
+[summary_doc]
+d31 1
+a31 1
+[group_list]
+d34 4
+a37 1
+DO LB1 [grp-key]=1,[num-grps]
+d39 2
+a40 2
+    UD IC [grp-key],[grp]  ; ,[numparts]
+    [group_list]             ; Group selection file            (input)
+d42 7
+a48 2
+    vm
+    @@bps-main ([grp])
+d52 1
+d54 22
+a75 1
+[group_list]
+d87 2
+a88 1
+; Modified 2012-05-14
+@

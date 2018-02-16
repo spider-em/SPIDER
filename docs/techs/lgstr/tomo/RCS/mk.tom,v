@@ -1,0 +1,345 @@
+head	1.4;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+1.4
+date	2008.12.19.16.03.17;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2005.01.21.18.16.53;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2005.01.05.20.48.29;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2005.01.05.20.38.53;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.4
+log
+@[angles_both]angles_both...
+@
+text
+@; SOURCE: mk.tom
+;
+; PURPOSE: Single or double tilt marker alignment 
+
+;<b>------------------- Edit next 1  Input parameters ------------------------------ 
+
+x21 = 2                        ; For single angle series: 1,   For double tilt: 2
+
+; ----------------------- Input files --------------------------------------------
+
+FR G
+[rot]rotated/rot_***                    ; Tilt image file template
+
+FR G                                     
+[marker]rotated/d_rot***               ; Marker doc file template
+
+FR G
+[sel001]sel001                 ; First series  selection doc file 
+FR G
+[ang001]ang001                 ; First series angles doc file  
+
+FR G
+[sel002]sel002                 ; Second series selection doc file (if any) 
+FR G
+[ang002]ang002                 ; Second series angles doc file  
+
+FR G
+[sel003]sel003                 ; Combined series selection doc file (if any) 
+FR G
+[ang003]ang003                 ; Combined series angles doc file  
+
+; ---------------------- Output files -----------------------------------------------
+
+FR G
+[viewerror1]viewerror_first        ; Error per view output doc file 
+FR G
+[viewerror2]viewerror_second        ; Error per view output doc file 
+
+FR G
+[errors1]errors_first              ; Error per marker output doc file
+FR G
+[errors2]errors_second              ; Error per marker output doc file
+
+FR G
+[cca1]cca002                   ; Corrections output doc file
+FR G
+[cca2]ccb002                   ; Corrections output doc file
+
+FR G
+[cra1]cra002                   ; 3-D coords output doc file 
+FR G
+[cra2]crb002                   ; 3-D coords output doc file 
+
+; For double tilt -----
+FR G
+[c3c202]c3c202                 ; Corrections doc file            
+FR G
+[angles_second]angles_second        ; Corrected angular output doc file 
+FR G
+[errors_both]errors_both          ; Alignment/errors output file     
+FR G
+[angles_both]angles_both          ; Alignment angles output file   
+
+; ----------------- END BATCH HEADER ------------------------------------------- </b>
+
+UD N, x11                 ; Query number of angles in first series  
+[ang001]
+
+DO LB1 x22=1,x11          ; Query zero tilt image number in first series
+   UD IC x22, x30,x31,x32 ; Find angle number
+   [ang001]               ; Marker doc file            (input)
+   IF (x31 .EQ. 0.0) THEN
+      x71=x22             ; Zero degree angle image number
+   ENDIF
+LB1
+
+VM 
+echo " First series reference image:  {***x71}"
+
+FI x40                    ; Query image size (must be square)
+[rot]x71                  ; aligned image
+12                        ; NSAM 
+
+MK                        ; Marker alignment, for single tilt
+[marker]                  ; Marker file template         (input)
+[sel001]                  ; Selection file               (input)
+x71                       ; Reference file number (usually zero-tilt image)     
+x40,x40                   ; Size of images
+YES                       ; Refine scale (vs reference)?
+NO                        ; Refine tilt angle (vs reference)
+YES                       ; Refine in-plane rotation
+YES                       ; Refine shift (vs reference)
+NO                        ; Use previous corrections
+NO                        ; Full output
+[viewerror1]              ; Error per view doc file      (output)
+[errors1]                 ; Error per marker doc file    (output)
+[cca1]                    ; Corrections doc file         (output)
+[cra1]                    ; 3-D coords doc file          (output)
+
+IF (x21.LE.1) GOTO LB6    ; Stop if single tilt only --------------------
+
+UD N, x11                 ; Query number of files in second series  
+[sel002]
+
+DO LB3 x23=1,x11          ; Loop over all files in second series
+   UD IC x23, x22         ; Get angle number for this file
+   [sel002]
+
+   UD IC x22, x30,x31,x32 ; Find tilt angle
+   [ang002]               ; Angle doc file            (input)
+   IF (x31 .EQ. 0) THEN
+      x72=x22             ; Zero degree angle
+      GOTO LB4
+   ENDIF
+LB3
+LB4
+
+VM 
+echo " Second series reference image: {***x72}"
+
+IF (x21.GE.2) THEN
+   MK                     ; Marker alignment, for single tilt
+   [marker]               ; Marker file template         (input)
+   [sel002]               ; Selection file               (input)
+   x72                    ; Reference file number (usually zero-tilt image)      
+   x40,x40                ; Size of image
+   YES                    ; Refine scale (vs reference)?
+   NO                     ; Refine tilt angle (vs reference)
+   YES                    ; Refine in-plane rotation
+   YES                    ; Refine shift (vs reference)
+   NO                     ; Use previous corrections
+   NO                     ; Full output
+   [viewerror2]           ; Error per view doc file      (output)
+   [errors2]              ; Error per marker doc file    (output)
+   [cca2]                 ; Corrections doc file         (output)
+   [cra2]                 ; 3-D coords doc file          (output)
+ENDIF
+
+IF (x21.GE.2) THEN        ; For double tilt using two angle series
+   MK 3                   ; Align two sets of markers for two-tilt geometry      
+   [cra1]                 ; First series marker doc file           (input)
+   [cra2]                 ; Second series marker doc file          (input)
+   [c3c202]               ; Corrections doc file                   (output) 
+   [ang002]               ; Second series angular doc file         (input)
+   [angles_second]        ; Corrected angular doc file             (output)
+   [errors_both]          ; Alignment/errors file                  (output)
+
+   DOC MERGE              ; Merge and renumber
+   [ang001]
+   [angles_second]
+   [angles_both]          ; Alignment angles output file           (output)
+   -1                     ; Merge and renumber
+ENDIF
+
+LB6
+;---print out errors files to terminal
+vm
+head -20 [errors1].$DATEXT
+
+IF(x21.GE.2) THEN
+
+  vm  
+  head -n20 [errors2].$DATEXT [errors_both].$DATEXT
+
+ENDIF
+
+EN
+@
+
+
+1.3
+log
+@jamie's changes
+@
+text
+@d15 1
+a15 1
+[marker]markers/d_rot***               ; Marker doc file template
+d35 1
+a35 1
+[viewerror1]viewerror_1        ; Error per view output doc file 
+d37 1
+a37 1
+[viewerror2]viewerror_2        ; Error per view output doc file 
+d40 1
+a40 1
+[errors1]errors_1              ; Error per marker output doc file
+d42 1
+a42 1
+[errors2]errors_2              ; Error per marker output doc file
+d58 1
+a58 1
+[angles_second]angles_1        ; Corrected angular output doc file 
+d60 1
+a60 1
+[errors_both]errors_3          ; Alignment/errors output file     
+d62 1
+a62 1
+[angles_both]angles_3          ; Alignment angles output file   
+d100 1
+a100 3
+IF (x21.LE.1) THEN
+   RE                     ; Stop if single tilt only ---------------------------------
+ENDIF
+d155 1
+@
+
+
+1.2
+log
+@*** empty log message ***
+@
+text
+@d157 11
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d3 1
+a3 1
+; PURPOSE: Find Single or double tilt alignment parameters using markers
+d7 1
+a7 1
+x21 = 2                        ; For single angle series: 1,  For double tilt: 2
+d12 1
+a12 1
+[rot]rot_***                   ; Tilt image file template
+d15 1
+a15 1
+[marker]d_rot***               ; Marker doc file template
+d35 1
+a35 1
+[viewerror1]viewerror_1        ; Error per view doc file 
+d37 1
+a37 1
+[viewerror2]viewerror_2        ; Error per view doc file 
+d40 1
+a40 1
+[errors1]errors_1              ; Error per marker doc file
+d42 1
+a42 1
+[errors2]errors_2              ; Error per marker doc file
+d45 1
+a45 1
+[cca1]cca002                   ; Alignment doc file
+d47 1
+a47 1
+[cca2]ccb002                   ; Alignment doc file
+d50 1
+a50 1
+[cra1]cra002                   ; 3-D coords doc file 
+d52 1
+a52 1
+[cra2]crb002                   ; 3-D coords doc file 
+d56 1
+a56 1
+[c3c202]c3c202                 ; Combined alignment doc file            
+d58 1
+a58 1
+[angles_second]angles_1        ; Final angular doc file 
+d60 1
+a60 1
+[errors_both]errors_3          ; Combined alignment errors doc file     
+d62 1
+a62 1
+[angles_both]angles_3          ; Combined alignment angles doc file   
+a83 10
+
+DE                        ; Delete existing files
+[viewerror1]              ; Error per view doc file      (output)
+DE                        ; Delete existing files
+[errors1]                 ; Error per marker doc file    (output)
+DE                        ; Delete existing files
+[cca1]                    ; Corrections doc file         (output)
+DE                        ; Delete existing files
+[cra1]                    ; 3-D coords doc file          (output)
+
+a123 9
+   DE                     ; Delete existing files
+   [viewerror2]            
+   DE                     ; Delete existing files
+   [errors2]              
+   DE                     ; Delete existing files
+   [cca2]                 
+   DE                     ; Delete existing files
+   [cra2]                
+
+a141 8
+
+   DE                     ; Delete existing files
+   [c3c202]              
+   DE                     ; Delete existing files
+   [angles_second]
+   DE                     ; Delete existing files
+   [errors_both]         
+
+d151 2
+a152 2
+   [ang001]               ;                                        (input)
+   [angles_second]        ;                                        (input)
+d157 1
+a157 1
+RE
+@

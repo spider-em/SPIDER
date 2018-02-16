@@ -1,0 +1,1058 @@
+head	1.22;
+access;
+symbols
+	GPL_update:1.22
+	pre_rewrite_2010:1.19
+	pre_more_stack:1.17
+	best-code:1.17
+	no-named-regs:1.17
+	pre_GPL:1.17
+	tag_version1_0:1.17;
+locks; strict;
+comment	@:: @;
+
+
+1.22
+date	2010.02.04.19.19.41;	author leith;	state Exp;
+branches;
+next	1.21;
+
+1.21
+date	2010.01.20.17.47.45;	author leith;	state Exp;
+branches;
+next	1.20;
+
+1.20
+date	2010.01.19.18.51.59;	author leith;	state Exp;
+branches;
+next	1.19;
+
+1.19
+date	2007.03.21.13.07.06;	author leith;	state Exp;
+branches;
+next	1.18;
+
+1.18
+date	2007.01.17.16.35.37;	author leith;	state Exp;
+branches;
+next	1.17;
+
+1.17
+date	2005.04.05.19.23.06;	author leith;	state Exp;
+branches;
+next	1.16;
+
+1.16
+date	2005.03.10.17.10.18;	author bbaxter;	state Exp;
+branches;
+next	1.15;
+
+1.15
+date	2005.03.10.16.42.01;	author bbaxter;	state Exp;
+branches;
+next	1.14;
+
+1.14
+date	2005.02.03.15.39.33;	author leith;	state Exp;
+branches;
+next	1.13;
+
+1.13
+date	2005.02.01.16.19.43;	author leith;	state Exp;
+branches;
+next	1.12;
+
+1.12
+date	2004.12.10.13.41.15;	author bbaxter;	state Exp;
+branches;
+next	1.11;
+
+1.11
+date	2004.12.02.14.32.13;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2004.12.01.16.48.23;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2004.11.09.19.40.44;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2004.10.05.15.23.54;	author bbaxter;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2004.08.06.13.26.50;	author bbaxter;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2004.06.04.16.16.57;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2004.06.03.13.29.50;	author bbaxter;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2004.06.01.15.29.40;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2004.05.13.12.41.42;	author bbaxter;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2004.04.02.14.51.39;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2004.03.29.16.08.51;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.22
+log
+@max radius too big
+@
+text
+@; <html><head><title>Computes alignment parameters for sample images</title></head><body><pre>
+;
+; SOURCE: spider/docs/techs/recon/newprogs/apsh.spi 
+;          New                                            Nov 2004 ArDean Leith  
+;          Added alignment option & stack op              Nov 2006 ArDean Leith
+;          Var naming                                     Jan 2010 ArDean Leith
+;
+; PURPOSE: Multi-reference alignment of an image series. 
+;          Sample images are aligned with reference projections via
+;          shifts (translations) and rotations.  
+;          THIS PROCEDURE IS FOR PROJECTS WITH A SINGLE  GROUP. 
+;          USE: apshgrp.spi FOR ALIGNING MULTIPLE GROUPS
+;
+;<b>------------ Edit next 7 Input parameters ------------------------------ 
+
+[grp]     = 1   ; Group number  (If used in your file name)
+
+[doalign] = 1   ; If >0 apply alignment to images
+
+[range]   = 8 	; Translation search range (must be divisible by step size)
+[step]    = 2   ; Translation step size
+
+[diam]    = 366 ; Diameter of object (Angstroms) for alignment search.
+                ;   (EDIT as needed!) Used to find last alignment radius.
+
+[r1]      = 5	; First rotation alignment ring, only radii > this will be analyzed
+[r2]      = 0   ; Last rotation ring (If zero, compute from object diameter)
+
+; ----------------- Input files --------------------------------------------
+
+[parameters]        = '../params'              ; Reconstruction parameter file
+
+[ref_images]        = 'projs/prj_{***[grp]}@@'  ; Reference image   
+
+[ref_images_angles] = 'refangles'              ; Reference images angles doc. file
+
+[unaligned_images]  = 'data{***[grp]}@@'        ; Unaligned particles name template
+
+; ----------------- Output files -------------------------------------------------
+
+[align_parameters] = 'align_01_{***[grp]}'    ; Alignment parameters doc. file 
+
+[aligned_images]   = 'dala01_{***[grp]}@@'     ; Rotated, shifted (aligned) particles
+
+; ----------------- END BATCH HEADER ------------------------------------------- </b>
+
+   MD
+   TR OFF                             ; Decrease results file output
+   MD
+   VB OFF                             ; Decrease results file output
+
+   IF ([r2] .LE. 0) THEN              ; Compute alignment radius from object size  
+      UD 5,[pxsz]                     ; Get pixel size (A) from this file
+      [parameters]
+ 
+      UD 17,[winsz]                   ; Get window size (pixels) from this file
+      [parameters]
+
+      [r2] = INT([diam]/(2.0*[pxsz])) ; Compute object radius (pixels) for last alignment ring
+      [tp] = [r2] + [range]           ; Compute last ring + translation range
+      [t]  = INT([winsz]/2) - 2       ; Compute max. radius of object within window
+
+      IF ([tp] .GE. [t]) THEN
+         [r2] = [t] - [range] - 1     ; Reduce radius of last alignment ring to fit window
+      ENDIF
+   ENDIF
+
+   DE                           ; Delete existing alignment parameter output doc. files.
+   [align_parameters]
+
+   FI X [numpart]               ; Get number of particles 
+   [unaligned_images]           ; Unaligned particles name template       (input)
+   (26)                         ; Max. image number in stack      
+
+   FI X [numproj]               ; Get number of projections 
+   [ref_images]                 ; Unaligned particles name template       (input)
+   (26)                         ; Max. image number in stack      
+
+   VM
+   echo ' 'Finding alignment for: {******[numpart]} particles  
+
+   AP SH                        ; Align sample images using multiple references  
+   [ref_images]****             ; Reference image name template           (input)
+   (1-[numproj])                ; List of reference images       
+   [range],[step]               ; Search range, step size  
+   [r1],[r2]                    ; First and last ring      
+   [ref_images_angles]          ; Ref. angles doc file                    (input)
+   [unaligned_images]*****      ; Unaligned particles name template       (input)
+   (1-[numpart])                ; Number of particles  
+   *                            ; No unaligned images align. doc file  
+   (0)                          ; No restriction on angular proj. search 
+   (1)                          ; Check mirrored positions
+   [align_parameters]           ; Alignment angles doc. file              (output)
+
+   IF ([doalign] .GT. 0) THEN
+      ; Apply alignment parameters to unaligned images
+      ; Order in doc file: PHI,THETA,PSI, REF#,IMG#,  ROT,SX,SY
+
+      VM
+      echo " Applying alignment parameters"
+
+      RT SQ                     ; Rotate & shift whole stack operation
+      [unaligned_images]        ; Unaligned particles stack              (input) 
+      [aligned_images]          ; Aligned particles stack                (output)
+      (6,0,7,8)                 ; Reg. numbers for angle, scale,& shifts
+      [align_parameters]        ; Alignment angles doc. file             (input)
+   ENDIF
+   VM
+   echo " "
+
+   EN                              
+
+; </body></pre></html>
+
+
+
+
+
+@
+
+
+1.21
+log
+@var
+@
+text
+@a40 1
+FR G
+a42 1
+FR G
+d61 1
+a61 1
+      [t]  = INT([winsz]/2) - 1       ; Compute max. radius of object within window
+@
+
+
+1.20
+log
+@simplify-rewrite
+@
+text
+@d4 3
+a6 2
+;                       New                               Nov 2004 ArDean Leith  
+;                       Added alignment option & stack op Nov 2006 ArDean Leith
+d31 1
+a31 2
+FR G
+[parameters]../params                   ; Parameter setting file
+d33 1
+a33 2
+FR G
+[ref_images]projs/prj_{***[grp]}@@       ; Reference image   
+d35 1
+a35 2
+FR G
+[ref_images_angles]refangles            ; Reference images angles doc. file
+d37 1
+a37 2
+FR G
+[unaligned_images]data{***[grp]}@@       ; Unaligned particles name template
+d42 1
+a42 1
+[align_parameters]align_01_{***[grp]}   ; Alignment parameters doc. file 
+d45 1
+a45 1
+[aligned_images]dala01_{***[grp]}@@      ; Rotated, shifted (aligned) particles
+@
+
+
+1.19
+log
+@projs/
+@
+text
+@d3 2
+a4 1
+; SOURCE: apsh.spi                                        Nov 2004 ArDean Leith  
+a11 2
+;
+; MASTER COPY: /net/bali/usr1/spider/docs/techs/recon/newprogs/
+@
+
+
+1.18
+log
+@added stacks, named variables
+@
+text
+@d35 1
+a35 1
+[ref_images]prj_{***[grp]}@@             ; Reference image name  
+@
+
+
+1.17
+log
+@[ref_images_template]prj_{***x77}@@****
+@
+text
+@d3 3
+a5 3
+; SOURCE: apsh.spi                                Nov 2004 ArDean Leith  
+;                     Only for single groups      Feb 2005 ArDean Leith
+
+d9 2
+a10 2
+;          FOR PROJECTS WITH A SINGLE  GROUP. USE: apshgrp.spi for
+;          ALIGNING MULTIPLE GROUPS
+d14 3
+a16 2
+;
+;<b>------------ Edit next 6 Input parameters ------------------------------ 
+d18 1
+a18 1
+x77 = 1         ; Group number  (if necessary for your file names)
+d20 2
+a21 2
+x31 = 8 	; Translation search range (must be divisible by step size)
+x32 = 2		; Translation step size
+d23 1
+a23 1
+x20 = 366       ; Diameter of object (Angstroms) for alignment search.
+d26 2
+a27 2
+x21 = 5		; First rotation alignment ring, only radii > this will be analyzed
+x22 = 0         ; Last rotation ring (If zero, compute from object diameter)
+d32 1
+a32 1
+[parameters]../params                      ; Parameter setting file
+d35 1
+a35 1
+[ref_images_template]prj_{***x77}@@****     ; Reference image name template  
+d38 1
+a38 1
+[ref_images_selection]projlist             ; Reference images selection doc. file
+d41 1
+a41 1
+[ref_images_angles]refangles               ; Reference images angles doc. file
+d43 1
+a43 2
+FR G
+[sample_images_template]../Particles/win/ser****** ; Sample image name template
+d46 1
+a46 3
+[sample_images_selection]part_by_group_{***x77}    ; Particle selection doc file
+
+; ----------------- Output files -------------------------------------------------
+d49 1
+a49 1
+[align_parameters]align_01_{***x77}                ; Alignment parameters doc. file 
+d54 1
+a54 1
+   TR OFF                       ; Decreases results file output
+d56 1
+a56 2
+   VB OFF                       ; Decreases results file output
+
+d58 2
+a59 2
+   IF (x22 .LE. 0) THEN         ; Compute alignment radius from object size  
+      UD 5,x39                  ; Get pixel size (A) from this file
+d62 1
+a62 1
+      UD 17,x52                 ; Get window size (pixels) from this file
+d65 3
+a67 3
+      x22 = INT(x20/(2.0*x39))  ; Compute object radius (pixels) for last alignment ring
+      x46 = x22 + x31           ; Compute last ring + translation range
+      x45 = INT(x52/2) - 1      ; Compute max. radius of object within window
+d69 2
+a70 2
+      IF (x46 .GE. x45) THEN
+         x22 = x45 - x31 - 1    ; Reduce radius of last alignment ring to fit window
+a73 1
+
+d77 11
+d89 8
+a96 8
+   [ref_images_template]        ; Reference image name template          (input)
+   [ref_images_selection]       ; Reference images selection doc. file   (input)
+   x31,x32                      ; Search range, step size  
+   x21,x22                      ; First and last ring      
+   [ref_images_angles]          ; Ref. angles doc file                   (input)
+   [sample_images_template]     ; Sample images  name template           (input)
+   [sample_images_selection]    ; Sample images selection doc. file      (input) 
+   *                            ; No sample images align. doc file        
+d99 17
+a115 1
+   [align_parameters]           ; Alignment angles doc. file             (output)
+@
+
+
+1.16
+log
+@changed 'diameter of object' back to 366
+@
+text
+@d22 2
+a23 2
+x20 = 366   ; Diameter of object (Angstroms) for alignment search.
+            ;   (EDIT as needed!) Used to find last alignment radius.
+d34 1
+a34 1
+[ref_images_template]prj****               ; Reference image name template  
+@
+
+
+1.15
+log
+@changed 'diameter of object' default from 366 to 250
+@
+text
+@d22 1
+a22 1
+x20 = 250   ; Diameter of object (Angstroms) for alignment search.
+@
+
+
+1.14
+log
+@Edit next 6 Input
+@
+text
+@d22 2
+a23 2
+x20 = 366.47    ; Diameter of object (Angstroms) for alignment search.
+                ;   (EDIT as needed!) Used to find last alignment radius.
+@
+
+
+1.13
+log
+@only for single groups now
+@
+text
+@d15 1
+a15 1
+;<b>------------ Edit next 7 Input parameters ------------------------------ 
+@
+
+
+1.12
+log
+@checks for external file (use_ctf) to see if refs are multiplied by ctf
+@
+text
+@d3 3
+a5 2
+; SOURCE: apsh.spi                 ArDean Leith    Nov 2004
+;
+d9 2
+a10 1
+;          FOR PROJECTS WITH SINGLE OR MULTIPLE GROUPS.
+a13 1
+; INSTRUCTIONS:  <a href="../pub_apsh.html">pub_apsh.html</a>
+d17 1
+a17 1
+x12=0           ; If >0 use PubSub
+d31 1
+a31 1
+[parameters]../params                    ; Parameter setting file
+a32 3
+FR G                                     
+[order]../Power_Spectra/order_defgrps    ; List of groups (group selection doc file)
+
+d34 1
+a34 1
+[ref_images_template]prj{***x77}/prj**** ; Reference image name template  
+d37 1
+a37 1
+[ref_images_selection]projlist           ; Reference images selection doc. file
+d40 1
+a40 1
+[ref_images_angles]refangles             ; Reference images angles doc. file
+d46 1
+a46 4
+[sample_images_selection]part_by_group_{***x77}  ; Particle selection doc file
+
+FR G
+[usectf]ctf_refs           ; file used to signal if refs are multiplied by ctf
+d48 1
+a48 1
+; ----------------- Output files ---------------------------------------------
+d55 5
+a59 1
+IF (x77 .GT. 0) x12 = 0         ; Secondary PubSub run
+d61 1
+a61 12
+IQ FI x13
+[usectf]
+IF (x13 .EQ. 0) x77 = 1         ; Single group only use default output file name
+
+MD
+TR OFF                          ; Decreases results file output
+MD
+VB OFF                          ; Decreases results file output
+
+IF (x12 .EQ. 0) THEN            ; Usual run (Not a primary PubSub run)
+  
+   IF (x22.LE.0) THEN           ; Compute alignment radius from object size  
+d72 1
+a72 1
+      IF (x46.GE.x45) THEN
+a76 4
+   IF (x77 .LT. 1) THEN         ; Group not on command line, get it from selection file        
+
+      UD N,x70                  ; Get number of groups 
+      [order]                   ; Groups selection file  (input)
+a77 6
+      DO LB2 x11=1,x70          ; Loop over all groups
+
+         UD x11,x77             ; Get current group number 
+         [order]                ; Group selection file   (input)
+   ENDIF
+
+d94 1
+a94 1
+   MY FL                        ; Flush results file
+d96 1
+a96 3
+   LB2                          ; End loop for multiple groups
+    
+ELSE                            ; Primary PubSub run
+a97 2
+   UD N,x70                     ; Get number of groups 
+   [order]                      ; Groups selection file   (input)
+a98 1
+   DO LB3 x11=1,x70             ; Loop over all groups
+a99 5
+       UD x11,x77               ; Get current group number 
+       [order]                  ; Group selection file    (input)
+   
+       VM                       ; Use PubSub to create parallel 'AP SH' processes   
+       publish './spider bat/$DATEXT @@pub_apshctf {***x77} x77={***x77}'
+a100 6
+    LB3
+ENDIF
+
+EN                              
+
+; </body></pre></html>
+@
+
+
+1.11
+log
+@LB2 bug
+@
+text
+@a17 2
+x13=2           ; If >1 do multiple groups listed in: order_defgrps
+
+d30 1
+a30 1
+[parameters]../params                      ; Parameter setting file
+d33 1
+a33 1
+[order]../Power_Spectra/order_defgrps      ; List of groups (group selection doc file)
+d35 2
+a36 7
+IF (x13.GT.1) THEN
+   FR G
+   [ref_images_template]df{***x77}/prj**** ; Reference image name template  
+ELSE
+   FR G
+   [ref_images_template]prj****            ; Reference image name template  
+ENDIF
+d39 1
+a39 1
+[ref_images_selection]projlist             ; Reference images selection doc. file
+d42 1
+a42 1
+[ref_images_angles]refangles               ; Reference images angles doc. file
+d48 4
+a51 1
+[sample_images_selection]part_by_group_{***x77}    ; Particle selection doc file
+d53 1
+a53 1
+; ----------------- Output files -------------------------------------------------
+d61 4
+a64 1
+IF (x13 .LE. 1) x77 = 1         ; Single group only use default output file name
+@
+
+
+1.10
+log
+@IF (x77 .LT. 1)
+@
+text
+@d5 1
+a5 1
+; PURPOSE: Multireference alignment of an image series. 
+a7 1
+;
+d18 1
+a18 1
+x13=2           ; If >1 do multiple groups
+d24 1
+a24 1
+                ;   (EDIT as needed!) Used to find radius of last alignment ring.
+a35 1
+                                           ; If file missing, create using: 'DOC CREATE' 
+d72 1
+a72 1
+IF (x12 .EQ. 0) THEN            ; Normal run (Not a primary PubSub run)
+d75 1
+a75 1
+      UD 5,x39                  ; Get pixel size (A) from [parameters] file
+d78 1
+a78 1
+      UD 17,x52                 ; Get window size (pixels) from [parameters] file
+d113 1
+a113 1
+   (0)                          ; NO restriction on Angular proj search 
+d126 1
+a126 1
+   DO LB2 x11=1,x70             ; Loop over all groups
+d134 1
+a134 1
+    LB2
+@
+
+
+1.9
+log
+@new merged pubsub & multi-group procedure
+@
+text
+@d92 1
+a93 2
+   IF (x77 .LE. 0) THEN         ; Group not on command line, get it from selection file        
+
+d96 1
+a96 1
+x70=2 ;;;;;;;;  
+@
+
+
+1.8
+log
+@replaced [FILENUMS] with [order]
+@
+text
+@d1 1
+a1 1
+; <html><head><title>Multireference alignment</title></head><body><pre>
+d3 1
+a3 1
+; SOURCE: apsh.spi                 ArDean Leith    Mar 2004
+d6 1
+a6 1
+;          Sample images are aligned with reference projections via 
+a7 1
+;          For projects with single defocus group.
+d9 2
+d13 1
+a13 1
+; I/O PARAMETERS AND FILES ARE SET HERE:
+d15 1
+a15 2
+;<b>------------ Edit next 5 Alignment parameters --------------------- 
+; -------------- DO NOT COPY FROM WEB BROWSER     ---------------------
+d17 1
+a17 2
+x77=1           ; Pseudo defocus group for output (for consistency with
+                ;   other procedures's file naming convention)
+d19 1
+a19 1
+x12 = 0         ; Number of OMP threads (0 = use all available processors)
+d24 7
+a30 5
+x21 = 5		; First ring, only radii within specified rings will be analyzed
+x22 = -1	; Last ring  (if last ring is set to -1, it will automatically
+                ;     be calculated from the pixel size in params file)
+     
+; ----------------- Input files -----------------------------------------------
+d33 1
+a33 1
+[parameters]../params                 ; Parameter file
+d35 3
+a37 1
+; from this point, FILENUMS selects by defocus group, instead of micrograph
+d39 8
+d48 1
+a48 1
+[order]../Power_Spectra/order_defgrps  ; Defocus group selection doc file
+d51 1
+a51 1
+[ref_images_template]prj/prj****      ; Reference image template
+d54 2
+a55 2
+[ref_images_selection]projlist        ; Reference selection doc file
+ 
+d57 3
+a59 1
+[ref_images_angles]refangles          ; Reference images angles doc file  
+d62 1
+a62 1
+[sample_images_template]../Particles/win/ser******  ; Sample image template
+d64 1
+a64 4
+FR G
+[sample_images_selection]part_by_group_{***x77}  ; Sample selection doc file
+ 
+; ----------------- Output files  ----------------------------------------
+d66 2
+a67 4
+FR G
+[align_parameters]align_01_{***x77} ; Alignment parameters doc. file 
+ 
+; -------------- END BATCH HEADER ---------------------------------------- </b>
+d70 1
+a70 4
+TR OFF        ; Decreases results file output
+MD
+VB OFF        ; Decreases results file output
+
+d72 1
+a72 2
+SET MP        ; Set number of OMP processors
+x12
+d74 5
+a78 5
+
+IF (X22.LT.0) THEN
+    ; Get pixelsize from [params] file and compute radius
+    UD 5,x39
+    [parameters]
+d80 2
+a81 3
+    ; Use radius = 138 A for ribosome
+    X22 = INT(138.0/x39)
+ENDIF
+d83 42
+a124 16
+; check that LAST RING + TRANSLATION are < radius
+UD 17,x44
+[parameters]  ; x44 = window size
+
+x45 = INT(x44/2) - 1   ; max radius
+
+x46 = x22 + x31   ; last ring + translation step
+
+IF (x46.GE.x45) THEN
+   DO LB88 x44 = 1,x45
+      x22 = x22 - 1
+      x46 = x22 + x31
+      IF (x46.LE.x45) GOTO LB87
+   LB88
+ENDIF
+LB87
+d126 2
+d129 1
+d131 5
+a135 2
+UD N,x20
+[order]
+d137 2
+a138 29
+;  Loop over all defocus groups
+DO LB1 x11 = 1,x20
+   
+    ; 1st column should have def_group
+    UD x11,x77
+    [order]
+    ; x77 is now the defocus group 
+
+    VM
+    echo "{**x11}: defocus group {**x77} -> [align_parameters]"
+
+    DE                                ; Delete preexisting output files.
+    [align_parameters]
+
+    MY FL                             ; Flush results file
+
+    ; Run 'AP SH' : align sample images using Multireference Method 
+    AP SH
+    [ref_images_template]      ; Reference image name template        (input)
+    [ref_images_selection]     ; Reference images selection doc. file (input)
+    x31,x32                    ; Search range, step size         
+    x21,x22                    ; First and last ring      
+    [ref_images_angles]        ; Ref. angles doc file                 (input)
+    [sample_images_template]   ; Sample images  name template         (input)
+    [sample_images_selection]  ; Sample images selection doc. file    (input) 
+    *                          ; Sample images align. doc file        (input)
+    (0)                        ; NO restriction on Angular proj search 
+    (1)                        ; Check mirrored positions
+    [align_parameters]         ; Alignment angles doc. file           (output)
+d140 1
+a140 1
+LB1
+a141 1
+EN                                
+d143 1
+@
+
+
+1.7
+log
+@added check that LAST RING + TRANSLATION are < radius; uses [FILENUMS] for selection
+@
+text
+@d37 1
+a37 1
+[FILENUMS]../Power_Spectra/order_defgrps  ; Defocus group selection doc file
+d100 1
+a100 1
+[FILENUMS]
+d107 1
+a107 1
+    [FILENUMS]
+@
+
+
+1.6
+log
+@defocus group selction file name
+@
+text
+@d3 1
+a3 1
+; SOURCE: apsh.bat                 ArDean Leith    Mar 2004
+d34 1
+a34 1
+; At this point, we're selecting by defocus group, not micrograph number
+d37 1
+a37 1
+[group_selection_file]../Power_Spectra/order_defgrps  ; Defocus group selection doc file
+d40 1
+a40 1
+[ref_images_template]prj/prj****      ; Reference image name template
+d43 1
+a43 1
+[ref_images_selection]projlist        ; Reference images selection doc. file
+d49 1
+a49 1
+[sample_images_template]../Particles/win/ser******  ; Sample image name template
+d52 1
+a52 1
+[sample_images_selection]part_by_group_{***x77}  ; Sample images selection doc. file stem
+d80 19
+d100 1
+a100 1
+[group_selection_file]
+d107 1
+a107 1
+    [group_selection_file]
+@
+
+
+1.5
+log
+@added loop over defocus groups
+@
+text
+@d34 1
+a34 1
+; at this point, we're selecting by defocus group, not micrograph number
+d37 1
+a37 1
+[filenums]../Power_Spectra/order_defgrps  ; file number selection
+d81 1
+a81 1
+[filenums]
+d88 1
+a88 1
+    [filenums]
+@
+
+
+1.4
+log
+@ap sh
+@
+text
+@d34 1
+d37 3
+d49 3
+d80 2
+d83 12
+a94 1
+    DE                                ; Delete existing alignment parameter output files.
+d99 1
+a99 1
+    ; Run 'AP SH' for this group, align sample images using Multireference Method 
+d101 13
+a113 11
+    [ref_images_template]             ; Reference image name template         (input)
+    [ref_images_selection]            ; Reference images selection doc. file  (input)
+    x31,x32                           ; Search range, step size         
+    x21,x22                           ; First and last ring      
+    [ref_images_angles]               ; Ref. angles doc file                  (input)
+    [sample_images_template]          ; Sample images  name template          (input)
+    [sample_images_selection]         ; Sample images selection doc. file     (input) 
+    *                                 ; Sample images align. doc file         (input)
+    (0)                               ; NO restriction on Angular proj search 
+    (1)                               ; Check mirrored positions
+    [align_parameters]                ; Alignment angles doc. file            (output)
+@
+
+
+1.3
+log
+@fixed up some typos (added {***x55} to [sample_images_selection])
+@
+text
+@d1 1
+a1 2
+; <html><head><title>Controls Alignment</title></head><body><pre>
+; apsh.bat                 ArDean Leith    Mar 2004
+d3 1
+a3 3
+; Multireference alignment of an image series. 
+; Sample images are aligned with reference projections via shifts (translations) 
+;    and rotations.  For project with multiple micrographs.
+d5 4
+a8 1
+; MASTER COPY: /net/bali/usr1/spider/docs/techs/recon/programs/
+d10 2
+d17 3
+d27 3
+a29 3
+            ;      be calculated from the pixel size in params file)
+ 
+; ----------------- Input files -- May have to edit these names --------------
+d32 1
+a32 3
+[micrograph_selection_file]../filenums       ; Micrograph selection doc. file
+;                                              Can create this using: 'DOC CREATE' and 
+;                                              inputting the number of micrographs
+a33 2
+FR G
+[parameters]../params                        ; Parameter file
+d36 1
+a36 1
+[ref_images_template]prj/prj****             ; Reference image name template
+d39 1
+a39 1
+[ref_images_selection]projlist               ; Reference images selection doc. file
+d42 1
+a42 1
+[ref_images_angles]refangles                  ; Ref. angles doc file (from alignment)
+d45 1
+a45 4
+[sample_images_template]../Particles/win/ser****** ; Sample image name template
+ 
+FR G
+[sample_images_selection]../Particles/good/ngood  ; Sample images selection doc. file stem
+d47 1
+a47 1
+; ----------------- Output files  --  May want to edit these names ------------
+d50 1
+a50 1
+[align_parameters]align01_{***x55} ; Alignment parameters doc. file 
+d60 1
+a60 1
+SET MP     ; Set number of OMP processors
+a72 9
+; Get number of micrographs from micrograph selection file
+; If you do not have a "micrograph selection file" you can
+;   create it using: 'DOC CREATE' and inputting the number of micrographs
+
+UD N,x20
+[micrograph_selection_file]
+
+;  Loop over all micrographs
+DO LB1 x11=1,x20
+d74 1
+a74 5
+    ; Get this micrograph file-number from micrograph selection file
+    UD x11,x55                  ; Current micrograph number = x55
+    [micrograph_selection_file]
+
+    DE                           ; Delete any existing alignment parameter output doc. files.
+d77 1
+a77 1
+    MY FL                        ; Flush results file
+d79 1
+a79 1
+    ; Run 'AP SH' for this micrograph, align sample images using Multireference Method 
+d81 11
+a91 13
+    [ref_images_template]        ; Reference image name template          (input)
+    [ref_images_selection]       ; Reference images selection doc. file   (input)
+    x31,x32                      ; Search range, step size  
+    x21,x22                      ; First and last ring      
+    [ref_images_angles]          ; Ref. angles doc file                   (input)
+    [sample_images_template]     ; Sample images  name template           (input)
+    [sample_images_selection]{***x55}    ; Sample images selection doc. file      (input) 
+    *                            ; Sample images align. doc file          (input)
+    (0)                          ; NO restriction on Angular proj search 
+    (1)                          ; Check mirrored positions
+    [align_parameters]           ; Alignment angles doc. file            (output)
+
+LB1
+@
+
+
+1.2
+log
+@ap sh
+@
+text
+@d22 1
+a22 1
+                  be calculated from the pixel size in params file)
+d102 1
+a102 1
+    [sample_images_selection]    ; Sample images selection doc. file      (input) 
+d106 1
+a106 1
+    [align_parameters]           ; Alignment angles doc. file            (output)            (output)
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d95 1
+@

@@ -1,0 +1,734 @@
+head	1.21;
+access;
+symbols
+	GPL_update:1.18
+	pre_rewrite_2010:1.15
+	pre_more_stack:1.15
+	best-code:1.14
+	no-named-regs:1.13
+	pre_GPL:1.13
+	tag_version1_0:1.13;
+locks; strict;
+comment	@# @;
+
+
+1.21
+date	2015.04.28.15.42.26;	author leith;	state Exp;
+branches;
+next	1.20;
+
+1.20
+date	2010.12.28.16.23.51;	author leith;	state Exp;
+branches;
+next	1.19;
+
+1.19
+date	2010.09.01.18.09.33;	author leith;	state Exp;
+branches;
+next	1.18;
+
+1.18
+date	2010.01.21.19.05.50;	author leith;	state Exp;
+branches;
+next	1.17;
+
+1.17
+date	2010.01.20.16.07.17;	author leith;	state Exp;
+branches;
+next	1.16;
+
+1.16
+date	2010.01.19.19.06.33;	author leith;	state Exp;
+branches;
+next	1.15;
+
+1.15
+date	2006.05.09.15.39.05;	author leith;	state Exp;
+branches;
+next	1.14;
+
+1.14
+date	2006.01.04.14.28.54;	author leith;	state Exp;
+branches;
+next	1.13;
+
+1.13
+date	2005.03.23.16.48.50;	author leith;	state Exp;
+branches;
+next	1.12;
+
+1.12
+date	2005.02.03.19.27.45;	author leith;	state Exp;
+branches;
+next	1.11;
+
+1.11
+date	2004.05.10.19.22.08;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2004.03.29.16.01.08;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2004.03.18.15.16.21;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2003.10.20.16.44.54;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2003.06.06.12.58.51;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2003.04.16.19.09.00;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2002.10.18.15.19.29;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2002.10.10.20.36.28;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2002.10.02.14.30.49;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2002.09.12.21.00.44;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2002.09.09.19.32.43;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.21
+log
+@[converg] parameter removed,   cosmetic
+@
+text
+@([task],[ntot-big],[num-grps],[iter],[rn])
+;
+; SOURCE: spider/docs/techs/recon/newprogs/pub_refine_wait.pam
+;         New                           ArDean Leith Nov 2000
+;         [rn]                          ArDean Leith Feb 2005
+;         []                            ArDean Leith Dec 2005
+;         echo date change              ArDean Leith Sep 2010
+;         wait message                  ArDean Leith Dec 2010
+;         [ntot-big]                    ArDean Leith Apr 2015
+;
+; PURPOSE:  Waits for all subscriber processes to finish
+;           [task]=0  Runs grploop 
+;           [task]=1  Runs smangloop 
+;           [task]=2  Runs endmerge, accumulates [n-big] contents from sync doc file.
+;
+; CALLED FROM: <a href=./pub_refine.pam">pub_refine.pam</a> 
+;  
+; INPUT REGISTERS (FROM CALLER):
+;    [task]       Task id 
+;    [num-grps]   Number of tasks 
+;    [iter]       Iteration number 
+;    [rn]         4 digit random number to append to DOC_SYNC files
+;
+; OUTPUT REGISTER:  [ntot-big]   Accumulated number of images with large angle changes 
+;
+; INPUT FILE:  jnkdocparamout{***group}_{****[rn]}*
+
+ IF ( [task] <= 1) THEN
+   SYS
+     echo -n " Waiting for iteration: {%I0%[iter]}   " ; date '+ TIME: %x  %X'
+ ELSE
+   SYS                      ; Echo current time 
+     echo -n " Waiting for endmerge for iteration: {%I0%[iter]}  " ; date '+ TIME: %x  %X'
+ ENDIF
+
+ MY FL                     ; Flush results
+
+ [ntot-big] = 0            ; Initialize return value
+
+ DO I=1,[num-grps]         ; Wait for all groups/parallel tasks 
+
+   UD S I,[grp]            ; Get group number
+     [sel_group_sorted]
+
+   UD E
+
+   IQ SYNC                 ; Wait for file existence
+     jnkdocparamout{***[grp]}_{****[rn]}
+     10 3600000            ; Check time, max. time
+
+   SYS
+     echo -n " Synced iter: {%I0%[iter]} Group: {%I0%[grp]} --- "; date '+ TIME: %x  %X'
+
+   IF ( [task] == 0 ) THEN
+      ; grploop returns [n-big] in jnkdocparamout{***[grp]} key:47 
+      ; Key 47 has # of images whose proj. angle moved by > 1.5*[ang-step]
+      UD 47, [n-big]
+        jnkdocparamout{***[grp]}_{****[rn]}
+      [ntot-big] = [ntot-big] + [n-big]+1     
+      UD E
+   ENDIF
+   DE
+     jnkdocparamout{***[grp]}_{****[rn]}
+
+   MY FL                   ; Flush results
+ ENDDO                     ; End wait loop over tasks
+
+ RE
+@
+
+
+1.20
+log
+@echo -n " Waiting.....
+@
+text
+@d1 1
+a1 1
+([task],[num-big],[num-grps],[iter],[converg],[rn])
+d9 1
+d14 1
+a14 1
+;           [task]=2  Runs endmerge, accumulates [num-big] contents from sync doc file.
+a21 1
+;    [converg]    Convergence %  
+d24 1
+a24 1
+; OUTPUT REGISTER:  [num-big]   Acummulated number of groups with large changes 
+d28 7
+a34 7
+IF ([task] .LE. 1) THEN
+   VM
+   echo -n " Waiting for iteration: {**[iter]}   " ; date '+ TIME: %x  %X'
+ELSE
+   VM                      ; Echo current time 
+   echo -n " Waiting for endmerge for iteration: {**[iter]}  " ; date '+ TIME: %x  %X'
+ENDIF
+d36 1
+a36 1
+MY FL                      ; Flush results
+d38 1
+a38 1
+[num-big]=0                ; Initialize return value
+d40 1
+a40 1
+DO I=1,[num-grps]          ; Wait for all groups/parallel tasks 
+d43 1
+a43 1
+   [sel_group_sorted]
+d48 2
+a49 2
+   jnkdocparamout{***[grp]}_{****[rn]}
+   (10 3600000)            ; Check time, max. time
+d51 2
+a52 2
+   VM
+   echo -n " Synced iter: {**[iter]} Group: {**[grp]} --- "; date '+ TIME: %x  %X'
+d54 6
+a59 6
+   IF ([task] .EQ. 0) THEN
+      ; grploop/smangloop returns [num-big] in jnkdocparamout{***[grp]} key:47 
+      ; Key 47 has % of images whose proj. angle moved by >1.5*[ang-step]
+      UD 47,[percent]
+      jnkdocparamout{***[grp]}_{****[rn]}
+      IF([percent].GT.[converg]) [num-big]=[num-big]+1  ; Excessive ang. change for this group  
+d63 1
+a63 1
+   jnkdocparamout{***[grp]}_{****[rn]}
+d66 1
+a66 1
+ENDDO                      ; End wait loop over tasks
+d68 1
+a68 1
+RE
+@
+
+
+1.19
+log
+@echo msg & date on one line
+@
+text
+@d8 1
+d10 4
+a13 2
+; PURPOSE:  Waits for subscribers to finish
+;    For task=2, accumulates [num-big] contents from sync doc file.
+d15 1
+a15 1
+; CALLED FROM:  pub_refine_start <a href=./pub_refine_start.pam">pub_refine_start.pam</a> 
+d28 10
+d52 1
+a52 1
+   echo -n " Synced iter: {**[iter]} Group: {**[grp]} --- "; date '+ TIME: %x  %X'd
+@
+
+
+1.18
+log
+@output formatting
+@
+text
+@d7 1
+d19 1
+a19 1
+;    [rn]         Random number to append to DOC_SYNC files
+d33 1
+a37 3
+   VM                      ; Echo time
+   date '+ TIME: %x  %X'd
+
+d39 1
+a39 1
+   echo " Synced iter: {**[iter]} group: {**[grp]} "
+d53 1
+a53 1
+ENDDO                      ;  End wait loop over tasks
+@
+
+
+1.17
+log
+@cosmetic output
+@
+text
+@d3 4
+a6 3
+; pub_refine_wait.pam              ArDean Leith Nov 2000
+;                            [rn]  ArDean Leith Feb 2005
+;                            []    ArDean Leith Dec 2005
+a7 2
+; SOURCE: spider/docs/techs/recon/programs/
+;
+d26 1
+a26 1
+DO I=1,[num-grps]          ;  Wait for all groups/parallel tasks 
+d53 2
+a54 2
+   MY FL     ; Flush results
+ENDDO        ;  End wait loop over tasks
+@
+
+
+1.16
+log
+@simplify-rewrite
+@
+text
+@d7 1
+a7 1
+; MASTER COPY: spider/docs/techs/recon/programs/
+d41 1
+a41 1
+   echo "Synced iter: {**[iter]} group: {**[grp]} "
+@
+
+
+1.15
+log
+@comment changed
+@
+text
+@d7 1
+a7 1
+; MASTER COPY: /net/bali/usr1/spider/docs/techs/recon/programs/
+d21 1
+a21 2
+; OUTPUT REGISTER:
+;    [num-big]    Acummulated number of groups with large changes 
+d23 1
+a23 2
+; INPUT FILES:
+;    jnkdocparamout{***group}_{****[rn]}*
+d27 1
+a27 1
+DO LB3 I=1,[num-grps]   ;  Wait for all groups/parallel tasks 
+d29 2
+a30 2
+   UD S I,[grp]      ; Get group number
+   [sorted_order_select]
+d33 1
+a33 1
+   IQ SYNC
+d35 1
+a35 1
+   (10 3600000)
+d37 3
+a39 2
+   VM
+   date
+d54 2
+a55 2
+   MY FL   ; flush results
+LB3        ;  End wait loop over tasks
+@
+
+
+1.14
+log
+@uses named registers
+@
+text
+@d22 1
+a22 1
+;    [num-big]    Acummulated nuber of large changes 
+@
+
+
+1.13
+log
+@   IQ SYNC
+   jnkdocparamout{***x77}_{****x59}
+@
+text
+@d1 1
+a1 1
+(x11,x47,x22,x76,x16,x59)
+d4 2
+a5 1
+;                            x59   ArDean Leith Feb 2005
+d10 1
+a10 1
+;    For task id=2, accumulates register 47 contents from sync doc file.
+d15 5
+a19 5
+;    x11    Task id 
+;    x22    Number of tasks 
+;    x76    Iteration number 
+;    x16    Convergence %  
+;    x59    Random number to append to DOC_SYNC files
+d22 1
+a22 1
+;    x47    Acummulated reg #47 
+d25 1
+a25 1
+;    jnkdocparamout{***group}_{****x59}*
+d27 1
+a27 1
+x47=0                ; Initialize return value
+d29 1
+a29 1
+DO LB3 x78=1,x22   ;  Wait for all tasks 
+d31 1
+a31 1
+   UD S,x78,x77      ; Get group number
+d36 1
+a36 1
+   jnkdocparamout{***x77}_{****x59}
+d42 1
+a42 1
+   echo "Synced iter: {**x76} group: {**x77} "
+d44 6
+a49 6
+   IF (x11 .EQ. 0) THEN
+      ; grploop/smangloop returns x47 in jnkdocparamout{***x77} key:47 
+      ; key 47 has % of images whose proj. angle moved by >1.5*x41
+      UD 47,x12
+      jnkdocparamout{***x77}_{****x59}
+      IF(x12.GT.x16)   x47=x47+1  ; Excessive ang. change for this group  
+d53 1
+a53 1
+   jnkdocparamout{***x77}_{****x59}
+@
+
+
+1.12
+log
+@x59 for sync name
+@
+text
+@d35 1
+a35 1
+   jnkdocparamout{***x77}
+@
+
+
+1.11
+log
+@comments
+@
+text
+@d1 1
+a1 1
+(x11,x47,x22,x76,x16)
+d3 2
+a4 1
+; pub_refine_wait.pam        ArDean Leith Nov 2000
+d18 1
+d24 1
+a24 1
+;    jnkdocparamout{***group}*
+d47 1
+a47 1
+      jnkdocparamout{***x77}
+d52 1
+a52 1
+   jnkdocparamout{***x77}
+@
+
+
+1.10
+log
+@ap ref
+@
+text
+@d42 2
+a43 1
+      ; grploop returns x47 in jnkdocparamout{***x77} 
+@
+
+
+1.9
+log
+@ap ref
+@
+text
+@d1 1
+a1 1
+(x11,x47,x65,x66,x76,x16)
+d14 1
+a14 2
+;    x66    Start group 
+;    x66    End group 
+d26 1
+a26 1
+DO LB3 x78=x65,x66   ;  Wait for all tasks 
+@
+
+
+1.8
+log
+@x11 shud be 0
+@
+text
+@d1 1
+a1 1
+(x11,x47,x65,x66,x76)
+d17 1
+d46 1
+a46 1
+      x47=x47+x12
+d53 1
+a53 1
+LB3                  ;  End wait loop over tasks
+@
+
+
+1.7
+log
+@*** empty log message ***
+@
+text
+@d41 1
+a41 1
+   IF (X11 .EQ. 1) THEN
+@
+
+
+1.6
+log
+@*** empty log message ***
+@
+text
+@d3 1
+a3 1
+; pub_wait.pam        ArDean Leith Nov 2000
+@
+
+
+1.5
+log
+@*** empty log message ***
+@
+text
+@d34 1
+a34 1
+   (10 36000)
+@
+
+
+1.4
+log
+@renamed
+@
+text
+@d1 1
+a1 1
+(x11,x47,x66,x76)
+d7 2
+a8 2
+;OYRPOSE:  Waits for subscribers to finish
+; for task id=2, accumulates register 47 contents from sync doc file.
+d13 4
+a16 3
+;    x11    task id 
+;    x66    number of groups 
+;    x76    task number 
+d19 1
+a19 1
+;    x47    acummulated reg #47 
+a22 2
+;
+;.......................................................................
+d24 1
+a24 3
+FR L
+?input/order_select_sort? <1>
+input/order_select_sort
+d26 1
+a26 1
+x47=0                ; initialize return value
+d28 2
+a29 1
+DO LB3 x78=1,x66     ;  wait for all tasks -------------
+a30 2
+   UD S,x78,x77 
+   <1>
+d35 1
+d39 1
+a39 1
+   echo "Synced task: {**x76} group: {**x77} "
+d42 1
+a42 1
+      ; grploop sets x47 in jnkdocparamout{***x77} 
+a46 1
+      jnkdocparamout{***x77}
+d52 1
+a52 1
+LB3                  ;  end wait loop over tasks ----------
+@
+
+
+1.3
+log
+@after test
+@
+text
+@d1 1
+a1 1
+[x11,x47,x66,x76]
+d3 1
+a3 13
+; wait.pam        ArDean Leith Nov 2000
+; master copy: /net/sicily/usr1/leith/clus/linde/refine
+; Used in master. Waits for subscribers to finish
+; for step id=2, accumulates register 47 contents from sync doc file.
+;
+; CALLED FROM:
+; master 
+;
+; INPUT:
+; reg: [11]  (step id)
+; reg: [66]  (number of groups)
+; reg: [76]  (step number)
+; jnkdocparamout{***group}*
+d5 20
+d28 15
+a42 9
+;
+; OUTPUT:
+; reg: [47]  (acummulated reg #47)
+;
+;.......................................................................
+;
+   x47=0                ; initialize return value
+   ;
+   DO LB3 x78=1,x66     ;  wait for all defocus groups -------------
+d44 5
+a48 2
+      UD S,x78,x77 
+      <1>
+a49 1
+      IQ SYNC
+d51 6
+a56 19
+      (10 36000)
+      VM
+      date
+      VM
+      echo "synced step: {**x76} group: {**x77} "
+      ;
+       IF (X11 .EQ. 1) THEN
+         ; grploop sets x47 in jnkdocparamout{***x77} 
+         UD 47,x12
+         jnkdocparamout{***x77}
+         x47=x47+x12
+         UD E
+         jnkdocparamout{***x77}
+      ENDIF
+      DE
+      jnkdocparamout{***x77}
+      ;
+      MY FL   ; flush results
+   LB3                  ;  end wait loop over defocus groups -------
+@
+
+
+1.2
+log
+@<>
+@
+text
+@d1 1
+a1 1
+(x11,x47,x66,x76)
+d12 3
+a14 3
+; reg: 11  (step id)
+; reg: 66  (number of groups)
+; reg: 76  (step number)
+d18 1
+a18 1
+?input/order_select_sort? [1]
+d22 1
+a22 1
+; reg: 47  (acummulated reg #47)
+d31 1
+a31 1
+      [1]
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d1 1
+a1 1
+[x11,x47,x66,x76]
+d12 3
+a14 3
+; reg: [11]  (step id)
+; reg: [66]  (number of groups)
+; reg: [76]  (step number)
+d18 1
+a18 1
+?input/order_select_sort? <1>
+d22 1
+a22 1
+; reg: [47]  (acummulated reg #47)
+d31 1
+a31 1
+      <1>
+@

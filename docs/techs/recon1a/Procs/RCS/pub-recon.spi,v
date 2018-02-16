@@ -1,0 +1,545 @@
+head	1.10;
+access;
+symbols
+	Pre_gold:1.4;
+locks;
+comment	@# @;
+
+
+1.10
+date	2016.07.07.14.39.22;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2016.03.29.19.59.47;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2016.03.24.15.48.20;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2016.03.21.16.28.21;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2016.03.17.14.08.40;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2016.03.01.20.29.54;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2014.05.14.16.15.06;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2013.12.13.16.43.06;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2013.11.08.19.26.29;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2012.05.23.02.56.08;	author tapu;	state Exp;
+branches;
+next	;
+
+
+desc
+@new file -- parallel, toplevel reconstruction batch file
+@
+
+
+1.10
+log
+@[steptype] & comments
+@
+text
+@ ; <html><head><title>Reconstructs a volume by back-projection of an image series</title></head><body><pre>
+ ;
+ ; SOURCE: spider/docs/techs/recon1/Procs/pub-recon.spi
+ ;
+ ;         New                                 ArDean Leith  Nov 2000
+ ;         [rn] for endmerge                   ArDean Leith  May 2005
+ ;         [] from publish                     ArDean Leith  Feb 2006
+ ;         More stacks                         ArDean Leith  Dec 2006
+ ;         COG centering                       ArDean Leith  Sep 2010
+ ;         Dala files removed                  ArDean Leith  Jan 2012
+ ;         pixsiz, resol headers,...           ArDean Leith  Aug 2012
+ ;         For CTF corrected images            ArDean Leith  Oct 2013
+ ;         For gold standard reconstruction    ArDean Leith  May 2014
+ ;         Inlined params, changed dirs        ArDean Leith  Mar 2016
+ ;
+ ; PURPOSE: Runs on master node to control parallel reconstruction. 
+ ;          Reconstructs a volume by back-projection of an image series.
+ ;
+ ; Parameters & files are set in: <a href="recon-settings.spi">recon-settings.spi</a>
+ ;
+ ; INPUT FILES: ([win_dir] denotes input directory, '***' denotes group,  '%' denotes subset)
+ ;   [sel_group]        [win_dir]/sel_group       Group selection file           (one)
+ ;   [sel_parts]        [win_dir]/sel_part_***    Group particle selection files (one/group)
+ ;   [group_align]      [win_dir]/align_01_***    Alignment parameter files      (one/group)
+ ;   [unaligned_images] [win_dir]/data_***        Unaligned image stacks         (one/group)
+ ;
+ ; PROCEDURES CALLED:
+ ;   recon-settings      <a href="recon-settings.spi"> recon-settings.spi</a>
+ ;   pub_submit          <a href="pub_submit.spi">     pub_submit.spi</a>
+ ;   .. qsub/publish     <a href="qsub.pbs">           qsub.pbs</a>
+ ;   .... recon-settings <a href="recon-settings.spi"> recon-settings.spi</a>            
+ ;   .... recon-loop     <a href="recon-loop.spi">     recon-loop</a>          
+ ;   merge-fsc-filt      <a href="merge-fsc-filt.spi"> merge-fsc-filt.spi</a>
+ ;
+ ; -------------------------------- END BATCH HEADER ----------------------------
+ 
+ MD
+   TR OFF                    ; Loop info turned off
+ MD
+   VB OFF                    ; File info turned off
+ MD
+   SET MP                    ; Use only a few processors if using master node!!
+   4 
+
+ ; Get reconstruction parameters & file names
+ [steptype]   = 1            ; Reconstruction step
+ @@recon-settings([steptype],[num-grps],[pixsiz],[ang-step],[r2],[alignsh],[prj-radius],[winsiz],[incore-yn],[bp-type],[qsub])
+ [ampenhance] = 0
+ [sphdecon]   = 0
+ [iter]       = 0
+ [gold-std]   = 1
+
+ SYS
+   echo '  Projection radius: {%I0%[prj-radius]}' ; echo
+
+ SD /     ITERATION     MASKED-RES    RESOLUTION
+   [iter_resol]               ; Resolution doc file              (output)
+ SD E     
+   [iter_resol]               ; Resolution doc file              (closed)
+
+ ; Backproject ('BP 3F') aligned experimental images in parallel by groups of images
+ ; to create two subset volumes. Wait for all parallel groups to finish.
+
+ [task]   = 0                                         ; Unused
+ [script] = './spider $PRJEXT/$DATEXT @@recon-loop '   ; Script starts recon-loop 
+ @@pub-submit([iter],[num-grps],[task],[qsub])
+   [script]                                           ; Runs recon-loop
+
+
+ ; Merge ('AS S') the group volumes into two subset output volumes,
+ ; find resolution ('FSC') by comparing FSC of the two subsets,
+ ; filter ('FD C') the combined volumes using FSC curve to limit resolution, 
+ ; merge ('AS S')  the two subset output volumes into single overall output volume.
+
+ @@merge-fsc-filt([pixsiz],[iter],[ampenhance],[r2],[sphdecon],[gold-std],[qsub])
+ 
+ SYS                          ; Echo current time 
+   echo -n '  Reconstruction finished' ; date '+ TIME: %x  %X' ; echo  
+
+ EN
+ ; </pre></body></html>
+
+@
+
+
+1.9
+log
+@comments
+@
+text
+@d21 5
+a25 6
+ ; INPUT FILES: ([win] denotes input directory, '***' denotes group,  '%' denotes subset)
+ ;   [vol]              [win]/ref_vol         Reference volume               (one)
+ ;   [sel_group]        [win]/sel_group       Group selection file           (one)
+ ;   [sel_parts]        [win]/sel_part_***    Group particle selection files (one/group)
+ ;   [group_align]      [win]/align_01_***    Alignment parameter files      (one/group)
+ ;   [unaligned_images] [win]/data_***        Unaligned image stacks         (one/group)
+d31 1
+a32 1
+ ;   .... recon-settings <a href="recon-settings.spi"> recon-settings.spi</a>            
+d46 2
+a47 1
+ @@recon-settings([num-grps],[pixsiz],[ang-step],[r2],[alignsh],[prj-radius],[winsiz],[incore-yn],[bp-type],[qsub])
+@
+
+
+1.8
+log
+@header
+@
+text
+@d19 1
+a19 1
+ ; I/O Registers & files are set in: <a href="recon-settings.spi">recon-settings.spi</a>
+@
+
+
+1.7
+log
+@[gold-std] parameter
+@
+text
+@d21 6
+a26 7
+ ; INPUT FILES: ('***' denotes group here)
+ ;   [params]           ../params              Params file                    (one)
+ ;   [vol]              ../ref_vol             Reference volume               (one)
+ ;   [sel_group]        ../win_1/sel_group     Group selection file           (one)
+ ;   [sel_parts]        ../win_1/sel_part_***  Group particle selection files (one/group)
+ ;   [group_align]      ../win_1/align_01_***  Alignment parameter files      (one/group)
+ ;   [unaligned_images] ../win_1/data_***      Unaligned image stacks         (one/group)
+@
+
+
+1.6
+log
+@Inlined params, changed dirs
+@
+text
+@d52 1
+d60 1
+a60 1
+   [iter_resol]               ; Resolution doc file              (finished)
+d76 1
+a76 1
+ @@merge-fsc-filt([pixsiz],[iter],[ampenhance],[r2],[sphdecon],[qsub])
+@
+
+
+1.5
+log
+@for gold
+@
+text
+@d5 10
+a14 9
+ ;         New                                  ArDean Leith  Nov 2000
+ ;         [rn] for endmerge                    ArDean Leith  May 2005
+ ;         [] from publish                      ArDean Leith  Feb 2006
+ ;         More stacks                          ArDean Leith  Dec 2006
+ ;         COG centering                        ArDean Leith  Sep 2010
+ ;         Dala files removed                   ArDean Leith  Jan 2012
+ ;         pixsiz, resol headers,...            ArDean Leith  Aug 2012
+ ;         For CTF corrected images             ArDean Leith  Oct 2013
+ ;         For gold standard reconstruction     ArDean Leith  May 2014
+d22 6
+a27 6
+ ;   [params]           ../params             Params file                    (one)
+ ;   [vol]              vol01                 Reference volume               (one)
+ ;   [sel_group]        input/sel_group       Group selection file           (one)
+ ;   [sel_parts]        input/sel_part_***    Group particle selection files (one/group)
+ ;   [group_align]      input/align_01_***    Alignment parameter files      (one/group)
+ ;   [unaligned_images] input/data_ctfd_***   Unaligned image stacks         (one/group)
+d30 6
+a35 6
+ ;    recon-settings      <a href="recon-settings.spi">    recon-settings.spi</a>
+ ;    pub_submit          <a href="pub_submit.spi">        pub_submit.spi</a>
+ ;    .. qsub/publish     <a href="qsub.pbs">              qsub.pbs</a>
+ ;    .... recon-loop     <a href="recon-loop.spi">        recon-loop</a>          
+ ;    .... recon-settings <a href="recon-settings.spi">    recon-settings.spi</a>            
+ ;    merge-fsc-filt      <a href="merge-fsc-filt.spi">    merge-fsc-filt.spi</a>
+d72 2
+a73 2
+ ; filter ('FD C')  the combined volumes using FSC curve to limit resolution, 
+ ; merge ('AS S') the two subset output volumes into single overall output volume.
+@
+
+
+1.4
+log
+@[finished_file] replaces [group_fsc]_u
+@
+text
+@d1 1
+a1 1
+ ; <html><head><title>Computes back-projection of an image series</title></head><body><pre>
+d3 1
+a3 1
+ ; SOURCE: spider/docs/techs/recon1/Procs/bp-pubsub.spi   
+d5 9
+a13 2
+ ; PURPOSE: Computes back-projection and its resolution for an image series. 
+ ;          FOR PROJECTS WITH ONE OR MORE GROUPS - WITH PUBSUB
+d15 22
+a36 6
+ ; USAGE:       clean ; ./spider spi/dat @@bp-pubsub
+
+; --------------------- END BATCH HEADER ---------------------
+
+ ; Set parameter and file names
+ @@bp-settings([stk-opt],[r-fsc],[bp-type],[r-bpn],[cg-err],[cg-chi], [cg-iter],[cg-mode],[cg-lam],[rp-lam],[rp-cor],[rp-iter], [sp_pixsiz],[incore-yn])
+d39 3
+a41 1
+   TR OFF                        ; Decrease results file output
+d43 2
+a44 1
+   VB OFF                        ; Decrease results file output
+d46 5
+a50 74
+ ; Put label in new resolution doc file
+ DE
+   [resol_doc]                   ; Resolution doc file    (removed)
+ SD / '      GROUP,    NORM-FREQ,    RESOL.(ANG.)  MASKED-RESOL.  (CUTOFF=50%)' 
+   [resol_doc]                   ; Resolution doc file    (output)
+
+ ; Initialize counters
+ [total-parts] = 0               ; Initialize # of particles
+ [num-grps]    = 0               ; Initialize # of groups
+
+ ; Loop through groups
+ DO                              ; Loop through groups -----------------------------
+
+   UD NEXT [key], [grp]          ; Get group number
+     [sel_group]                 ; Group selection file     (input)
+   IF ([key] <= 0) EXIT
+
+   [num-grps] = [num-grps] + 1   ; Increment # of groups
+
+   ; For first group, check whether input files exist
+   IF ( [num-grps] == 1 ) THEN
+
+      @@check-exist([exists1])
+        [aligned_images][grp]      ; Image file  (input)
+      @@check-exist([exists2])
+        [group_align][grp]         ; Doc file  (input)
+      @@check-exist([exists3])
+        [sel_particles][grp]       ; Image file  (input)
+
+      ; If any file is missing, product of flags will be zero
+      [iqfi-product] = [exists1]*[exists2]*[exists3]
+
+      IF ( [iqfi-product] == 0 ) THEN
+         SYS
+            echo ; echo " Exiting" ; echo
+         EN 
+      ENDIF
+   ENDIF
+
+   ; Get # of particles
+   UD N [grp-parts]
+     [sel_particles][grp]         ; Doc file  (input)
+    
+   ; Increment total particle counter
+   [total-parts] = [total-parts] + [grp-parts]
+
+   SYS
+      publish './spider spi/$DATEXT @@bp-main {***[grp]} grp={***[grp]}'
+
+   IF ( [max-wait] > 0 ) THEN
+     ; Wait for compute node copy to local disk to minimize competition
+     IQ SYNC DEL  [wait-time]     ; Check file existance then delete it
+       [wait_file][grp]           ; Flag file  (input)
+       10 [max-wait]              ; Wait time
+     SYS
+        echo " Group: {%I3%[grp]}  Wait time: {%I5%[wait-time]} seconds"
+   ENDIF
+
+   MY FL                          ; Flush results file
+ ENDDO                            ; End group-loop
+
+ ; Wait for PubSub compute node completion
+ [one] = 1
+ [end] = [num-grps]
+ @@wait-pub([one],[end])           ; Wait for compute node completion  
+    [finished_file]               ; File created when finished (one/group)
+
+ ; If more than one group, sum and compute resolution
+ IF ( [num-grps] > 1 ) THEN
+   @@bp-merge([num-grps])
+
+   SYS
+     echo -n " Back projections merged   "; date '+ TIME: %x  %X' ; echo
+ ENDIF
+d52 15
+a66 2
+ ; Create matched filter
+ @@make-matched-filt              ; Create filter doc file
+a67 2
+ ; Apply matched filter to output volume
+ @@matched-filt                   ; Filter to specified resolution
+d69 9
+a77 2
+ SYS
+   echo -n " Done   " ; date '+ TIME: %x  %X' ; echo
+d79 1
+a79 1
+ EN 
+@
+
+
+1.3
+log
+@batch header
+@
+text
+@d85 1
+a85 2
+   [group_fsc]_u                  ; Unmasked group FSC doc file         (output)
+!  [finished_file]                ; File created when finished (one/group)
+@
+
+
+1.2
+log
+@rewrite_syntax_filenames
+@
+text
+@d10 2
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d1 95
+a95 50
+; CALCULATE TWO HALF-SET RECONSTRUCTIONS FOR EACH GROUP
+;
+; Adapted from bpodd.bat (formerly b24.bpo)
+
+@@bps-settings([stk-opt],[rad-fsc],[bp-method],[rad-recon],[cg-error],[cg-chisqr],[cg-iter],[cg-mode],[cg-lambda],[rp-lambda],[rp-correct],[rp-iter],[max-wait])
+
+fr l
+[temp_var]_3  ; variance map (not saved)
+
+;; initialize particle-counter
+;[total-parts] = 0
+
+de
+[summary_doc]
+;;SD /     MASKED_RES  UNMASKED_RES   NUMPARTS
+;;[summary_doc]
+
+; get #groups
+UD N,[num-grps]
+[group_list]
+
+; loop through groups
+DO LB1 [grp-key]=1,[num-grps]
+    ; Get current group number
+    UD IC [grp-key],[grp]  ; ,[numparts]
+    [group_list]             ; Group selection file            (input)
+    
+    ; for first group, check whether files exist
+    if([grp-key].eq.1) then
+        @@bps-check([exists1])
+        [params]
+    
+        @@bps-check([exists2])
+        [group_list]
+    
+        @@bps-check([exists3])
+        [ali_stack]
+    
+        @@bps-check([exists4])
+        [angles]
+    
+        @@bps-check([exists5])
+        [seltotal]
+    
+        ; if any file is missing, product of flags will be zero
+        [iqfi-product] = [exists1]*[exists2]*[exists3]*[exists4]*[exists5]
+
+        if([iqfi-product].eq.0) then
+            vm
+            echo ; echo "Exiting" ; echo
+d97 2
+a98 6
+            en
+        else
+            vm
+            echo "Input files OK"; echo
+        endif
+    endif
+d100 2
+a101 2
+;    ; increment counter
+;    [total-parts] = [total-parts] + [grp-parts]
+d103 2
+a104 20
+    vm
+    publish './spider spi/$DATEXT @@bps-distribute {***[grp]} grp={***[grp]}'
+LB1
+; end group-loop
+
+UD ICE
+[group_list]
+
+
+; WAIT FOR ALL DEFOCUS GROUPS TO FINISH
+
+my fl  ; flush results file
+
+; loop through defocus-groups
+DO LB2 [grp-key] = 1,[num-grps]
+    ; get defocus-group#
+    ud ic [grp-key], [grp]
+    [group_list]
+    
+    my fl  ; flush results file
+a105 51
+    IQ SYNC
+    [finished_flag]
+    (10 3600000)
+
+    MY FL
+
+    VM
+    echo "Group #{***[grp]} ({***[grp-key]}th out of {***[num-grps]}) synced"
+
+    DE
+    [finished_flag]
+    de
+    [dummy_wait_file][grp]
+LB2
+; end group-loop
+
+ud ice  ; close
+[group_list]
+
+vm
+echo "All groups synced" ; date ; echo
+
+; remove the header lines
+doc sort
+[summary_doc]_temp
+[summary_doc]
+0  ; column# to sort: 0==key (group#)
+N  ; renumber keys?
+
+; clean up doc files
+de
+[summary_doc]_temp
+;SD /      MASKEDRES    UNMASKEDRES    NUM_PARTS
+SD /      GROUP_NUM    UNMASKEDRES    MASKEDRES
+[summary_doc]
+sd e
+[summary_doc]
+
+; if more than one group, sum and compute resolution
+if([num-grps].ge.2) then
+    @@bps-combine
+endif
+
+vm
+echo "Done"; date
+
+EN
+
+; Modified 2012-05-14
+;    2012-05-14 (trs) -- reformatted summary doc to comply with plotres.spi
+;    2011-11-04 (trs) -- adapted from realign-pubsub.spi
+@

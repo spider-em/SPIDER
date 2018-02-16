@@ -1,0 +1,1054 @@
+head	1.12;
+access;
+symbols
+	Pre_gold:1.7;
+locks;
+comment	@# @;
+
+
+1.12
+date	2016.07.07.14.40.52;	author leith;	state Exp;
+branches;
+next	1.11;
+
+1.11
+date	2016.03.24.15.47.42;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2016.03.17.14.09.17;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2016.03.08.20.19.00;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2016.03.01.20.32.41;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2014.05.14.16.12.32;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2014.04.23.18.36.39;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2013.12.13.19.02.23;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2013.12.13.16.40.49;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2013.11.08.19.26.29;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2012.06.14.20.24.35;	author tapu;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2012.05.23.03.02.22;	author tapu;	state Exp;
+branches;
+next	;
+
+
+desc
+@new file -- core subroutine for reconstruction
+@
+
+
+1.12
+log
+@steptype & comments
+@
+text
+@ 
+ ; <html><head><title>Calculate two half-set reconstructions for each group</title></head><body><pre>
+ ; SOURCE: spider/docs/techs/recon1/Procs/recon-loop.spi   
+ ;
+ ; PURPOSE: Calculate two half-set and one overall reconstructions for each group
+ ;
+ ; INPUT REGISTERS:  From command line
+ ;    [grp]                 group
+ ;
+ ; INPUT FILES: ([win_dir] denotes input directory, '***' denotes group,  '%' denotes subset)
+ ;              ([rec_dir] denotes alignment/reconstruction output directory)
+ ;    [sel_parts]          [win_dir]/sel_part_***    Group particle selection files (one/group)
+ ;    [aligned_images]     [rec_dir]/dala_***        Aligned stacked image files    (one-stack/group)
+ ;    [group_align]        [rec_dir]/align_##_***    Alignment parameter doc files  (one/group)    
+ ;
+ ; OUTPUT FILES: 
+ ;    [next_group_vol]     [rec_dir]/vol_##+_***     Reconstructed group volumes    (one/group)
+ ;    [next_group_vol]_s1  [rec_dir]/vol_##+_***_s1  Group subset volume            (one/group)
+ ;    [next_group_vol]_s2  [rec_dir]/vol_##+_***_s2  Group subset volume            (one/group)
+ ;    [temp_images]        _8                        If [incore-yn] == 0, Created & deleted 
+ ;    [finished_file]      jnk_sync_$$$$_***         Created & deleted 
+ ;
+ ; PARAMETERS:      Set seldom altered parameters here
+ [rp-lam]    = 0.2e-7;  0.2e-5         ; BP RP: lambda
+ [rp-cor]    = 0.0                     ; BP RP: correction limit
+ [rp-iter]   = 50                      ; BP RP: iteration limit
+ [rp-mode]   = 0                       ; BP RP: mode
+ [rp-min]    = 0.5                     ; BP RP: minimum    (not used in mode 0)
+ [rp-max]    = 0.5                     ; BP RP: maximum    (not used in mode 0)
+ [rp-smooth] = 0.5                     ; BP RP: smoothing  (not used in mode 0)
+
+ [cg-err]    = 1.0E-5                  ; BP CG: error limit, chi^2 limit
+ [cg-chi]    = 0.0                     ; BP CG: chi^2 limit (none)
+ [cg-iter]   = 25                      ; BP CG: iteration limit
+ [cg-mode]   = 1                       ; BP CG: mode
+ [cg-lam]    = 2000                    ; BP CG: weighting
+ ;
+ ; ------------------------------- END BATCH HEADER -------------------------------------------
+
+ MD
+   TR OFF                     ; Decrease results file output
+ MD
+   VB OFF                     ; Decrease results file output
+
+ [iter]      = 0
+ [next-iter] = 1
+
+ IF ( [grp] == 0 ) THEN
+   ; [grp] not sent on command line so this is in series not parallel
+   RR [grp]                 ; Input group from caller for inline use
+      ? ENTER GROUP ?
+   MD                            
+     SET MP
+     4 
+ ELSE
+   ; Get reconstruction parameters & file names
+   [steptype] = 1           ; Reconstruction step
+   @@recon-settings([steptype],[num-grps],[pixsiz],[ang-step],[r2],[alignsh],[prj-radius],[winsiz],[incore-yn],[bp-type],[qsub])
+
+   MD                            
+     SET MP
+     10                      ; Edit this!!!
+
+ ENDIF
+
+ IF ( [incore-yn] == 0 ) THEN
+   ; Use disk image stack
+   GLO [temp_images] = '[aligned_images]@@'
+ 
+ ELSE
+   ; Load input image stack into incore image stack first
+   GLO [temp_images] = '_8@@'
+
+   FI H [numparts]           ; Get number of particles 
+     [aligned_images]@@       ; Image stack                         (input)
+     MAXIM                   ; Max. image number in stack      
+
+   SYS                       ; Echo progress
+      echo '  Copying:  [aligned_images]   Into: [temp_images] '  
+   MY FL
+
+   CP                        ; Load input images into incore stack
+     [aligned_images]@@       ; Image stack                         (input)
+     [temp_images]           ; Incore stack                        (output)
+     [numparts]              ; Stack size
+ ENDIF
+
+ MY FL
+
+ ; 'Back project' aligned particle images according to angles from alignment doc file
+
+ [bp-typet] = [bp-type]      ; Hack to overcome global symbol parsing bug
+
+ IF ( [bp-typet] == 1 ) THEN
+
+  SYS                        ; Echo progress
+     echo -n "  Back projecting group: {%I3%[grp]} with 'BP CG', On: " ; hostname
+   MY FL                     ; Flush results file                                                    
+
+   ; Create group volumes using 'BP CG 3' .
+   BP CG 3                   ; Back Projection - CG
+     [temp_images]*****      ; Template for image files            (input)
+     [sel_parts][grp]        ; Group particle selection doc file   (input)
+     [rad-bp]                ; Radius of restored object
+     [next_group_align]      ; Alignment parameter doc file        (input)
+     F                       ; Fourier-based spline interpolation
+     [next_group_vol]        ; Reconstructed group vol - overall   (output)
+     [next_group_vol]_s1     ; Reconstructed group vol - subset 1  (output)
+     [next_group_vol]_s2     ; Reconstructed group vol - subset 2  (output)
+     [cg-err],[cg-chi]       ; Error limit, chi^2 limit
+     [cg-iter],[cg-mode]     ; Iteration limit, mode
+     [cg-lam]                ; Weighting
+
+ ELSEIF ( [bp-typet] == 2 ) THEN
+
+   SYS                       ; Echo progress
+     echo -n "  Back projecting group: {%I3%[grp]} with 'BP 3F',   On: " ; hostname
+   MY FL                     ; Flush results file                                   
+
+   BP 32F                    ; Back Projection - 3D Fourier
+     [temp_images]*****      ; Template for image files            (input)
+     [sel_parts][grp]        ; Particle selection doc file         (input)
+     [next_group_align]      ; Alignment parameter doc file        (input)
+     [symmetry_doc]          ; Symmetries doc file (* = none)      (input)
+     [next_group_vol]        ; Reconstructed group vol - overall   (output)
+     [next_group_vol]_s1     ; Reconstructed group vol - subset 1  (output)
+     [next_group_vol]_s2     ; Reconstructed group vol - subset 2  (output)
+
+ ELSEIF ( [bp-typet] == 3 ) THEN
+
+   SYS                       ; Echo progress
+     echo -n "  Back projecting group: {%I3%[grp]} with 'BP RP',   On: " ; hostname
+   MY FL                     ; Flush results file                                   
+
+   ; Compute the group subset reconstructions. --------------------------------
+   BP RP 3 [niter]           ; [niter] returns # iterations used
+     [temp_images]*****      ; Template for image files            (input)
+     [sel_parts][grp]        ; Particle selection doc file         (input)
+     [r-bp]                  ; Radius of restored object
+     [next_group_align]      ; Alignment parameter doc file        (input)
+     [symmetry_doc]          ; Symmetries doc file (* = none)      (input)
+     [next_group_vol]        ; Reconstructed group vol - overall   (output)
+     [next_group_vol]_s1     ; Reconstructed group vol - subset 1  (output)
+     [next_group_vol]_s2     ; Reconstructed group vol - subset 2  (output)
+     [rp-lam],[rp-cor]       ; Lambda, correction limit
+     [rp-iter],0             ; Iteration limit, mode
+     .5, .5                  ; Minimum, maximum
+     .5                      ; Smoothing constant
+
+ ELSEIF ( [bp-typet] ==  4 ) THEN
+   
+  SYS                        ; Echo progress
+     echo -n "  Back projecting group: {%I3%[grp]} with 'BP 3N',  On: " ; hostname
+   MY FL                     ; Flush results file
+
+   ; Split into odd and even selection lists
+   DOC SPLIT
+     [sel_parts]             ; Particle selection doc file         (input)
+     [sel_parts]_s1          ; Odd  particle selection doc file    (output)         
+     [sel_parts]_s2          ; Even particle selection doc file    (output)         
+
+   ; Reconstruct odd volume
+   BP 3N
+     [temp_images]******     ; Template for image files            (input)
+     [sel_parts]_s1          ; Odd  particle selection doc file    (output)         
+     [next_group_align]      ; Alignment parameter doc file        (input)
+     [symmetry_doc]          ; Symmetries doc file (* = none)      (input)
+     [next_group_vol]_s1     ; Reconstructed group vol - subset 1  (output)
+
+   ; Reconstruct even volume
+   BP 3N
+     [temp_images]*****      ; Template for image files            (input)
+     [sel_parts]_s2          ; Even particle selection doc file    (output)
+     [next_group_align]      ; Alignment parameter doc file        (input)
+     [symmetry_doc]          ; Symmetries doc file (* = none)      (input)
+     [next_group_vol]_s1     ; Reconstructed group vol - subset 2  (output)
+
+   ; Reconstruct combined volume
+   BP 3N
+     [temp_images]*****      ; Template for image files            (input)
+     [sel_parts]             ; Particle selection doc file         (input)
+     [next_group_align]      ; Alignment parameter doc file        (input)
+     [symmetry_doc]          ; Symmetries doc file (* = none)      (input)
+     [next_group_vol]        ; Reconstructed group vol - overall   (output)
+ ENDIF
+
+ MY FL                       ; Flush results file
+
+ IF ( [incore-yn] > 0) THEN
+   DE                        ; Delete incore stack                (deleted)
+     [temp_images]
+ ENDIF 
+
+ IF ( [qsub] >= 0 ) THEN
+   SYS                       ; File created when finished (one/group)
+     touch [finished_file].$DATEXT
+   EN
+ ENDIF
+
+ RE
+
+ ; </pre></body></html>
+@
+
+
+1.11
+log
+@header
+@
+text
+@d10 5
+a14 5
+ ; INPUT FILES: ([win] denotes input directory, '***' denotes group,  '%' denotes subset)
+ ;              ([out] denotes alignment/reconstruction output directory)
+ ;    [sel_parts]          [win]/sel_part_***    Group particle selection files (one/group)
+ ;    [aligned_images]     [out]/dala_***        Aligned stacked image files    (one-stack/group)
+ ;    [group_align]        [out]/align_##_***    Alignment parameter doc files  (one/group)    
+d17 5
+a21 5
+ ;    [next_group_vol]     [out]/vol_##+_***     Reconstructed group volumes    (one/group)
+ ;    [next_group_vol]_s1  [out]/vol_##+_***_s1  Group subset volume            (one/group)
+ ;    [next_group_vol]_s2  [out]/vol_##+_***_s2  Group subset volume            (one/group)
+ ;    [temp_images]        _8                    If [incore-yn] == 0, Created & deleted 
+ ;    [finished_file]      jnk_sync_$$$$_***
+d57 2
+a58 1
+   @@recon-settings([num-grps],[pixsiz],[ang-step],[r2],[alignsh],[prj-radius],[winsiz],[incore-yn],[bp-type],[qsub])
+d62 1
+a62 1
+     10                      ; Edit this
+@
+
+
+1.10
+log
+@comments
+@
+text
+@d10 5
+a14 5
+ ; '##' denotes iteration, '##+' denotes next iteration, '@@' denotes subset,  '***' denotes group
+ ; INPUT FILES:
+ ;    [sel_parts]           ../in_1/sel_part_***    Group particle selection files (one/group)
+ ;    [aligned_images]      ../out_1/dala_***       Aligned stacked image files    (one-stack/group)
+ ;    [group_align]         ../out_1/align_##_***   Alignment parameter doc files  (one/group)    
+d16 6
+a21 6
+ ; OUTPUT FILES:
+ ;    [next_group_vol]      work/vol_##+_***      Reconstructed group volumes    (one/group)
+ ;    [next_group_vol]_s1   work/vol_##+_***_s1   Group subset volume            (one/group)
+ ;    [next_group_vol]_s2   work/vol_##+_***_s2   Group subset volume            (one/group)
+ ;    [temp_images]         _8                    If [incore-yn] == 0, Created & deleted 
+ ;    [finished_file]       jnk_sync_$$$$_***
+d24 7
+a30 7
+ [rp-lam]    = 0.2e-7;  0.2e-5           ; BP RP: lambda
+ [rp-cor]    = 0.0                       ; BP RP: correction limit
+ [rp-iter]   = 50                        ; BP RP: iteration limit
+ [rp-mode]   = 0                         ; BP RP: mode
+ [rp-min]    = 0.5                       ; BP RP: minimum    (not used in mode 0)
+ [rp-max]    = 0.5                       ; BP RP: maximum    (not used in mode 0)
+ [rp-smooth] = 0.5                       ; BP RP: smoothing  (not used in mode 0)
+d32 5
+a36 5
+ [cg-err]    = 1.0E-5                    ; BP CG: error limit, chi^2 limit
+ [cg-chi]    = 0.0                       ; BP CG: chi^2 limit (none)
+ [cg-iter]   = 25                        ; BP CG: iteration limit
+ [cg-mode]   = 1                         ; BP CG: mode
+ [cg-lam]    = 2000                      ; BP CG: weighting
+d61 1
+a61 1
+     10 
+@
+
+
+1.9
+log
+@echo msg changed
+@
+text
+@d12 3
+a14 3
+ ;    [sel_parts]           input/sel_part_***    Group particle selection files (one/group)
+ ;    [aligned_images]      output/dala_***       Aligned stacked image files    (one-stack/group)
+ ;    [group_align]         output/align_##_***   Alignment parameter doc files  (one/group)    
+@
+
+
+1.8
+log
+@for gold
+@
+text
+@d23 15
+a43 3
+ MD                            
+   SET MP
+   12 ;0
+a44 2
+ ; Get reconstruction parameters & file names
+ @@recon-settings([num-grps],[pixsiz],[ang-step],[r2],[alignsh],[prj-radius],[winsiz],[incore-yn],[bp-type],[qsub])
+d49 2
+a50 1
+    RR [grp]                  ; Input group from caller for inline use
+d52 11
+a62 3
+    ; SYS
+    ;   echo " RR grp: {***[grp]}"
+    [qsub] = 0
+d91 3
+a93 1
+ IF ( [bp-type] == 1 ) THEN
+d96 1
+a96 1
+     echo -n "  Back projecting with 'BP CG',  Group:{%I3%[grp]}  On: " ; hostname
+d113 1
+a113 1
+ ELSEIF ( [bp-type] == 2 ) THEN
+d116 1
+a116 1
+     echo -n "  Back projecting with 'BP 3F',   Group:{%I3%[grp]}  On: " ; hostname
+d128 1
+a128 1
+ ELSEIF ( [bp-type] == 3 ) THEN
+d131 1
+a131 1
+     echo -n "  Back projecting with 'BP RP',   Group:{%I3%[grp]}  On: " ; hostname
+d149 1
+a149 1
+ ELSEIF ( [bp-type] ==  4 ) THEN
+d152 1
+a152 1
+     echo -n "  Back projecting with 'BP 3N',   Group:{%I3%[grp]}  On: " ; hostname
+@
+
+
+1.7
+log
+@removed group resolution doc file, added finished file
+@
+text
+@d1 1
+a1 2
+;;([grp])
+
+d3 6
+a8 1
+ ; SOURCE: spider/docs/techs/recon1/Procs/bp-main.spi   
+d10 5
+a14 1
+ ; PURPOSE: Calculate two half-set reconstructions for each group
+d16 8
+a23 1
+ ; INPUT:   Group must be read into this procedure
+d26 1
+a26 1
+   TR OFF                       ; Decrease results file output
+d28 1
+a28 1
+   VB OFF                       ; Decrease results file output
+d31 6
+a36 1
+   0
+a37 1
+ [pubsub] = 1
+d39 2
+a40 2
+    RR [grp]                    ; Input group from caller
+      ?ENTER GROUP?
+d43 1
+a43 1
+    [pubsub] = 0
+d45 4
+a48 13
+     
+ ; Set parameter and file names
+ @@bp-settings([stk-opt],[r-fsc],[bp-type],[r-bp],[cg-err],[cg-chi],[cg-iter],[cg-mode],[cg-lam],[rp-lam],[rp-cor],[rp-iter],[sp_pixsiz],[incore-yn])
+
+ ; Initialize counters
+
+ FI H [numparts]               ; Get number of particles 
+   [aligned_images][grp]@@      ; Image stack                         (input)
+   MAXIM                       ; Max. image number in stack      
+ 
+ IF ([incore-yn] == 0) THEN
+   ; Use on-disk image stack
+   [temp_images] = '[aligned_images][grp]@@'
+d52 1
+a52 1
+   [temp_images] = '_8@@'
+d54 12
+a65 4
+   CP                          ; Load input images into incore stack
+     [aligned_images][grp]@@    ; Image stack                         (input)
+     [temp_images]             ; Incore stack                        (output)
+     [numparts]                ; Stack size
+d68 1
+a68 2
+ SYS
+   mkdir -p [group_dir][grp]
+d70 1
+a70 2
+ SYS
+   echo ' 'Back projecting from: [temp_images]'   ' Group: {%I3%[grp]}'  ' Images: {%I6%[numparts]}  
+a71 2
+ MY FL                         ; Flush results file
+ 
+d74 4
+d79 12
+a90 12
+   BP CG 3                     ; Back Projection - CG
+     [temp_images]*****        ; Template for image files            (input)
+     [sel_parts][grp]          ; Group particle selection doc file   (input)
+     [rad-bp]                  ; Radius of restored object
+     [group_align][grp]        ; Alignment parameter doc file        (input)
+     F                         ; Fourier-based spline interpolation
+     [group_vol][grp]          ; Reconstructed group vol - overall   (output)
+     [group_vol_1][grp]        ; Reconstructed group vol - subset 1  (output)
+     [group_vol_2][grp]        ; Reconstructed group vol - subset 2  (output)
+     [cg-err],[cg-chi]         ; Error limit, chi^2 limit
+     [cg-iter],[cg-mode]       ; Iteration limit, mode
+     [cg-lam]                  ; Weighting
+d94 12
+a105 8
+   BP 32F                      ; Back Projection - 3D Fourier
+     [temp_images]*****        ; Template for image files            (input)
+     [sel_parts][grp]          ; Particle selection doc file         (input)
+     [group_align][grp]        ; Alignment parameter doc file        (input)
+     [symmetry_doc]            ; Symmetries doc file (* = none)      (input)
+     [group_vol][grp]          ; Reconstructed group vol - overall   (output)
+     [group_vol_1][grp]        ; Reconstructed group vol - subset 1  (output)
+     [group_vol_2][grp]        ; Reconstructed group vol - subset 2  (output)
+d109 4
+d114 13
+a126 13
+   BP RP 3 [niter]             ; [niter] returns # iterations used
+     [temp_images]*****        ; Template for image files            (input)
+     [sel_parts][grp]          ; Particle selection doc file         (input)
+     [r-bp]                    ; Radius of restored object
+     [group_align][grp]        ; Alignment parameter doc file        (input)
+     [symmetry_doc]            ; Symmetries doc file (* = none)      (input)
+     [group_vol][grp]          ; Reconstructed group vol - overall   (output)
+     [group_vol_1][grp]        ; Reconstructed group vol - subset 1  (output)
+     [group_vol_2][grp]        ; Reconstructed group vol - subset 2  (output)
+     [rp-lam],[rp-cor]         ; Lambda, correction limit
+     [rp-iter],0               ; Iteration limit, mode
+     .5, .5                    ; Minimum, maximum
+     .5                        ; Smoothing constant
+d130 4
+d136 3
+a138 3
+     [sel_parts][grp]          ; Particle selection doc file         (input)
+     [selodd][grp]             ; Odd  particle selection doc file    (output)         
+     [seleven][grp]            ; Even particle selection doc file    (output)         
+d142 5
+a146 5
+     [temp_images]******       ; Template for image files            (input)
+     [selodd][grp]             ; Odd  particle selection doc file    (output)         
+     [group_align][grp]        ; Alignment parameter doc file        (input)
+     [symmetry_doc]            ; Symmetries doc file (* = none)      (input)
+     [group_vol_1][grp]        ; Reconstructed group vol - subset 1  (output)
+d150 5
+a154 5
+     [temp_images]*****        ; Template for image files            (input)
+     [seleven][grp]            ; Even particle selection doc file    (output)
+     [group_align][grp]        ; Alignment parameter doc file        (input)
+     [symmetry_doc]            ; Symmetries doc file (* = none)      (input)
+     [group_vol_2]             ; Reconstructed group vol - subset 2  (output)
+d158 5
+a162 5
+     [temp_images]*****        ; Template for image files            (input)
+     [sel_parts][grp]          ; Particle selection doc file         (input)
+     [group_align][grp]        ; Alignment parameter doc file        (input)
+     [symmetry_doc]            ; Symmetries doc file (* = none)      (input)
+     [group_vol][grp]          ; Reconstructed group vol - overall   (output)
+d165 1
+d168 1
+a168 1
+   DE                          ; Delete incore stack                (deleted)
+d171 5
+a175 5
+   
+ IF ( [pubsub] == 1 ) THEN
+    SYS                        ; File created when finished (one/group)
+       touch [finished_file][grp] 
+    EN
+@
+
+
+1.6
+log
+@sel_parts, cosmetic .
+@
+text
+@a6 1
+ ;          Find group FSC and resolution
+d99 1
+a99 1
+     .5,.5                     ; Minimum, maximum
+a135 33
+ ; CALCULATE UNMASKED AND MASKED RESOLUTION CURVES
+
+ ; Determine masked group reconstruction resolution
+ FSC [half],[spfr],[mask-res]  ; Find phase residual &  shell correl.
+   [group_vol_1][grp]          ; Volume                              (input)
+   [group_vol_2][grp]          ; Volume                              (input)
+   0.5, [r-fsc]                ; Shell width, mask radius
+   [sp_pixsiz]                 ; Pixel size
+   [group_fsc]_m[grp]          ; Unmasked group FSC doc file         (output)
+   *                           ; No Gnuplot file wanted
+
+ ; Determine unmasked group reconstruction resolution
+ FSC [half],[spfr],[umask-res] ; Find phase residual &  shell correl.
+   [group_vol_1][grp]          ; Volume                              (input)
+   [group_vol_2][grp]          ; Volume                              (input)
+   0.5, 0                      ; Shell width, mask radius
+   [sp_pixsiz],0.5             ; Pixel size, 50% level
+   [group_fsc]_u[grp]          ; Unmasked group FSC doc file         (output)
+   *                           ; No Gnuplot file wanted
+
+ SYS
+   echo " Group: {%I3%[grp]}, Masked resolution: {%f6.2%[mask-res]} Angstroms"
+
+ ; Record group reconstruction resolution in doc file
+
+ [tmp] = [grp]
+ SD [tmp],[tmp],[spfr],[umask-res] ,[mask-res]   
+   [resol_doc]                 ; Resolution doc file                   (output)
+
+ ; Clean up
+ SD E
+   [resol_doc]                 ; Resolution doc file                   (output)
+
+d137 1
+a137 1
+   DE                          ; Delete incore stack                   (deleted)
+d142 2
+@
+
+
+1.5
+log
+@set mp
+@
+text
+@d59 1
+a59 1
+ IF ( [bp-type] == 1) then
+d64 1
+a64 1
+     [sel_particles][grp]      ; Group particle selection doc file   (input)
+d75 1
+a75 1
+ ELSEIF ( [bp-type] == 2) THEN
+d79 1
+a79 1
+     [sel_particles][grp]      ; Particle selection doc file         (input)
+d86 1
+a86 1
+ ELSEIF ( [bp-type] == 3) THEN
+d91 1
+a91 1
+     [sel_particles][grp]      ; Particle selection doc file         (input)
+d103 1
+a103 1
+ ELSEIF ( [bp-type] ==  4) THEN
+d107 1
+a107 1
+     [sel_particles][grp]      ; Particle selection doc file         (input)
+d130 1
+a130 1
+     [sel_particles][grp]      ; Particle selection doc file         (input)
+d140 7
+a146 7
+ FSC [half],[spfr],[mask-res]   ; Find phase residual &  shell correl.
+   [group_vol_1][grp]           ; Volume                              (input)
+   [group_vol_2][grp]           ; Volume                              (input)
+   0.5, [r-fsc]                 ; Shell width, mask radius
+   [sp_pixsiz]                  ; Pixel size
+   [group_fsc]_m[grp]           ; Unmasked group FSC doc file         (output)
+   *                            ; No Gnuplot file wanted
+d149 7
+a155 7
+ FSC [half],[spfr],[unmask-res] ; Find phase residual &  shell correl.
+   [group_vol_1][grp]           ; Volume                              (input)
+   [group_vol_2][grp]           ; Volume                              (input)
+   0.5, 0                       ; Shell width, mask radius
+   [sp_pixsiz],0.5              ; Pixel size, 50% level
+   [group_fsc]_u[grp]           ; Unmasked group FSC doc file         (output)
+   *                            ; No Gnuplot file wanted
+d163 1
+a163 1
+ SD [tmp],[tmp],[spfr],[unmask-res],[mask-res]   
+@
+
+
+1.4
+log
+@SET MP ; Only if not PubSub.
+@
+text
+@d15 3
+a25 4
+
+    MD                          ; Only if not PubSub
+      SET MP
+      0
+@
+
+
+1.3
+log
+@rewrite_syntax_filenames
+@
+text
+@d9 1
+a9 1
+ ; INPUT:   Group must be passed to this procedure
+d20 2
+a21 2
+    !SYS
+    !  echo " RR grp: {***[grp]}"
+d23 4
+@
+
+
+1.2
+log
+@using sorted group list
+using Fourier-based spline interpolation in BP CG
+@
+text
+@d1 1
+a1 1
+([grp])
+d3 176
+a178 305
+; CALCULATE TWO HALF-SET RECONSTRUCTIONS FOR EACH GROUP
+;
+; Adapted from bpodd.bat (formerly b24.bpo)
+
+@@bps-settings([stk-opt],[rad-fsc],[bp-method],[rad-recon],[cg-error],[cg-chisqr],[cg-iter],[cg-mode],[cg-lambda],[rp-lambda],[rp-correct],[rp-iter],[max-wait])
+
+; Temporary files
+fr l
+[mask_unscaled]_11
+fr l
+[gaussian_mask]_12
+
+; get parameters
+UD IC 5,[pxsz]   ; Pixel size
+[params]
+UD IC 17,[idim]  ; Window size
+[params]
+
+[center] = [idim]/2 + 1                          ; Center coordinate
+
+; calculate reconstruction radius if necessary
+IF ([rad-recon].eq.-1) THEN
+   [rad-recon] = INT( (0.95*[idim])/2.0 )
+ENDIF
+
+; calculate mask radius, if necessary
+if([rad-fsc].le.0) then
+    ; get diameter from PARAMS
+    ud ic 18,[part-diam]
+    [params]
+
+    [radius] = [part-diam]/2
+endif
+
+md
+set mp
+0       ; 0 = use all processors available
+
+; MAKE GAUSSIAN MASK FOR FSC
+
+; create Gaussian
+mo 3
+[mask_unscaled]             ; OUTPUT
+[idim],[idim],[idim]        ; dimensions
+G                           ; _G_aussian
+[center],[center],[center]  ; center coordinates
+[radius],[radius],[radius]  ; Gaussian falloff
+
+; get statistics
+fs [max]
+[mask_unscaled]
+
+; lift maximum to 1
+ar
+[mask_unscaled]
+[gaussian_mask]
+p1/[max]
+
+; clean up
+de
+[mask_unscaled]
+ud ice
+[params]
+
+FI H [numparts]          ; Get number of particles 
+[ali_stack]              ; Unaligned particle images              (input)
+MAXIM                    ; Max. image number in stack      
+
+; if copying stack locally or into memory
+if([stk-opt].ne.0) then
+    ; wait for previous group
+    @@bps-wait([numgrps],[grp-rank])
+    [grp]                 ; INPUT REGISTER: group number
+    [sorted_group_list]   ; INPUT: group list
+    ; ------------------ Output Parameters -----------------
+    ; [numgrps]    ; number of groups
+    ; [grp-rank]   ; order within groups
+    ; ------------------ END BATCH HEADER ------------------
+
+    ; make local directory, if necessary
+    if([stk-opt].eq.2) then
+        vm
+        echo "if(! -d [temp_local_dir]) mkdir [temp_local_dir]"|csh
+        
+        fr l
+        [ali][temp_images]*******
+    endif
+
+    ; copying into memory
+    if([stk-opt].eq.1) then
+        fr l
+        [temp_images]_8@@  ; (CHECK if original FR G assignment is overridden, and [ali] is updated)
+    endif
+
+    vm
+    echo "Group #{***[grp]} ({***[grp-rank]}th out of {***[numgrps]}) copying stacks"; date
+    
+    ; copy locally
+    cp
+    [ali_stack]
+    [temp_images]
+    [numparts]  ; only needed if in-core
+
+    vm
+    echo "Group #{***[grp]} ({***[grp-rank]}th out of {***[numgrps]}) finished copying stacks"; date
+
+    my fl
+
+    ; If not last-ranked group, create temporary file
+    if([grp-rank].ne.[numgrps]) then
+        vm
+        touch [dummy_wait_file][grp].$DATEXT
+    endif
+
+; if using original image-stack (option #0)
+else
+    ; using original image-stack
+    fr l
+    [temp_images][ali_stack]  ; (CHECK that [temp_images] isn't deleted for this case, and [ali] is updated)
+endif
+
+; get #groups
+UD N,[num-grps]
+[group_list]
+
+; create directory, if needed
+vm
+mkdir -p [group_dir]
+;echo "if(! -d [group_dir]) mkdir -p [group_dir]"|csh
+
+; split into odd and even selection lists
+doc split
+[seltotal]              ; INPUT; total-selection file
+[group_dir]/[selodd]    ; OUTPUT
+[group_dir]/[seleven]   ; OUTPUT
+
+if([bp-method].eq.1) then
+    if([grp].eq.1) then
+        vm
+        echo "Using BP CG"
+    endif
+
+    bp cg 3
+    [ali]
+    [seltotal]   
+    [rad-recon]
+    [angles]
+    F   ; _F_ourier-based spline interpolation
+    [group_dir]/[unfiltered_volume]
+    [group_dir]/[vol_odd]
+    [group_dir]/[vol_even]
+    [cg-error],[cg-chisqr]
+    [cg-iter],[cg-mode]
+    [cg-lambda]
+endif
+
+if([bp-method].eq.2) then
+    if([grp].eq.1) then
+        vm
+        echo "Using BP 32F"
+    endif
+
+    bp 32f
+    [ali]
+    [seltotal]   
+    [angles]
+    [symmetry_doc]
+    [group_dir]/[unfiltered_volume]  ; combined reconstruction
+    [group_dir]/[vol_odd]
+    [group_dir]/[vol_even]
+endif
+
+if([bp-method].eq.3) then
+    if([grp].eq.1) then
+        vm
+        echo "Using BP RP"
+    endif
+
+    ; reconstruct even volume
+    @@bprp([rad-recon],[rp-lambda],[rp-correct],[rp-iter])
+    [ali]
+    [group_dir]/[selodd]
+    [angles]
+    [symmetry_doc]
+    [group_dir]/[vol_odd]
+
+    ; reconstruct odd volume
+    @@bprp([rad-recon],[rp-lambda],[rp-correct],[rp-iter])
+    [ali]
+    [group_dir]/[seleven]
+    [angles]
+    [symmetry_doc]
+    [group_dir]/[vol_even]
+
+    ; reconstruct combined volume
+    @@bprp([rad-recon],[rp-lambda],[rp-correct],[rp-iter])
+    [ali]
+    [seltotal]
+    [angles]
+    [symmetry_doc]
+    [group_dir]/[unfiltered_volume]
+endif
+
+if([bp-method].eq.4) then
+    if([grp].eq.1) then
+        vm
+        echo "Using BP 3N"
+    endif
+
+    ; reconstruct even volume
+    bp 3n
+    [ali]
+    [group_dir]/[selodd]
+    [angles]
+    [symmetry_doc]
+    [group_dir]/[vol_odd]
+
+    ; reconstruct odd volume
+    bp 3n
+    [ali]
+    [group_dir]/[seleven]
+    [angles]
+    [symmetry_doc]
+    [group_dir]/[vol_even]
+
+    ; reconstruct combined volume
+    bp 3n
+    [ali]
+    [seltotal]
+    [angles]
+    [symmetry_doc]
+    [group_dir]/[unfiltered_volume]
+endif
+
+
+; CALCULATE UNMASKED AND MASKED RESOLUTION CURVES
+
+; unmasked
+@@bps-calcres([unmasked-freq])  ; output parameter: unmasked-freq
+[group_dir]/[vol_odd]   ; INPUT: first volume
+[group_dir]/[vol_even]  ; INPUT: second volume
+*                       ; INPUT: (optional) mask
+[group_dir]/[doc_cmp]   ; OUTPUT: unmasked FSC doc
+
+[unmasked-res] = [pxsz]/[unmasked-freq]
+
+; masked
+@@bps-calcres([masked-freq])  ; output parameter: masked-freq
+[group_dir]/[vol_odd]         ; INPUT: first volume
+[group_dir]/[vol_even]        ; INPUT: second volume
+[gaussian_mask]               INPUT: (optional) mask
+[group_dir]/[masked_fsc_doc]  ; OUTPUT: unmasked FSC doc
+
+[masked-res]   = [pxsz]/[masked-freq]
+
+vm
+echo "Group {***[grp]}, Masked resolution: {%f6.2%[masked-res]} Angstroms"
+
+sd [grp], [grp],[unmasked-res],[masked-res]  ; ,[numparts]
+[summary_doc]_temp
+sd e
+[summary_doc]_temp
+
+
+; CLEAN UP
+
+; delete temporary stack
+if([stk-opt].ne.0) then
+    de
+    [temp_images]
+endif
+
+; if copying stack locally, remove temp directory
+if([stk-opt].eq.2) then
+    vm
+    rmdir [temp_local_dir]
+    ; might not be empty
+endif
+
+UD ICE
+[group_list]
+
+vm
+echo "Done with group #{***[grp]}"; date
+
+RE
+
+; Modified 2012-06-13
+;    2012-06-13 (trs) -- using sorted group list
+;    2012-05-14 (trs) -- reformatted summary doc to comply with plotres.spi
+;    2012-03-13 (trs) -- added option for BP 3N
+;    2011-10-18 (trs) -- updated to named registers
+;    2011-01-14 (trs) -- FSC resolution outsourced to calcres.spi
+;    2011-01-13 (trs) -- writing out both masked and unmasked FSCs
+;    2009-10-23 (trs) -- bug fix for input file pattern in BP32F option
+;    2009-07-10 (trs) -- creates defocus-group directories, if needed
+;    2009-04-14 (trs) -- input selection file now Reconstruction/sel_particles_***
+;    2008-02-01 (trs) -- added option for BP RP
+;    2008-01-31 (trs) -- added option for BP 32F
+;    2007-03-23 (trs) -- uses sel_group as input instad of order_defocus
+;    2007-01-30 (trs) -- half-set selection lists created here
+;    2007-01-30 (trs) -- inputs are now stacks
+;    2006-05-12 (trs) -- calculates radius from PARAMS
+;    2006-05-12 (trs) -- computes resolution curves, from old FSC.SPI
+;    2006-04-05 (trs) -- updated for changes in variable-passing
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d75 2
+a76 2
+    [grp]         ; INPUT REGISTER: group number
+    [group_list]  ; INPUT: group list
+d78 2
+a79 2
+    ; [numgrps]   ; number of groups
+    ; [grp-rank]  ; order within groups
+d130 2
+a131 1
+echo "if(! -d [group_dir]) mkdir -p [group_dir]"|csh
+d135 1
+a135 1
+[seltotal]                   ; INPUT; total-selection file
+d150 2
+a151 2
+    [symmetry_doc]
+    [group_dir]/[unfiltered_volume]  ; combined reconstruction
+d267 1
+a267 1
+    ; CLEAN UP
+d290 2
+a291 1
+; Modified 2012-05-14
+@

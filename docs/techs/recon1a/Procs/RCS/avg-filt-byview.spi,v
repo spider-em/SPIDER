@@ -1,0 +1,1062 @@
+head	1.8;
+access;
+symbols
+	Pre_gold:1.6;
+locks;
+comment	@# @;
+
+
+1.8
+date	2016.03.25.17.35.32;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2016.03.24.14.39.21;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2015.03.03.15.12.38;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2013.11.13.19.41.47;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2013.11.13.16.50.55;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2013.11.12.14.02.33;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2013.11.08.19.22.18;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2012.05.23.03.05.00;	author tapu;	state Exp;
+branches;
+next	;
+
+
+desc
+@new file -- filters and computes averages for each view
+@
+
+
+1.8
+log
+@comments
+@
+text
+@ ; <html><head><title>Average, filter &amp; shrink a set of particle images</title></head><body><pre>
+ ;
+ ; SOURCE:       spider/docs/techs/recon1/Procs/avg-filter-byview.spi
+ ;
+ ; ADAPTED FROM: filterbyview.spi, pfilt.bat
+ ;
+ ; PURPOSE:      Average, filter & shrink set of particle images
+ ;
+ ; USAGE:        clean ; ./spider spi/dat @@avg-filter-byview
+ ;
+ ; REQUIRES:     spider/docs/techs/recon1/Procs/verify-settings.spi
+ ;
+ ; INPUTS:  (Where *** denotes image group,  ### denotes view)
+ ;  [params]          ../params                  Parameter doc file         (one)
+ ;  [ref_view_list]   [rec_dir]/sel_proj         List of reference views    (one)
+ ;  [aligned_images]  [rec_dir]/dala_01_***      Aligned-images stack       (one/group)
+ ;  [view_list]       views/prj###/sel_part_byv  Particle list              (one/view)
+ ;
+ ; OUTPUTS: 
+ ;  [sd_vsview]       sd_vsview                  View average summary doc file           (one)
+ ;  [filtered_stack]  views/prj###/filtavg       Filtered view average stacks            (one/view)
+ ;  [total_view_avg]  views/prj###]/allavg       OPTIONAL full-sized view average stacks (one/view)
+ ;
+ ; ----------------------- Parameters -----------------------
+
+ [save-avg-yn]   = 1     ; Flag to save unfiltered view-average (1 == save)
+
+ [save-filt-yn]  = 1     ; Flag to save filtered images         (1 == save)
+ [reduction]     = 2     ; Size factor (integer) for optional filtered images
+ [filter-type]   = 7     ; Filter type for optional filtered images (7 == Butterworth)
+
+ [filt-param1]   = 37.6  ; Pass-band, Angstroms (assuming Butterworth)
+ [filt-param2]   = 28.2  ; Stop-band, Angstroms (assuming Butterworth)
+
+ [last-view]     = 0     ; Last reference-view to filter  (0 == all)
+ [view-progress] = 1     ; Prints progress message every Nth reference view
+
+ ; ------------------ END BATCH HEADER ------------------
+
+ MD
+   TR OFF                           ; Decrease results file output
+ MD
+   VB OFF                           ; Decrease results file output
+
+ ; Set common filenames & parameters
+ @@verify-settings
+
+ ; Set temporary filenames
+
+ [fullsize_mask]        = '_6'
+ [temp_mirrored_incore] = '_5'
+ [temp_filtered_incore] = '_4'
+ [temp_filtered_stack]  = '_2'
+ [temp_fullsize_stack]  = '_1'
+ [temp_variance_incore] = '_3'
+
+ SYS
+   echo -n "  Filtering images    "; date ; echo
+
+ ; Get parameters
+ UD 5, [sp_pixsiz]
+   [params]
+ UD 17, [sp_winsiz]
+   [params]
+ UD E
+
+ [reduced-size] = [sp_winsiz]/[reduction]
+ [mask-radius]  = INT([reduced-size]/2)
+
+ IF ( [save-filt-yn]*[save-avg-yn] == 0 ) THEN
+    SYS
+      echo "  WARNING: Neither unfiltered nor filtered average requested -- Continuing..."
+ ENDIF
+
+ ; Make circular mask
+ IF ( [save-filt-yn]  > 0 ) THEN
+   MO
+     [fullsize_mask]              ; Circle image (output)
+     [sp_winsiz],[sp_winsiz]      ; Image dimensions
+     C                            ; Circle
+     [mask-radius]                ; Mask radius
+ ENDIF
+
+ DE
+   [sd_vsview]
+ ; Label summary doc
+ IF ( [save-avg-yn]  > 0 ) THEN
+   SD /       VIEWNUM      PARTICLES        SD_VAR
+     [sd_vsview]                  ; File         (output)
+ ELSE
+   SD /       VIEWNUM      PARTICLES      
+     [sd_vsview]                  ; File         (output)
+ ENDIF
+
+ ; Change filter radii to reciprocal pixels
+ [filt-param1] = [sp_pixsiz]/[filt-param1]  ; Pass-band if Butterworth
+ [filt-param2] = [sp_pixsiz]/[filt-param2]  ; Stop-band
+
+ IF ( [last-view] == 0 ) THEN
+   UD N [last-view]
+     [ref_view_list]
+ ENDIF
+
+ ; Loop through reference-views
+ DO [view] = 1,[last-view]            ; Loop through reference-views ------------
+
+    ; Skip unpopulated views
+    IQ FI [exists]
+      [view_list][view]               ; File      (input)
+    IF ( [exists] == 0 ) THEN
+       SYS
+         echo " View: {%I3%[view]}  Out of: {%I3%[last-view]}    Is empty"
+       CYCLE
+    ENDIF
+
+    SYS
+       mkdir -p [prj_dir][view]
+
+    ; Get # of particles
+    UD N [num-particles]
+      [view_list][view]               ; File      (input)
+
+    IF ( int( [view]/[view-progress] ) == [view]/[view-progress] ) THEN
+      SYS
+        echo "  View: {%I3%[view]}  Out of: {%I3%[last-view]}    Particles: {%I5%[num-particles]}"
+    ENDIF
+
+    ; Skip unpopulated views
+    IF ( [num-particles] == 0 ) CYCLE
+
+    ; Initialize stacks
+    IF ( [save-filt-yn]  > 0 ) THEN    
+      DE
+        [temp_filtered_stack]         ; Stack     (output)
+      MS
+        [temp_filtered_stack]@@        ; Stack     (output)
+        [reduced-size],[reduced-size] ; Dimensions
+        [num-particles]               ; Max image allowed
+
+    ENDIF
+
+    IF ( [save-avg-yn]  > 0 ) THEN
+      DE
+        [temp_fullsize_stack]         ; Stack     (removed)
+
+      MS
+        [temp_fullsize_stack]@@        ; Stack     (output)
+        [sp_winsiz],[sp_winsiz]       ; Dimensions
+        [num-particles]               ; Max image allowed
+
+    ENDIF
+
+    DE
+      [filtered_stack][view]
+
+    ; Loop through particles
+    DO  [grp-part-key] = 1,[num-particles] ; Loop through particles ------------
+
+        ; Get group-slice#, mirroring, group#
+        UD IC [grp-part-key], [view-slice],[global-num],[grp-slice],[ccrot],[mirror-flag],[grp-num]
+          [view_list][view]
+
+        ; Mirror, if necessary
+        IF ( [mirror-flag] < 0 ) THEN
+          MR
+            [aligned_images][grp-num][grp-slice] ; Image          (input)
+            [temp_mirrored_incore]               ; Mirrored image (output)
+            Y                                    ; Mirror around y-axis
+        ELSE
+          CP
+            [aligned_images][grp-num][grp-slice]
+            [temp_mirrored_incore]
+        ENDIF
+
+        ; Copy to full-sized stack, if necessary
+        IF ( [save-avg-yn]  > 0 ) THEN
+
+          CP
+            [temp_mirrored_incore]         ; File         (input)
+            [temp_fullsize_stack]@@{*****[grp-part-key]} ; (output)
+        ENDIF
+
+        ; Filter, if necessary
+        IF ( [save-filt-yn]  > 0 ) THEN
+          ; If Butterworth filter
+          IF ( [filter-type] == 7 ) THEN
+            FQ NP
+              [temp_mirrored_incore]       ; File         (input)
+              [temp_filtered_incore]       ; File         (output)
+              [filter-type]                ; Filter type
+              [filt-param1],[filt-param2]  ; passband, stopband
+          ENDIF
+
+          ; If Fermi filter
+          IF ( [filter-type] == 5) THEN
+            FQ NP
+              [temp_mirrored_incore]       ; File         (input)
+              [temp_filtered_incore]       ; File         (output)
+              [filter-type]                ; Filter type = Fermi
+              [filt-param1]                ; Filter radius
+              [filt-param2]                ; Temperature cutoff
+          ENDIF
+
+          ; If Gaussian or top-hat filter
+          IF  ( [filter-type] <= 3 ) THEN
+            FQ NP
+              [temp_mirrored_incore]       ; File         (input)
+              [temp_filtered_incore]       ; File         (output)
+              [filter-type]                ; Filter type = top hat, Gaussian
+              [filt-param1]                ; Filter radius
+          ENDIF
+
+          ; Shrink, if necessary
+          IF ( [reduction]  > 1 ) THEN
+            DC S
+              [temp_filtered_incore]      ; File          (input)
+              [temp_filtered_stack]@@{*****[grp-part-key]}
+              [reduction],[reduction]     ; Reduction in X,Y
+          ELSE
+            CP
+              [temp_filtered_incore]      ; File            (input)
+              [temp_filtered_stack]@@{*****[grp-part-key]}   ;  (output)
+          ENDIF
+      ENDIF                               ; Filter IF-THEN
+    ENDDO                                 ; End particle-loop -----------------
+
+    ; Close files
+    UD ICE
+      [view_list][view]
+
+    IF ( [save-avg-yn]  > 0 ) THEN
+      AS R                              ; Average
+        [temp_fullsize_stack]@@*****     ; File          (input)
+        1-[num-particles]               ; Image range
+        A                               ; All particles
+        [total_view_avg][view]          ; Average file  (output)
+        [temp_variance_incore]          ; variance  (output, not saved)
+
+      ; Get standard deviation of the variance
+      FS M [min],[max],[avg],[sd-var]
+        [temp_variance_incore]          ; Variance
+        [fullsize_mask]
+    ELSE
+      [sd-var] = 1                      ; Dummy variable
+    ENDIF
+
+    CP
+      [temp_filtered_stack]@@              ; File         (input)
+      [filtered_stack][view]@@             ; File         (output)
+
+    DE
+      [temp_filtered_stack]@@
+
+    ; Write info to document
+    SD [view], [view],[num-particles],[sd-var]
+      [sd_vsview]                     ; File         (output)
+
+ ENDDO                                   ; End view-loop -----------------------
+
+ ; Close summary doc
+ SD E
+  [sd_vsview]                            ; File        (closed)
+
+ SYS
+   echo ; echo -n "  Done   "; date ; echo
+
+ EN D
+
+ ; Modified 2013-10-16
+ ;    TO DO: add option to save variance
+ ;    2013-10-23 (agl)       -- New file names, modernized syntax & cosmetic
+ ;    2011-10-24 (trs)       -- Added options to average unshrunken images and save shrunken images
+ ;    2011-10-24 (trs)       -- Adapted from filterbyview.spi
+ ;    2009-11-20 (trs)       -- Bug fix: #particles written to HOW_MANY file was 0
+ ;    2009-06-03 (trs)       -- Changed format of select/sel files
+ ;    2009-04-22 (trs)       -- Generates average for all particles
+ ;    2009-03-13 (trs      ) -- Makes directory for unpopulated views
+ ;    2007-10-19 (trs      ) -- Added check for unpopulated views
+ ;    2007-09-28 (trs)       -- Bug fixes: select/sel format fixed and needed to delete re-used stack _2
+ ;    2007-06-07 (trs)       -- Now filtering by view and into stacks
+ ;    2007-06-07 (trs)       -- Now getting mirror information from VO MQ output
+ ;    2007-05-30 (trs & gsa) -- Reflects change to input file sel_part
+ ;    2007-03-27 (trs & xa)  -- Reflects changes to input file sel_part
+ ;    2007-02-22 (trs & djt) -- Bug fix for filenames
+ ;    2007-01-24 (trs)       -- Input aligned images are now stacked
+ ;    2006-08-17 (trs)       -- Bug fix for mirroring in prj001 
+ ;    2006-04-05 (trs)       -- Changed units for filter radii
+ ;    2004-12-28 (trs)       -- Mirrors aligned image, if necessary
+ ;    2004-06-16 (trs)       -- Dusts images
+
+ ; </pre></body></html>
+@
+
+
+1.7
+log
+@input file locations changed
+@
+text
+@d14 4
+a17 4
+ ;  [params]          = '../params'                   ; Parameter doc file         (one)
+ ;  [ref_view_list]   = '../win_1/sel_proj'           ; List of reference views    (one)
+ ;  [aligned_images]  = '../win_1/dala_01_***'        ; Aligned-images stack       (one/group)
+ ;  [view_list]       = 'views/prj###/sel_part_byv'   ; Particle list              (one/view)
+d20 3
+a22 3
+ ;  [sd_vsview]       = 'sd_vsview'                   ; View average summary doc file           (one)
+ ;  [filtered_stack]  = 'views/prj###/filtavg'        ; Filtered view average stacks            (one/view)
+ ;  [total_view_avg]  = 'views/prj###]/allavg'        ; OPTIONAL full-sized view average stacks (one/view)
+@
+
+
+1.6
+log
+@sp_ param names
+@
+text
+@d14 4
+a17 4
+ ;  [params]          = '../params'                       ; Parameter doc file         (one)
+ ;  [ref_view_list]   = 'sel_proj'                        ; List of reference views    (one)
+ ;  [aligned_images]  = '../Alignment/output/dala_01_***' ; Aligned-images stack       (one/group)
+ ;  [view_list]       = 'views/prj###/sel_part_byv'       ; Particle list              (one/view)
+d20 3
+a22 3
+ ;  [sd_vsview]       = 'sd_vsview'                       ; View average summary doc file           (one)
+ ;  [filtered_stack]  = 'views/prj###/filtavg'            ; Filtered view average stacks            (one/view)
+ ;  [total_view_avg]  = 'views/prj###]/allavg'            ; OPTIONAL full-sized view average stacks (one/view)
+d58 1
+a58 1
+   echo -n " Filtering images     "; date ; echo
+d72 1
+a72 1
+      echo " WARNING: Neither unfiltered nor filtered average requested -- Continuing..."
+d77 5
+a81 5
+    MO
+      [fullsize_mask]              ; Circle image (output)
+      [sp_winsiz],[sp_winsiz]      ; Image dimensions
+      C                            ; Circle
+      [mask-radius]                ; Mask radius
+d88 2
+a89 2
+    SD /       VIEWNUM      PARTICLES        SD_VAR
+      [sd_vsview]                  ; File         (output)
+d91 2
+a92 2
+    SD /       VIEWNUM      PARTICLES      
+      [sd_vsview]                  ; File         (output)
+d125 1
+a125 1
+        echo " View: {%I3%[view]}  Out of: {%I3%[last-view]}    Particles: {%I5%[num-particles]}"
+d192 1
+a192 1
+          endif
+d232 11
+a242 11
+        AS R
+          [temp_fullsize_stack]@@*****     ; File          (input)
+          1-[num-particles]               ; Image range
+          A                               ; All particles
+          [total_view_avg][view]          ; Average file  (output)
+          [temp_variance_incore]          ; variance  (output, not saved)
+
+        ; Get standard deviation of the variance
+        FS M [min],[max],[avg],[sd-var]
+          [temp_variance_incore]          ; Variance
+          [fullsize_mask]
+d244 1
+a244 1
+        [sd-var] = 1                      ; Dummy variable
+d265 1
+a265 1
+   echo ; echo -n " Done    "; date ; echo
+d272 18
+a289 18
+ ;    2011-10-24 (trs)       -- added options to average unshrunken images and save shrunken images
+ ;    2011-10-24 (trs)       -- adapted from filterbyview.spi
+ ;    2009-11-20 (trs)       -- bug fix: #particles written to HOW_MANY file was 0
+ ;    2009-06-03 (trs)       -- changed format of select/sel files
+ ;    2009-04-22 (trs)       -- generates average for all particles
+ ;    2009-03-13 (trs      ) -- makes directory for unpopulated views
+ ;    2007-10-19 (trs      ) -- added check for unpopulated views
+ ;    2007-09-28 (trs)       -- bug fixes: select/sel format fixed and needed to delete re-used stack _2
+ ;    2007-06-07 (trs)       -- now filtering by view and into stacks
+ ;    2007-06-07 (trs)       -- now getting mirror information from VO MQ output
+ ;    2007-05-30 (trs & gsa) -- reflects change to input file sel_part
+ ;    2007-03-27 (trs & xa)  -- reflects changes to input file sel_part
+ ;    2007-02-22 (trs & djt) -- bug fix for filenames
+ ;    2007-01-24 (trs)       -- input aligned images are now stacked
+ ;    2006-08-17 (trs)       -- bug fix for mirroring in prj001 
+ ;    2006-04-05 (trs)       -- changed units for filter radii
+ ;    2004-12-28 (trs)       -- mirrors aligned image, if necessary
+ ;    2004-06-16 (trs)       -- dusts images
+@
+
+
+1.5
+log
+@using_settings
+@
+text
+@d1 1
+a1 1
+ ; <html><head><title>Average and filter &amp; shrink a set of particle images</title></head><body><pre>
+d7 1
+a7 1
+ ; PURPOSE:      Average and filter &amp; shrink set of particle images
+d61 1
+a61 1
+ UD 5, [pixel-size]
+d63 1
+a63 1
+ UD 17, [window-size]
+d67 1
+a67 1
+ [reduced-size] = [window-size]/[reduction]
+d78 2
+a79 2
+      [fullsize_mask]              ; OUTPUT
+      [window-size],[window-size]  ; Image dimensions
+d89 1
+a89 1
+      [sd_vsview]             ; File         (output)
+d92 1
+a92 1
+      [sd_vsview]             ; File         (output)
+d96 2
+a97 2
+ [filt-param1] = [pixel-size]/[filt-param1]  ; Pass-band if Butterworth
+ [filt-param2] = [pixel-size]/[filt-param2]  ; Stop-band
+d148 1
+a148 1
+        [window-size],[window-size]   ; Dimensions
+@
+
+
+1.4
+log
+@consolidated_filenames
+@
+text
+@d13 5
+a17 6
+ ; INPUTS:  (Where *** denotes image group)
+ ;  [params]          = '../params'                  ; Parameter doc file       (one)
+ ;  [ref_view_list]   = 'sel_proj'                   ; List of reference views  (one)
+ ;  [in_dir]          = '../Alignment/output'        ; Aligned-images directory (one)
+ ;  [aligned_images]  = '[in_dir]/dala_01_***@@*****' ; Aligned-images           (one-stack/group)
+ ;  [view_list]       = 'views/prj***/sel_part_byv'  ; Particle list            (one/view)
+d19 4
+a22 5
+ ; OUTPUTS:  (Where *** denotes view)
+ ;  [prj_dir]         = 'views/prj***'               ; Directories for each view               (one/view)
+ ;  [filtered_stack]  = 'views/prj***/filtavg'       ; Filtered view average stacks            (one/view)
+ ;  [total_view_avg]  = 'views/prj***]/allavg'       ; OPTIONAL full-sized view average stacks (one/view)
+ ;  [sd_vsview]       = 'sd_vsview'                  ; View average summary doc file           (one)
+@
+
+
+1.3
+log
+@consolidated_filenames
+@
+text
+@d10 16
+a25 1
+
+d28 1
+a28 1
+ [last-view]       = 0     ; Last reference-view to filter        (0 == all)
+d30 3
+a32 1
+ [save-avg]        = 1     ; Flag to save unfiltered view-average (1 == save)
+d34 2
+a35 1
+ [save-filt]       = 1     ; Flag to save filtered images         (1 == save)
+d37 2
+a38 1
+ [reduction]       = 2     ; Size factor (integer) for optional filtered images
+d40 1
+a40 3
+ [filter-type]     = 7     ; Filter type for optional filtered images (7 == Butterworth)
+ [filt-param1]     = 37.6  ; Pass-band, Angstroms (assuming Butterworth)
+ [filt-param2]     = 28.2  ; Stop-band, Angstroms (assuming Butterworth)
+d42 4
+a45 21
+ ; ------------------------- Inputs -------------------------
+
+ [params]          = '../params'                             ; Parameter doc file      (one)
+
+ [ref_view_list]   = 'sel_proj'                              ; List of reference views (one)
+
+ [in_dir]          = '../Alignment/output'                   ; Aligned-images input directory
+
+ [aligned_images]  = '[in_dir]/dala_01_{***[grp-num]}@@*****' ; Aligned-images   (one-stack/group)
+
+ [view_list]       = 'views/prj***/sel_part_byv'             ; Particle list    (one/view)
+ ;   VIEW_WIN    GLOBAL_NUM   GRP_WIN     CCROT  MIRROR  GRP_NUM  VIEW
+ ;                 used                   used   used
+
+ ; ------------------------ Output ------------------------
+
+ [prj_dir]              = 'views/prj***'                     ; Directories for each view
+
+ [filtered_stack]       = '[prj_dir]/filtavg'                ; Filtered viwe-average stacks (w/o "@@")  (one-stack/view)
+
+ [total_view_avg]       = '[prj_dir]/allavg'                 ; OPTIONAL full-sized view-average stacks (one/view)
+d47 2
+a48 3
+ [summary_parts_vsview] = 'summary_avgbyview'                ; View average summary doc file            (one)
+
+ ; ------------------ END BATCH HEADER ------------------
+d72 1
+a72 1
+ IF ( [save-filt]*[save-avg] == 0 ) THEN
+d78 1
+a78 1
+ IF ( [save-filt]  > 0 ) THEN
+d87 1
+a87 1
+   [summary_parts_vsview]
+d89 1
+a89 1
+ IF ( [save-avg]  > 0 ) THEN
+d91 1
+a91 1
+      [summary_parts_vsview]             ; File         (output)
+d94 1
+a94 1
+      [summary_parts_vsview]             ; File         (output)
+a105 6
+ MD
+   VB OFF
+ MD
+   SET MP
+ 0
+
+d108 10
+d125 4
+a128 2
+    SYS
+      echo " View: {%I3%[view]}  Out of: {%I3%[last-view]}    Particles: {%I5%[num-particles]}"
+d134 1
+a134 1
+    IF ( [save-filt]  > 0) THEN    
+d144 1
+a144 1
+    IF ( [save-avg]  > 0 ) THEN
+d168 3
+a170 3
+            [aligned_images][grp-slice] ; Image          (input)
+            [temp_mirrored_incore]      ; Mirrored image (output)
+            Y                           ; Mirror around y-axis
+d173 1
+a173 1
+            [aligned_images][grp-slice]
+d178 1
+a178 1
+        IF ( [save-avg]  > 0 ) THEN
+d186 1
+a186 1
+        IF ( [save-filt]  > 0 ) THEN
+d233 1
+a233 1
+    IF ( [save-avg]  > 0 ) THEN
+d235 1
+a235 1
+          [temp_fullsize_stack]@@*****     ; File         (input)
+d258 1
+a258 1
+      [summary_parts_vsview]                     ; File         (output)
+a261 1
+
+d264 1
+a264 1
+  [summary_parts_vsview]                 ; File         (closed)
+@
+
+
+1.2
+log
+@rewrite_syntax_filenames
+@
+text
+@d13 1
+a13 1
+ [last-view]        = 0     ; Last reference-view to filter        (0 == all)
+d15 1
+a15 1
+ [save-avg]         = 1     ; Flag to save unfiltered view-average (1 == save)
+d17 1
+a17 1
+ [save-filt]        = 1     ; Flag to save filtered images         (1 == save)
+d19 1
+a19 1
+ [reduction-factor] = 2     ; Size factor (integer) for optional filtered images
+d21 3
+a23 3
+ [filter-type]      = 7     ; Filter type for optional filtered images (7 == Butterworth)
+ [filt-param1]      = 37.6  ; Pass-band, Angstroms (assuming Butterworth)
+ [filt-param2]      = 28.2  ; Stop-band, Angstroms (assuming Butterworth)
+d35 1
+a35 1
+ [part_by_view]    = 'views/prj***/sel_part_byv'             ; Particle list    (one/view)
+d41 1
+a41 1
+ [avg_dir]         = 'avg'                              ; Directory for view-averages and doc file
+d43 1
+a43 1
+ [prj_dir]         = 'views/prj{***[view-num]}'         ; Directories for each view
+d45 1
+a45 1
+ [filtered_stack]  = '[prj_dir]/stkfilt'                ; Filtered stacks (w/o "@@")     (one-stack/view)
+d47 1
+a47 3
+ [total_view_avg]  = '[avg_dir]/allavg_{***[view-num]}'  ; OPTIONAL full-sized view-average files
+
+ [view_avg_doc]    = 'summary_avgbyview'                ; View average summary doc file (one)
+a53 1
+
+a54 1
+
+a55 1
+
+a56 1
+
+a57 1
+
+d70 1
+a70 1
+ [reduced-size] = [window-size]/[reduction-factor]
+a86 2
+ SYS
+   mkdir -p [avg_dir]
+d88 9
+a96 1
+   [view_avg_doc]
+d102 1
+a102 1
+ IF ( [last-view] == 0) THEN
+d114 1
+a114 1
+ DO [view-num] = 1,[last-view]          ; Loop through reference-views ------------
+d116 1
+a116 1
+       mkdir -p [prj_dir]
+d120 1
+a120 1
+      [part_by_view][view-num]          ; File      (input)
+d123 1
+a123 1
+      echo " View: {%I3%[view-num]}  Out of: {%I3%[last-view]}    Particles: {%I5%[num-particles]}"
+d139 1
+a139 1
+    IF ( [save-avg]  > 0) THEN
+d151 1
+a151 1
+      [filtered_stack]
+d158 1
+a158 1
+          [part_by_view][view-num]
+d183 1
+a183 1
+          IF ( [filter-type] == 7) THEN
+d202 1
+a202 1
+          IF  ( [filter-type] <= 3) THEN
+d211 1
+a211 1
+          IF ( [reduction-factor]  > 1) THEN
+d215 1
+a215 1
+              [reduction-factor],[reduction-factor]  ; Reduction in X,Y
+d219 1
+a219 1
+              [temp_filtered_stack]@@{*****[grp-part-key]};  (output)
+d226 1
+a226 1
+      [part_by_view][view-num]
+d228 1
+a228 1
+    IF ( [save-avg]  > 0) THEN
+d233 2
+a234 2
+          [total_view_avg]
+          [temp_variance_incore]          ; OUTPUT: variance (not saved)
+d246 1
+a246 1
+      [filtered_stack]@@                   ; File         (output)
+d252 2
+a253 2
+    SD [view-num], [view-num],[num-particles],[sd-var]
+      [view_avg_doc]                     ; File         (output)
+d258 1
+a258 9
+ ; Label + close summary doc
+ IF ( [save-avg]  > 0) THEN
+    SD /       VIEWNUM      PARTICLES        SD_VAR
+      [view_avg_doc]                    ; File         (output)
+ ELSE
+    SD /       VIEWNUM      PARTICLES        
+      [view_avg_doc]                    ; File         (output)
+ ENDIF
+
+d260 1
+a260 1
+  [view_avg_doc]                       ; File         (closed)
+d263 1
+a263 1
+   echo ; echo -n " Done    "; date
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d1 9
+a9 2
+; Adapted from FILTERBYVIEW.SPI, PFILT.BAT
+; Average and filter+shrink a set of particle images
+d11 158
+a168 138
+; ----------------------- Parameters -----------------------
+[last-view]        = 0     ; last reference-view to filter (0==all)
+[save-avg]         = 1     ; flag to save unfiltered view-average (1==save)
+[save-filt]        = 1     ; flag to save filtered images (1==save)
+[reduction-factor] = 2     ; reduction/decimation factor (integer) for optional filtered images
+[filter-type]      = 7     ; filter type for optional filtered images (7==Butterworth)
+[filt-param1]      = 37.6  ; pass-band, Angstroms (assuming Butterworth)
+[filt-param2]      = 28.2  ; stop-band, Angstroms (assuming Butterworth)
+
+; ------------------------- Inputs -------------------------
+fr l
+[params]../params                                          ; parameter document
+fr l
+[ref_view_list]../Alignment/projlist                       ; list of reference views
+fr l
+[particles_by_view]Views/sel***                            ; particles by reference-view
+; /     VIEW_SLICE   GLOBAL_NUM    GRPSLICE      CC_ROT       MIRROR      GROUPNUM
+;                                    used                      used         used
+fr g
+[aligned_images]../Alignment/dala01_{***[grp-num]}@@*****  ; aligned-image template
+
+; ------------------------ Output ------------------------
+fr g
+[prj_dir]Views/prj{***[view-num]}                      ; output-directory pattern, for each reference-view
+fr l
+[filtered_stack][prj_dir]/stkfilt                      ; filtered stacks (w/o "@@")
+fr l
+[avg_dir]Avg                                           ; output directory for view-averages and doc file
+fr l
+[total_view_avg][avg_dir]/allavg{***[view-num]}        ; (full-sized) view-average file pattern (optional, see above)
+fr l
+[view_avg_doc]summary-avgbyview                        ; view-average info summary doc
+
+; ------------------ END BATCH HEADER ------------------
+
+; Set temporary filenames
+fr l
+[fullsize_mask]_6
+fr l
+[temp_mirrored_incore]_5
+fr l
+[temp_filtered_incore]_4
+fr l
+[temp_filtered_stack]_2
+fr l
+[temp_fullsize_stack]_1
+fr l
+[temp_variance_incore]_3
+
+vm
+echo "Filtering images"; date
+
+; get parameters
+ud 5,[pixel-size]
+[params]
+ud 17,[window-size]
+[params]
+ud e
+
+[reduced-size] = [window-size]/[reduction-factor]
+[mask-radius]  = int([reduced-size]/2)
+
+if([save-filt]*[save-avg].eq.0) then
+    vm
+    echo "WARNING: Neither unfiltered nor filtered average requested -- Continuing..."
+endif
+
+; make circular mask
+if([save-filt].gt.0) then
+    mo
+    [fullsize_mask]              ; OUTPUT
+    [window-size],[window-size]  ; image dimensions
+    C                            ; _C_ircle
+    [mask-radius]                ; mask radius
+endif
+
+vm
+echo "if(! -d [avg_dir]) mkdir [avg_dir]"|csh
+de
+[view_avg_doc]
+
+; change filter radii to reciprocal pixels
+[filt-param1] = [pixel-size]/[filt-param1]  ; pass-band if Butterworth
+[filt-param2] = [pixel-size]/[filt-param2]  ; stop-band
+
+if([last-view].eq.0) then
+    ud n [last-view]
+    [ref_view_list]
+endif
+
+md
+vb off
+md
+set mp
+0
+
+; loop through reference-views
+do lb8 [view-num] = 1,[last-view]
+    vm
+    echo "if(! -d [prj_dir]) mkdir [prj_dir]"|csh
+
+    vm
+    echo "On reference-view #{***[view-num]} out of {***[last-view]}"
+
+    ; get #particles
+    ud n [num-particles]
+    [particles_by_view][view-num]
+
+    ; skip unpopulated views
+    if ([num-particles].eq.0)goto lb8
+
+    ; initialize stacks
+    if([save-filt].gt.0) then    
+        ms
+        [temp_filtered_stack]@@
+        [reduced-size],[reduced-size]  ; dimensions
+        [num-particles]                ; #slices
+    endif
+
+    if([save-avg].gt.0) then
+        ms
+        [temp_fullsize_stack]@@
+        [window-size],[window-size]  ; dimensions
+        [num-particles]              ; #slices
+    endif
+
+    de
+    [filtered_stack]
+
+    ; loop through particles
+    do lb4 [grp-part-key] = 1,[num-particles]
+        ; get group-slice#, mirroring, group#
+        ud ic,[grp-part-key], [view-slice],[global-num],[grp-slice],[ccrot],[mirror-flag],[grp-num]
+        [particles_by_view][view-num]
+
+        ; mirror, if necessary
+        if([mirror-flag].lt.0) then
+            mr
+d171 84
+a254 6
+            y  ; mirror around y-axis
+        else
+            cp
+            [aligned_images][grp-slice]
+            [temp_mirrored_incore]
+        endif
+d256 1
+a256 6
+        ; copy to full-sized stack, if necessary
+        if([save-avg].gt.0) then
+            cp
+            [temp_mirrored_incore]
+            [temp_fullsize_stack]@@{*****[grp-part-key]}
+        endif
+a257 77
+        ; filter, if necessary
+        if([save-filt].gt.0) then
+            ; if Butterworth filter
+            IF ([filter-type].eq.7) THEN
+                FQ np
+                [temp_mirrored_incore]  ; INPUT
+                [temp_filtered_incore]  ; OUTPUT
+                [filter-type]                ; filter type
+                [filt-param1],[filt-param2]  ; passband, stopband
+            endif
+
+            ; if Fermi filter
+            IF ([filter-type].eq.5) THEN
+                FQ np
+                [temp_mirrored_incore]  ; INPUT
+                [temp_filtered_incore]  ; OUTPUT
+                [filter-type]  ; filter type = Fermi
+                [filt-param1]  ; filter radius
+                [filt-param2]  ; temperature cutoff
+            endif
+
+            ; if Gaussian or top-hat filter
+            IF ([filter-type].le.3) THEN
+                FQ np
+                [temp_mirrored_incore]  ; INPUT
+                [temp_filtered_incore]  ; OUTPUT
+                [filter-type]  ; filter type = top hat, Gaussian
+                [filt-param1]  ; filter radius
+            ENDIF
+
+            ; shrink, if necessary
+            if([[reduction-factor]].gt.1) then
+                dc s
+                [temp_filtered_incore]
+                [temp_filtered_stack]@@{*****[grp-part-key]}
+                [reduction-factor],[reduction-factor]  ; reduction factor in x,y
+            else
+                cp
+                [temp_filtered_incore]
+                [temp_filtered_stack]@@{*****[grp-part-key]}
+            endif
+        endif  ; filter IF-THEN
+    lb4
+    ; end particle-loop
+
+    ; close files
+    ud ice
+    [particles_by_view][view-num]
+
+    if ([save-avg].gt.0) then
+        as r
+        [temp_fullsize_stack]@@*****
+        (1-[num-particles])  ; image range
+        A                    ; _A_ll particles
+        [total_view_avg]
+        [temp_variance_incore]  ; OUTPUT: variance (not saved)
+
+        ; get standard deviation of the variance
+        fs m [min],[max],[avg],[sd-var]
+        [temp_variance_incore]  ; variance
+        [fullsize_mask]
+    else
+        [sd-var] = 1  ; dummy variable
+    endif
+
+    cp
+    [temp_filtered_stack]@@
+    [filtered_stack]@@
+
+    de
+    [temp_filtered_stack]@@
+
+    ; write info to document
+    sd [view-num], [view-num],[num-particles],[sd-var]
+    [view_avg_doc]
+LB8
+; end view-loop
+d259 2
+a260 2
+; label + close summary doc
+if ([save-avg].gt.0) then
+d262 2
+a263 2
+    [view_avg_doc]
+else
+d265 5
+a269 2
+    [view_avg_doc]
+endif
+d271 2
+a272 2
+sd e
+[view_avg_doc]
+d274 23
+a296 2
+vm
+echo "Done"; date
+d298 1
+a298 22
+EN D
+
+; Modified 2012-04-10
+;    TO DO: add option to save variance
+;    2011-10-24 (trs) -- added options to average unshrunken images and save shrunken images
+;    2011-10-24 (trs) -- adapted from filterbyview.spi
+;    2009-11-20 (trs) -- bug fix: #particles written to HOW_MANY file was 0
+;    2009-06-03 (trs) -- changed format of select/sel files
+;    2009-04-22 (trs) -- generates average for all particles
+;    2009-03-13 (trs) -- makes directory for unpopulated views
+;    2007-10-19 (trs) -- added check for unpopulated views
+;    2007-09-28 (trs) -- bug fixes: select/sel format fixed and needed to delete re-used stack _2
+;    2007-06-07 (trs) -- now filtering by view and into stacks
+;    2007-06-07 (trs) -- now getting mirror information from VO MQ output
+;    2007-05-30 (trs & gsa) -- reflects change to input file sel_particles
+;    2007-03-27 (trs & xa) -- reflects changes to input file sel_particles
+;    2007-02-22 (trs & djt) -- bug fix for filenames
+;    2007-01-24 (trs) -- input aligned images are now stacked
+;    2006-08-17 (trs) -- bug fix for mirroring in prj001 
+;    2006-04-05 (trs) -- changed units for filter radii
+;    2004-12-28 (trs) -- mirrors aligned image, if necessary
+;    2004-06-16 (trs) -- dusts images
+@

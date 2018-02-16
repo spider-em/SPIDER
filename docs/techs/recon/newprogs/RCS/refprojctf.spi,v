@@ -1,0 +1,379 @@
+head	1.4;
+access;
+symbols
+	GPL_update:1.4
+	pre_rewrite_2010:1.4
+	pre_more_stack:1.4
+	best-code:1.4
+	no-named-regs:1.4
+	pre_GPL:1.4
+	tag_version1_0:1.4;
+locks; strict;
+comment	@:: @;
+
+
+1.4
+date	2004.08.06.00.48.10;	author bbaxter;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2004.04.20.17.45.29;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2004.04.15.15.05.49;	author bbaxter;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2003.07.24.18.08.01;	author bbaxter;	state Exp;
+branches;
+next	;
+
+
+desc
+@spider batch file
+@
+
+
+1.4
+log
+@moved asterisks into header
+@
+text
+@; <html><head><title>Multiplies a reference volume by the CTF & creates ref projections</title></head><body><pre>
+;
+; refproj.bat
+;
+; PURPOSE: Multiplies a reference volume by the CTF for each defocus group, then
+;          creates reference projections from each CTFvolume.
+;
+;Inputs
+;   ../params		; the parameter doc file
+;   reference_volume	; reference volume
+;   radius		; parameter for PJ 3Q (if the value is -1, a default
+;                         value will be computed that is .69 * actual size.)
+;
+;Outputs
+;   refangles    ; doc file with reference angles
+;   projlist     ; doc file with list of projections
+;   df***/prj		; template for 2D projections
+;   df***/refctf	; reference multiplied by CTF
+;
+; the following values are computed from the params file
+;x12 = number of defocus groups
+;x72 = electron wavelength (Angstroms)
+;x73 = pixel size, Angstroms
+;x75 = array dimension, pixels
+;
+;
+; MASTER COPY: /net/bali/usr1/spider/docs/techs/recon/newprogs/
+;
+; I/O PARAMETERS AND FILES ARE SET HERE:
+;
+; <b> ------------ Parameters ---------------------------------------
+
+x15 = 15	; delta theta : 15 gives 83 projections
+x39 = -1 	; radius : use -1 for default value
+
+;    ------------ Input files ---------------------------------------
+
+FR G
+[params]../params    ; the parameter file
+
+FR G
+[refvol]../reference_volume  ;  input reference volume
+
+FR G
+[defocus]../Power_Spectra/order_defgrps ; average defocus group values
+
+; --------------- Output files  -------------------------------------
+FR G
+[refangles]refangles   ; output doc file of angles
+
+FR G
+[projlist]projlist   ; output list of projections
+
+FR G
+[df]df{***x22}   ; directory template for defocus groups
+
+FR G
+[prj]prj****   ; output template for 2D projections
+
+
+; -------------- END BATCH HEADER ---------------------------------</b>
+
+; delete output document files and get parameters
+DE
+[refangles]
+DE
+[projlist]
+
+UD 5,x73    ; pixel size
+[params]
+x74=0.5/x73 	; max. spatial frequency
+
+UD 6,x71    ; electron energy
+[params]
+x72 = 12.398 / SQR(x71 * (1022.0 + x71))    ; lambda
+
+UD 7,x79     ; spherical aberration
+[params]
+UD 8,x61     ; source size
+[params]
+UD 9,x62     ; defocus spread
+[params]
+UD 12,x63     ; amplitude contrast ratio
+[params]
+UD 13,x64     ; Gaussian envelope halfwidth
+[params]
+UD 17,x75    ; window size
+[params]
+
+IF (x39.LT.0) THEN    ; get actual size and compute radius
+    UD 18,x41
+    [params] 
+    x39 = 0.69 * x41
+ENDIF
+
+UD N,x12    ; number of defocus groups
+[defocus]
+
+; create the document files
+VO EA,x83
+x15        ; delta theta
+0,0        ; range of theta
+0,0        ; range of phi
+[refangles]  ; output doc file of angles
+
+x83=x83-1
+
+DOC CREATE    
+[projlist]   ; output doc file
+1            ; column to be filled
+1-x83        ; numbers to put in column
+
+;------------------------------------------
+; For each defocus group, multiply the reference volume by the
+; appropriate defocus, then use this ctf-reference to generate
+; 83 projection images
+DO LB1 x21=1,x12 
+
+   UD x21,x22,x71 ; get defocus group # (x22) and defocus value (x71)
+   [defocus]
+
+   VM
+   mkdir -p [df]
+
+   TF C3
+   _7       ; output file (complex model CTF)
+   x79      ; spherical aberration
+   x71,x72  ; defocus,lambda
+   x75      ; array dimension
+   x74      ; maximum spatial frequency
+   x61,x62  ; source size, defocus spread
+   (0,0)    ; astigmatism, azimuth
+   x63,x64  ; amplitude contrast ratio, envelope 1/2-width
+   (-1)     ; sign
+
+   FT
+   [refvol]
+   _2
+
+   MU
+   _2
+   _7
+   _4
+   *
+
+   FT
+   _4
+   _7    ; output = ctf_multiplied volume
+
+   PJ 3Q          ; generate projections of a volume
+   _7             ; input volume
+   x39            ; radius
+   [projlist]     ; file numbers
+   [refangles]    ; angles doc file
+   [df]/[prj]    ; template for output projection images
+
+LB1
+
+EN
+; </body></pre></html>
+
+@
+
+
+1.3
+log
+@cosmetic
+@
+text
+@d55 1
+a55 1
+[df]df     ; directory template for defocus groups
+d58 1
+a58 1
+[prj]prj   ; output template for 2D projections
+d123 1
+a123 1
+   mkdir -p [df]{***x22}
+d155 1
+a155 1
+   [df]{***x22}/[prj]****    ; template for output projection images
+@
+
+
+1.2
+log
+@changed link to ../reference_volume
+@
+text
+@d1 2
+d4 4
+a7 3
+; Multiplies a reference volume by the CTF for each defocus group, then
+; creates reference projections from each CTFvolume.
+
+d10 3
+a12 3
+;   reference_volume		; reference volume
+;   radius			; parameter for PJ 3Q (if the value is -1, a default
+;                     value will be computed that is .69 * actual size.)
+d19 1
+a19 4
+
+x15 = 15	; delta theta : 15 gives 83 projections
+x39 = -1 	; radius : use -1 for default value
+
+d25 12
+a37 1
+; ----------- Input files --------------
+d39 2
+a40 1
+<params>../params    ; the parameter file
+d42 2
+a43 1
+<refvol>../reference_volume  ;  input reference volume
+d45 1
+a45 1
+<defocus>../Power_Spectra/order_defgrps ; average defocus group values
+d47 1
+a47 1
+; ----------- Output files --------------
+d49 2
+a50 1
+<refangles>refangles   ; output doc file of angles
+d52 2
+a53 1
+<projlist>projlist   ; output list of projections
+d55 2
+a56 1
+<df>df     ; directory template for defocus groups
+d58 2
+a59 1
+<prj>prj   ; output template for 2D projections
+d61 1
+a61 1
+; -------------- END BATCH HEADER --------------------------
+d65 1
+a65 1
+<refangles>
+d67 1
+a67 1
+<projlist>
+d70 1
+a70 1
+<params>
+d74 1
+a74 1
+<params>
+d78 1
+a78 1
+<params>
+d80 1
+a80 1
+<params>
+d82 1
+a82 1
+<params>
+d84 1
+a84 1
+<params>
+d86 1
+a86 1
+<params>
+d88 1
+a88 1
+<params>
+d92 1
+a92 1
+    <params> 
+d97 1
+a97 1
+<defocus>
+d104 1
+a104 1
+<refangles>  ; output doc file of angles
+d109 1
+a109 1
+<projlist>   ; output doc file
+d119 2
+a120 2
+ud x21,x22,x71 ; get defocus group # (x22) and defocus value (x71)
+<defocus>
+d122 2
+a123 2
+VM
+mkdir -p <df>{***x22}
+d125 31
+a155 31
+TF C3
+_7       ; output file (complex model CTF)
+x79      ; spherical aberration
+x71,x72  ; defocus,lambda
+x75      ; array dimension
+x74      ; maximum spatial frequency
+x61,x62  ; source size, defocus spread
+(0,0)    ; astigmatism, azimuth
+x63,x64  ; amplitude contrast ratio, envelope 1/2-width
+(-1)     ; sign
+
+FT
+<refvol>
+_2
+
+MU
+_2
+_7
+_4
+*
+
+FT
+_4
+_7    ; output = ctf_multiplied volume
+
+PJ 3Q          ; generate projections of a volume
+_7             ; input volume
+x39            ; radius
+<projlist>     ; file numbers
+<refangles>    ; angles doc file
+<df>{***x22}/<prj>****    ; template for output projection images
+d159 3
+a161 1
+EN D
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d30 1
+a30 1
+<refvol>ref_vol    ; reference_volume  ;  input reference volume
+@

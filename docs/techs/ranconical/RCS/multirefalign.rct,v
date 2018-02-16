@@ -1,0 +1,1388 @@
+head	1.4;
+access;
+symbols;
+locks;
+comment	@# @;
+
+
+1.4
+date	2015.08.31.14.48.33;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2014.06.06.10.14.18;	author tapu;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2014.02.04.18.12.40;	author tapu;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2012.12.21.14.33.58;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.4
+log
+@*** empty log message ***
+@
+text
+@; PERFORMS MULTI-REFERENCE ALIGNMENT
+;
+; NOTE: Requires backup.rct, center1.rct
+
+; --------------------------------- Parameters ---------------------------------
+[multirefIterNum]  = -1    ; iteration of multireference alignment to use as input (0 == initial classes, <0 == last)
+[cgOption]         = 2     ; center-of-gravity option (0==None, 1==CG PH, 2=RT180)
+[verified-yn]      = 0     ; use individually verified particles? (0==NO, 1==YES (follows combinegoodclasses.rct))
+[numProcs]         = 0     ; number of CPUs to use (0 == ALL)
+[last-ring]        = -1    ; outer radius (<0 == automatic)
+[first-ring]       = 1     ; inner radius for orientation alignment, pixels
+[searchRange]      = 8     ; maximum translational shift, pixels
+[stepSize]         = 2     ; translational-search step size
+[mirror-option]    = 0     ; search mirrored positions in AP SH? (0==NO)
+
+; ----------------------------------- Inputs -----------------------------------
+fr l
+[parameter_doc]params                                                     ; needed if outer alignment ring set to auto
+fr l
+[unaligned_images]Zerodegr/stk2-winrot@@*****                              ; unaligned particle template
+fr l
+[multiref_tracking_doc]Zerodegr/docmultiref                               ; (optional) doc file tracking iterations of multireference alignment 
+;                                                                         ; (will be created if non-existent)
+
+; directory containing previous classes (will set [old_class_dir])
+fr l
+[initial_class_dir]Zerodegr/Tree                                          ; directory from reference-free alignment ([multirefIterNum]: 0)
+fr l
+[old_multiref_dir]Zerodegr/Multiref{*[prevIterNum]}                       ; directory for previous iteration's files
+
+; list of good classes (will set [good_class_list])
+fr l
+[toplevel_good_classes][old_class_dir]/goodclasses                        ; list of toplevel references (if all from one directory, generated if not present)
+;;;[good_class_list][old_class_dir]/goodclasses                              ; list of good classes after individual verification (after combinegoodclasses.rct)
+fr l
+[old_ref_views][old_class_dir]/listviews                                  ; (optional) list of views, used if toplevel references not found
+fr l
+[byview_good_classes][old_class_dir]/View***/goodclasses                  ; (optional) list of references in View*** subdirectories
+
+; single list of classes or classes for each view (will set [class_doc])  
+fr l
+[preverified_class_parts][old_class_dir]/docclass{***[class-num]}         ; class-membership list (initial classes)
+fr l
+[verifiedparts_per_view][old_class_dir]/goodsel{***[class-num]}           ; class-membership list (after verification, for each view)
+
+; pre-aligned images (will set [old_aligned_images])
+fr l
+[initial_aligned_images]Zerodegr/Pairwise/stkcenu@@*****                   ; aligned-images (for OPTION: reference-free inputs ([multirefIterNum]: 0))
+fr l    
+[master_aligned_images]Zerodegr/stk3-aligned@@*****                        ; aligned-images (for OPTION: most recent alignment ([multirefIterNum]: -1))
+fr l
+[iter_aligned_images][old_class_dir]/stkcenu@@*****                        ; aligned-images (for OPTION: specific iteration's input)
+
+; list of particles to align (will set [selection_list])
+fr l
+[preverified_particles]listparticles                                      ; particle list (before verification)
+fr l
+[verified_list][old_class_dir]/combinedgood                               ; particle list (OPTIONAL, after verification)
+
+; -------------------------------- Outputs -------------------------------
+fr l
+[next_multiref_dir]Zerodegr/Multiref{*[nextIterNum]}         ; alignment directory
+fr l
+[new_ref_views][next_multiref_dir]/listviews                 ; reference-view list
+fr l
+[reference_stack][next_multiref_dir]/stkref                  ; reference stack (w/o "@@")
+fr l
+[alignment_doc][next_multiref_dir]/docalign                  ; alignment doc file
+fr l
+[new_aligned_stack][next_multiref_dir]/stkcenu               ; new aligned image stack (w/o "@@")
+fr l
+[master_aligned]Zerodegr/stk3-aligned                        ; master aligned-image stack (w/o "@@")
+fr l
+[how_many][next_multiref_dir]/how_many                       ; particles-per-view doc file
+fr l
+[view_select][next_multiref_dir]/selview***                  ; selection file for each view
+;        PART_NUM      CC_ROT     MIRRORFLAG
+fr l
+[sorted_select][next_multiref_dir]/sortsel{***[view-num]}    ; sorted selection file
+fr l
+[viewavg_stack][next_multiref_dir]/stkavgview                ; view-average stack (w/o "@@")
+fr l
+[viewvar_stack][next_multiref_dir]/stkvarview                ; view-variance stack (w/o "@@")
+
+; ------------------------------ END BATCH HEADER ------------------------------
+
+; Change if not enough digits allocated
+fr l
+[centered_refs][reference_stack]@@***                         ; reference images (modify if >=1000 references)
+fr l
+[new_aligned_images][new_aligned_stack]@@*****                ; new aligned-image template (modify if >=10,000 particles)
+fr l
+[viewavg_slice][viewavg_stack]@@{***[view-num]}               ; multi-reference average image-template (modify if >=1000 references)
+fr l
+[viewvar_slice][viewvar_stack]@@{***[view-num]}               ; view-variance image-template (modify if >=1000 references)
+; (also modify label [view_select] and [sorted_select] if >=1000 references)
+
+; Temporary files
+FR L
+[temp_uncentered_avg]_11
+FR L
+[temp_uncentered_var]_12
+FR L
+[temp_centered_avg]_13
+
+md
+set mp
+[numProcs]
+
+; get image-dimension
+ud ic 17,[idim-params]
+[parameter_doc]
+
+; if outer radius automatic, get particle diameter
+if([last-ring].le.0) then
+    ud ic 18,[particle-diam]
+    [parameter_doc]
+
+    [last-ring] = ([particle-diam] - 1)/1.4
+endif
+
+; CHECK IF ITERATION-TRACKER EXISTS
+
+iq fi [tracker-exists]
+[multiref_tracking_doc]
+
+; if tracker does exist
+if([tracker-exists].eq.1) then
+    ; look for last iteration number
+    ud n [lastIterKey]
+    [multiref_tracking_doc]
+    
+;    ; get last iteration number
+;    UD [lastIterKey], [lastIterNum]
+;    [multiref_tracking_doc]
+;    UD E   ; close doc
+    
+    [lastIterKey]
+;    [lastIterNum]
+else
+; if tracker does not exist
+    [lastIterKey] = 0
+endif
+
+; increment iteration-key
+[nextIterKey] = [lastIterKey] + 1
+
+
+; CHECK IF ITERATION# IS SPECIFIED
+
+; if iteration# specified to be zero, then start from initial classes
+if ([multirefIterNum].eq.0) then
+    ; use initial classification
+    [nextIterNum]        = 1
+    [old_class_dir]      = [initial_class_dir]
+    [old_aligned_images] = [initial_aligned_images]
+
+; if iteration# specified and not initial, then use that iteration
+elseif ([multirefIterNum].gt.0) then
+    [old_class_dir]      = [old_multiref_dir]
+    [old_aligned_images] = [iter_aligned_images]
+    
+;    ; look for last iteration number
+;    ud n [lastIterKey]
+;    [multiref_tracking_doc]
+    
+    [prevIterNum] = [multirefIterNum]
+    
+    ; increment key & iteration#
+;;;    [nextIterKey] = [lastIterKey] + 1
+    [nextIterNum] = [multirefIterNum] + 1
+
+; if iteration# not specified, then use the last one
+else
+;;;    [old_class_dir]      = [old_multiref_dir]
+    [old_aligned_images] = [master_aligned_images]
+;;;    [lastIterKey]      = 0    ; initialize
+    
+    ; if tracker exists
+    if([tracker-exists].eq.1) then
+        ; if tracker is non-empty
+        if([lastIterKey].ge.1) then
+            ; get iteration number
+            ud [lastIterKey], [prevIterNum]
+            [multiref_tracking_doc]
+            ud e  ; close doc
+            
+            ; increment key & iteration#
+            [nextIterNum]   = [prevIterNum] + 1
+            [old_class_dir] = [old_multiref_dir]
+        endif
+    endif
+        
+    ; if iteration-track doesn't exist OR last key was zero, delete doc file and start over
+    IF ([lastIterKey]*[tracker-exists] .EQ. 0) THEN
+        vm
+        echo "Multiref tracking doc empty, starting with iteration #1" ; echo
+        
+        de
+        [multiref_tracking_doc]
+        
+;;;        [tracker-exists] = 0
+        [nextIterNum]        = 1
+        [old_class_dir]      = [initial_class_dir]
+        [old_aligned_images] = [master_aligned_images]
+    endif
+    
+;    ; if tracker does not exist (or was empty)
+;    if([tracker-exists].eq.0) then
+;        [nextIterNum] = 1
+;    endif
+endif
+
+vm
+echo "Input class docs assumed to be in toplevel of [old_class_dir]" ; echo
+
+
+; CHECK WHICH PARTICLE LIST TO USE, i.e., before or after verification
+
+; before verification
+if([verified-yn] .lt. 1) then
+    [selection_list]  = [preverified_particles]
+    [class_doc]       = [preverified_class_parts]
+    
+; after verification
+else
+    [class_doc]       = [verifiedparts_per_view]
+
+    ; if input iteration-specified
+    if([multirefIterNum].gt.0) then
+        [iter] = [multirefIterNum]
+
+        ; define location of selection list
+        fr l
+        [selection_list][verified_list]
+    
+    ; if input iteration not specified
+    else
+        ; get iteration number
+        ud [lastIterKey], [iter]
+        [multiref_tracking_doc]
+        ud e  ; close doc
+        
+        ; define location of selection list
+        fr l
+        [selection_list][verified_list]
+    endif
+endif
+
+vm
+echo "Using particles listed in [selection_list].$DATEXT" ; echo
+
+
+; CHECK WHETHER DOWNSAMPLED
+
+[one] = 1  ; dummy register
+
+; get first-particle#
+ud ic [one],[first-particle]
+[selection_list]
+
+; get image-dimension from first particle
+fs
+[unaligned_images][first-particle]
+fi [idim-first]
+[unaligned_images][first-particle]
+(2)   ; header position for NROW
+
+; compare image-dimensions from params and header, make sure not downsampled
+if([idim-params].ne.[idim-first]) then
+    ; compute ratio
+    [ratio] = [idim-params]/[idim-first]
+
+    ; if ratio is an integer, images are probably shrunk
+    if([ratio].eq.int([ratio])) then
+        ; use shrunken image-dimension
+        [img-dim] = [idim-first]
+
+        ; reduce object diameter
+        [last-ring] = [last-ring]/[ratio]
+
+        vm
+        echo "WARNING:"
+        vm
+        echo "Image dimension from [parameter_doc], {***[idim-params]}, {*[ratio]} times that from [unaligned_images][first-particle]"
+        vm
+        echo "Reducing object diameter by a factor of {*[ratio]} also, to {***[last-ring]}" ; echo
+    
+    ; if ratio is not an integer, then I don't know what to do
+    else
+        vm
+        echo "ERROR"
+        vm
+        echo "Image dimension from [parameter_doc], {***[idim-params]}, different from [unaligned_images][first-particle], {***[idim-first]}"
+        vm
+        echo "Fix and re-start"
+
+        en
+    endif
+else
+    [img-dim] = [idim-params]
+endif
+
+
+; check outer alignment radius
+[check-radius] = int([img-dim]/2) - [last-ring] - [searchRange]
+
+; fix outer alignment radius, if necessary
+if([check-radius].lt.2) then
+    vm
+    echo "WARNING"
+    vm
+    echo "Tested alignment radius of {***[last-ring]} too big"
+    
+    ; re-set alignment radius
+    [last-ring] = int([img-dim]/2) - [searchRange] - 3
+endif
+
+vm
+echo "Using outer alignment radius of {***[last-ring]} pixels" ; echo
+
+ud ice
+[parameter_doc]
+
+; initialize reference-counter
+[refCounter] = 0
+
+[num-views] = 1
+[zero] = 0
+
+    
+; PREPARE OUTPUT DIRECTORY
+
+vm
+echo "Working on multireference iteration #{*[nextIterNum]}" ; echo
+vm
+echo "if(! -d [next_multiref_dir]) mkdir -v [next_multiref_dir]"|csh
+
+de
+[reference_stack]@@
+
+
+; GENERATE REFERENCES
+
+if ([multirefIterNum] .gt. 0) then
+    vm
+    echo "Generating references from specific iteration [old_aligned_images]"
+else
+    vm
+    echo "Generating references from master aligned images [old_aligned_images]"
+endif
+
+VM
+date
+
+de
+[new_ref_views]
+
+
+; GENERATE REFERENCE-LIST
+
+; Look for toplevel good-class list
+IQ FI [toplevelGoodClassesYN]
+[toplevel_good_classes]
+
+IF ([toplevelGoodClassesYN] .EQ. 1) THEN
+    UD N [numGoodClasses]
+    [toplevel_good_classes]
+ENDIF
+
+IF ([toplevelGoodClassesYN]*[numGoodClasses] .GE. 1) THEN
+    vm
+    echo ; echo "List of references found in toplevel [old_class_dir]"
+
+; Will try to generate from by-view good-classes
+ELSE
+    DOC COMBINE
+    [byview_good_classes]
+    [old_ref_views]
+    [toplevel_good_classes]
+
+    vm
+    echo ; echo "List of references generated in toplevel [old_class_dir] from combined views"
+ENDIF
+
+[good_class_list] = [toplevel_good_classes]
+
+; get #references
+ud n [num-refs]
+[good_class_list]
+
+IF ([num-refs] .GT. 999) THEN
+    VM
+    echo "WARNING:" ; echo "Increase number of digits allocated for file labels"
+ENDIF
+
+VM
+echo
+
+; loop through references
+do lb1 [ref-key]=1,[num-refs]
+    ; get class#
+    ud ic [ref-key],[class-num]
+    [good_class_list]
+
+    ; get #particles (check for empty classes)
+    ud n [NumParts]
+    [class_doc]
+    
+    if ([NumParts] .eq. 0) then
+        vm
+        echo "Skipping  (empty)   [class_doc]"
+    else
+        ; increment reference-counter
+        [refCounter] = [refCounter] + 1
+
+        ; generate average
+        as r
+        [old_aligned_images]
+        [class_doc]
+        A                      ; _A_ll images
+        [temp_uncentered_avg]  ; OUTPUT: class-average
+        [temp_uncentered_var]  ; OUTPUT: class-variance (not saved)
+
+        if([cgOption].eq.1) then
+            if([refCounter].eq.1) then
+                vm
+                echo "Centering references using CG PH"
+            endif
+            
+            ; center reference
+            cg ph x21,x22,[xshift],[yshift]
+            [temp_uncentered_avg]  ; INPUT: unshifted class-average
+
+            ; shift
+            sh
+            [temp_uncentered_avg]  ; INPUT: unshifted class-average
+            [centered_refs][refCounter]
+            -[xshift],-[yshift]
+        elseif([cgOption].eq.2) then
+            if([refCounter].eq.1) then
+                vm
+                echo "Centering average by rotating 180 degrees and aligning"
+            endif
+            
+            ; center by rotating by 180 degrees and self-alignment
+            @@center1(x21,x22)
+            [temp_uncentered_avg]  ; INPUT: uncentered class-average
+            [temp_centered_avg]  ; WAS [centered_refs][refCounter]  ; OUTPUT
+            
+            CP
+            [temp_centered_avg]
+            [centered_refs][refCounter]
+        else
+            if([refCounter].eq.1) then
+                vm
+                echo "Not centering references"
+            endif
+            
+            cp
+            [temp_uncentered_avg]  ; INPUT: uncentered class-average
+            [centered_refs][refCounter]
+        endif
+
+        vm
+        echo "Reference #{***[refCounter]} from [class_doc]"
+    endif
+    
+    ; write to doc
+    if ([NumParts] .gt. 0) then
+        sd [refCounter], [refCounter],[zero],[class-num]
+        [new_ref_views]
+    endif
+lb1
+; end reference-loop
+
+; close doc
+ud ice
+[good_class_list]
+
+; close doc
+SD /       REFNUM      VIEW_NUM     CLASSNUM
+[new_ref_views]
+sd e
+[new_ref_views]
+
+
+vm
+echo ; echo "Running multireference-alignment using {***[refCounter]} references"
+
+; if alignment doc exists, output directory might mistakenly be same as input directory
+iq fi [align-exists]
+[alignment_doc]
+
+if([align-exists].eq.1) then
+    vm
+    echo "WARNING: [alignment_doc] exists, backing up..."
+
+    @@backup
+    [alignment_doc]
+endif
+
+; run multireference alignment
+if([mirror-option].eq.1) then
+    vm
+    echo ; echo "Searching for mirrored positions" ; date
+    
+    ap sh
+    [centered_refs]
+    (1-[refCounter])
+    [searchRange],[stepSize]
+    [first-ring],[last-ring]
+    *                ; no reference angles doc
+    [unaligned_images]
+    [selection_list]
+    *                ; no previous alignment doc
+    (0,0)            ; no restiction angle, angle-change threshold
+    Y,N              ; check mirrored positions, don't pre-align input
+    [alignment_doc]  ; OUTPUT
+else
+    vm
+    echo ; echo "Not searching for mirrored positions"
+    
+    ap sh
+    [centered_refs]
+    (1-[refCounter])
+    [searchRange],[stepSize]
+    [first-ring],[last-ring]
+    *                ; no reference angles doc
+    [unaligned_images]
+    [selection_list]
+    *                ; no previous alignment doc
+    (0,0)            ; no restiction angle, angle-change threshold
+    N,N              ; check mirrored positions, don't pre-align input
+    [alignment_doc]  ; OUTPUT
+endif
+
+
+; APPLY ALIGNMENTS
+
+vm
+echo ; echo "Applying alignments" ; date
+
+de
+[new_aligned_stack]@@
+
+; get #particles
+ud n [numTotParts]
+[selection_list]
+
+; loop through particles
+do lb3 x30 = 1,[numTotParts]
+    ; get particle#
+    ud ic x30, [part-num]
+    [selection_list]
+    
+    ; read parameters
+    ud ic [part-num], x81,x82,x83,x84,x85,[inplane-angle],[xshift],[yshift],x89,x90,x91,x92,x93,x94,[mirror-flag]
+    [alignment_doc]
+    ; (If MIRROR_FLAG is negative, mirroring is required.)
+
+    ; check for mirroring
+    if([mirror-flag].lt.0) then
+        rt sq
+        [unaligned_images][part-num]
+        _31  ; OUTPUT
+        [inplane-angle]
+        [xshift],[yshift]
+
+        mr
+        _31
+        [new_aligned_images][part-num]
+        Y  ; mirror-axis
+    else
+        rt sq
+        [unaligned_images][part-num]
+        [new_aligned_images][part-num]
+        [inplane-angle]
+        [xshift],[yshift]
+    endif
+lb3
+; end particle-loop
+
+; close docs
+ud ice
+[selection_list]
+ud ice
+[alignment_doc]
+
+; copy aligned images to central location (will be overwritten by subsequent alignments)
+cp
+[new_aligned_stack]@@
+[master_aligned]@@
+
+
+; clean up
+de
+[how_many]
+de a
+[view_select][one]
+
+; separate by view
+vo mq
+(0)  ; CC threshold
+[alignment_doc]
+[refCounter]
+[view_select]
+[how_many]
+
+
+; GENERATE AVERAGES AND SORT BY CCROT
+
+vm
+echo "Generating averages"; date
+
+de
+[viewavg_stack]@@
+
+; loop through views
+do lb2 [view-num] = 1,[refCounter]
+    ; sort by CCROT
+    doc sort
+    [view_select][view-num]
+    [sorted_select]  ; OUTPUT: in VIEW_DIR, which contains VIEW-NUM
+    (2)              ; column#: CCROT
+    Y                ; renumber?
+
+    ; label docs
+    SD /      PART_NUM      CC_ROT     MIRRORFLAG
+    [view_select][view-num]
+    SD /      PART_NUM      CC_ROT     MIRRORFLAG
+    [sorted_select]
+    sd e
+    [view_select][view-num]
+    sd e
+    [sorted_select]
+
+
+    ; GENERATE AVERAGES
+
+    ; get #particles
+    ud n [numViewParts]
+    [sorted_select]
+
+    ; if #particles=0 then create blank images
+    if([numViewParts].eq.0) then
+        bl
+        [viewavg_slice]
+        [img-dim],[img-dim]
+        N    ; background from image?
+        (0)  ; background 
+
+        bl
+        [viewvar_slice]
+        [img-dim],[img-dim]
+        N    ; background from image?
+        (0)  ; background 
+    endif
+
+    ; if #particles=1 then...
+    if([numViewParts].eq.1) then
+        ; get parameters
+        ud 1,[part-num]  ; WAS [view-slice],x92,[df-slice],x94,[flip-flop],[df-group]
+        [sorted_select]
+        ud e
+
+        cp
+        [new_aligned_images][part-num]
+        [viewavg_slice]
+
+        bl
+        [viewvar_slice]
+        [img-dim],[img-dim]
+        N    ; background from image?
+        (0)  ; background 
+    endif
+
+    ; if #particles>1 then...
+    if([numViewParts].gt.1) then
+;        ; average
+;        as r
+;        [new_aligned_images]
+;        [sorted_select]
+;        A
+;        [viewavg_slice]
+;        [viewvar_slice]
+        ; generate average
+        AS R
+        [new_aligned_images]
+        [sorted_select]
+        A                      ; _A_ll images
+        [temp_uncentered_avg]  ; OUTPUT: class-average
+        [temp_uncentered_var]  ; OUTPUT: class-variance (not saved)
+
+        if([cgOption].eq.1) then
+            ; center reference
+            cg ph x21,x22,[xshift],[yshift]
+            [temp_uncentered_avg]  ; INPUT: unshifted class-average
+
+            ; shift average & variance
+            sh
+            [temp_uncentered_avg]  ; INPUT: unshifted class-average
+            [viewavg_slice]
+            -[xshift],-[yshift]
+            sh
+            [temp_uncentered_var]  ; INPUT: unshifted class-variance
+            [viewvar_slice]
+            -[xshift],-[yshift]
+        elseif([cgOption].eq.2) then
+            ; center by rotating by 180 degrees and self-alignment
+            @@center1([xshift],[yshift])
+            [temp_uncentered_avg]  ; INPUT: uncentered class-average
+            [temp_centered_avg]    ; OUTPUT
+            
+            CP
+            [temp_centered_avg]
+            [viewavg_slice]
+            SH
+            [temp_uncentered_var]  ; INPUT: unshifted class-variance
+            [viewvar_slice]
+            -[xshift],-[yshift]
+        else
+            CP
+            [temp_uncentered_avg]  ; INPUT: uncentered class-average
+            [viewavg_slice]
+            CP
+            [temp_uncentered_var]  ; INPUT: uncentered class-variance
+            [viewvar_slice]
+        endif
+    endif
+lb2
+; end view-loop
+
+; save to tracking doc
+sd [nextIterKey], [nextIterNum]
+[multiref_tracking_doc]
+sd e
+[multiref_tracking_doc]
+DOC REN
+[multiref_tracking_doc]
+[multiref_tracking_doc]
+
+vm
+echo ; echo "Done" ; date
+
+en 
+
+; Modified 2015-08-10
+;    2015-08-10 (trs) -- centers output averages (using same scheme as for input references)
+;    2015-08-10 (trs) -- can pick classes in View*** using verifybyview
+;    2015-04-01 (trs) -- added option for RT180 centering
+;    2015-03-24 (trs) -- tracking doc not updated until successful completion
+;    2014-11-07 (trs) -- variance saved as default
+;    2014-11-06 (trs) -- skips empty classes
+;    2014-03-08 (trs) -- added error-check for empty good-classes file
+;    2014-03-06 (trs) -- making master copy of aligned stack
+;    2014-03-06 (trs) -- using images in stacks
+;    2014-03-04 (trs) -- keeps track of last iteration
+;    2014-02-04 (trs) -- added error-checking for alignment radius
+;    2012-09-10 (trs) -- center-of-gravity and checking mirrored positions in AP SH now options
+;    2012-08-31 (trs) -- skipping center-of-gravity calculation
+;    2012-08-31 (trs) -- bug fix: variance map for case of 1 particle in view
+;    2012-08-08 (trs) -- updated obsolete AP MQ to AP SH
+@
+
+
+1.3
+log
+@keeps track of last iteration
+using images in stacks
+making master copy of aligned stack
+added error-check for empty good-classes file
+@
+text
+@d3 1
+a3 1
+; Requires backup.rct
+d5 9
+a13 6
+; ------------------------------- Parameters -------------------------------
+[multiref-iter]    = -1    ; iteration of multireference alignment to use as input (<0 == last/none)
+[subdir-flag]      = 0     ; set to 1 if references are in subdirectories (e.g., View***/classavg***)
+;;[subdir-flag]      = 1     ; set to 1 if references are in subdirectories (e.g., View***/classavg***)
+[cg-option]        = 0     ; compute center-of-gravity for references? (0==NO)
+[verified-yn]      = 0     ; use verified particles? (0==NO)
+a14 4
+[search-range]     = 8     ; maximum translational shift, pixels
+[step-size]        = 2     ; translational-search step size
+[first-ring]       = 1     ; inner radius for orientation alignment, pixels
+[last-ring]        = -1    ; outer radius (<0 == automatic)
+d16 1
+a16 1
+; --------------------------------- Inputs ---------------------------------
+d20 1
+a20 2
+[old_class_dir]Zerodegr/Tree                                              ; directory for class doc files
+;;[old_class_dir]Zerodegr/Multiref{*[prev-iter]}                            ; directory for class doc files
+d22 6
+a27 1
+[view_list][old_class_dir]/how_many                                       ; (optional) list of views (if references are from multireference alignment)
+d29 3
+a31 2
+[good_class_list][old_class_dir]/goodclasses                              ; class-selection list
+;;[good_class_list][old_class_dir]/View{***[view-num]}/goodclasses          ; class-selection list
+d33 2
+a34 2
+[class_doc][old_class_dir]/docclass{***[class-num]}                       ; particle-per-class doc file
+;;[class_doc][old_class_dir]/View{***[view-num]}/docclass{***[class-num]}   ; particle-per-class doc file
+d36 5
+a40 1
+[preverified_list]listparticles                                           ; pre-verification particle list (optional, see parameter above)
+d42 1
+a42 1
+[verified_list]Zerodegr/Multiref*/combinedgood                            ; verified particle list (optional, see parameter above)
+d44 11
+a54 2
+[multiref_tracking_doc]Zerodegr/docmultiref                               ; doc file tracking iterations of multireference alignment 
+;                                                                         ; (will be created if non-existent)
+d56 1
+a56 1
+[old_aligned_images]Zerodegr/stk3-aligned@@*****                           ; existing aligned-image template
+d58 1
+a58 1
+[unaligned_images]Zerodegr/stk2-winrot@@*****                              ; unaligned particle template
+d62 1
+a62 1
+[multiref_dir]Zerodegr/Multiref{*[next-iter]}           ; alignment directory
+d64 1
+a64 1
+[ref_view_list][multiref_dir]/listviews                 ; reference-view list
+d66 1
+a66 1
+[reference_stack][multiref_dir]/stkref                  ; reference stack (w/o "@@")
+d68 1
+a68 1
+[alignment_doc][multiref_dir]/docalign                  ; alignment doc file
+d70 1
+a70 1
+[new_aligned_stack][multiref_dir]/stkcenu               ; new aligned image stack (w/o "@@")
+d72 1
+a72 1
+[new_aligned_images][new_aligned_stack]@@*****           ; new aligned-image template (check number of digits)
+d74 1
+a74 1
+[master_aligned]Zerodegr/stk3-aligned                   ; master aligned-image stack (w/o "@@")
+d76 2
+a77 1
+[how_many][multiref_dir]/how_many                       ; particles-per-view doc file
+d79 1
+a79 1
+[new_view_dir][multiref_dir]/View{***[view-num]}        ; directory for each view
+d81 1
+a81 2
+[view_select][multiref_dir]/selview***                  ; selection file for each view
+;        PART_NUM      CC_ROT     MIRRORFLAG
+d83 5
+a87 1
+[sorted_select][new_view_dir]/sortsel                   ; sorted selection file
+d89 1
+a89 1
+[viewavg_stack][multiref_dir]/stkviewavg                ; view-average stack (w/o "@@")
+d91 1
+a91 2
+[centered_refs][reference_stack]@@***                    ; reference images (check number of digits)
+;;[centered_refs][multiref_dir]/ref***                    ; reference images, full-sized
+d93 1
+a93 2
+[good_view_avg][viewavg_stack]@@{***[view-num]}          ; view-average template (check number of digits)
+;;[good_view_avg][multiref_dir]/viewavg{***[view-num]}    ; average template
+d95 2
+a96 2
+[good_view_var]_2                                       ; variance (not saved)
+;[good_view_var][multiref_dir]/viewvar{***[view-num]}    ; variance template (saved)
+d98 11
+a108 1
+; ---------------------------- END BATCH HEADER ----------------------------
+d130 1
+a130 1
+    ud n [last-iter-key]
+d133 36
+d170 4
+a173 1
+    [next-iter-key] = [last-iter-key] + 1
+d175 37
+a211 2
+; if tracker does not exist
+    [next-iter-key] = 1
+d214 3
+a218 2
+if([verified-yn].lt.0.5) then
+    [selection_list] = [preverified_list]
+d220 6
+d227 1
+a227 1
+; if verified-particle list specified
+d230 2
+a231 2
+    if([multiref-iter].gt.0) then
+        [iter] = [multiref-iter]
+d235 1
+a235 1
+        [selection_list][preverified_list]
+d237 1
+a238 6
+    ; if input iteration not specified
+    
+;        ; look for last iteration number
+;        ud n [last-iter-key]
+;        [multiref_tracking_doc]
+        
+d240 1
+a240 1
+        ud [last-iter-key], [iter]
+d246 1
+a246 1
+        [selection_list][verified_list][iter]
+d251 1
+a251 48
+echo "Using particles in [selection_list].$DATEXT" ; echo
+
+
+; CHECK IF ITERATION# IS SPECIFIED
+
+if([multiref-iter].gt.0) then
+    ; look for last iteration number
+    ud n [last-iter-key]
+    [multiref_tracking_doc]
+    
+    [prev-iter] = [multiref-iter]
+    
+    ; increment key & iteration#
+    [next-iter-key] = [last-iter-key] + 1
+    [next-iter] = [multiref-iter] + 1
+
+else
+; if iteration# not specified
+    
+    ; if tracker does exist
+    if([tracker-exists].eq.1) then
+        ; if iteration-tracker is empty, highest key will be zero
+        if([last-iter-key].ge.1) then
+            ; get iteration number
+            ud [last-iter-key], [prev-iter]
+            [multiref_tracking_doc]
+            ud e  ; close doc
+            
+            ; increment key & iteration#
+            [next-iter]     = [prev-iter] + 1
+        else
+        ; if last key was zero, delete doc file and start over
+        
+            vm
+            echo "Multiref tracking doc empty (?), starting with iteration #1" ; echo
+            
+            de
+            [multiref_tracking_doc]
+            
+            [tracker-exists] = 0
+        endif
+    endif
+    
+    ; if tracker does not exist (or was empty)
+    if([tracker-exists].eq.0) then
+        [next-iter]     = 1
+    endif
+endif
+d285 1
+a285 1
+        echo "Image dimension from [parameter_doc], {***[idim-params]}, {*[ratio]} times that from [unaligned_image][first-particle]"
+d288 2
+a290 2
+    ; if ratio is not an integer
+        ; don't know what to do
+d294 1
+a294 1
+        echo "Image dimension from [parameter_doc], {***[idim-params]}, different from [unaligned_image][first-particle], {***[idim-first]}"
+d306 1
+a306 1
+[check-radius] = int([img-dim]/2) - [last-ring] - [search-range]
+d316 1
+a316 1
+    [last-ring] = int([img-dim]/2) - [search-range] - 3
+d325 13
+d339 2
+a340 2
+; initialize reference-counter
+[ref-counter] = 0
+a341 19
+;; check if VIEW_LIST exists
+;iq fi [multiple-views]
+;[view_list]
+
+; if exists, get #views
+;;if([multiple-views].eq.1) then
+if([subdir-flag].eq.1) then
+    ; check if VIEW_LIST exists
+    iq fi [viewlist-exists]
+    [view_list]
+    
+    if([viewlist-exists].eq.0) then
+        vm m
+        echo "ERROR: [view_list].$DATEXT doesn't exist" ;
+        echo "Did you set the iteration number correctly?" ;
+        echo "Exiting..."
+.
+        en
+    endif
+d343 1
+a343 2
+    ud n [num-views]
+    [view_list]
+d345 1
+d347 1
+a347 1
+    echo "Using multiple classes from views listed in [view_list].$DATEXT" ; echo
+a348 3
+    [num-views] = 1
+    [zero] = 0
+
+d350 1
+a350 1
+    echo "Input class docs assumed to be in [old_class_dir]" ; echo
+d353 5
+a358 1
+; PREPARE OUTPUT DIRECTORY
+d360 1
+a360 4
+vm
+echo "Working on multireference iteration #{*[next-iter]}"
+vm
+echo "if(! -d [multiref_dir]) mkdir -v [multiref_dir]"|csh
+d362 3
+a364 2
+de
+[reference_stack]@@
+d366 4
+a369 5
+; save to tracking doc
+sd [next-iter-key], [next-iter]
+[multiref_tracking_doc]
+sd e
+[multiref_tracking_doc]
+d371 3
+d375 6
+a380 1
+; GENERATE REFERENCES
+d382 3
+a384 2
+vm
+echo "Generating references from selected classes in [multiref_dir]" ; date
+d386 1
+a386 4
+;@@backup
+;[ref_view_list]
+de
+[ref_view_list]
+d388 16
+a403 11
+; loop through views
+do lb5 [view-num] = 1,[num-views]
+    ; check if good class-list exists
+    iq fi [classlist-exists]
+    [good_class_list]
+    
+    ; if it doesn't exist, skip ahead to the next view
+    if ([classlist-exists].eq.0) goto lb5
+    
+    ; get #references
+    ud n [num-refs]
+d406 3
+a408 2
+    ; if no good classes, skip ahead
+    if ([num-refs].eq.0) goto lb5
+d410 4
+a413 6
+    ; loop through references
+    do lb1 [ref-key]=1,[num-refs]
+        ; get class#
+        ud ic [ref-key],[class-num]
+        [good_class_list]
+
+d415 1
+a415 1
+        [ref-counter] = [ref-counter] + 1
+d421 3
+a423 3
+        A  ; _A_ll images
+        _11  ; OUTPUT: class-average
+        _12  ; OUTPUT: class-variance (not used)
+d425 2
+a426 2
+        if([cg-option].eq.1) then
+            if([ref-counter].eq.1) then
+d432 2
+a433 2
+            cg ph x21,x22,[x-shift],[y-shift]
+            _11  ; INPUT: unshifted class-average
+d437 17
+a453 3
+            _11  ; INPUT: unshifted class-average
+            [centered_refs][ref-counter]
+            -[x-shift],-[y-shift]
+d455 1
+a455 1
+            if([ref-counter].eq.1) then
+d461 2
+a462 2
+            _11  ; INPUT: uncentered class-average
+            [centered_refs][ref-counter]
+d466 10
+a475 13
+        echo "Reference #{***[ref-counter]} from [class_doc]"
+        
+        ; write to doc
+;;        if([multiple-views].eq.1) then
+        if([subdir-flag].eq.1) then
+            sd [ref-counter], [ref-counter],[view-num],[class-num]
+            [ref_view_list]
+        else
+            sd [ref-counter], [ref-counter],[zero],[class-num]
+            [ref_view_list]
+        endif
+    lb1
+    ; end reference-loop
+d477 3
+a479 4
+    ud ice
+    [good_class_list]
+lb5
+; end view-loop
+d483 1
+a483 1
+[ref_view_list]
+d485 1
+a485 1
+[ref_view_list]
+d489 1
+a489 1
+echo ; echo "Running multireference-alignment" ; date
+a500 3
+    
+    vm
+    echo
+a502 10
+;; run multireference alignment
+;ap mq
+;[centered_refs]
+;(1-[ref-counter])
+;[search-range],[step-size]
+;[first-ring],[last-ring]
+;[unaligned_images]
+;[selection_list]
+;[alignment_doc]  ; OUTPUT
+
+d506 1
+a506 1
+    echo ; echo "Searching for mirrored positions"
+d510 2
+a511 2
+    (1-[ref-counter])
+    [search-range],[step-size]
+d526 2
+a527 2
+    (1-[ref-counter])
+    [search-range],[step-size]
+a543 2
+;vm
+;echo "if(! -d [new_aligned_dir]) mkdir [new_aligned_dir]"|csh
+d548 1
+a548 1
+ud n [num-parts]
+d552 1
+a552 1
+do lb3 x30 = 1,[num-parts]
+d558 1
+a558 2
+;    ud ic x30, [ref-num],x32,[inplane-angle],[x-shift],[y-shift],[part-num]
+    ud ic [part-num], x81,x82,x83,x84,x85,[inplane-angle],[x-shift],[y-shift],x89,x90,x91,x92,x93,x94,[mirror-flag]
+a562 1
+;    if([ref-num].lt.0) then
+d568 1
+a568 1
+        [x-shift],[y-shift]
+d579 1
+a579 1
+        [x-shift],[y-shift]
+a595 3
+vm
+echo "Separating by view" ; date
+
+d599 2
+a600 2
+de
+[viewavg_stack]@@
+d606 1
+a606 1
+[ref-counter]
+d616 3
+d620 1
+a620 6
+do lb2 [view-num] = 1,[ref-counter]
+    ; make view directory
+    vm
+    echo "if(! -d [new_view_dir]) mkdir [new_view_dir]"|csh
+    ; label VIEW_DIR should contain VIEW-NUM
+
+d642 1
+a642 1
+    ud n [num-parts]
+d646 1
+a646 1
+    if([num-parts].eq.0) then
+d648 1
+a648 1
+        [good_view_avg]
+d654 1
+a654 1
+        [good_view_var]
+d661 1
+a661 1
+    if([num-parts].eq.1) then
+d669 1
+a669 1
+        [good_view_avg]
+d672 1
+a672 1
+        [good_view_var]
+d679 10
+a688 3
+    if([num-parts].gt.1) then
+        ; average
+        as r
+d691 39
+a729 3
+        A
+        [good_view_avg]
+        [good_view_var]
+d734 9
+d746 1
+a746 1
+en d
+d748 7
+a754 1
+; Modified 2014-03-26
+@
+
+
+1.2
+log
+@added error check for outer alignment radius
+@
+text
+@d6 1
+d8 3
+a10 1
+[cg-option]        = 1     ; compute center-of-gravity for references? (0==NO)
+d14 1
+a14 1
+[first-ring]       = 3     ; inner radius for orientation alignment, pixels
+d22 1
+a22 1
+;[old_class_dir]Zerodegr/Kmeans                                            ; directory for class doc files
+d27 1
+d30 1
+d32 1
+a32 1
+[selection_list]listparticles                                             ; particle list
+d34 1
+a34 1
+[old_aligned_images]Zerodegr/Aligned/cenu*****                            ; full-sized, aligned-image template
+d36 6
+a41 1
+[unaligned_images]Zerodegr/Winrot/unt*****                                ; unaligned particle template
+d45 1
+a45 2
+[multiref_dir]Zerodegr/Multiref                         ; alignment directory
+;[multiref_dir]Zerodegr/Multiref2                         ; alignment directory
+d47 1
+a47 1
+[ref_view_list][multiref_dir]/listrefs                  ; reference-view list
+d49 1
+a49 1
+[centered_refs][multiref_dir]/ref***                    ; reference images, full-sized
+d53 3
+a55 1
+[new_aligned_dir]Zerodegr/Aligned                       ; output directory for aligned images, can be same as old
+d57 1
+a57 1
+[new_aligned_images][new_aligned_dir]/cenu*****         ; new aligned-image template
+d68 7
+a74 1
+[good_view_avg][multiref_dir]/viewavg{***[view-num]}    ; average template
+d93 102
+d230 1
+a231 1
+    else
+a267 8
+; GENERATE FULL-SIZED REFERENCES
+
+vm
+echo "if(! -d [multiref_dir]) mkdir [multiref_dir]"|csh
+
+;@@backup
+;[ref_view_list]
+
+d278 13
+d304 5
+d310 10
+a319 1
+echo "Generating references from selected classes in [multiref_dir]" ; date
+d324 8
+d345 3
+a364 4
+;        ; back up pre-existing reference
+;        @@backup
+;        [centered_refs][ref-counter]
+
+d487 4
+a490 2
+vm
+echo "if(! -d [new_aligned_dir]) mkdir [new_aligned_dir]"|csh
+d537 5
+d546 1
+d549 2
+d648 5
+a652 1
+; Modified 2014-02-04
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d11 1
+a11 1
+[first-ring]       = 5     ; inner radius for orientation alignment, pixels
+d65 1
+a65 1
+ud ic 17,[img-dim]
+a71 1
+    ud ice
+d73 67
+a139 1
+    [last-ring] = [particle-diam]*1.2/2
+d142 6
+d493 2
+a494 1
+; Modified 2012-12-17
+@

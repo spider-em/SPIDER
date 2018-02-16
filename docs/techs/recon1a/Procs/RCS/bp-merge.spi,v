@@ -1,0 +1,284 @@
+head	1.4;
+access;
+symbols
+	Pre_gold:1.4;
+locks;
+comment	@# @;
+
+
+1.4
+date	2014.05.14.16.35.23;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2014.05.14.16.15.40;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2013.11.08.19.26.29;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2012.05.23.03.03.02;	author tapu;	state Exp;
+branches;
+next	;
+
+
+desc
+@new file -- merges group volumes
+@
+
+
+1.4
+log
+@iter in resolution doc file
+@
+text
+@([num-grps])
+ ; <html><head><title> Calculate two half-set reconstructions and overall reconstruction</title></head><body><pre>
+
+ ; SOURCE: spider/docs/techs/recon1/Procs/bp-merge.spi   
+ ;
+ ; PURPOSE: Calculate two half-set reconstructions and overall reconstruction 
+ ;          Find FSC and resolution
+
+ ; Set parameter and file names
+ @@bp-settings([stk-opt],[r-fsc],[bp-type],[r-bp],[cg-err],[cg-chi],[cg-iter],[cg-mode],[cg-lam],[rp-lam],[rp-cor],[rp-iter],[sp_pixsiz],[incore-yn])
+
+ SYS
+   echo ; echo " Summing reconstructed volumes"
+
+ ; Average subset 1 volumes
+ AS S                        ; Add volumes
+   [group_vol_1]             ; Volume template (input)
+   [sel_group]               ; Selection file
+   A                         ; Find average
+   [vol_1]                   ; Average volume  (output)
+
+ ; Average subset 2 volumes 
+ AS S                        ; Add volumes
+   [group_vol_2]             ; Volume template (input)
+   [sel_group]               ; Selection file
+   A                         ; Find average
+   [vol_2]                   ; Average volume  (output)
+
+ ; Average combined volumes
+ AS S                        ; Add volumes
+   [group_vol]               ; Volume template (input)
+   [sel_group]               ; Selection file
+   A                         ; Find average
+   [vol]                     ; Average volume  (output)
+
+ ; Calculate unmasked and masked resolution curves
+
+ ; Determine masked reconstruction resolution
+ FSC [half],[spfr],[m-res]   ; Find FSC
+   [vol_1]                   ; Volume                   (input)
+   [vol_2]                   ; Volume                   (input)
+   0.5, [r-fsc]              ; Shell width, mask radius
+   [sp_pixsiz],0.5           ; Pixel size, 50% level
+   [fsc]_m                   ; Masked FSC doc file      (output)
+   *                         ; No Gnuplot file wanted
+
+ ; Determine unmasked reconstruction resolution
+ FSC [half],[spfr],[u-res]   ; Find FSC
+   [vol_1]                   ; Volume                   (input)
+   [vol_2]                   ; Volume                   (input)
+   0.5, 0                    ; Shell width, mask radius
+   [sp_pixsiz],0.5           ; Pixel size, 50% level
+   [fsc]_u                   ; Unmasked FSC doc file    (output)
+   *                         ; No Gnuplot file wanted
+
+ SYS
+   echo " Reconstruction, Masked resolution:'  '{%f6.2%[m-res]} UnMasked:' '{%f6.2%[u-res]} (Angstroms)"
+
+ SD / '      NORM-FREQ,    RESOL.(ANG.)  MASKED-RESOL.  (CUTOFF=50%)' 
+   [resol_doc]               ; Resolution doc file       (output)
+
+ [key]   = 1
+ [itert] = 0
+
+ SD [key], [itert],[spfr],[u-res],[m-res]
+   [resol_doc]
+ SD E
+   [resol_doc]
+
+ RE
+ ; </pre></body></html>
+@
+
+
+1.3
+log
+@SD [key], [spfr],[u-res],[m-res]
+@
+text
+@d62 2
+a63 1
+ [key] = 1
+d65 1
+a65 1
+ SD [key], [spfr],[u-res],[m-res]
+@
+
+
+1.2
+log
+@rewrite_syntax_filenames
+@
+text
+@d59 2
+a60 2
+ SD / '      OVERALL,    NORM-FREQ,    RESOL.(ANG.)  MASKED-RESOL.  (CUTOFF=50%)' 
+   [resol_doc]                  ; Resolution doc file       (output)
+d62 1
+d64 1
+a64 4
+ [key]   = [num-grps] + 1
+ [grpz]  = 0
+
+ SD [key], [grpz],[spfr],[u-res],[m-res]
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d1 2
+a2 1
+@@bps-settings([stk-opt],[rad-fsc],[bp-method],[rad-recon],[cg-error],[cg-chisqr],[cg-iter],[cg-mode],[cg-lambda],[rp-lambda],[rp-correct],[rp-iter],[max-wait])
+d4 66
+a69 2
+fr l
+[temp_var]_3  ; variance map (not saved)
+d71 2
+a72 123
+vm
+echo "Summing volumes"
+
+; get #groups
+UD N,[num-grps]
+[group_list]
+
+; add odd volumes
+as r
+[group_dir_template]/[vol_odd]
+[group_list]
+A  ; _A_ll
+[vol_odd]
+[temp_var]  ; variance (not saved)
+
+; add combined volumes
+as r
+[group_dir_template]/[vol_even]
+[group_list]
+A  ; _A_ll
+[vol_even]
+[temp_var]  ; variance (not saved)
+
+; add combined volumes
+as r
+[group_dir_template]/[unfiltered_volume]
+[group_list]
+A  ; _A_ll
+[unfiltered_volume]
+[temp_var]  ; variance (not saved)
+
+
+; MAKE GAUSSIAN MASK FOR FSC
+
+; get parameters
+UD IC 5,[pxsz]   ; Pixel size
+[params]
+UD IC 17,[idim]  ; Window size
+[params]
+
+[center] = [idim]/2 + 1                          ; Center coordinate
+
+; calculate reconstruction radius if necessary
+IF ([rad-recon].eq.-1) THEN
+    [rad-recon] = INT( (0.95*[idim])/2.0 )
+ENDIF
+
+; calculate mask radius, if necessary
+if([rad-fsc].le.0) then
+    ; get diameter from PARAMS
+    ud ic 18,[part-diam]
+    [params]
+
+    [radius] = [part-diam]/2
+endif
+
+fr l
+[mask_unscaled]_11
+fr l
+[gaussian_mask]_12
+
+; create Gaussian
+mo 3
+[mask_unscaled]             ; OUTPUT
+[idim],[idim],[idim]        ; dimensions
+G                           ; _G_aussian
+[center],[center],[center]  ; center coordinates
+[radius],[radius],[radius]  ; Gaussian falloff
+
+; get statistics
+fs [max]
+[mask_unscaled]
+
+; lift maximum to 1
+ar
+[mask_unscaled]
+[gaussian_mask]
+p1/[max]
+
+; clean up
+de
+[mask_unscaled]
+ud ice
+[params]
+
+
+; CALCULATE UNMASKED AND MASKED RESOLUTION CURVES
+
+; unmasked
+@@bps-calcres([unmasked-freq])  ; output parameter: unmasked-freq
+[vol_odd]   ; INPUT: first volume
+[vol_even]  ; INPUT: second volume
+blah        ; INPUT: (optional) mask
+[doc_cmp]   ; OUTPUT: unmasked FSC doc
+
+[unmasked-res] = [pxsz]/[unmasked-freq]
+
+; masked
+@@bps-calcres([masked-freq])  ; output parameter: masked-freq
+[vol_odd]         ; INPUT: first volume
+[vol_even]        ; INPUT: second volume
+[gaussian_mask]   ; INPUT: (optional) mask
+[masked_fsc_doc]  ; OUTPUT: unmasked FSC doc
+
+[masked-res]   = [pxsz]/[masked-freq]
+[dummy]        = [num-grps] + 1
+[grp]          = 0
+
+vm
+echo "Summed reconstruction, Masked resolution: {%f6.2%[masked-res]} Angstroms"
+
+sd [dummy], [grp],[unmasked-res],[masked-res]  ; ,[numparts]
+[summary_doc]
+;SD /           MASKEDRES    UNMASKEDRES
+SD /      GROUP_NUM    UNMASKEDRES    MASKEDRES
+[summary_doc]
+sd e
+[summary_doc]
+
+RE
+
+; Modified 2012-05-14
+;    2012-05-14 (trs) -- reformatted summary doc to comply with plotres.spi
+@

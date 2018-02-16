@@ -1,0 +1,528 @@
+head	1.2;
+access;
+symbols
+	GPL_update:1.1
+	pre_rewrite_2010:1.1
+	pre_more_stack:1.1
+	best-code:1.1;
+locks; strict;
+comment	@:: @;
+
+
+1.2
+date	2010.11.09.13.44.10;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2006.01.18.17.38.48;	author bimal;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.2
+log
+@cosmetic & FR removal
+@
+text
+@; cmask
+;
+; Create a circular mask for the round Quantifoil hole in a micrograph.
+; This assumes the hole is surrounded by a slightly brighter ring (inverted 
+; contrast).
+;
+; This batch file creates small intermediate files that should be checked
+; to make sure the circle is located correctly. The main output is a 
+; coordinate doc file that is read by the batch file cmfull.bat, which
+; applies the mask to the full-sized micrograph.
+
+;
+; NB : while Quantafoil guarantees consistent hole-to-hole spacing, the
+; diameter of the ring and its width vary from one batch to another. Therefore,
+; you may need to adjust ring parameters x97 and x98
+
+
+; In addition to normalization, it uses an inner negative ring.
+;
+; Inputs: 
+;     Filenums : file numbers
+;     Micrographs in spider format
+;
+; Outputs
+;     Coords : Doc file of alignment parameters (to be used in cmfull.bat)
+;              columns: X_center, Y_center, radius
+;     The following files are used to check correctness. 
+;     set x80 = 1 to save these files (default), otherwise they are not saved.
+;        circle : Image of circle
+;        small  : Tiny image of micrograph
+;        ring   : Circle superimposed on little micrograph.
+;
+; Check the ring images, if ok, go to cmfull.spi 
+; If not ok, adjust RING PARAMETERS
+
+MD
+SET MP
+0
+
+x40 = 10 ;  Reduction factor
+
+; ===== RING PARAMETERS =====
+
+x97 = 2.65  ; Diameter of circle, in microns
+x98 = 0.16  ; Width of the circular line, in microns
+
+x99 = 3.72  ; Pixelsize
+
+x80 = 1     ; 1 = save intermediate files
+
+; ----- Input files -----
+
+[mic] = './mic{***x85}'             ; Full-sized micrograph
+
+[filenums] = '../filenums'
+
+; ----- Output files -----
+
+[outdir] = 'cmask'                  ; Output directory
+
+[circle] = '[outdir]/circ{***x85}'  ; Image of the circle
+
+[small]  = '[outdir]/small{***x85}' ; Small version of micrograph
+
+[ring]   = '[outdir]/sup{***x85}'     ; Circle superimposed on small micrograph
+                                    ; CHECK THIS FILE TO ENSURE CORRECT MASK
+
+[outdoc] = 'coords'                 ; Docfile of coordinates: mic x y radius
+
+; ------------ END BATCH HEADER ------------------------------------
+
+DE                      ; Deletes the output document at start
+[outdoc]
+
+VM                      ; Make sure output dir. is present
+mkdir -p [outdir]
+
+
+x99 = x99 * x40         ; new pixelsize
+
+UD N,x90
+[filenums]
+
+SD /       MIC          X COORD      Y COORD      RADIUS
+[outdoc]
+
+DO LB1 x84 = 1,x90
+
+UD x84,x85              ; x85 is now the file number
+[filenums]
+
+VM
+echo working on [mic]
+
+; Shrink the micrograph
+FI x21,x22
+[mic]
+(12,2)
+
+x31 = INT(x21/x40)
+x32 = INT(x22/x40)
+
+IP
+[mic]
+_1
+(x31,x32)
+
+IF (x80.EQ.1) THEN
+   CP
+   _1
+   [small]
+ENDIF
+
+FI x11,x12                  ; Get input image size
+_1
+(12,2)
+
+; convert to pixels
+x20 = 10000 * x97/x99       ; Diameter of circle
+x21 = 10000 * x98/x99       ; Width of line
+x23 = INT(x20 + x21) + 1    ; width, height of circle image
+
+x24 = x23 - x11             ; pad x
+x25 = x23 - x12             ; pad y
+
+IF (x24.LT.0) x24 = 0
+IF (x25.LT.0) x25 = 0
+
+PD
+_1                         ; pad  input image  as big as the circle
+_2                         ; padded image
+(x11+x24, x12+x25)
+Y
+(1,1)
+
+CP 
+_2
+_1
+
+; Make the circle masks
+
+x19 = x20/2.0             ; radius
+x19
+x23
+
+MO
+_2                        ; outer circle
+(x23,x23)
+C
+(x19)
+
+x19 = (x20-x21)/2.0       ; radius of inner circle
+
+MO
+_3                        ; inner circle
+(x23,x23)
+C
+(x19)
+
+SU
+_2
+_3
+_5       ; subtract small from large circle to make ring 
+*
+
+CP
+_5
+_44      ; save regular ring for later, without inner negative ring
+
+
+AR IF    ; change small circle, to create inner negative ring
+_3
+_4
+IF (P1.eq.1) THEN P2 = 2
+
+
+
+
+CP
+_4
+_3
+
+SU
+_2
+_3
+_5        ; Subtract small from large circle to make ring (-1 in center)
+*
+
+x69 = (x20 - (2*x21)) / 2.0
+x69
+
+MO  
+_61            ; Inner inner circle
+(x23,x23)
+C
+(x69)
+
+AD
+_5
+_61 
+_4             ; Subtract even smaller  from ring to give negative inner ring
+*
+
+IF (x80.EQ.1) THEN
+   CP
+   _44
+   [circle]    ; Only positive circle, without negative inner ring
+ENDIF
+
+; ********** Cross-correlation ***************
+CC N
+_1             ; Mic
+_4             ; Ring
+_5
+
+;CP
+;_5
+;cca{***x85}
+
+; "Normalize" the CC (sums) by the # pixels under the ring at each point
+
+BL
+_33        
+(x23,x23)    ; Blank image size of padded img
+N
+(0.0)
+
+PT
+_33
+R
+(1,1)
+(x11,x12)    ; Draw rectangle the size of unpadded img
+N
+
+CC 
+_44          ; Ring
+_33          ; Rectangle image
+_34          ; Count of pixels when circle overlaps rectangle
+
+RT 90
+_34          ; Input
+_35          ; Output
+
+
+
+
+(180)        ; rotation angle for RT 90
+
+
+MU D
+_5          ; CC result
+_35         ; Divided by pixel counts
+_36
+*
+
+CP
+_36
+_5
+
+;CP
+;_5
+;ccb{***x85}
+
+; --- End normalization
+; Get X,Y shifts from peak search
+PK x41,x42
+_5            ; CC result
+(1,0)
+(1)
+
+SH
+_44    ; Regular ring, without inner negative ring  
+_8
+x41,x42
+
+AR IF
+_8
+_9
+IF (p1.GT.0) THEN p2 = 1.01
+ELSE IF(P1.EQ.0) THEN p2=1.0
+
+IF (x80.EQ.1) THEN
+   MU
+   _9
+   _1
+   [ring]
+   *
+ENDIF
+
+
+; Use the inner circle as a mask 
+; (create a new one. Can't use SH since it does a circular shift)
+BL
+_3        
+(x11,x12)
+N
+(0.0)
+
+x25 = x23/2.0 + 1
+;x26 = x12/2.0 + 1
+
+x71 = x25+x41    ; X,Y coords of circle center
+x72 = x25+x42
+
+PT
+_3
+C
+(x25+x41, x25+x42)
+(x19)       ; Radius of the inner circle
+N
+
+SD x84,x85,x71,x72,x19
+[outdoc]
+
+
+LB1
+
+EN D
+
+@
+
+
+1.1
+log
+@new file for quantifoil.html added to newprogs dir
+@
+text
+@d21 2
+a22 2
+;     filenums : file numbers
+;     micrographs in spider format
+d25 1
+a25 1
+;     coords : doc file of alignment parameters (to be used in cmfull.bat)
+d29 3
+a31 3
+;        circle : image of circle
+;        small  : tiny image of micrograph
+;        ring   : circle superimposed on little micrograph.
+d33 1
+a33 1
+; Check the ring images, if ok, go to cmfull.bat. 
+d40 1
+a40 1
+x40 = 10 ;  reduction factor
+d44 2
+a45 2
+x97 = 2.65  ; diameter of circle, in microns
+x98 = 0.16  ; the width of the circular line, in microns
+d47 1
+a47 1
+x99 = 3.72  ; pixelsize
+d51 1
+a51 1
+; ----- input files -----
+d53 1
+a53 2
+FR G
+[mic]./mic{***x85}     ; full-sized micrograph
+d55 1
+a55 2
+FR G
+[filenums]../filenums
+d57 1
+a57 1
+; ----- output files -----
+d59 1
+a59 2
+FR G
+[outdir]cmask       ; output directory
+d61 1
+a61 2
+FR G
+[circle][outdir]/circ{***x85}   ; image of the circle
+d63 1
+a63 2
+FR G
+[small][outdir]/small{***x85}    ; small version of micrograph
+d65 2
+a66 3
+FR G
+[ring][outdir]/sup{***x85}     ; circle superimposed on small micrograph
+                               ; CHECK THIS FILE TO ENSURE CORRECT MASK
+d68 1
+a68 2
+FR G
+[outdoc]coords    ; output docfile of coordinates: mic x y radius
+d72 1
+a72 1
+DE                 ; deletes the output document at start
+d79 1
+a79 1
+x99 = x99 * x40  ; new pixelsize
+d89 1
+a89 1
+UD x84,x85      ; x85 is now the file number
+d95 1
+a95 1
+; shrink the micrograph
+d114 1
+a114 1
+FI x11,x12    ; get input image size
+d119 3
+a121 3
+x20 = 10000 * x97/x99   ; diameter of circle
+x21 = 10000 * x98/x99   ; width of line
+x23 = INT(x20 + x21) + 1         ; width, height of circle image
+d123 2
+a124 2
+x24 = x23 - x11   ; pad x
+x25 = x23 - x12   ; pad y
+d130 2
+a131 2
+_1    ; pad the input image to be as big as the circle
+_2    ; padded image
+d140 1
+a140 1
+; make the circle masks
+d142 1
+a142 1
+x19 = x20/2.0   ; radius
+d147 1
+a147 1
+_2        ; outer circle
+d152 1
+a152 1
+x19 = (x20-x21)/2.0   ; radius of inner circle
+d155 1
+a155 1
+_3        ; inner circle
+d163 1
+a163 1
+_5   ; subtract small from large circle to make ring 
+d168 1
+a168 1
+_44   ; save regular ring for later, without inner negative ring
+d186 1
+a186 1
+_5   ; subtract small from large circle to make ring (-1 in center)
+d193 1
+a193 1
+_61   ; inner inner circle
+d201 1
+a201 1
+_4   ; subtract even smaller  from ring to give negative inner ring
+d207 1
+a207 1
+   [circle]    ; only positive circle, without negative inner ring
+d212 2
+a213 2
+_1     ; mic
+_4     ; ring
+d220 1
+a220 1
+; "normalize" the CC (sums) by the # pixels under the ring at each point
+d224 1
+a224 1
+(x23,x23)     ; blank image size of padded img
+d232 1
+a232 1
+(x11,x12)    ;  draw rectangle the size of unpadded img
+d236 3
+a238 3
+_44    ; ring
+_33   ; rectangle image
+_34   ; count of pixels when circle overlaps rectangle
+d241 2
+a242 2
+_34    ; input
+_35    ; output
+d247 1
+a247 1
+(180)  ; rotation angle for RT 90
+d251 2
+a252 2
+_5         ; cc result
+_35        ; divided by pixel counts
+d264 2
+a265 2
+; --- end normalization
+; get X,Y shifts from peak search
+d267 1
+a267 1
+_5           ; cc result
+d272 1
+a272 1
+_44    ; regular ring, without inner negative ring  
+d291 1
+a291 1
+; use the inner circle as a mask 
+d302 1
+a302 1
+x71 = x25+x41    ; x,y coords of circle center
+d309 1
+a309 1
+(x19)       ; radius of the inner circle
+@

@@ -1,0 +1,273 @@
+head	1.3;
+access;
+symbols
+	Pre_gold:1.3;
+locks;
+comment	@# @;
+
+
+1.3
+date	2013.11.08.19.26.29;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2012.07.19.18.33.46;	author tapu;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2012.05.23.02.46.19;	author tapu;	state Exp;
+branches;
+next	;
+
+
+desc
+@new file -- converts EMAN2 coordinates files to sndc-like SPIDER doc files
+@
+
+
+1.3
+log
+@rewrite_syntax_filenames
+@
+text
+@ ; <html><head><title>Generates CTF correction profiles for micrographs</title></head><body><pre>
+ ;
+ ; PURPOSE: Converts EMAN2 coordinates file to SPIDER format.
+            Outputs coordinates of window centers. 
+ ;
+ ; SOURCE:  spider/docs/techs/recon1/Procs/eman2spi.spi
+ ;
+ ; REQUIRES: emancoords2spiderdoc.py
+ ;
+ ; USAGE:    clean ; spider spi/dat @@eman2spi
+
+ ; ---------------------- Inputs ----------------------
+
+ [sel_mic]    = '../sel_micrograph                       ; Micrograph list  (one)
+
+ [eman_coords] = '../Micrographs/mic{****[mic-num]}.box  ; EMAN coordinates (one / micrograph)
+
+ ; ----------------------- Output -----------------------
+
+ [win_dir]       = 'win'                                 ; Directory for selection docs
+
+ [coords_dir]    = 'coords'                              ; Directory for coordinate docs
+
+![spider_coords] = '[coords_dir]/sndc_{****[mic-num]}'   ; SPIDER center coordinates doc files (one / micrograph)
+ [spider_coords] = '[coords_dir]/pkcoor_{****[mic-num]}' ; SPIDER center coordinates doc files (one / micrograph)
+
+ [mic_part_list] = '[win_dir]/sel_part_{****[mic-num]}'  ; Particle selection doc files (one / micrograph)
+
+ [summary_doc]   = 'summary-eman2spi'                    ; Summary docfiles             (one / micrograph)
+
+ ; ------------------ END BATCH HEADER ------------------
+
+ ; Prepare summary doc
+ DE
+   [summary_doc]
+ SD /       MICNUM    NUMPARTICLES
+   [summary_doc]
+
+ [particle-counter] = 0
+
+ ; Create directories if necessary
+ SYS
+   mkdir -p [win_dir]  [coords_dir]
+
+ ; Get # of micrographs
+ UD N [num-mics]
+   [sel_mic]
+
+ DO [mic-key] = 1, [num-mics] ; Loop through micrographs ----------
+
+    ; Get micrograph #
+    UD IC [mic-key], [mic-num]
+      [sel_mic]
+
+    ; Run Python script
+    SYS
+      emancoords2spiderdoc.py [eman_coords] [spider_coords].$DATEXT
+
+    ; Get # of particles
+    UD N [mic-parts]
+      [spider_coords]
+    
+    ; Write selection doc
+    DOC CREATE
+      [mic_part_list]
+      1                   ; Column # to populate
+      1-[mic-parts]
+
+    ; Write to summary
+    SD [mic-key], [mic-num], [mic-parts]
+      [summary_doc]
+
+    ; Update cumulative counter
+    [particle-counter] = [particle-counter] + [mic-parts]
+ ENDDO               ; End micrograph-loop -----------------------
+
+ SYS
+   echo ; echo " Converted: {%I0%[particle-counter]} coordinates from {%I0%[num-mics]} micrographs"
+
+ ; Close doc
+ UD ICE
+   [sel_mic]
+ SD /           NUM_MICS   NUMPARTICLES
+   [summary_doc]
+ SD -1, [num-mics],[particle-counter]
+   [summary_doc]
+ SD E
+   [summary_doc]
+
+ EN D
+
+ ; Modified 2013-10-16
+ ;    2013-10-16 (agl) -- modernized
+ ;    2012-07-19 (trs) -- creates output directories if needed
+ ;    2012-04-06 (trs) -- added sel_part output
+ ; </pre></body></html>
+@
+
+
+1.2
+log
+@creates directories if needed
+@
+text
+@d1 61
+a61 55
+; BATCH CONVERTS EMAN2 COORDINATES FILE TO SPIDER FORMAT
+;
+; NOTE: REQUIRES emancoords2spiderdoc.py
+
+; ---------------------- Inputs ----------------------
+fr l
+[filenums]../sel_micrograph                          ; micrograph list
+fr l
+[eman_coords]../Micrographs/mic{****[mic-num]}.box   ; EMAN coordinates
+
+; ----------------------- Output -----------------------
+fr l
+[coords_dir]coords                                      ; output directory for coordinate docs
+fr l
+[spider_coords][coords_dir]/sndc{****[mic-num]}         ; SPIDER coordinates doc
+fr l
+[win_dir]win                                            ; output directory for selection docs
+fr l
+[mic_part_list][win_dir]/sel_particles{****[mic-num]}   ; particle selection doc
+fr l
+[summary_doc]summary-eman2spi                           ; summary doc
+
+; ------------------ END BATCH HEADER ------------------
+
+; prepare summary doc
+de
+[summary_doc]
+SD /       MICNUM    NUMPARTICLES
+[summary_doc]
+
+[particle-counter] = 0
+
+; create directories if necessary
+vm
+echo "if(! -d [win_dir]) mkdir -p [win_dir]"|csh
+vm
+echo "if(! -d [coords_dir]) mkdir -p [coords_dir]"|csh
+
+; get #micrographs
+ud n [num-mics]
+[filenums]
+
+; loop through micrographs
+do [mic-key] = 1, [num-mics]
+    ; get micrograph#
+    ud ic [mic-key], [mic-num]
+    [filenums]
+
+    ; run Python script
+    vm
+    emancoords2spiderdoc.py [eman_coords] [spider_coords].$DATEXT
+
+    ; get #particles
+    ud n [mic-parts]
+    [spider_coords]
+d63 9
+a71 9
+    ; write selection doc
+    doc create
+    [mic_part_list]
+    (1)  ; column# to populate
+    (1-[mic-parts])
+
+    ; write to summary
+    sd [mic-key], [mic-num], [mic-parts]
+    [summary_doc]
+d73 1
+a73 1
+    ; update cumulative counter
+d75 1
+a75 2
+enddo
+; end micrograph-loop
+d77 2
+a78 2
+VM
+echo ; echo "Converted coordinates for {*******[particle-counter]} particles in {*****[num-mics]} micrographs"
+d80 17
+a96 15
+; close doc
+ud ice
+[filenums]
+SD /           NUM_MICS   NUMPARTICLES
+[summary_doc]
+sd -1, [num-mics],[particle-counter]
+[summary_doc]
+sd e
+[summary_doc]
+
+en d
+
+; Modified 2012-07-19
+;    2012-07-19 (trs) -- creates output directories if needed
+;    2012-04-06 (trs) -- added sel_particles output
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d5 1
+a5 1
+; --------------------- Inputs ---------------------
+d7 1
+a7 1
+[filenums]../sel_micrograph                         ; micrograph list
+d9 1
+a9 1
+[eman_coords]../Micrographs/mic{****[mic-num]}.box  ; EMAN coordinates
+d11 1
+a11 1
+; -------------------- Output --------------------
+d13 1
+a13 1
+[spider_coords]coords/sndc{****[mic-num]}        ; SPIDER coordinates doc
+d15 1
+a15 1
+[mic_part_list]win/sel_particles{****[mic-num]}  ; particle selection doc
+d17 5
+a21 1
+[summary_doc]summary-eman2spi                    ; summary doc
+d23 1
+a23 1
+; ---------------- END BATCH HEADER ----------------
+d33 6
+d87 2
+a88 1
+; Modified 2012-04-06
+a89 1
+
+@

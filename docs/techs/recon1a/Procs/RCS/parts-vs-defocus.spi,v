@@ -1,0 +1,792 @@
+head	1.7;
+access;
+symbols
+	Pre_gold:1.6;
+locks;
+comment	@# @;
+
+
+1.7
+date	2016.07.05.19.05.47;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2013.12.13.16.08.43;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2013.11.13.19.41.47;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2013.11.13.16.52.50;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2013.11.12.14.03.23;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2013.11.08.19.26.58;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2012.05.23.03.22.03;	author tapu;	state Exp;
+branches;
+next	;
+
+
+desc
+@new file -- separates selected particles by micrograph
+@
+
+
+1.7
+log
+@echo formatting
+@
+text
+@ ; <html><head><title>Plots number of particles vs_defocus</title></head><body><pre>
+ ;
+ ; SOURCE:   spider/docs/techs/recon1/Procs/parts-vs-defocus.spi
+ ;
+ ; PURPOSE:  Sorts particles by micrograph and thus defocus. 
+ ;           Tabulates number of particles versus defocus level.
+ ;           Plots number of particles vs defocus
+ ;
+ ; USAGE:    clean ; ./spider spi/dat @@parts-vs-defocus
+ ;
+ ; ----------------- Parameters -----------------
+
+ [viewplot-yn]        = 1       ; Open Gnuplot automatically? (0 == no)
+
+ [progress-interval]  = 100     ; Print progress message to screen every Nth particle
+
+ ;  ------------------- Inputs -------------------
+
+ [sel_mic]           = '../Power_Spectra/defocus'         ; Micrograph selection file       (one)
+
+ [sel_part_combined] = 'sel_part_combined_good'           ; Combined list of all particles  (one)
+
+ [mic_sel_part]      = '../Particles/good/sel_part_****'  ; Initial particle selection doc file (one/micrograph)
+
+ [global2grp_lut]    = '../Particles/win/glonum2micwin'   ; Global particle look-up table   (one)
+
+ ; ------------------- Outputs -------------------
+
+ [sel_part_bymic]    = '../Micrographs/sel_part_bymic_****'  ; New particle selection doc file (one/micrograph)
+
+ [good_parts_bymic]  = 'parts_vsmic'                         ; Summary doc file            (one)
+
+ [gnuplot_script]    = 'parts_vsdefocus.gnu'                 ; Gnuplot script              (one)
+
+ ; -------------- END BATCH HEADER --------------
+
+ MD
+   TR OFF                                                  ; Decrease results file output
+ MD
+   VB OFF                                                  ; Decrease results file output
+
+
+ [good_parts_bymic_sorted] = '[good_parts_bymic]_sorted'   ; Sorted summary doc file     (one)
+
+ SYS
+    echo -n "  Making good particle list for micrographs    "; date ; echo
+
+ ; Clean up pre-existing files 
+ DE                              ; Delete
+   [good_parts_bymic]            ; Summary doc file             (deleted)
+
+ ; Put header in output doc file 
+ SD /       MIC_NUM       DEFOCUS      PARTSGOOD     PARTS_ALL
+   [good_parts_bymic]            ; Summary doc file             (output)
+ 
+ [goodtotal]     = 0
+ [combinedparts] = 0
+ [mic-counter]   = 0
+
+ DO                              ; Loop over all micrographs ----------------------------
+   UD NEXT [mkey], [mic],[defocus]
+     [sel_mic]                   ; Micrograph selection file (input)
+   IF ( [mkey] <= 0 ) EXIT
+
+   [mic-parts] = 0
+   [outkey]    = 0
+
+   DO                            ; Loop over particles ----------------------------------
+
+    ;   VIEW_WIN   GLOBAL_NUM  GRP_WIN  CCROT   MIRROR    GRP_NUM   VIEW   MIC
+    UD NEXT [pkey],[vwin], [glonum] ,[grpwin],[ccr],[mir],[grp],[view],[micnow] 
+       [sel_part_combined]       ; Particle  file            (input)
+    IF ( [pkey] <= 0 ) EXIT
+
+    IF ( [micnow] == [mic] ) THEN
+       ; Particle from this micrograph
+
+       IF ( [mic-parts] == 0 ) THEN
+         ; First particle for this micrograph, clean existing files and lable headers
+
+         DE                         ; Delete
+           [sel_part_bymic][mic]    ; Selection doc file (deleted)
+ 
+         ; First particle in mic, label columns
+         SD /         WIN          MIC_NUM       MIC_WIN      GLOBAL_NUM        GRP
+           [sel_part_bymic][mic]    ; Selection doc file (output)
+
+         [outkey] = 0
+       ENDIF
+
+       [outkey]    = [outkey] + 1
+       [mic-parts] = [mic-parts]+ 1
+       
+       ; Refer to global particle look-up table   
+       ;  KEY: GLOBAL_NUM   REG: MIC-NUM,   MIC-WIN
+       UD IC [glonum], [mic-num], [mic-win] 
+          [global2grp_lut]           ; Global particle look-up table      (one)
+ 
+       ; Write to sel particle list
+       ;   WIN   MIC_NUM  MIC_WIN  GLOBAL_NUM   GRP
+       SD  [outkey], [mic-win],[mic],[mic-win],[glonum],[grp]
+         [sel_part_bymic][mic]      ; Selection doc file (output)
+
+     ENDIF
+   ENDDO                            ; End of: Loop over particles ----------------------------------
+
+   [goodtotal] = [goodtotal] + [mic-parts] ; Overall total parts
+
+   SYS
+     echo "  Kept: {%I7%[mic-parts]} particles from micrograph: {%I4%[mic]} " 
+
+   [mic-counter] = [mic-counter] + 1
+
+   ; Get number of particles before verification
+   UD N [tot-parts]
+     [mic_sel_part][mic]
+
+   ; Increment combined particle counter
+   [combinedparts] = [combinedparts] + [tot-parts]
+
+   SD  [mic-counter], [mic], [defocus],[mic-parts],[tot-parts]
+     [good_parts_bymic]            ; Summary doc file (output)
+  
+   ; Close docs
+   UD ICE
+     [sel_part_bymic][mic]         ; Selection doc file (closed)
+
+ ENDDO                             ; End of: Loop over all micrographs ----------------------------
+
+ SD E                              ; Close
+   [good_parts_bymic]              ; Summary  file                (closed)
+
+ DE  
+   [good_parts_bymic_sorted]       ; Sorted summary  file         (deleted)
+ SD /       MIC_NUM       DEFOCUS      PARTSGOOD     PARTS_ALL
+   [good_parts_bymic_sorted]       ; Sorted summary  file         (output)
+ SD E                              ; Close
+   [good_parts_bymic_sorted]       ; Sorted summary  file         (output)
+
+ DOC SORT A                        ; Sort doc file into existing labeled file
+   [good_parts_bymic]              ; Summary  file                (input)
+   [good_parts_bymic_sorted]       ; Sorted summary  file         (output)
+   2                               ; Register to sort by: defocus
+   Y                               ; Renumber
+
+
+ ; Write to summary doc
+ SD /            NUMMICS     SAVED_PARTS  INITIAL_PARTS     
+   [good_parts_bymic]              ; Summary  file                 (output)
+ [dummy] = -[mic-counter]
+ SD [dummy], [mic-counter],[goodtotal],[combinedparts]
+   [good_parts_bymic]              ; Summary  file                (output)
+ SD E
+   [good_parts_bymic]              ; Summary  file                (closed)
+
+
+ ; Close docs
+ UD ICE
+   [sel_part_combined]             ; Particle  file                (closed)
+ UD NEXT E
+   [sel_mic]                       ; Micrograph selection file     (closed)
+ UD ICE 
+   [global2grp_lut]                ; Global particle look-up table (closed)
+ SYS
+   echo "  Kept: {%I7%[goodtotal]} particles from: {%I0%[mic-counter]} micrographs" ; echo
+ 
+
+ ; GENERATE GNUPLOT SCRIPT -------------------------------------------------------------------
+
+ ; Delete pre-existing file
+ SYS
+   rm -f [gnuplot_script]
+
+ ; Will use arbitrary numbers in case version <18.20
+ SYS
+   echo 'set xlabel "Micrograph (sorted by defocus)"' > [gnuplot_script]
+ SYS
+   echo 'set ylabel "#Particles"' >> [gnuplot_script]
+ SYS
+   echo 'set boxwidth 0.95 relative ' >> [gnuplot_script]
+ SYS
+   echo 'set style data histogram' >> [gnuplot_script]
+ SYS
+   echo 'set style fill solid'   >> [gnuplot_script]
+ SYS
+   echo 'set key outside box'    >> [gnuplot_script]
+ SYS
+   echo 'plot [] [0:] \'         >> [gnuplot_script]
+ SYS
+   echo '"[good_parts_bymic_sorted].$DATEXT" using 1:6               title "total" with boxes, \' >> [gnuplot_script]
+ SYS
+   echo '"[good_parts_bymic_sorted].$DATEXT" using 1:5               title "good"  with boxes' >> [gnuplot_script]
+;;   echo '"[good_parts_bymic_sorted].$DATEXT" using 1:5:xticlabels(3) title "good"  with boxes' >> [gnuplot_script]
+
+ ; If requested, open Gnuplot
+ IF ( [viewplot-yn] .NE. 0 ) THEN
+    SYS
+      echo " gnuplot -persist [gnuplot_script]" ; echo
+    SYS
+      gnuplot -persist [gnuplot_script]
+ ELSE
+    SYS
+      echo ; echo "gnuplot usage: load '[gnuplot_script]'" ; echo
+ ENDIF
+
+ EN D
+
+ ; Modified 2013-11-27
+ ;    2013-11-27 (trs) -- Overlays number of particles before verification, removed xticlabels
+ ;    2013-10-23 (agl) -- New file names, modernized syntax & cosmetic
+ ;    2012-05-10 (trs) -- Optionally spawns Gnuplot
+ ;    2012-04-30 (trs) -- Adapted from goodpartsbygroup.spi
+
+ ; </pre></body></html>
+@
+
+
+1.6
+log
+@tapus changes
+@
+text
+@d46 1
+a46 1
+    echo -n " Making good particle list for micrographs    "; date ; echo
+d110 1
+a110 1
+     echo " Kept: {%I7%[mic-parts]} particles from micrograph: {%I4%[mic]} " 
+d165 1
+a165 1
+   echo " Kept: {%I7%[goodtotal]} particles from: {%I0%[mic-counter]} micrographs" ; echo
+@
+
+
+1.5
+log
+@using_settings
+@
+text
+@d19 1
+a19 1
+ [sel_mic]           = '../Power_Spectra/defocus'          ; Micrograph selection file       (one)
+d21 1
+a21 1
+ [sel_part_combined] = 'sel_part_combined_good'            ; Combined list of good particles (one)
+d23 3
+a25 1
+ [global2grp_lut]    = '../Particles/win/glonum2micwin'    ; Global particle look-up table   (one)
+d29 1
+a29 1
+ [sel_part_bymic]    = '../Micrographs/sel_goodpart_bymic_****' ; Particle selection doc file (one/micrograph)
+d31 1
+a31 1
+ [good_parts_bymic]  = 'good_parts_vsmic'                       ; Summary doc file            (one)
+d33 1
+a33 1
+ [gnuplot_script]    = 'parts_vsdefocus.gnu'                    ; Gnuplot script              (one)
+d53 1
+a53 1
+ SD /       MIC_NUM       DEFOCUS     PARTICLES
+d56 3
+a58 2
+ [ntotal]      = 0
+ [mic-counter] = 0
+d107 1
+a107 1
+   [ntotal] = [ntotal] + [mic-parts] ; Overall total parts
+d114 8
+a121 1
+   SD  [mic-counter], [mic], [defocus],[mic-parts]
+d135 1
+a135 1
+ SD /       MIC_NUM       DEFOCUS     PARTICLES
+d148 1
+a148 1
+ SD /  NUM_MICS   SAVED_PARTICLES       
+d151 1
+a151 1
+ SD [dummy], [mic-counter],[ntotal]
+d165 1
+a165 1
+   echo " Kept: {%I7%[ntotal]} particles from: {%I0%[mic-counter]} micrographs" ; echo
+d186 5
+a190 1
+   echo 'plot \'                  >> [gnuplot_script]
+d192 2
+a193 1
+   echo '"[good_parts_bymic_sorted].$DATEXT" using 1:5:xticlabels(3) title "good" with boxes' >> [gnuplot_script]
+d208 2
+a209 1
+ ; Modified 2013-10-13
+@
+
+
+1.4
+log
+@using_settings
+@
+text
+@d31 1
+a31 1
+ [gnuplot_script]    = 'parts_vs_defocus.gnu'                   ; Gnuplot script              (one)
+@
+
+
+1.3
+log
+@consolidated_filenames
+@
+text
+@d10 1
+a10 1
+
+a20 1
+ ;   VIEW_WIN   GLOBAL_NUM  GRP_WIN  CCROT   MIRROR    GRP_NUM   VIEW   MIC
+a22 1
+ ; KEY=GLOBAL#  GRPSLICE  MICSLICE  GRP_NUM  MICROGRAPH
+d27 1
+a27 1
+ [goodmic_dir]        = '../Micrographs'                     ; Output directory            (one)
+d29 1
+a29 2
+ [sel_part_bymic]     = '[goodmic_dir]/sel_part_bymic_****' ; Particle selection doc file (one/micrograph)
+ ;        MICSLICE     GLOBAL_PART
+d31 1
+a31 1
+ [summary_good_doc]   = 'summary_good_parts_bymic'          ; Summary doc file            (one)
+d33 1
+a33 3
+ [summary_good_doc_sorted] = '[summary_good_doc]_sorted'              ; Summary doc file            (one)
+
+ [gnuplot_script]     = 'parts_vs_defocus.gnu'              ; Gnuplot script              (one)
+d35 4
+a38 1
+ ; -------------- END BATCH HEADER --------------
+d41 1
+a41 2
+ SYS
+    echo -n " Making good particle list for each micrograph    "; date
+a42 1
+ ; Make directory, if necessary
+d44 1
+a44 1
+   mkdir -p [goodmic_dir]
+d47 2
+a48 2
+ DE                         ; Delete
+   [summary_good_doc]            ; Summary doc file            (deleted)
+d50 3
+a52 4
+  DE  
+   [summary_good_doc]            ; Summary doc file             (output)
+  SD /       MIC_NUM       DEFOCUS     PARTICLES
+   [summary_good_doc]            ; Summary doc file             (output)
+d57 1
+a57 1
+ DO                                ; Loop over all micrographs ----------------------------
+d59 1
+a59 1
+     [sel_mic]                     ; Micrograph selection file (input)
+d65 1
+a65 1
+   DO                              ; Loop over particles ----------------------------------
+d69 1
+a69 1
+       [sel_part_combined]         ; Particle  file            (input)
+a88 1
+
+d102 1
+a102 1
+   ENDDO                           ; End of: Loop over particles ----------------------------------
+d112 1
+a112 1
+     [summary_good_doc]                 ; Summary doc file (output)
+d121 1
+a121 1
+   [summary_good_doc]                   ; Summary  file                (closed)
+d124 1
+a124 1
+   [summary_good_doc_sorted]            ; Sorted summary  file         (deleted)
+d126 1
+a126 1
+   [summary_good_doc_sorted]            ; Sorted summary  file         (output)
+d128 1
+a128 1
+   [summary_good_doc_sorted]            ; Sorted summary  file         (output)
+d131 2
+a132 2
+   [summary_good_doc]                   ; Summary  file                (input)
+   [summary_good_doc_sorted]            ; Sorted summary  file         (output)
+d139 1
+a139 1
+   [summary_good_doc]                  ; Summary  file                 (output)
+d142 1
+a142 1
+   [summary_good_doc]                   ; Summary  file                (output)
+d144 1
+a144 1
+   [summary_good_doc]                   ; Summary  file                (closed)
+d149 1
+a149 1
+   [sel_part_combined]         ; Particle  file                (closed)
+d151 1
+a151 1
+   [sel_mic]                   ; Micrograph selection file     (closed)
+d153 1
+a153 1
+   [global2grp_lut]            ; Global particle look-up table (closed)
+d157 2
+a158 1
+ ; GENERATE GNUPLOT SCRIPT
+d170 6
+d178 1
+a178 1
+   echo '"[summary_good_doc_sorted].$DATEXT" using 3:5 title "good" with boxes' >> [gnuplot_script]
+@
+
+
+1.2
+log
+@rewrite_syntax_filenames
+@
+text
+@d34 1
+a34 1
+ [summary_doc]        = 'summary_good_parts_bymic'          ; Summary doc file            (one)
+d36 1
+a36 1
+ [summary_doc_sorted] = '[summary_doc]_sorted'              ; Summary doc file            (one)
+d52 1
+a52 1
+   [summary_doc]            ; Summary doc file            (deleted)
+d55 3
+a57 3
+   [summary_doc]            ; Summary doc file             (output)
+  SD /     MIC_NUM    DEFOCUS     PARTICLES
+   [summary_doc]            ; Summary doc file             (output)
+d118 1
+a118 1
+     [summary_doc]                 ; Summary doc file (output)
+d127 1
+a127 1
+   [summary_doc]                   ; Summary  file                (closed)
+d130 3
+a132 3
+   [summary_doc_sorted]            ; Sorted summary  file         (deleted)
+ SD /     MIC_NUM    DEFOCUS     PARTICLES
+   [summary_doc_sorted]            ; Sorted summary  file         (output)
+d134 1
+a134 1
+   [summary_doc_sorted]            ; Sorted summary  file         (output)
+d137 2
+a138 2
+   [summary_doc]                   ; Summary  file                (input)
+   [summary_doc_sorted]            ; Sorted summary  file         (output)
+d145 1
+a145 1
+   [summary_doc]                  ; Summary  file                 (output)
+d148 1
+a148 1
+   [summary_doc]                   ; Summary  file                (output)
+d150 1
+a150 1
+   [summary_doc]                   ; Summary  file                (closed)
+d177 1
+a177 1
+   echo '"[summary_doc_sorted].$DATEXT" using 3:5 title "good" with boxes' >> [gnuplot_script]
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d1 195
+a195 1
+; SEPARATES GOOD PARTICLES BY MICROGRAPH
+d197 1
+a197 257
+; ----------------- Parameters -----------------
+[viewplot-yn]       = 1       ; open Gnuplot automatically? (0 == no)
+[progress-interval] = 3000    ; prints progress message to screen every N particles
+
+; ------------------- Inputs -------------------
+fr l
+[combined_part_list]combinedgood                ; combined list of good particles
+;         VIEWSLICE      GLOBAL      GROUP_SLICE      CCROT        MIRROR       GROUP_NUM      VIEWNUM
+;                         used
+fr l
+[global2grp_lut]../Alignment/global2group       ; combined-particle list
+;KEY=GLOBAL / GRPSLICE     MICSLICE     GROUPNUM    MICROGRAPH
+fr l
+[mic_defoci]../Power_Spectra/defocus            ; doc file with defocus-group for each micrograph
+;        MICROGRAPH     DEFOCUS
+fr l
+[old_mic_part_doc]../Particles/good/ngood****   ; filename pattern for total list of particles for each micrograph
+
+; ------------------- Outputs -------------------
+fr l
+[goodmic_dir]Micrographs                 ; directory where output files will go
+fr l
+[mic_good_list][goodmic_dir]/ngood****   ; good-particle list, for each micrograph
+;        MICSLICE     GLOBAL_PART
+fr l
+[summary_doc]summary-goodpartsbymic      ; summary doc file
+fr l
+[gnuplot_script]partsbydf.gnu            ; Gnuplot script
+
+; -------------- END BATCH HEADER --------------
+
+fr l
+[temp_sorted_defocus_doc]tmpdocdefocus_sorted
+
+vm
+echo "Making good-particle list for each micrograph"; date
+
+; make directory, if necessary
+vm
+echo "if(! -d [goodmic_dir]) mkdir [goodmic_dir]"|csh
+
+
+; clean up pre-existing files 
+
+;; read first micrograph#
+;ud 1, [first]
+;[mic_defoci]
+;ud e
+;
+;; clean up pre-existing files
+;de a
+;[mic_good_list][first]
+
+;(There might be a gap of >10, so DE A wouldn't work.)
+
+; get #micrographs
+ud n [num-mics]
+[mic_defoci]
+
+do lb6 [mic-key6] = 1,[num-mics]
+    ; read micrograph#
+    ud ic [mic-key6], [mic-num6]
+    [mic_defoci]
+    
+    de
+    [mic_good_list][mic-num6]
+lb6
+
+; close doc
+ud ice
+[mic_defoci]
+
+
+; SEPARATE PARTICLES BY MICROGRAPH
+
+; initialize previous mic#
+[prev-mic] = -1
+
+; initialize particle-counter
+[part-counter] = 0
+
+; get #particles
+ud n [num-parts]
+[combined_part_list]
+
+; loop through particles
+do lb5 [part-key] = 1,[num-parts]
+    ; read global#
+    ud ic [part-key], [v99],[global-part]
+    [combined_part_list]
+
+    ; print progress message
+    if (int([part-key]/[progress-interval]).eq.[part-key]/[progress-interval]) then
+        vm
+        echo "Working on {******[part-key]}th particle out of {*******[num-parts]}"    
+    endif
+    
+    ; read mic#, mic-slice, etc.
+    ud ic [global-part], [grp-slice],[mic-slice],[grp-num5],[mic-num5]
+    [global2grp_lut]
+
+    ; if new group, close & update previous group#
+    if([mic-num5].ne.[prev-mic]) then
+        sd e
+        [mic_good_list][prev-mic]
+
+        [prev-mic] = [mic-num5]
+    endif
+
+    ; write to doc
+    [part-counter] = [part-counter] + 1
+    sd [part-counter], [mic-slice],[global-part]
+    [mic_good_list][mic-num5]
+    ; (keys will be renumbered below)
+lb5
+; end particle-loop
+
+; close docs
+ud ice
+[combined_part_list]
+ud ice
+[global2grp_lut]
+sd e
+[mic_good_list][mic-num5]
+
+vm
+echo "Separated {*******[part-counter]} particles from {*******[num-parts]} in [combined_part_list].$DATEXT" ; echo
+
+
+; GET NEW GROUP STATS
+
+vm
+echo "Generating summary"
+
+; delete pre-existing file
+de
+[summary_doc]
+SD /       GRP_NUM     PARTS_AFTER   PARTSBEFORE     DEFOCUS
+[summary_doc]
+
+; initialize counters
+[mic-counter]     = 0
+[totparts-before] = 0
+[totparts-after]  = 0
+
+; sort micrographs by defocus
+doc sort
+[mic_defoci]
+[temp_sorted_defocus_doc]
+(2)   ; column# to sort: defocus value
+Y     ; renumber?
+
+; get #groups
+ud n [num-mics]
+[temp_sorted_defocus_doc]
+
+; loop through groups
+do lb7 [mic-key] = 1,[num-mics]
+    ; read micrograph#, defocus
+    ud ic [mic-key], [mic-num7],[defocus]
+    [temp_sorted_defocus_doc]
+
+    ; read #orig-particles
+    ud n [parts-before]
+    [old_mic_part_doc][mic-num7]
+    
+    ; check if new micrograph-particle list exists
+    iq fi [miclist-exists]
+    [mic_good_list][mic-num7]
+
+    ; if it doesn't exist, print warning and proceed to next group
+    if([miclist-exists].eq.0) then
+        vm
+        echo "No particles found in micrograph #{****[mic-num7]}, {****[parts-before]} particles found initially"
+        
+        [parts-after] = 0
+    else
+        ; renumber keys
+        doc ren
+        [mic_good_list][mic-num7]
+        [mic_good_list][mic-num7]
+        
+        SD /      MIC_SLICE     GLOBALNUM
+        [mic_good_list][mic-num7]
+        sd e
+        [mic_good_list][mic-num7]
+
+        ; get #new-particles
+        ud n [parts-after]
+        [mic_good_list][mic-num7]
+
+;        vm
+;        echo "Micrograph {****[mic-num7]} -- Kept {******[parts-after]} particles out of {******[parts-before]}"
+    endif
+
+    ; write to summary doc
+    [mic-counter] = [mic-counter] + 1
+    sd [mic-counter], [mic-num7],[parts-after],[parts-before], [defocus]
+    [summary_doc]
+    
+    ; increment cumulative particle counters
+    [totparts-before] = [totparts-before] + [parts-before]
+    [totparts-after]  = [totparts-after]  + [parts-after]
+lb7
+; end micrograph-loop
+
+vm
+echo; echo "Assigned {*******[totparts-after]} particles out of {*******[totparts-before]} initial particles" 
+
+; close docs
+ud ice
+[temp_sorted_defocus_doc]
+de
+[temp_sorted_defocus_doc]
+[dummy] = -[num-mics]
+sd [dummy], [totparts-after],[totparts-before]
+[summary_doc]
+SD /  NUMMICS   CURRENT      INITIAL
+[summary_doc]
+sd e
+[summary_doc]
+
+
+; GENERATE GNUPLOT SCRIPT
+
+; delete pre-existing file
+vm
+rm -f [gnuplot_script]
+
+; Will use arbitrary numbers in case version <18.20
+vm
+echo 'set xlabel "Micrograph (sorted by defocus)"' > [gnuplot_script]
+vm
+echo 'set ylabel "#Particles"' >> [gnuplot_script]
+vm
+echo 'plot \' >> [gnuplot_script]
+vm
+echo '"[summary_doc].$DATEXT" using 1:5 title "initial" with boxes, \' >> [gnuplot_script]
+vm
+echo '"[summary_doc].$DATEXT" using 1:4 title "final" with boxes' >> [gnuplot_script]
+
+; if requested, open Gnuplot
+if([viewplot-yn].ne.0) then
+    vm
+    echo ; echo "gnuplot -persist [gnuplot_script]" ; echo
+    vm
+    gnuplot -persist [gnuplot_script]
+else
+    vm
+    echo ; echo "gnuplot usage: load '[gnuplot_script]'" ; echo
+endif
+
+en d
+
+; Modified 2012-05-10
+;    2012-05-10 (trs) -- optionally spawns Gnuplot
+;    2012-04-30 (trs) -- adapted from goodpartsbygroup.spi
+@

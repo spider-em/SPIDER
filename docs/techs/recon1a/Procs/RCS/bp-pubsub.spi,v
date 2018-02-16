@@ -1,0 +1,313 @@
+head	1.4;
+access;
+symbols
+	Pre_gold:1.4;
+locks;
+comment	@# @;
+
+
+1.4
+date	2014.05.14.16.15.06;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2013.12.13.16.43.06;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2013.11.08.19.26.29;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2012.05.23.02.56.08;	author tapu;	state Exp;
+branches;
+next	;
+
+
+desc
+@new file -- parallel, toplevel reconstruction batch file
+@
+
+
+1.4
+log
+@[finished_file] replaces [group_fsc]_u
+@
+text
+@ ; <html><head><title>Computes back-projection of an image series</title></head><body><pre>
+ ;
+ ; SOURCE: spider/docs/techs/recon1/Procs/bp-pubsub.spi   
+ ;
+ ; PURPOSE: Computes back-projection and its resolution for an image series. 
+ ;          FOR PROJECTS WITH ONE OR MORE GROUPS - WITH PUBSUB
+ ;
+ ; USAGE:       clean ; ./spider spi/dat @@bp-pubsub
+
+; --------------------- END BATCH HEADER ---------------------
+
+ ; Set parameter and file names
+ @@bp-settings([stk-opt],[r-fsc],[bp-type],[r-bpn],[cg-err],[cg-chi], [cg-iter],[cg-mode],[cg-lam],[rp-lam],[rp-cor],[rp-iter], [sp_pixsiz],[incore-yn])
+ 
+ MD
+   TR OFF                        ; Decrease results file output
+ MD
+   VB OFF                        ; Decrease results file output
+
+ ; Put label in new resolution doc file
+ DE
+   [resol_doc]                   ; Resolution doc file    (removed)
+ SD / '      GROUP,    NORM-FREQ,    RESOL.(ANG.)  MASKED-RESOL.  (CUTOFF=50%)' 
+   [resol_doc]                   ; Resolution doc file    (output)
+
+ ; Initialize counters
+ [total-parts] = 0               ; Initialize # of particles
+ [num-grps]    = 0               ; Initialize # of groups
+
+ ; Loop through groups
+ DO                              ; Loop through groups -----------------------------
+
+   UD NEXT [key], [grp]          ; Get group number
+     [sel_group]                 ; Group selection file     (input)
+   IF ([key] <= 0) EXIT
+
+   [num-grps] = [num-grps] + 1   ; Increment # of groups
+
+   ; For first group, check whether input files exist
+   IF ( [num-grps] == 1 ) THEN
+
+      @@check-exist([exists1])
+        [aligned_images][grp]      ; Image file  (input)
+      @@check-exist([exists2])
+        [group_align][grp]         ; Doc file  (input)
+      @@check-exist([exists3])
+        [sel_particles][grp]       ; Image file  (input)
+
+      ; If any file is missing, product of flags will be zero
+      [iqfi-product] = [exists1]*[exists2]*[exists3]
+
+      IF ( [iqfi-product] == 0 ) THEN
+         SYS
+            echo ; echo " Exiting" ; echo
+         EN 
+      ENDIF
+   ENDIF
+
+   ; Get # of particles
+   UD N [grp-parts]
+     [sel_particles][grp]         ; Doc file  (input)
+    
+   ; Increment total particle counter
+   [total-parts] = [total-parts] + [grp-parts]
+
+   SYS
+      publish './spider spi/$DATEXT @@bp-main {***[grp]} grp={***[grp]}'
+
+   IF ( [max-wait] > 0 ) THEN
+     ; Wait for compute node copy to local disk to minimize competition
+     IQ SYNC DEL  [wait-time]     ; Check file existance then delete it
+       [wait_file][grp]           ; Flag file  (input)
+       10 [max-wait]              ; Wait time
+     SYS
+        echo " Group: {%I3%[grp]}  Wait time: {%I5%[wait-time]} seconds"
+   ENDIF
+
+   MY FL                          ; Flush results file
+ ENDDO                            ; End group-loop
+
+ ; Wait for PubSub compute node completion
+ [one] = 1
+ [end] = [num-grps]
+ @@wait-pub([one],[end])           ; Wait for compute node completion  
+    [finished_file]               ; File created when finished (one/group)
+
+ ; If more than one group, sum and compute resolution
+ IF ( [num-grps] > 1 ) THEN
+   @@bp-merge([num-grps])
+
+   SYS
+     echo -n " Back projections merged   "; date '+ TIME: %x  %X' ; echo
+ ENDIF
+
+ ; Create matched filter
+ @@make-matched-filt              ; Create filter doc file
+
+ ; Apply matched filter to output volume
+ @@matched-filt                   ; Filter to specified resolution
+
+ SYS
+   echo -n " Done   " ; date '+ TIME: %x  %X' ; echo
+
+ EN 
+ ; </pre></body></html>
+
+@
+
+
+1.3
+log
+@batch header
+@
+text
+@d85 1
+a85 2
+   [group_fsc]_u                  ; Unmasked group FSC doc file         (output)
+!  [finished_file]                ; File created when finished (one/group)
+@
+
+
+1.2
+log
+@rewrite_syntax_filenames
+@
+text
+@d10 2
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d1 95
+a95 50
+; CALCULATE TWO HALF-SET RECONSTRUCTIONS FOR EACH GROUP
+;
+; Adapted from bpodd.bat (formerly b24.bpo)
+
+@@bps-settings([stk-opt],[rad-fsc],[bp-method],[rad-recon],[cg-error],[cg-chisqr],[cg-iter],[cg-mode],[cg-lambda],[rp-lambda],[rp-correct],[rp-iter],[max-wait])
+
+fr l
+[temp_var]_3  ; variance map (not saved)
+
+;; initialize particle-counter
+;[total-parts] = 0
+
+de
+[summary_doc]
+;;SD /     MASKED_RES  UNMASKED_RES   NUMPARTS
+;;[summary_doc]
+
+; get #groups
+UD N,[num-grps]
+[group_list]
+
+; loop through groups
+DO LB1 [grp-key]=1,[num-grps]
+    ; Get current group number
+    UD IC [grp-key],[grp]  ; ,[numparts]
+    [group_list]             ; Group selection file            (input)
+    
+    ; for first group, check whether files exist
+    if([grp-key].eq.1) then
+        @@bps-check([exists1])
+        [params]
+    
+        @@bps-check([exists2])
+        [group_list]
+    
+        @@bps-check([exists3])
+        [ali_stack]
+    
+        @@bps-check([exists4])
+        [angles]
+    
+        @@bps-check([exists5])
+        [seltotal]
+    
+        ; if any file is missing, product of flags will be zero
+        [iqfi-product] = [exists1]*[exists2]*[exists3]*[exists4]*[exists5]
+
+        if([iqfi-product].eq.0) then
+            vm
+            echo ; echo "Exiting" ; echo
+d97 2
+a98 6
+            en
+        else
+            vm
+            echo "Input files OK"; echo
+        endif
+    endif
+d100 2
+a101 2
+;    ; increment counter
+;    [total-parts] = [total-parts] + [grp-parts]
+d103 2
+a104 20
+    vm
+    publish './spider spi/$DATEXT @@bps-distribute {***[grp]} grp={***[grp]}'
+LB1
+; end group-loop
+
+UD ICE
+[group_list]
+
+
+; WAIT FOR ALL DEFOCUS GROUPS TO FINISH
+
+my fl  ; flush results file
+
+; loop through defocus-groups
+DO LB2 [grp-key] = 1,[num-grps]
+    ; get defocus-group#
+    ud ic [grp-key], [grp]
+    [group_list]
+    
+    my fl  ; flush results file
+a105 51
+    IQ SYNC
+    [finished_flag]
+    (10 3600000)
+
+    MY FL
+
+    VM
+    echo "Group #{***[grp]} ({***[grp-key]}th out of {***[num-grps]}) synced"
+
+    DE
+    [finished_flag]
+    de
+    [dummy_wait_file][grp]
+LB2
+; end group-loop
+
+ud ice  ; close
+[group_list]
+
+vm
+echo "All groups synced" ; date ; echo
+
+; remove the header lines
+doc sort
+[summary_doc]_temp
+[summary_doc]
+0  ; column# to sort: 0==key (group#)
+N  ; renumber keys?
+
+; clean up doc files
+de
+[summary_doc]_temp
+;SD /      MASKEDRES    UNMASKEDRES    NUM_PARTS
+SD /      GROUP_NUM    UNMASKEDRES    MASKEDRES
+[summary_doc]
+sd e
+[summary_doc]
+
+; if more than one group, sum and compute resolution
+if([num-grps].ge.2) then
+    @@bps-combine
+endif
+
+vm
+echo "Done"; date
+
+EN
+
+; Modified 2012-05-14
+;    2012-05-14 (trs) -- reformatted summary doc to comply with plotres.spi
+;    2011-11-04 (trs) -- adapted from realign-pubsub.spi
+@

@@ -1,0 +1,618 @@
+head	1.4;
+access;
+symbols
+	GPL_update:1.4
+	pre_rewrite_2010:1.4
+	pre_more_stack:1.1
+	best-code:1.1
+	no-named-regs:1.1
+	pre_GPL:1.1
+	tag_version1_0:1.1;
+locks; strict;
+comment	@# @;
+
+
+1.4
+date	2009.11.09.16.46.42;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2007.03.22.14.21.30;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2007.01.17.16.35.45;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2005.04.04.13.52.56;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@new
+@
+
+
+1.4
+log
+@rewrite
+@
+text
+@; <html><head><title>Computes FSC Resolution</title></head><body><pre>
+;
+; SOURCE: deffsc.spi 
+;
+; PURPOSE: For each defocus group in the reconstrution:
+;          Divides particle data into two sets, the odd- vs even-numbered particles.
+;          Computes odd and even half 3D reconstructions.
+;          Computes Fourier Shell Correlation for each group reconstruction.
+;
+; I/O PARAMETERS AND FILES ARE SET HERE:
+;
+; --------------------- Parameters -----------------------------------
+
+[r]      = -1        ; Radius of restored object (Use: -1 for 95% winsize / 2)
+[lambda] = 0.2e-5    ; Lambda
+[climit] = 0.0       ; Back projection correction limit
+[iters]  = 60        ; Back projection iteration limit
+
+; -------------------- Input files -----------------------------------
+
+[params]   = '../params'                             ; Reconstruction parameter file
+
+[sel_grp]  = 'sel_group_cclim'                       ; Defocus group selection file
+
+[sel_part] = 'sel_particles_{***[grp]}'              ; Particle selection files (one / defocus group)
+
+[ali]      = '../Alignment/dala01_{***[grp]}@@******' ; Aligned particle images (one stack / defocus group)
+
+[angles]   = '../Alignment/align_01_{***[grp]}'      ; Alignment parameter doc files (one / defocus group)
+
+; -------------------------- Output files ---------------------------
+
+[seleven]  = 'df{***[grp]}/seleven'         ; Selection files for even-numbered particles (one / defocus group)
+
+[selodd]   = 'df{***[grp]}/selodd'          ; Selection files for odd-numbered particles (one / defocus group)
+
+[volodd]   = 'df{***[grp]}/vol001_odd'      ; Volumes (one / defocus group)
+
+[voleven]  = 'df{***[grp]}/vol001_even'     ; Volumes (one / defocus group)
+
+[tmp]      = 'df{***[grp]}/tmpdoccmp001'    ; Temp FSC doc files (one / defocus group)(deleted)
+[out]      = 'df{***[grp]}/doccmp001'       ; FSC doc files (one / defocus group)
+
+; -------------- END BATCH HEADER ---------------------------------</b>
+
+MD
+TR OFF                              ; Decrease results file output
+MD
+VB OFF                              ; Decrease results file output
+MD 
+SET MP 
+0                                   ; 0 = use all available processors  
+
+IF ([r] .EQ. -1) THEN
+   UD 17,[winsiz]                   ; Key 17 = windowsize
+   [params]
+   [r] = INT( (0.95*[winsiz])/2.0 )
+ENDIF
+
+UD 15,[maxspfq]                    ; Get maximum spatial frequency (1/Angstroms) 
+[params]
+
+DO                                  ; Loop over all defocus groups
+
+   IF ([grpin] .EQ. 0)  THEN        ; Group not on operation line
+      UD NEXT [key],[grp],[parts]   ; Get group from group sel. file
+      [sel_grp]                     ; Group selection file             (input)
+      IF ([key] .LE. 0) EXIT        ; End of groups in doc file
+
+   ELSE                             ; Group sent on operation line
+      [grp] = [grpin]               ; Set group from operation line
+   ENDIF
+
+   ; Create particle selection doc files for odd and even particle sets --------------
+
+   DE                               ; Delete any existing output file
+   [seleven]
+   DE                               ; Delete any existing output file
+   [selodd]
+
+   DOC SPLIT                        ; Alternately split doc. file into two 
+   [sel_part]                       ; Particle selection file              (input)
+   [selodd]                         ; particle selection file              (output)
+   [seleven]                        ; Particle selection file              (output)
+
+   VM
+   echo  ' 'Backprojecting group: {****[grp]}  Particles: {******[parts]}    
+   MY FL
+
+   ; Compute the first sampled 3D reconstruction.
+   BP RP  [niter]                 ; Gets number of BP iterations
+   [ali]                          ; Template for input image files          (input)
+   [selodd]                       ; Selection doc file for input images     (input)
+   [r]                            ; Radius of restored object
+   [angles]                       ; Angles doc file                         (input)
+   *                              ; Symmetries doc file (* = no symmetries) (input)
+   [volodd]                       ; Reconstructed 3D volume                (output)
+   [lambda],[climit]              ; Lambda, correction limit
+   [iters],0                      ; Iteration limit, mode
+   (.5,.5)                        ; Minimum, maximum
+   (.5)                           ; Smoothing constant
+
+   ; Compute the second sampled 3D reconstruction.
+   BP RP  [niter]                 ; Gets number of BP iterations
+   [ali]                          ; Template for input  image files         (input)
+   [seleven]                      ; Selection doc file for input images     (input)
+   [r]                            ; Radius of restored object
+   [angles]                       ; Angles doc file                         (input)
+   *                              ; Symmetries doc file (* = no symmetries) (input)
+   [voleven]                      ; Reconstructed 3D volume                 (output)
+   [lambda],[climit]              ; Lambda, correction limit
+   ([iters],0)                    ; Iteration limit, mode
+   (.5,.5)                        ; Minimum, maximum
+   (.5)                           ; Smoothing constant
+
+   ; Compute  Fourier Shell Correlation for this group. -------------------------
+
+   DE                             ; Remove any existing FSC file
+   [out]                          ; Doc file
+
+   RF 3 [unused],[spfq]           ; Fourier Shell Correlation
+   [voleven]                      ; First input volume              (input)
+   [volodd]                       ; Second input volume             (input)
+   (0.5)                          ; Ring width
+   (0.2,2)                        ; Lower, upper scale factors
+   C                              ; C = missing cone
+   (90)                           ; Max. tilt angle
+   (3)                            ; Factor for noise comparison
+   [tmp]                          ; Temp. FSC doc file              (output)
+
+   DOC REN                        ; Renumber doc keys (1...)
+   [tmp]                          ; Temp. FSC doc file              (input)
+   [out]                          ; FSC doc file                    (output)
+
+   ; Add footer in FSC doc file
+   SD /     NORM-FREQ         DPH         FSC        FSCCRIT        VOXELS
+   [out]                          ; FSC doc file                    (output)
+   SD E
+   [out]
+
+   [res] = 0.5/([maxspfq]*[spfq]) ; Resolution = pixel size / spatial freq.
+   VM
+   echo  ' 'Backprojected group:  {****[grp]}  Particles: {******[parts]}  Resolution: {%f7.2%[res]}    
+   VM
+   echo  ' '    
+   MY FL
+
+   IF ([grpin] .GT. 0) EXIT       ; Stop after one group
+
+ENDDO
+
+UD NEXT END                       ; Finished  with group selection file
+[sel_grp]                         ; Group selection file         (input)
+
+VM
+echo  ' '
+    
+EN
+; </body></pre></html>
+@
+
+
+1.3
+log
+@UD [numgrp], [grp],[parts]
+@
+text
+@d1 1
+a1 1
+; <html><head><title>Computes the FSC</title></head><body><pre>
+d5 2
+a6 2
+; PURPOSE: Divides the data set into two sets, the 
+;             odd- vs even-numbered particles.
+d8 1
+a8 1
+;          Computes the Fourier Shell Correlation for the overall reconstruction.
+d14 1
+a14 1
+[r]      = -1        ; Radius of restored object (use -1 for 95% winsize / 2)
+d16 2
+a17 2
+[climit] = 0.0       ; Correction limit
+[iters]  = 60        ; Iteration limit
+d21 1
+a21 2
+FR G
+[params]../params                          ; Parameter file
+d23 1
+a23 2
+FR G
+[defgrps_lim]sel_group_cclim                ; Defocus groups selection file
+d25 1
+a25 2
+FR G
+[sel_particles]sel_particles_{***[grp]}    ; Particle selection files
+d27 1
+a27 2
+FR G
+[ali]../Alignment/dala01_{***[grp]}@@****** ; Aligned particle images
+d29 1
+a29 2
+FR G
+[angles]../Alignment/align_01_{***[grp]}   ; Alignment parameter files
+d33 1
+a33 2
+FR G
+[seleven]df{***[grp]}/seleven         ; Selection files for even-numbered particles (one for each defocus group)
+d35 1
+a35 2
+FR G
+[selodd]df{***[grp]}/selodd           ; Selection files for odd-numbered particles (one for each defocus group)
+d37 1
+a37 2
+FR G
+[volodd]df{***[grp]}/vol001_odd       ; Volume (one for each defocus group)
+d39 1
+a39 2
+FR G
+[voleven]df{***[grp]}/vol001_even     ; Volume (one for each defocus group)
+d41 2
+a42 2
+FR G
+[out]df{***[grp]}/doccmp001           ; Output doc file (one / defocus group)
+d60 2
+a61 2
+UD N,[numgrps]                      ; Find number of defocus groups
+[defgrps_lim]                       ;                              (input)
+d63 1
+a63 2
+; Create selection doc files for odd and even numbered particles ------
+DO LB1 [numgrp]=1,[numgrps]         ; Loop over all defocus groups
+d65 4
+a68 2
+   UD [numgrp], [grp],[numparts]    ; Get current group number 
+   [defgrps_lim]                    ; Group selection file         (input)
+d70 7
+a76 1
+   DE                               ; Delete the output file
+d78 1
+a78 1
+   DE                               ; Delete the output file
+d81 4
+a84 35
+   [oddeven] = -1
+   [nodd]    = 0
+   [neven]   = 0
+
+   DO LB2 [part]=1,[numparts]       ; Loop over all particles
+
+      UD IC,[part],[num]
+      [sel_particles]               ;                    (input)
+
+      IF ([oddeven].EQ.-1) THEN
+         [neven] = [neven] + 1
+         SD [neven],[num]
+         [seleven]                  ;                     (output)
+      ELSE
+         [nodd] = [nodd] + 1
+         SD [nodd],[num]
+         [selodd]                   ;                    (output)
+      ENDIF
+      [oddeven] = -[oddeven]
+   LB2
+
+   SD E
+   [seleven]                        ;                    (output)
+   SD E
+   [selodd]                         ;                    (output)
+   UD ICE 
+   [sel_particles]                  ;                    (input)
+LB1
+
+MY FL
+
+DO LB3 [numgrp]=1,[numgrps]        ; Loop over all defocus groups
+
+   UD [numgrp], [grp],[parts]      ; Get current group number 
+   [defgrps_lim]                   ; Group selection file               (input)
+d88 1
+d90 3
+a92 3
+   ; Compute the odd half 3D reconstruction.
+   BP RP, [niter]                 ; Gets number of iterations
+   [ali]                          ; Template for input 2D image files       (input)
+d103 3
+a105 3
+   ; Compute the even half 3D reconstruction.
+   BP RP, [niter]                 ; Gets number of iterations
+   [ali]                          ; Template for input 2D image files       (input)
+a114 1
+LB3
+d116 1
+a116 2
+FR G
+[tmp]tmpres89                     ; Temp doc file (deleted)
+d118 2
+a119 1
+DO LB4 [numgrp]=1,[numgrps]       ; Loop over all defocus groups
+d121 1
+a121 9
+   UD [numgrp], [grp],[parts]     ; Get current group number 
+   [defgrps_lim]                  ; Group selection file               (input)
+
+   DE
+   [out]
+   DE
+   [tmp]
+
+   RF 3 
+d129 1
+a129 1
+   [tmp]                          ; Doc file                        (output)
+d131 9
+a139 3
+   DOC REN                        ; Renumber doc file keys
+   [tmp]                          ; Doc file                        (input)
+   [tmp]                          ; Doc file                        (output)
+d141 6
+a146 2
+   UD N,[nkeys]                   ; Get number of keys in tmp file
+   [tmp]
+d148 1
+a148 3
+   ; Title for output doc file
+   SD /    NORM'D FREQ    DPR        FSC        FSCCRIT     VOXELS
+   [out]
+d150 1
+a150 9
+   DO LB5 [key] = 1,[nkeys]
+      UD [key],[v62],[v63],[v64],[v65],[v66]  
+      [tmp]
+
+      SD [key],[v62],[v63],[v64],[v65],[v66]
+      [out]                        ;                      (output)
+   LB5
+   UD E
+LB4
+d152 2
+a153 2
+DE                                 ; Remove temp. file
+[tmp]
+@
+
+
+1.2
+log
+@added stacks, named variables
+@
+text
+@d7 2
+a8 4
+;          Computes  odd and even half 3D reconstructions.
+;          Computes the FSC for the overall reconstruction.
+;
+; MASTER COPY: /net/bali/usr1/spider/docs/techs/recon/newprogs/
+d73 1
+a73 1
+DO LB1 [numgrp]=1,[numgrps]       ; Loop over all defocus groups
+d152 5
+a156 1
+DO LB4 [grp]= 1,[numgrps]         ; Loop over all defocus groups
+d162 13
+a174 13
+   RF 3
+   [voleven]              ; First input volume              (input)
+   [volodd]               ; Second input volume             (input)
+   (0.5)                  ; Ring width
+   (0.2,2)                ; Lower, upper scale factors
+   C                      ; C = missing cone
+   (90)                   ; Max. tilt angle
+   (3)                    ; Factor for noise comparison
+   [tmp]                  ; Doc file                        (output)
+
+   DOC REN                ; Renumber doc file keys
+   [tmp]                  ; Doc file                        (input)
+   [tmp]                  ; Doc file                        (output)
+d176 1
+a176 1
+   UD N,[nkeys]           ; Get number of keys in tmp file
+d188 1
+a188 1
+      [out]                ;                      (output)
+d193 1
+a193 1
+DE                         ; Remove temp. file
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d6 3
+a8 3
+;          odd- vs even-numbered particles.
+;          Computes  odd/even half 3D reconstructions.
+;          Computes the FSC for the reconstruction.
+d16 4
+a19 4
+x41 = -1        ; Radius of restored object (use -1 for 95% winsize / 2)
+x42 = 0.2e-5    ; Lambda
+x43 = 0.0       ; Correction limit
+x44 = 60        ; Iteration limit
+d22 1
+d24 1
+a24 1
+[params]../params                     ; Parameter file
+d27 1
+a27 1
+[order]order_defocus                  ; Selection file for defocus groups
+d30 1
+a30 1
+[seltotal]df{***x77}/seltotal         ; Selection files for particles in each defocus group
+d33 1
+a33 1
+[ali]../Alignment/ali/sar******       ; Aligned particles
+d36 1
+a36 2
+[angles]../Alignment/align_01_{***x77} ; Alignment parameter files
+
+d41 1
+a41 1
+[seleven]df{***x77}/seleven         ; Selection files for even-numbered particles (one for each defocus group)
+d44 1
+a44 1
+[selodd]df{***x77}/selodd           ; Selection files for odd-numbered particles (one for each defocus group)
+d47 1
+a47 1
+[volodd]df{***x77}/vol001_odd       ; Volume (one for each defocus group)
+d50 1
+a50 1
+[voleven]df{***x77}/vol001_even     ; Volume (one for each defocus group)
+d53 1
+a53 1
+[out]df{***x77}/doccmp001           ; Output doc file (one / defocus group)
+d57 4
+d63 1
+a63 2
+0                        ; 0 = use all processors available  
+
+d65 2
+a66 3
+
+IF (x41.eq.-1) THEN
+   UD 17,x55     ; key 17 = windowsize
+d68 1
+a68 1
+   x41 = INT( (0.95*x55)/2.0 )
+d71 2
+a72 2
+UD N,x50                 ; Find number of defocus groups
+[order]
+d75 4
+a78 1
+DO LB1 x77 = 1,x50       ; Loop over all defocus groups
+d80 1
+a80 1
+   DE                    ; Delete the output file
+d82 1
+a82 2
+
+   DE                    ; Delete the output file
+d85 13
+a97 18
+   UD N,x20              ; Find number of particles in current group
+   [seltotal]
+
+   x21 = -1
+   x51 = 0
+   x52 = 0
+
+   DO LB2 x71=1,x20      ; Loop over all particles
+
+      UD IC,x71,x91
+      [seltotal]
+
+      IF (x21.eq.-1) THEN
+         x52 = x52 + 1
+
+         SD x52,x91
+         [seleven]
+ 
+d99 3
+a101 4
+         x51 = x51 + 1
+
+         SD x51,x91
+         [selodd]
+d103 1
+a103 1
+      x21 = -x21
+d107 1
+a107 1
+   [seleven]
+d109 3
+a111 4
+   [selodd]
+
+   UD ICE
+   [seltotal]
+d116 4
+a119 1
+DO LB3 x77=1,x50  ; Loop over all defocus groups
+d122 1
+a122 1
+   echo  ' 'Reconstructing group: {****x77}    
+d125 11
+a135 11
+   BP RP, x90             ; Register x90 gets number of iterations
+   [ali]                  ; Template for input 2D image files
+   [selodd]               ; Selection doc file for input images
+   x41                    ; Radius of restored object
+   [angles]               ; Angles doc file
+   *                      ; Symmetries doc file (* means no symmetries)
+   [volodd]               ; Output reconstructed 3D volume
+   x42,x43                ; Lambda, correction limit
+   x44,0                  ; Iteration limit, mode
+   (.5,.5)                ; Minimum, maximum
+   (.5)                   ; Smoothing constant
+d138 11
+a148 12
+   BP RP, x90             ; Register x90 gets number of iterations
+   [ali]                  ; Template for input 2D image files
+   [seleven]              ; Selection doc file for input images
+   x41                    ; Radius of restored object
+   [angles]               ; Angles doc file
+   *                      ; Symmetries doc file (* means no symmetries)
+   [voleven]              ; Output reconstructed 3D volume
+   x42,x43                ; Lambda, correction limit
+   x44,0                  ; Iteration limit, mode
+   (.5,.5)                ; Minimum, maximum
+   (.5)                   ; Smoothing constant
+
+d152 1
+a152 1
+[tmp]tmpres89             ; Temp doc file (deleted)
+d154 1
+a154 1
+DO LB4 x77= 1,x50         ; Loop over all defocus groups
+d161 2
+a162 2
+   [voleven]              ; First input volume
+   [volodd]               ; Second input volume
+d168 1
+a168 1
+   [tmp]                  ; Output doc file
+d171 2
+a172 2
+   [tmp]                  ; Input  doc file
+   [tmp]                  ; Output doc file
+d174 1
+a174 1
+   UD N,x60               ; Get number of keys in tmp file
+d181 2
+a182 2
+   DO LB5 x61 = 1,x60
+      UD x61,x62,x63,x64,x65,x66
+d185 2
+a186 2
+      SD x61,x62,x63,x64,x65,x66
+      [out]
+a187 1
+
+a188 1
+
+d191 1
+a191 1
+DE
+d194 3
+@
+

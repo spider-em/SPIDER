@@ -1,0 +1,221 @@
+head	1.4;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+1.4
+date	2016.11.08.15.03.40;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2016.05.31.18.56.34;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2016.05.25.13.40.38;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2016.02.09.20.31.43;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.4
+log
+@cosmetic
+@
+text
+@ ([prj-radius],[iter],[grp])
+
+ ; <html><head><title>Volume projection loop</title></head><body><pre>
+ ;
+ ; SOURCE: spider/docs/techs/recon1/Procs/refine-prjloop.spi
+ ;         New                              ArDean Leith  Nov 2015
+ ; 
+ ; PURPOSE: Projection loop.  Runs for each parallel group on each iteration.
+ ;          Creates projections from reference volume.
+ ;
+ ; CALLED FROM: <a href="pub_refine_start.spi">pub_refine_start</a> 
+ ;
+ ; INPUT REGISTERS:
+ ;   [prj-radius]        Projection radius of structure (pixels)
+ ;   [iter]              Alignment iteration  
+ ;   [grp]               Current parallel group                      
+ ;
+ ; FILES ARE SET IN: <a href="refine settings.spi">refine settings.spi</a>
+ ;                      '##' denotes iteration,  '%' denotes subset, and '***' denotes group
+ ; INPUT FILES:
+ ;   [sel_group]         win_1/sel_group            Group selection file         (one)
+ ;   [iter_refangs]      work/ang_refs_##           Reference angles doc file    (one)      
+ ;   [current_vol]       final/vol_##_s%            Current reference volume     (two) 
+ ;
+ ; OUTPUT FILES:
+ ;   [iter_refangs_grp]  work/ref_angs_##_***       Reference projection angles doc file (one/group/iter)
+ ;   [ref_projs_s_grp]   work/ref_projs_##_s%_***@@  Group reference projections  (two/group/iter) (deleted)
+ ;    
+ ; ----------------- END BATCH HEADER -------------------------------------
+
+ UD N [num-grps]            ; Find number of groups
+   [sel_group]              ; Group selection file      (input)
+
+ UD N [num-angs]            ; Get number of reference images used
+   [iter_refangs]           ; Reference images angles doc. file (input)
+
+ [num-in-grp] = INT ( [num-angs] / [num-grps])
+ IF ( ([num-in-grp] *[num-grps]) < [num-angs]) [num-in-grp] = [num-in-grp] + 1
+  
+ [igo]  = ([grp] - 1) * [num-in-grp] + 1
+ [iend] = [igo] + [num-in-grp] - 1
+ IF ( [iend] > [num-angs] ) [iend] = [num-angs] 
+[ngot] = [iend] - [igo] + 1
+
+ SYS
+   echo  "  Starting: refine-prjloop  Iteration: {%I0%[iter]}  Group:{%I3%[grp]}  Projections: {%i4%[igo]} ... {%i4%[iend]} " 
+
+ DE
+   [iter_refangs_grp]      ; Reference projection angles doc file (removed)
+
+ ; Create doc file listing projection angles in use for this parallel group
+
+ DOC SLICE                 ; Extract angles for [igo]...[iend] into temp file
+   [iter_refangs]          ; Reference projection angles doc file (input)
+   [iter_refangs_grp]      ; Reference projection angles doc file (output)
+   [igo]-[iend]            ; Slice numbers transferred
+
+ ; Create stacks holding this iterations's set of reference projections from current volume subsets.
+ 
+ DO [s] = 1,2              ; Loop over subvolumes
+   PJ 3F                   ; Projection operation
+     [vol_s]               ; Current reference volume             (input) 
+     [prj-radius]          ; Radius of object
+     1-[ngot]              ; Reference angles used    
+     [iter_refangs_grp]    ; Reference angles doc file            (input)
+     [ref_projs_s_grp]     ; Reference projection stack           (output) 
+ ENDDO                     ; End of: DO  [s] = 1,2
+
+ RE
+
+ ; </pre></body></html>
+
+@
+
+
+1.3
+log
+@used 'DOC SLI' to simplify
+@
+text
+@d43 1
+a43 1
+ [ngot] = [iend] - [igo] + 1
+@
+
+
+1.2
+log
+@consolidation simpler
+@
+text
+@d11 1
+a11 2
+ ; CALLED FROM: <a href="pub_refine_start.spi">pub_refine_start</a> OR   
+ ;              <a href="refine.spi">refine.spi</a>  
+d21 1
+a21 1
+ ;   [sel_group]         input/sel_group            Group selection file         (one)
+d26 1
+a26 1
+ ;   [iter_refangs_grp]  work/ref_angs_##_***       Reference projection angles doc file (one/group)
+a51 1
+ [out] = 0
+d53 4
+a56 19
+ MD                           
+   RESULTS OFF             ; Discard further results file info
+ DO [i] = [igo],[iend]
+   UD IC [i],[psi],[theta],[phi]
+     [iter_refangs]        ; Reference projection angles doc file (input)
+ 
+   [out] = [out] + 1
+   SD [out],[psi],[theta],[phi],[i],[igo],[iend]
+     [iter_refangs_grp]    ; Reference projection angles doc file (output)
+ ENDDO
+ MD                           
+   RESULTS ON              ; Restart results file info
+
+ UD ICE                    ; Close doc file
+   [iter_refangs]          ; Reference projection angles doc file (closed)
+ SD E                      ; Close doc file
+   [iter_refangs_grp]      ; Reference projection angles doc file (closed)
+
+ MY FL                     ; Flush results file
+d60 8
+a67 16
+ [s] = 1                   ; Subset
+ PJ 3F                     ; Projection operation
+   [vol_s]                 ; Current reference volume             (input) 
+   [prj-radius]            ; Radius of object
+   1-[ngot]                ; Reference angles used    
+   [iter_refangs_grp]      ; Reference angles doc file            (input)
+   [ref_projs_s_grp]       ; Reference projection stack           (output) 
+
+
+ [s] = 2                   ; Subset
+ PJ 3F                     ; Projection operation
+   [vol_s]                 ; Current reference volume             (input) 
+   [prj-radius]            ; Radius of object
+   1-[ngot]                ; Reference angles used    
+   [iter_refangs_grp]      ; Reference angles doc file            (input)
+   [ref_projs_s_grp]       ; Reference projection stack           (output) 
+@
+
+
+1.1
+log
+@Gold_standard
+@
+text
+@d5 1
+a5 1
+ ; SOURCE: spider/docs/techs/recon1/Procs/gold/refine-prjloop.spi
+d7 1
+a7 1
+  ; 
+d9 1
+a9 1
+ ;          Creates projections from reference volume 
+d11 2
+a12 4
+ ; CALLED FROM: <a href="./pub_refine_start.spi">pub_refine_start</a> OR   
+ ;              <a href="./refine.spi">refine.spi</a>  
+ ;
+ ; REGISTERS AND FILES ARE SET IN: <a href="refine settings.spi">refine settings.spi</a>
+d15 3
+a17 3
+ ;   [prj-radius]         Radius (pixels) of structure for projection
+ ;   [iter]               Alignment step iteration counter  
+ ;   [grp]                Current defocus group                      
+d19 2
+a20 1
+ ;  '##' denotes iteration,  '%' denotes subset, and '***' denotes group
+d22 3
+a24 3
+ ;   [sel_group]          input/sel_group          Group selection file         (one)
+ ;   [iter_refangs]       work/ang_refs_##         Reference angles doc file    (one)      
+ ;   [current_vol]        final/vol_##_s%          Current reference volume     (two) 
+d27 2
+a28 2
+ ;   [ref_projs_s]        work/refproj_##_s%'      Reference projections        (two/iter)
+ ;   [ref_projs_s_grp]    work/refproj_##_s%_***@@' Group reference projections  (two/group/iter) (deleted)
+d52 1
+@

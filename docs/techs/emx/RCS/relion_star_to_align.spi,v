@@ -1,0 +1,180 @@
+head	1.1;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+1.1
+date	2014.04.29.18.29.54;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@ ; <html><head><title>Normalizes stacks and creates star file</title></head><body><pre>
+ ;
+ ; PURPOSE: Converts Relion data 'star' file into set of SPIDER alignment files.
+ ; SOURCE:  relion_star_to_align.spi  
+ ; USAGE:   spider spi/dat @@relion_star_to_align
+ ;
+ ; POSSIBLE COLUMNS CORRESPONDING TO STANDARD RELION STAR DATA DESCRIPTORS
+ ;         _rlnImageName             #7    Image name sometimes contains 2 integer strings for image                  
+ ;         _rlnOriginX               #12   X-shift
+ ;         _rlnOriginY               #13   Y-shift
+ ;         _rlnAngleRot              #9    Rot
+ ;         _rlnAngleTilt             #10   Tilt
+ ;         _rlnAnglePsi              #11   Psi
+ ;         _rlnClassNumber           #14   Class #
+ ;
+ ; ----------------- Variables    -----------------------
+
+ ! No need to alter these variables when using standard Relion data files
+ [star_vars]     = '_rlnOriginX,_rlnOriginY,_rlnAngleRot,_rlnAngleTilt,_rlnAnglePsi,_rlnClassNumber'
+ [star_img_name] = '_rlnImageName'
+
+ [iter]          = 10                                         ; Set Relion iteration number
+
+; ------------------ Input files -----------------------
+
+ [indir]         = '.'
+
+ [star]          = '[indir]/classify_it{***[iter]}_data.star' ; Star iteration data file (one) 
+
+ ; ----------------- Output files -----------------------
+
+ [outdir]        = 'input'
+
+ [star_doc]      = '[outdir]/star_doc_{**[iter]}'           ; Temp doc file without alphabetical chars  (one)
+
+ [align_doc]     = '[outdir]/ali_doc'                       ; Overall alignment file        (one)
+
+ [align_grp_doc] = '[outdir]/ali_doc_***'                   ; Group alignment file          (one/group)
+
+ [sel_grp]       = '[outdir]/sel_grp'                       ; Group selection file    (one)
+
+ [sel_part]      = '[outdir]/sel_part_{**[grp]}'            ; Particle selection file (one/group)
+
+! Unused examples for use with Relion classified data
+![class]         = 4                                                       ; Image class desired    
+![star]          = '[indir]/class{*[class]}_only_it{***[iter]}_input.star' ; Star class data file  (one) 
+![align_doc]     = '[outdir]/ali_doc_{**[class]}'                          ; Class alignment file  (one)
+![align_grp_doc] = '[outdir]/ali_doc_{**[class]}_***'                      ; Group alignment file  (one/group)
+
+ ; -------------- END BATCH HEADER -------------------------------
+ 
+
+ MD
+   VB OFF                       ; Decrease results file output
+
+ DE                             ; Delete existing output file
+    [star_doc]
+ DE                             ; Delete existing output file
+    [align]
+ 
+ ; Convert Relion 'star' file into a temporary SPIDER doc file ------------------
+ ;    Need to import: [n],[grp], [xsh],[ysh],[s_rot],[s_tilt],[s_psi],[class]
+ ;    From: '_rlnOriginX,_rlnOriginY,_rlnAngleRot,_rlnAngleTilt,_rlnAnglePsi,_rlnClassNumber'
+    
+ XM S2D [nkeys)                 ; Convert star file to doc file 
+    [star]                      ; Star file                     (input)
+    [star_vars]                 ; Star variables wanted
+    3,4,5,6,7,8                 ; SPIDER doc file registers
+    [star_img_name]             ; Star file name variables wanted
+    1,2                         ; Spider doc file registers from name
+    [star_doc]                  ; Spider doc file              (output)
+
+ SYS
+   head [star_doc].*
+
+
+ ; Initialize unused alignment file variables 
+ [PSI]    = 0
+ [REF]    = 0
+ [DIFF]   = 0 
+ [CCROT]  = 0
+ [ROTT]   = 0 
+ [SXT]    = 0 
+ [SYT]    = 0
+ [MIR-CC] = 0   
+
+ ; Loop over all doc file lines originating from star file ------------------
+ DO                                
+
+   ; Get input line from star file
+   UD NEXT [key], [n],[grp], [xsh],[ysh],[s_rot],[s_tilt],[s_psi],[class]    
+     [star_doc]                 ; Spider star doc file   (input)
+   IF ( [key] <= 0 ) EXIT
+
+   ; Only want one specified class from the star file
+   !IF ( [class] .NE. [class] ) CYCLE
+
+   ; Set alignment doc file values 
+   [KEY]  = [n]                 ; Will have duplicates of keys!
+   [EXP]  = [n]                 ; Exp. image number
+   [GRP]  = [grp]               ; Exp image group 
+
+   [THE]  = [s_tilt]            ; Projection angle: theta
+   [PHI]  = [s_rot]             ; Projection angle: phi
+
+   [ROT]  = -[s_psi]            ; RTSQ rot with PSI = 0 & matrix inversion shifts
+
+   ; Matrix inversion needed since: rotate then shift in SPIDER is opposite Relion's
+
+   [SX]   = [xsh]               ;                                       
+   [SY]   = [ysh]               ;                      
+   [ROT]  = 0                   ; 
+   [PSI]  = [s_psi]             ;                                                          
+
+   SD [KEY],[PSI],[THE],[PHI],[REF],[EXP],[ROT],[SX],[SY],[GRP],[DIFF],[CCROT],[ROTT],[SXT],[SYT],[MIR-CC]
+     [align_doc]
+
+ ENDDO
+
+ UD NEXT E                      ; End alignment doc file construction
+   [align_doc]                  ; Doc file              (closed)
+
+
+ !SYS
+   !cat [align_doc].*
+
+ ; Separate the alignment file by group into multiple doc files -------------------------------
+ DOC SEP [maxgrp]
+   [align_doc]                  ; Doc file                (input)
+   9                            ; Register for separation = group number 
+   [align_grp_doc]              ; Group align doc file template  (output)
+   KEY       PSI,    THE,    PHI,   REF#,    EXP#,  CUM. ROT,   SX,    SY,    GRP,   DIFF,  CCROT,     ROT,     SX,     SY,   MIR-CC ; Doc file header'
+   [sel_grp]                    ; Group selection file
+                                 
+
+ ; Renumber keys of the group alignment doc files --------------------------------------------
+ DO [grp] = 1,[maxgrp]
+   IQ FI [ex]
+   [align_grp_doc][grp]         ; Group align doc file template  (input)
+
+   IF ( [ex] > 0 ) THEN
+
+     ; Consecutively renumber doc file keys & move original key to the first register --------
+     DOC KEY ONE
+       [align_grp_doc][grp]     ; Group align doc file         (input)
+       [sel_part]               ; Particle selection doc file  (input)
+
+     !SYS
+     !  cat [sel_part].$DATEXT   
+   ENDIF
+
+ ENDDO
+
+ EN
+
+
+
+@

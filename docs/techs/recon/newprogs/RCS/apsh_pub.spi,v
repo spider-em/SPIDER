@@ -1,0 +1,426 @@
+head	1.6;
+access;
+symbols
+	GPL_update:1.6
+	pre_rewrite_2010:1.6
+	pre_more_stack:1.5
+	best-code:1.5
+	no-named-regs:1.5
+	pre_GPL:1.5
+	tag_version1_0:1.5;
+locks; strict;
+comment	@:: @;
+
+
+1.6
+date	2008.01.17.19.18.22;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2005.02.04.17.42.24;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2003.07.24.20.05.52;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2003.07.21.13.32.52;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2003.06.16.19.03.36;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2003.04.16.14.44.28;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.6
+log
+@ SET MP on secondary runs
+@
+text
+@; <html><head><title>Controls and synchronizes alignment</title></head><body><pre>
+; apsh_pub.bat                        Mar 2003 ArDean Leith   
+;                      From apmq_pub  Feb 2005 ArDean Leith 
+;  
+; Multireference alignment of an image series. 
+; Sample images are aligned with reference projections via shifts (translations) 
+; and rotations.  For project with multiple micrographs.  The work
+; is partitioned into sets of images.  The number of images in a set can be 
+; less than the number used in a whole micrograph.
+;
+; MASTER COPY: /net/bali/usr1/spider/docs/techs/recon/programs/
+;
+; INSTRUCTIONS:  <a href="../apsh_pub.html">apsh_pub.html</a>
+;
+; I/O PARAMETERS AND FILES ARE SET HERE:
+;
+;<b>------------ Edit next 5 Alignment parameters --------------------- 
+; -------------- DO NOT COPY FROM WEB BROWSER     ---------------------
+
+x16 = 25        ; Number of images / partition set
+
+x31 = 5 	; Translation search range (must be divisible by step size)
+x32 = 1		; Translation step size
+
+x21 = 5		; Rotation first ring, only radii within specified rings will be analyzed
+x22 = 30	; Rotation last ring, if pixel size is different than 4.78, change the rings
+
+; ----------------- Input files,  May have to edit these names ---------
+
+FR G
+[micrograph_selection_file]input/selmcg          ; Micrograph selection doc. file
+
+FR G
+[ref_images_template]input/proj****              ; Reference image name template
+
+FR G
+[ref_images_selection]input/selref               ; Reference images selection doc. file
+
+FR G
+[ref_images_angles]input/refangles               ; Reference images angles doc. file
+
+FR G
+[sample_images_template]input/data{***x55}@@****  ; Sample image name template
+
+FR G
+[sample_images_selection]input/selimg            ; Sample images selection doc. file
+
+
+; ----------------- Output file,  May want to edit this name --------
+
+FR G
+[align_parameters]output/jnk_apsh               ; Alignment parameters doc. file stem
+;</b>
+
+; ----------------- Temporary Output file ----------------------------
+FR G
+[sync_doc]output/jnk_sync                        ; Sync doc. file stem
+
+; --------------------------------------------------------------------
+
+MD
+TR OFF        ; Decreases results file output
+MD
+VB OFF        ; Decreases results file output
+
+IF (x14 .NE. 1) THEN  ; Primary PubSub run creates parallel processes 
+   ; Get number of micrographs from micrograph selection file
+   ; If you do not have a "micrograph selection file" you can
+   ;   create it using: 'DOC CREATE' and inputting the number of micrographs
+
+   UD N,x20
+   [micrograph_selection_file]
+
+   ;  Loop over all entries in micrograph selection file
+   x45=0                               ; Set number
+   DO LB1 x11=1,x20
+
+       ; Get micrograph file-number from micrograph selection file
+       UD x11,x55                      ; Current micrograph number = x55
+       [micrograph_selection_file]
+
+       ; Get image numbers in this micrograph from image selection file
+       UD x55,x43                      ; 
+       [sample_images_selection]
+
+       x40 = 1                         ; Starting image        
+       DO LB2 x42=1,1000000            ; Loop over all image sets
+          x41 = x40 + x16 - 1          ; Final image for this image set
+          IF (x41.GT.x43) x41=x43      ; Final image for this image set
+          x45 = x45 + 1                ; Set number
+
+          ; Use PubSub to create parallel 'AP SH' process for each image set   
+          VM
+          publish './spider bat/$DATEXT @@apsh_pub {***x45} x14=1 x55={***x55} x45={****x45} x40={****x40} x41={****x41}'
+
+          IF (x41.GE.x43) GOTO LB99    ; Final image set for this micrograph
+          x40 = x41 + 1                ; Increment for next starting image
+
+          MY FL                        ; Flush results file
+          
+       LB2
+       LB99
+    LB1
+
+ELSE                                       ; Secondary PubSub run (does actual alignments)
+  
+    MD  
+    SET MP                                 ; Use all processors (needed here for secondary runs)
+    0
+
+    DE                                     ; Delete existing alignment parameter output doc. files.
+    [align_parameters]_{***x55}_{****x45}
+
+    AP SH                                  ; Align sample images using Multireference Method 
+    [ref_images_template]                  ; Reference image name template              (input)
+    [ref_images_selection]                 ; Reference images selection doc. file       (input)
+    x31,x32                                ; Search range, step size  
+    x21,x22                                ; First and last ring      
+    [ref_images_angles]                    ; Reference images angles doc. file          (input)
+    [sample_images_template]               ; Sample images name template                (input)
+    x40-x41                                ; Sample image numbers                      
+    *                                      ; No sample images alignment angles doc. file  
+    (0)                                    ; No resturiction on angles
+    (0)                                    ; Check mirrored projections
+    [align_parameters]_{***x55}_{****x45}  ; Alignment angles doc. file                 (output)
+
+    SD 1,x40,x41                           ; Sync doc. file created when finished
+    [sync_doc]_{****x45}
+    SD E
+    [sync_doc]_{****x45}
+
+    EN
+ENDIF
+
+LB99
+;  Wait till all angular output files complete
+x29=1
+@@wait_pub(x29,x45)
+
+;  Loop over all entries in micrograph selection file, combining the angular output files
+DO LB3 x11=1,x20
+   DE
+   [align_parameters]_{***x11}           ; Alignment angles doc. file                 (output)
+
+   VM
+   cat [align_parameters]_{***x11}_*  > [align_parameters]_{***x11}_tmp.$DATEXT
+
+   DOC REN   
+   [align_parameters]_{***x11}_tmp
+   [align_parameters]_{***x11}
+
+   VM
+   \rm -f [align_parameters]_{***x11}_* [sync_doc]* 
+
+LB3
+
+EN                                         ; This SPIDER ends now
+
+
+; </body></pre></html>
+@
+
+
+1.5
+log
+@update
+@
+text
+@d106 5
+a110 1
+    
+@
+
+
+1.4
+log
+@new merger
+@
+text
+@d2 3
+a4 2
+; apmq_pub.bat                 ArDean Leith    Mar 2003
+;
+d13 1
+a13 1
+; INSTRUCTIONS:  <a href="../apmq_pub.html">apmq_pub.html</a>
+d40 3
+d52 1
+a52 1
+[align_parameters]output/jnk_apmq               ; Alignment parameters doc. file stem
+d66 1
+a66 1
+IF (x14 .NE. 1) THEN  ; Primary PubSub run
+d92 1
+a92 1
+          ; Use PubSub to create parallel 'AP MQ' process for each image set   
+d94 1
+a94 1
+          publish './spider bat/$DATEXT @@apmq_pub {***x45} x14=1 x55={***x55} x45={****x45} x40={****x40} x41={****x41}'
+d105 1
+a105 1
+ELSE                                       ; Secondary PubSub run
+d110 1
+a110 1
+    AP MQ                                  ; Align sample images using Multireference Method 
+d115 6
+a120 2
+    [sample_images_template]               ; Sample images  name template               (input)
+    x40-x41                                ; Sample images                      
+@
+
+
+1.3
+log
+@*** empty log message ***
+@
+text
+@d12 1
+a12 1
+; INSTRUCTIONS:  <a href="../../../../pubsub/apmq_pub.html">apmq_pub.html</a>
+d71 1
+a71 1
+   x45=0
+d92 1
+a92 1
+          IF (x41.GE.x43) GOTO LB99    ; Final image set
+d134 6
+a139 2
+   cat [align_parameters]_{***x11}_*  > [align_parameters]_{***x11}.$DATEXT
+   
+d142 1
+a147 25
+; ---------------------------- IGNORE FOLLOWING CODE ------------------------------------
+
+DOC CREATE
+[ref_images_selection]
+1
+1-83                          ; image numbers
+
+DOC CREATE
+[sample_images_selection]
+1
+1-250
+
+; CREATE ANGLES DOC FILE FOR "PJ 3Q"
+VO EA
+4.0
+0,90
+0,359.9
+jnksamang    
+
+PJ 3Q    
+vol000       
+(60)     
+1-500  
+jnksamang    
+[ref_images_template]
+@
+
+
+1.2
+log
+@html link
+@
+text
+@d6 3
+a8 1
+;    and rotations.  For project with multiple micrographs.
+d19 1
+a19 1
+x12 = 2         ; Number of OMP threads
+d25 1
+a25 3
+x22 = 30	; Rotation last ring 
+                ; If pixel size is different than 4.78, first and last 
+                ; ring parameters should be changed
+d27 1
+a27 2
+; ----------------- Input files ----------------------------------------
+; -------------- May have to edit these names --------------------------
+d30 1
+a30 5
+[micrograph_selection_file]../filenums       ; Micrograph selection doc. file
+;[micrograph_selection_file]input/mic_select ; Micrograph selection doc. file
+;                                             If you do not have a this file, you can 
+;                                             create it using: 'DOC CREATE' and 
+;                                             inputting the number of micrographs
+d33 1
+a33 2
+[ref_images_template]prj/prj***              ; Reference image name template
+;[ref_images_template]input/jnkrefstk@@****   ; Reference image name template
+d36 1
+a36 2
+[ref_images_selection]projlist               ; Reference images selection doc. file
+;[ref_images_selection]input/jnkrefsel       ; Reference images selection doc. file
+d39 1
+a39 2
+[sample_images_template]../Particles/win/ser*****  ; Sample image name template
+;[sample_images_template]input/jnksamstk@@****      ; Sample image name template
+d42 1
+a42 2
+[sample_images_selection]../Particles/good/ngood   ; Sample images selection doc. file template
+;[sample_images_selection]input/jnksamsel_         ; Sample images selection doc. file template
+a43 2
+; ----------------- Output files -------------------------------------
+; -------------- May have to edit these names ------------------------
+d45 7
+d53 1
+a53 2
+[align_parameters]apmq/apmq{***x55} ; Alignment parameters doc. file 
+;[align_parameters]output/jnk_apmq{***x55} ; Alignment parameters doc. file 
+d55 1
+a55 1
+; -------------------------------------------------------------------- </b>
+d70 2
+a71 1
+   ;  Loop over all micrographs
+d74 2
+a75 2
+       ; Get this micrograph file-number from micrograph selection file
+       UD x11,x55                    ; Current micrograph number = x55
+d78 21
+a98 5
+       MY FL                           ; Flush results file
+
+       ; Use PubSub to create parallel 'AP MQ' process for each micrograph   
+       VM
+       publish 'spider bat/$DATEXT @@apmq_pub {***x55} x14=1 x55={***x55}' 
+d101 1
+a101 2
+    EN
+ELSE                                   ; Secondary PubSub run
+d103 16
+a118 2
+    DE                                 ; Delete existing alignment parameter output doc. files.
+    [align_parameters]
+d120 1
+a120 8
+    AP MQ                              ; Align sample images using Multireference Method 
+    [ref_images_template]              ; Reference image name template              (input)
+    [ref_images_selection]             ; Reference images selection doc. file       (input)
+    x31,x32                            ; Search range, step size  
+    x21,x22                            ; First and last ring      
+    [sample_images_template]           ; Sample images  name template               (input)
+    [sample_images_selection]{***x55}  ; Sample images selection doc. file template (input) 
+    [align_parameters]                 ; Alignment angles doc. file                 (output)
+d123 19
+a141 1
+EN                                     ; This SPIDER ends now
+d143 2
+d146 1
+a146 1
+jnkrefsel
+d148 2
+a149 1
+1-83
+d151 1
+a151 1
+jnksamsel
+d167 1
+a167 1
+jnksamstk@@****
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d10 2
+@

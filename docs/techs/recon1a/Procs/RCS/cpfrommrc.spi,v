@@ -1,0 +1,114 @@
+head	1.1;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+1.1
+date	2016.02.24.17.03.20;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@ ; SOURCE:  cpfrommrc.spi
+ ; AUTHOR:  ArDean Leith    
+ ; PURPOSE: Convert Relion image stacks to SPIDER compatible format 
+ ; USAGE:   spider spi/dat @@cpfrommrc dat
+
+ ;  ----------------- Parameters --------------------------------------
+
+
+ ;  ----------------- Input files -----------------------------------------
+
+ [old_list] = 'star_doc'                                         ; Old selection file 
+ ! 1  5   150629.0  4144506.  1.000000  45639.31  41949.17
+
+![instk] = '/usr14/booth/K2/H80S/TIM_7_1_2015/Corrected/Particles/{*******[m1a]}{*[m1b]}_{*******[m2a]}{*[m2b]}_SumCorr_particles_manual.mrcs'  ; Stack file template
+! Sample: 000001@@Particles/20150629_14144506_SumCorr_particles_manual.mrcs
+ [instk] = 'REL_Particles/{*******[m1a]}{*[m1b]}_{*******[m2a]}{*[m2b]}_SumCorr_particles_manual.mrcs'  ; Stack file template
+
+ ;  ----------------- Output files ----------------------------------------
+
+ [outstk]   = 'SPI_Particles/SumCorr_{*******[m1a]}_{*[m1b]}_{*******[m2a]}_{*[m2b]}' ; SPIDER image stacks
+
+ [new_list] = 'star_1_doc'                                       ; New selection file 
+
+ ;----------------- END BATCH HEADER ------------------------------------
+
+
+ MD                             ; Use one processor
+   SET MP
+   1
+
+ SYS
+   echo "  Convert MRC stacks to SPIDER stacks  xxxxxxxxxxxx"; echo
+
+ [view] = 0
+
+ DE
+   [new_list]                  ; New selection file      (removed)
+
+ [deflast] = -999999 
+ 
+ DO   
+   ; Get micrograph number & defocus
+   UD NEXT [key], [m1a],[m1b],[m2a],[m2b],[n],[def1],[def2]   
+     [old_list]                ; Old selection file      (input)
+   IF ( [key] <= 0 ) EXIT
+
+   [view]   = [view] + 1       ; Output stack file number
+
+   [defavg] = ([def1] +[def2]) / 2.0
+    
+   IF ( [defavg] .NE. [deflast] ) THEN
+
+     CP FROM MRC               ; Copy the whole stack
+        [instk]                ; MRC stack file        (input)
+        [outstk]               ; SPIDER image stack    (output)
+        1                      ; First image number in SPIDER stack
+        No                     ; Flip byte ordering 
+
+     SYS
+       echo -n -e  "  Copied:  [instk] --> [outstk]  Def: {******[defavg]} \r"
+
+     [deflast] = [defavg]  
+
+   ENDIF
+
+   SD [view],[m1a],[m1b],[m2a],[m2b],[n],[defavg]
+     [new_list]               ; New selection file      (output)
+
+ ENDDO
+
+ ! Sample: 000001@@Particles/20150629_14144506_SumCorr_particles_manual.mrcs
+ [m1a] = 2015062
+ [m1b] = 9
+ [m2a] = 1414450
+ [m2b] = 6
+
+ FI H [min],[max]         ; File info
+   [outstk]@@1             ; Volume file         (input)
+   MIN, MAX               ; Header values wanted
+ SYS
+   echo ; echo '  Displaying: [outstk]@@1'
+ SYS
+   echo '  Range:       ({%f8.2%[min]} ... {%f8.2%[max]})'; echo
+ 
+ CP TO JPG
+   [outstk]@@1             ; Image         (input)
+   [outstk]               ; JPEG Image    (output)
+ SYS
+   display [outstk].jpg   &
+
+ EN
+@

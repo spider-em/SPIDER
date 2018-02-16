@@ -1,0 +1,1531 @@
+head	1.15;
+access;
+symbols
+	GPL_update:1.6
+	pre_rewrite_2010:1.5
+	pre_more_stack:1.4
+	best-code:1.4
+	no-named-regs:1.4
+	pre_GPL:1.4
+	branch_version1_0:1.4.0.2
+	tag_version1_0:1.4;
+locks; strict;
+comment	@:: @;
+
+
+1.15
+date	2012.05.23.02.19.29;	author tapu;	state Exp;
+branches;
+next	1.14;
+
+1.14
+date	2012.05.17.17.38.42;	author leith;	state Exp;
+branches;
+next	1.13;
+
+1.13
+date	2010.09.23.13.51.16;	author leith;	state Exp;
+branches;
+next	1.12;
+
+1.12
+date	2010.09.22.21.03.04;	author leith;	state Exp;
+branches;
+next	1.11;
+
+1.11
+date	2010.09.21.18.52.52;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2010.09.17.19.16.55;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2010.09.15.12.51.29;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2010.09.15.12.50.47;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2010.09.15.12.50.10;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2010.01.20.16.09.16;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2007.12.11.18.21.42;	author bbaxter;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2004.08.03.20.55.48;	author bbaxter;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2004.07.13.14.28.35;	author bbaxter;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2004.07.13.14.05.20;	author bbaxter;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2003.07.24.18.04.19;	author bbaxter;	state Exp;
+branches;
+next	;
+
+
+desc
+@spider batch file
+@
+
+
+1.15
+log
+@Micrographs are called raw**** and output no longer ends in '-mrc'
+@
+text
+@; <html><head><title>Estimates defocus values from power spectra</title></head><b>
+;
+; SOURCE:   spider/docs/techs/recon/newprogs/mrcctf.spi 
+;           New                                                            Bill Baxter
+;           Pixel size bug and total rewrite                     Sept 2010 ArDean Leith
+;
+; PURPOSE:  Get defocus using MRC program CTFFIND3
+;    
+; REQUIRES: ctffind3.exe   CTFFIND3 executable
+;           readmrc.py     Python script that extracts info from report
+;           loadmic.spi    SPIDER procedure to load micrographs
+;
+; INPUTS:   Micrographs (in SPIDER format)
+;           SPIDER Parameter doc file 
+;           Selection doc file containing micrograph numbers
+;           Boundary for windowing edges of micrographs
+;           Parameters for ctffind, including
+;              - CS     (mm)    : Spherical aberration of objective 
+;              - HT     (kv)    : Electron beam voltage
+;              - AmpCnst        : Amplitude contrast ratio 
+;              - XMAG           : Magnification or original image
+;              - DStep (microns): Pixel size on scanner (microns)
+;              - Box   (pixels) : Tile size in ctffind (must be even)
+;              - ResMin (A)     : Low resolution end of data to be fitted
+;              - ResMax (A)     : High resolution end of data to be fitted
+;              - dFMin  (A)     : Starting defocus value for grid search 
+;              - dFMax  (A)     : End defocus value for grid search
+;              - FStep  (A)     : Step width for grid search
+;                
+; OUTPUTS: Doc file of defocus and astigmatism information.
+;          Power spectrum from ctffind3 (in SPIDER format).
+;          Text report from ctffind3.
+;
+; DETAILS: <a href="../defmrc.html">defmrc.html</a>
+;  
+; CS[mm], HT[kV],    AmpCnst,    XMAG,      DStep[um]
+; 2.6,    200.0,     0.07,       60000.0,    28.0              From source
+; 2.00    200.       0.10        41899.      14.0              From Albany
+; Box,    ResMin[A], ResMax[A], dFMin[A],  dFMax[A],  FStep
+; 512,    35.0,        7.5,      10000.0,   40000.0,  5000.0   From Albany
+; 128,    100.0,      15.0,      30000.0,   90000.0,  5000.0   from source
+;
+; --------------------- Albany Standard Parameters ---------------------------------
+
+; Exclude edges of the micrograph
+[xb]      =   500                             ; X distance from border
+[yb]      =   500                             ; Y distance from border
+
+[box]     =   500                             ; Box size for CTFFIND3 (must be even)
+[ResMin]  =    35                             ; ResMin (A)
+[ResMax]  =   7.5                             ; ResMax (A)
+[dFMin]   = 10000                             ; dFMin  (A)
+[dFMax]   = 40000                             ; dFMax  (A)
+[FStep]   =  5000                             ; FStep  (A) 
+
+; ----------- Input files ---------------
+
+[params]  = '../params'                       ; Reconstruction parameters file
+
+[raw]     = '../Micrographs/raw{****[num]}'   ; Micrographs
+
+[sel_mic] = '../sel_micrograph'               ; Micrograph selection doc file 
+
+[exec]    = '/usr8/repository/ctffind3/ctffind3.exe' ; CTFFIND3 executable location
+
+; ----------- Output files --------------
+
+[output_dir] = 'power'                          ; Dir. for output files
+
+[ps-spi]     = '[output_dir]/powchk{****[num]}' ; Power spectrum files 
+[report]     = '[output_dir]/report{****[num]}' ; Report files, created by CTFFIND3 
+[defocus]    = 'defocus'                        ; Summary defocus doc file
+
+; Temporary files
+[spi]        = '_1'                             ; SPIDER temp files from conversion 
+[temp]       = '_2'                             ; SPIDER temp file from Nikon & Hiscan 
+[win-spi]    = 'jnk-win-spi'                    ; Windowed SPIDER temp files
+[commands]   = './jnk-commands.sh'              ; CTFFIND3 command files
+
+; -------------------- END BATCH HEADER -----------------------
+
+MD                             ; Skip unnecessary output 
+VB OFF
+MD                             ; Skip unnecessary output 
+TR OFF
+MD
+SET MP                         ; Use single processor
+1
+
+VM                             ; Create output directory
+mkdir -p  [output_dir]
+
+; Parameters for loading
+
+UD 1,[zflag]                   ; Get zip flag
+[params]                       ; Params file           (input)
+UD 2,[fflag]                   ; Get tif flag
+[params]                       ; Params file           (input)
+UD 3,[nx]                      ; HiScan  X parameters 
+[params]                       ; Params file           (input)
+UD 4,[ny]                      ; HiScan  Y dimension        
+[params]                       ; Params file           (input)
+
+; Parameters for CTFFIND3
+UD 6,[sp_kev]                  ; Electron beam voltage (kV)
+[params]                       ; Params file           (input)
+UD 7,[sp_sph_abb]              ; Spherical aberration
+[params]                       ; Params file           (input)
+UD 12,[sp_acr]                 ; Amplitude contrast ratio
+[params]                       ; Params file           (input)
+UD 19,[sp_mag]                 ; Magnification of original image (final mag on F30)
+[params]                       ; Params file           (input)
+UD 20,[sp_scanres]             ; Scanning resolution (microns) = Pixel size on scanner
+[params]                       ; Params file           (input)
+
+DE                             ; Delete output summary doc file
+[defocus]                      ; Doc file              (removed)
+
+
+[deci]     = 1                 ; No decimation 
+[keepspi]  = 0                 ; Do not keep temp Spider file
+
+[sp_sph_abb]
+[sp_kev]
+[sp_acr]
+[sp_mag]
+[sp_scanres]
+
+DO                             ; Loop over all files -------------------------
+
+   UD NEXT [key],[num]         ; Get micrograph  number from sel. file
+   [sel_mic]                   ; [num] is now the micrograph file number
+   IF ([key] .LE. 0) EXIT      ; End of images in selection doc file
+
+   ; Convert micrograph to SPIDER format (if necessary)
+   @@loadmic([num],[zflag],[fflag],[deci],[nsam],[nrow],[keepspi])
+   [raw]                       ; Micrograph                  (input)
+   [spi]                       ; SPIDER file                 (output)
+   _2                          ; Scratch file                (output)
+
+   FI H [nsam],[nrow]          ; Get NSAM & NROW
+   [spi]                       ; SPIDER file                 (input)
+   NSAM,NROW
+
+   [x] = [nsam] - (2*[xb])     ; Dimensions without border
+   [y] = [nrow] - (2*[yb])
+
+   VM
+   echo " Micrograph: {*****[num]} : {*****[nsam]} x {*****[nrow]} -- {*****[x]} x {*****[y]}"
+
+   ; Window the micrograph, removing borders
+   WI                          ; Window 
+   [spi]                       ; Micrograph                 (input)
+   [win-spi]                   ; Windowed micrograph        (output)
+   ([x],[y])                   ; Dimensions
+   ([xb],[yb])                 ; Start coords
+
+   FS                          ; CTFFIND3 needs min & max                         
+   [win-spi]                   ; Windowed micrograph        (output)
+
+   ; Create a CTFFIND3 command script
+   VM
+   \rm -f [report] [commands] 
+
+   VM                          ;  CTFFIND3 command script
+   echo '#!/bin/csh -x '   >> [commands]
+   VM 
+   echo '[exec] << eof'    >> [commands]
+   VM 
+   echo [win-spi].$DATEXT  >> [commands]
+   VM  
+   echo [ps-spi].$DATEXT   >> [commands]  
+   VM
+   echo ' ' {%f5.2%[sp_sph_abb]} {%f6.0%[sp_kev]} {%f5.2%[sp_acr]} {%f7.0%[sp_mag]} {%f7.2%[sp_scanres]} >> [commands] 
+   VM
+   echo ' ' {****[box]} {%f5.1%[ResMin]} {%f5.1%[ResMax]} {*****[dFMin]} {*****[dFMax]} {*****[FStep]} >> [commands]
+   VM 
+   echo 'eof' >> [commands]
+
+   IF ([key] .LE. 1) THEN
+      VM
+      echo ' ' ; echo ' 'First CTFFIND3 command script: ; cat [commands] ; echo ' '
+   ENDIF
+
+   ; Execute the CTFFIND3 command script 
+   VM                         
+   chmod +x [commands] ; [commands] >> [report]
+
+   ; Collect defocus values from report
+   VM                        
+   readmrc.py [report] {****[num]} >> [defocus].$DATEXT
+
+ENDDO
+
+VM                             ; Type the defocus doc file
+echo ' '  ; cat [defocus].$DATEXT ; echo ' ' 
+
+DE
+[spi]                          ; Temp SPIDER file            (deleted)
+DE
+[win-spi]                      ; Windowed SPIDER micrograph  (deleted)
+VM
+\rm -f [win-mic] [commands]
+
+EN
+
+@
+
+
+1.14
+log
+@reformatted
+@
+text
+@d5 1
+a5 1
+;           Pixel size bug and total rewrite                  Sept 2010 ArDean Leith
+d60 1
+a60 1
+[raw]     = '../Micrographs/mic{****[num]}'   ; Micrographs
+d72 1
+a72 1
+[defocus]    = 'defocus-mrc'                    ; Summary defocus doc file
+d83 1
+a83 1
+  VB OFF
+d85 1
+a85 1
+  TR OFF
+d87 2
+a88 2
+  SET MP                       ; Use single processor
+  1
+d91 1
+a91 1
+  mkdir -p  [output_dir]
+d96 1
+a96 1
+  [params]                     ; Params file           (input)
+d98 1
+a98 1
+  [params]                     ; Params file           (input)
+d100 1
+a100 1
+  [params]                     ; Params file           (input)
+d102 1
+a102 1
+  [params]                     ; Params file           (input)
+d106 1
+a106 1
+  [params]                     ; Params file           (input)
+d108 1
+a108 1
+  [params]                     ; Params file           (input)
+d110 1
+a110 1
+  [params]                     ; Params file           (input)
+d112 1
+a112 1
+  [params]                     ; Params file           (input)
+d114 1
+a114 1
+  [params]                     ; Params file           (input)
+d117 1
+a117 1
+  [defocus]                    ; Doc file              (removed)
+d132 1
+a132 1
+     [sel_mic]                 ; [num] is now the micrograph file number
+d137 3
+a139 3
+     [raw]                     ; Micrograph                  (input)
+     [spi]                     ; SPIDER file                 (output)
+     _2                        ; Scratch file                (output)
+d142 2
+a143 2
+     [spi]                     ; SPIDER file                 (input)
+     NSAM,NROW
+d149 1
+a149 1
+     echo " Micrograph: {*****[num]} : {*****[nsam]} x {*****[nrow]} -- {*****[x]} x {*****[y]}"
+d153 4
+a156 4
+     [spi]                     ; Micrograph                 (input)
+     [win-spi]                 ; Windowed micrograph        (output)
+     ([x],[y])                 ; Dimensions
+     ([xb],[yb])               ; Start coords
+d159 1
+a159 1
+     [win-spi]                 ; Windowed micrograph        (output)
+d163 1
+a163 1
+     \rm -f [report] [commands] 
+d166 1
+a166 1
+     echo '#!/bin/csh -x '   >> [commands]
+d168 1
+a168 1
+     echo '[exec] << eof'    >> [commands]
+d170 1
+a170 1
+     echo [win-spi].$DATEXT  >> [commands]
+d172 1
+a172 1
+     echo [ps-spi].$DATEXT   >> [commands]  
+d174 1
+a174 1
+     echo ' ' {%f5.2%[sp_sph_abb]} {%f6.0%[sp_kev]} {%f5.2%[sp_acr]} {%f7.0%[sp_mag]} {%f7.2%[sp_scanres]} >> [commands] 
+d176 1
+a176 1
+     echo ' ' {****[box]} {%f5.1%[ResMin]} {%f5.1%[ResMax]} {*****[dFMin]} {*****[dFMax]} {*****[FStep]} >> [commands]
+d178 1
+a178 1
+     echo 'eof' >> [commands]
+d182 1
+a182 1
+        echo ' ' ; echo ' 'First CTFFIND3 command script: ; cat [commands] ; echo ' '
+d187 1
+a187 1
+     chmod +x [commands] ; [commands] >> [report]
+d191 1
+a191 1
+     readmrc.py [report] {****[num]} >> [defocus].$DATEXT
+d199 1
+a199 1
+  [spi]                        ; Temp SPIDER file            (deleted)
+d201 1
+a201 1
+  [win-spi]                    ; Windowed SPIDER micrograph  (deleted)
+d203 1
+a203 1
+  \rm -f [win-mic] [commands]
+@
+
+
+1.13
+log
+@data locations changed
+@
+text
+@d5 1
+a5 1
+;           Pixel size bug and total rewrite                     Sept 2010 ArDean Leith
+d83 1
+a83 1
+VB OFF
+d85 1
+a85 1
+TR OFF
+d87 2
+a88 2
+SET MP                         ; Use single processor
+1
+d91 1
+a91 1
+mkdir -p  [output_dir]
+d96 1
+a96 1
+[params]                       ; Params file           (input)
+d98 1
+a98 1
+[params]                       ; Params file           (input)
+d100 1
+a100 1
+[params]                       ; Params file           (input)
+d102 1
+a102 1
+[params]                       ; Params file           (input)
+d106 1
+a106 1
+[params]                       ; Params file           (input)
+d108 1
+a108 1
+[params]                       ; Params file           (input)
+d110 1
+a110 1
+[params]                       ; Params file           (input)
+d112 1
+a112 1
+[params]                       ; Params file           (input)
+d114 1
+a114 1
+[params]                       ; Params file           (input)
+d117 1
+a117 1
+[defocus]                      ; Doc file              (removed)
+d132 1
+a132 1
+   [sel_mic]                   ; [num] is now the micrograph file number
+d137 3
+a139 3
+   [raw]                       ; Micrograph                  (input)
+   [spi]                       ; SPIDER file                 (output)
+   _2                          ; Scratch file                (output)
+d142 2
+a143 2
+   [spi]                       ; SPIDER file                 (input)
+   NSAM,NROW
+d149 1
+a149 1
+   echo " Micrograph: {*****[num]} : {*****[nsam]} x {*****[nrow]} -- {*****[x]} x {*****[y]}"
+d153 4
+a156 4
+   [spi]                       ; Micrograph                 (input)
+   [win-spi]                   ; Windowed micrograph        (output)
+   ([x],[y])                   ; Dimensions
+   ([xb],[yb])                 ; Start coords
+d159 1
+a159 1
+   [win-spi]                   ; Windowed micrograph        (output)
+d163 1
+a163 1
+   \rm -f [report] [commands] 
+d166 1
+a166 1
+   echo '#!/bin/csh -x '   >> [commands]
+d168 1
+a168 1
+   echo '[exec] << eof'    >> [commands]
+d170 1
+a170 1
+   echo [win-spi].$DATEXT  >> [commands]
+d172 1
+a172 1
+   echo [ps-spi].$DATEXT   >> [commands]  
+d174 1
+a174 1
+   echo ' ' {%f5.2%[sp_sph_abb]} {%f6.0%[sp_kev]} {%f5.2%[sp_acr]} {%f7.0%[sp_mag]} {%f7.2%[sp_scanres]} >> [commands] 
+d176 1
+a176 1
+   echo ' ' {****[box]} {%f5.1%[ResMin]} {%f5.1%[ResMax]} {*****[dFMin]} {*****[dFMax]} {*****[FStep]} >> [commands]
+d178 1
+a178 1
+   echo 'eof' >> [commands]
+d182 1
+a182 1
+      echo ' ' ; echo ' 'First CTFFIND3 command script: ; cat [commands] ; echo ' '
+d187 1
+a187 1
+   chmod +x [commands] ; [commands] >> [report]
+d191 1
+a191 1
+   readmrc.py [report] {****[num]} >> [defocus].$DATEXT
+d199 1
+a199 1
+[spi]                          ; Temp SPIDER file            (deleted)
+d201 1
+a201 1
+[win-spi]                      ; Windowed SPIDER micrograph  (deleted)
+d203 1
+a203 1
+\rm -f [win-mic] [commands]
+@
+
+
+1.12
+log
+@*** empty log message ***
+@
+text
+@d46 2
+a47 2
+[xb]      =   500                              ; X distance from border
+[yb]      =   500                              ; Y distance from border
+d49 6
+a54 6
+[box]     =   500                              ; Box size for CTFFIND3 (must be even)
+[ResMin]  =    35                              ; ResMin (A)
+[ResMax]  =   7.5                              ; ResMax (A)
+[dFMin]   = 10000                              ; dFMin  (A)
+[dFMax]   = 40000                              ; dFMax  (A)
+[FStep]   =  5000                              ; FStep  (A) 
+d58 1
+a58 2
+ [params]  = '../params'                       ; Reconstruction parameters file
+;[params]  = 'input/params'                    ; Reconstruction parameters file
+d60 1
+a60 2
+ [raw]     = '../Micrographs/mic{****[num]}'   ; Micrographs
+;[raw]     = 'input/m20{****[num]}'            ; Micrographs
+d62 1
+a62 2
+ [sel_mic] = '../sel_micrograph'               ; Micrograph selection doc file 
+;[sel_mic] = 'input/sel_micrograph'            ; Micrograph selection doc file 
+d64 1
+a64 1
+ [exec]    = '/usr8/repository/ctffind3/ctffind3.exe' ; CTFFIND3 executable location
+@
+
+
+1.11
+log
+@loadmic
+@
+text
+@d11 1
+d58 1
+a58 1
+[params]   = '../params'                       ; Reconstruction parameters file
+d61 2
+a62 2
+[raw]     = '../Micrographs/mic{****[num]}'    ; Micrographs
+;[raw]      = 'input/m20{****[num]}'           ; Micrographs
+d64 1
+a64 1
+[sel_mic]  = '../sel_micrograph'               ; Micrograph selection doc file 
+d67 1
+a67 1
+[exec]     = '/usr8/repository/ctffind3/ctffind3.exe' ; CTFFIND3 executable location
+d71 1
+a71 1
+[output_dir] = 'mrc-output'                     ; Dir. for output files
+d81 1
+a81 1
+[commands]   = 'jnk-commands.sh'                ; CTFFIND3 command files
+@
+
+
+1.10
+log
+@corrected border, etc
+@
+text
+@d4 2
+a5 2
+;           new                                                             Bill Baxter
+;           pixel size bug and total rewrite                     Sept 2010 ArDean Leith
+d17 1
+a17 1
+;              - CS     (mm)    : Spherical aberration of the objective 
+d55 1
+a55 1
+; ----------- Input files --------------
+d57 2
+a58 1
+[params]   = 'input/params'                    ; Reconstruction parameters file
+d60 2
+a61 1
+[raw]      = 'input/mic{****[num]}'            ; Micrographs
+d63 2
+a64 1
+[sel_mic]  = 'input/sel_micrograph'            ; Micrograph selection doc file 
+d70 1
+a70 1
+[output_dir] = 'output'                         ; Dir. for output files
+d74 1
+a74 1
+[defocus]    = '[output_dir]/defocus-mrc'       ; Summary defocus doc file
+d77 2
+a78 1
+[spi]        = 'jnk-spi'                        ; SPIDER temp files from conversion 
+d95 11
+a106 1
+
+d108 1
+a108 1
+[params]
+d110 1
+a110 1
+[params]
+d112 1
+a112 1
+[params]
+d114 1
+a114 1
+[params]
+d116 1
+a116 1
+[params]
+d119 1
+a119 1
+[defocus]
+a120 5
+; Column labels for the summary doc output file
+SD /     Micrograph  Avg.defocus  Defocus1    Defocus2       Angle  Astigmatism
+[defocus]
+SD E
+[defocus]
+d122 3
+a124 2
+[decimate] = 1                 ; No decimation 
+ 
+d138 1
+a138 2
+   @@convert_p([decimate])
+   [params]                    ; Parameter file
+d141 1
+d160 2
+a161 2
+FS
+[win-spi]                   ; Windowed micrograph        (output)
+@
+
+
+1.9
+log
+@Finished rewrite &  pixel size bug changes
+@
+text
+@d17 11
+a27 11
+;                - Spherical aberration
+;                - Electron beam voltage (in kV)
+;                - Amplitude contrast ratio
+;                - Magnification
+;                - Pixel size on scanner (in microns)
+;                - Box size  Box size for ctffind (must be even)
+;                - ResMin (A)
+;                - ResMax (A)
+;                - dFMin  (A)
+;                - dFMax  (A)
+;                - FStep 
+d29 3
+a31 4
+; OUTPUTS:
+;       Doc file of defocus and astigmatism information.
+;       Power spectrum generated by ctffind3 (in SPIDER format).
+;       Text report generated by ctffind3.
+d33 1
+a33 11
+;*********************   CTFFIND3 DESCRIPTION ***********************************
+;
+;  PURPOSE:   CTFFIND3 - determines defocus and astigmatism for images of
+;             arbitrary size (MRC format). Astigmatic angle is measured from
+;             x axis (same conventions as in the MRC 2D image processing
+;             programs).
+;
+;  AUTHOR:    CTFFIND3 is an updated version of the program CTFFIND2, which was 
+;             developed in 1998 by Nikolaus Grigorieff at the MRC Laboratory 
+;             of Molecular Biology in Cambridge, The software is licensed 
+;             under the terms of the GNU Public License version 3 (GPLv3).
+d35 6
+a40 79
+;  REFERENCE: Mindell, JA, Grigorieff N.  2003.  Accurate determination of 
+;             local defocus and specimen tilt in electron microscopy. 
+;             J Struct Biol. 142:334-47.
+;
+;  DOWNLOAD:  http://emlab.rose2.brandeis.edu/software
+;
+;  CTFFIND3 INPUT LINES: 
+;               1) Input file name for image
+;               2) Output file name to check result
+;               3) CS[mm], HT[kV], AmpCnst, XMAG, DStep[um]
+;               4) Box, ResMin[A], ResMax[A], dFMin[A], dFMax[A], FStep
+;
+;               The output image file can be used to check the result of the 
+;               fitting. It  shows the filtered average power spectrum of the 
+;               input image in one half, and the fitted CTF (squared) in the
+;               other half. The two halfs should agree very well for a
+;               sucessfull fit.
+;               CS: Spherical aberration coefficient of the objective in mm
+;               HT: Electron beam voltage in kV
+;               AmpCnst: Amount of amplitude contrast (fraction). For ice
+;                        images 0.07, for negative stain about 0.15.
+;               XMAG: Magnification of original image
+;               DStep: Pixel size on scanner in microns
+;
+;               Box: Tile size. The program devides the image into square
+;                    tiles and calculates the average power spectrum. Tiles
+;                    with a significatly higher or lower variance are
+;                    excluded; these are parts of the image which are unlikely
+;                    to contain useful information (beam edge, film number
+;                    etc). IMPORTANT: Box must have even pixel dimensions.
+;               ResMin: Low resolution end of data to be fitted.
+;               ResMaX: High resolution end of data to be fitted.
+;               dFMin: Starting defocus value for grid search in Angstrom.
+;                      Positive values represent an underfocus. The program
+;                      performs a systematic grid search of defocus values
+;                      and astigmatism before fitting a CTF to machine
+;                      precision.
+;               dFMax: End defocus value for grid search in Angstrom.
+;               FStep: Step width for grid search in Angstrom.
+;
+; CTFFIND3 OUTPUTS:
+;               Power spectrum generated (in SPIDER format).
+;               Text report.
+;
+; CS[mm], HT[kV], AmpCnst, XMAG,    DStep[um]
+; 2.6,    200.0,  0.07,    60000.0, 28.0                   From source
+; 2.00    200.    0.10     41899.   3.58                   From Albany
+; Box, ResMin[A], ResMax[A], dFMin[A], dFMax[A],  FStep
+; 512, 35.0,      7.5,       10000.0,   40000.0,  5000.0   From Albany
+; 128, 100.0,    15.0,       30000.0,   90000.0,  5000.0   from source
+; FROM: /usr8/tapu/Tresolve/50S_30S/highMg/43msec/
+;**********************************************************************************
+;
+;*********************   readmrc.py DESCRIPTION ***********************************
+;
+;  PURPOSE:    A python script that extracts info from report
+
+;  NOTES:      From Grigorieff's web site I have extracted following info that may be
+;              of use:
+;              Question: Is there a program, other than frealign, to CTF correct 
+;              (amplitudes or just phase flipping) a single image using the values 
+;              obtained from ctffind3 (i.e. correction taking into account some 
+;              astigmatism). I have a few programs that correct CTF on single images 
+;              but they all assume no astigmatism.
+;
+;              SPIDER also can do this-- you would use the "TF C" function to generate 
+;              CTF with amplitudes, or "TF CT" to just generate the binary version for 
+;              phase flipping. Then you would multiply the FT of your image by the 
+;              result using "MU". The only tricky thing is converting the CTFFIND3 
+;              parameters to SPIDER ones, because the astigmatism angle conventions 
+;              are different. The following code illustrates:
+;                 spider_defocus     = (DFMID1 + DFMID2)/2;
+;                 spider_astig       = (DFMID2 - DFMID1);
+;                 spider_angle_astig = ANGAST- 45;
+;                 if (spider_astig < 0)
+;                    {spider_astig       = -spider_astig;
+;                     spider_angle_astig = spider_angle_astig + 90; }
+;
+;**********************************************************************************
+d45 2
+a46 2
+[v27]     = 100                                ; X distance from border
+[v28]     = 100                                ; Y distance from border
+d48 2
+a49 2
+[box]     = 300                                ; Box size for CTFFIND3 (must be even)
+[ResMin]  =  35.0                              ; ResMin (A)
+d53 1
+a53 1
+[FStep]   =  5000                              ; FStep 
+d57 1
+a57 1
+[params]   = 'input/params'                    ; Parameters file
+d63 1
+a63 1
+[exec]     = '/usr8/repository/ctffind3/ctffind3.exe'  ; CTFFIND3 executable location
+d67 1
+a67 1
+[output_dir] = 'output'
+d71 1
+a71 1
+[defocus]    = '[output_dir]/defocus'           ; Summary defocus doc file
+d76 1
+a76 1
+[commands]   = 'jnk-commands'                   ; CTFFIND3 command files
+d99 1
+a99 1
+UD 19,[sp_mag]                 ; Magnification of original image (final mag on the F30)
+a103 2
+[scansize]=[sp_scanres] / [sp_mag] * 10000  
+
+d108 1
+a108 1
+SD /     micrograph  avg.defocus  defocus1    defocus2       angle  astigmatism
+d133 1
+a133 1
+   FI H [v21],[v22]            ; Get NSAM & NROW
+d137 3
+a139 2
+   [v31] = [v21] - (2*[v27])   ; Dimensions without border
+   [v32] = [v22] - (2*[v28])
+d141 1
+a141 1
+   echo " Micrograph: {****[num]} : {****[v21]} x {****[v22]} -- {****[v31]} x {****[v32]}"
+d143 2
+a144 2
+    ; Window the micrograph, removing borders
+    WI                         ; Window 
+d147 5
+a151 2
+   ([v31],[v32])               ; Dimensions
+   ([v27],[v28])               ; Start coords
+d166 1
+a166 1
+   echo ' ' {%f5.2%[sp_sph_abb]} {%f6.0%[sp_kev]} {%f5.2%[sp_acr]} {%f7.0%[sp_mag]} {%f7.2%[scansize]} >> [commands] 
+a186 1
+
+a188 1
+
+@
+
+
+1.8
+log
+@rewrite interim file (not finished)
+@
+text
+@d1 1
+a1 1
+; <html><head><title>Estimates defocus values from power spectra</title></head><b; SOURCE:  mrc.spi 
+d3 5
+a7 1
+; PURPOSE: Get defocus using MRC program CTFFIND3
+d9 2
+a10 1
+; SOURCE:  spider/docs/techs/recon/newprogs/mrcctf.spi 
+d12 17
+a28 16
+; REQUIRES
+;   ctffind.sh    A C shell script that invokes ctffind3.exe
+;   readmrc.py    A python script that extracts info from report
+;
+; INPUTS:
+;        Micrographs (in SPIDER format)
+;        Selection doc file containing micrograph numbers
+;        Boundary for windowing edges of micrographs
+;        Parameters to ctffind, including
+;                - spherical aberration
+;                - electron beam voltage (in kV)
+;                - amplitude contrast ratio
+;                - magnification
+;                - pixel size on scanner (in microns)
+;                - box size 
+;                (see ctffind,sh script for more)
+d34 93
+a126 1
+; --------------------- Parameters -----------------------------------
+d129 9
+a137 2
+[v27] = 100                                    ; X distance from border
+[v28] = 100                                    ; Y distance from border
+d143 1
+a143 1
+[sel_mic]  = 'input/sel_micrograph'            ; Micrograph file numbers
+d145 1
+a145 1
+[raw]      = 'input/mic{****[num]}'            ; Template for micrographs
+d147 1
+a147 2
+[box]      = 300                               ; Box size for ctffind (must be even)
+; FROM: /usr8/tapu/Tresolve/50S_30S/highMg/43msec/
+d158 3
+a160 2
+[spi]        = 'jnk-spi'                        ; SPIDER temp file from conversion 
+[win-spi]    = 'jnk-win-spi'                    ; Windowed SPIDER temp file
+d175 1
+a175 1
+; Parameters for CTFFIND3. Use symbolic vars to send to shell script.
+a176 2
+UD 5,[sp_pixsiz]               ; Pixel size (ANGSTROMS)
+[params]
+d190 1
+a190 1
+DE
+d193 1
+a193 1
+; Column labels for the doc. output file
+d199 1
+a199 1
+[decimate] = 1
+a204 1
+[sp_pixsiz]
+d213 1
+d228 2
+a229 1
+   WI                          ; Window the micrograph, removing borders
+d235 1
+d237 1
+a237 1
+   \rm -f [report] 
+d239 23
+a261 13
+   VM M
+   echo ' 'Calling ctffind.sh [win-spi].$DATEXT [ps-spi].$DATEXT 
+       {%f5.2%[sp_sph_abb]} {%f6.0%[sp_kev]} {%f5.2%[sp_acr]} 
+       {%f7.0%[sp_mag]} {%f7.2%[scansize]} {****[box]} 
+.
+; Do not alter dot
+
+   VM M
+   ./ctffind.sh [win-spi].$DATEXT [ps-spi].$DATEXT 
+     {%f5.2%[sp_sph_abb]} {%f6.0%[sp_kev]} {%f5.2%[sp_acr]} 
+     {%f7.0%[sp_mag]} {%f7.2%[scansize]} {****[box]} >> [report] 
+.
+; Do not alter dot
+d263 2
+a264 1
+   VM                         ; Collect defocus values from report
+d269 4
+a272 2
+VM
+cat [defocus].$DATEXT
+d275 1
+a275 1
+[spi]                          ; SPIDER file                 (deleted)
+d277 1
+a277 1
+[win-spi]                      ; Windowed spider micrograph  (deleted)
+d279 1
+a279 1
+\rm -f [win-mic]
+@
+
+
+1.7
+log
+@rewrite interim file
+@
+text
+@d3 1
+a3 1
+; PURPOSE: Get defocus using MRC program CTFFIND2
+d8 2
+a9 2
+;   ctffind*      A shell script
+;   readmrc.py    A python script
+d13 2
+a14 1
+;        Start, end micrograph numbers
+d21 2
+a22 1
+;                (see ctffind script for more)
+d25 3
+a27 3
+;       Power spectrum generated by ctffind2 (in SPIDER format).
+;       Text report generated by ctffind2.
+
+d31 2
+a32 2
+[v27] = 5 ;; 100                                   ; X distance from border
+[v28] = 5 ;; 100                                   ; Y distance from border
+d40 4
+a43 1
+[raw]      = 'input/pw_avg{****[num]}'         ; Template for micrographs
+d47 1
+a47 1
+[defocus]    = '[output_dir]/defocus'           ; Doc file
+d49 3
+a51 3
+[output_dir]  = 'output'
+[mrc_out]    = '[output_dir]/powmrc{****[num]}' ; Power spectrum template 
+[report]     = '[output_dir]/report{****[num]}' ; Report file, created by CTFFIND2 
+a55 2
+[win-mrc]    = 'jnk-win-mrc.mrc'                ; Windowed MRC temp file
+[ps-mrc]     = 'jnk-ps-mrc.mrc'                 ; PS MRC tTemp file
+d67 1
+a67 1
+VM 
+d70 1
+a70 1
+; Parameters for CTFFIND2. Use symbolic vars to send to shell script.
+d74 1
+a74 4
+
+[sp_pixsiz] = [sp_pixsiz]/1000 ; Pixel size (microns)
+
+UD 6,[sp_kev]                  ; Electron beam voltage in kV
+d82 2
+d85 1
+a85 1
+[v15]= [sp_pixsiz] / [sp_mag] * 10000 ; Pixel size
+d103 1
+a119 4
+   VM
+   echo " Micrograph: {****[num]}  {****[v21]} x{****[v22]} "
+
+
+d123 1
+a123 1
+   echo " Micrograph: {****[num]}:{****[v21]} x {****[v22]} -- {****[v31]} x {****[v32]}"
+a130 11
+    CP TO CCP4                 ; Convert to MRC format
+   [win-spi]                   ; Micrograph                 (input)
+   [win-mrc]                   ; Windowed MRC micrograph    (output)
+   (32)                        ; 4 byte real data
+                               ; Starting x,y, & z of CCP4 image
+   ([v15],[v15],[v15])         ; Pixel size                    
+                               ; X,y & z origin of CCP4 image
+
+   VM
+   echo " Calling ctffind for micrograph: {****[num]}"
+
+d134 13
+a146 6
+   vm
+   echo ' 'ctffind.sh [win-mrc] [ps-mrc] {%f5.2%[sp_sph_abb]} {%f6.0%[sp_kev]} {%f5.2%[sp_acr]} {%f7.0%[sp_mag]} {%1pe9.3%[sp_pixsiz]} 
+
+   VM
+   ctffind.sh [win-mrc] [ps-mrc] {%f5.2%[sp_sph_abb]} {%f6.0%[sp_kev]} {%f5.2%[sp_acr]} {%f7.0%[sp_mag]} {%1pe9.3%[sp_pixsiz]} 
+  ;ctffind.sh [win-mrc] [ps-mrc] {%f5.2%[sp_sph_abb]} {%f6.0%[sp_kev]} {%f5.2%[sp_acr]} {%f7.0%[sp_mag]} {%1pe9.3%[sp_pixsiz]} > [report]
+d148 2
+a149 10
+   CP FROM CCP4                ; Comment out these lines if you don't want spectra
+   [ps-mrc]                    ; MRC power spectrum from ctffind3 (input)
+   [ps_spi]                    ; SPIDER power spectrum            (output)
+   N                           ; Do not flip byte ordering
+
+   VM                          ; MRC power spectrum from ctffind3 (removed)
+   \rm [ps-mrc]
+    
+;   VM                          ; Extract defocus values from report
+;   readmrc.py [report] {****[num]} >> [defocus].$DATEXT
+d153 3
+d161 1
+a161 1
+\rm [win_mic]
+a164 3
+; ctffind.sh jnktmp9.mrc jnktmp7.mrc 2.00 200. 0.10 41899. 3.580E-03
+
+ctffind.sh jnk-ps-mrc.mrc jnk-win-mrc 2.00 200. 0.10 41899. 3.580E-03
+@
+
+
+1.6
+log
+@rewrite for variables
+@
+text
+@d29 2
+a30 2
+[v27] = 100  ; X distance from border
+[v28] = 100  ; Y distance from border
+d34 1
+a34 1
+[params]   = '../params'                      ; Parameters file
+d36 1
+a36 1
+[sel_mic]  = '../sel_micrograph'              ; Micrograph File numbers
+d38 1
+a38 1
+[raw]      = '../Micrographs/raw{****[num]}'  ; Template for micrographs
+d42 1
+a42 1
+[defocus]  = 'defocus'                        ; Doc file
+d44 3
+a46 3
+[mrc_out]  = 'powmrc'                         ; Power spectrum template 
+
+[report]   = 'report'                         ; Report file, created by CTFFIND2 
+d49 4
+a52 4
+[micout]  = 'jnkspi'                          ; SPIDER temp file from conversion 
+[tmp1]    = 'jnktmp8'                         ; Temporary file
+[tmp2]    = 'jnktmp7.mrc'                     ; Temporary file for MRC power spectrum
+[mrc_mic] = 'jnktmp9.mrc'                     ; Temporary file
+d61 1
+a61 1
+SET MP
+d64 3
+d71 1
+a93 3
+UD N [v20]                     ; Get micrograph filenumbers
+[sel_mic]
+
+d95 12
+a106 5
+
+DO [v65] = 1,[v20]             ; Loop over all files -------------------------
+
+   UD [v65], [num]
+   [sel_mic]                  ; [num] is now the micrograph file number
+d111 8
+a118 1
+   [micout]                    ; SPIDER file                 (output)
+a119 3
+   FI [v21],[v22]
+   [micout]
+   (12,2)
+d123 2
+d127 2
+a128 2
+   [micout]                    ; Micrograph                 (input)
+   [tmp1]                      ; Windowed micrograph        (output)
+d132 3
+a134 3
+   CP TO CCP4                  ; Convert to MRC format
+   [tmp1]                      ; Micrograph                 (input)
+   [mrc_mic]                   ; Windowed mrc micrograph    (output)
+d136 3
+d140 2
+a141 1
+   ([v15],[v15],[v15]) ; pixel size ; Leave blanked above and below! (call default values)
+d144 1
+a144 1
+   echo " Calling ctffind for micrograph: {****[num]}"
+d146 2
+a147 5
+   [sp_sph_abb]
+   [sp_kev]
+   [sp_acr]
+   [sp_mag]
+   [sp_pixsiz]
+d150 2
+a151 1
+   ./ctffind [mrc_mic] [tmp2] {%f5.2%[sp_sph_abb]} {%f6.0%[sp_kev]} {%f5.2%[sp_acr]} {%f7.0%[sp_mag]} {%1pe9.3%[sp_pixsiz]} > [report]{****[num]}
+d154 3
+a156 3
+   [tmp2]                      ; MRC power spectra                     (input)
+   [mrc_out]{****[num]}        ; Power spectrum generated by CTFFIND3. (output)
+   N                           ; Do not fold data
+d158 2
+a159 2
+   VM
+   \rm [tmp2]
+d161 2
+a162 2
+   VM                          ; Extract defocus values from report
+   ./readmrc.py [report]{****[num]} {****[num]} >> [defocus].$DATEXT
+d167 1
+a167 2
+[tmp1]                         ; Windowed micrograph        (deleted)
+
+d169 1
+a169 2
+[micout]                       ; SPIDER file                 (deleted)
+
+d171 1
+a171 1
+\rm [mrc_mic]
+d174 4
+@
+
+
+1.5
+log
+@changed MRC to CCP4
+@
+text
+@d1 3
+a3 4
+MD
+SET MP
+0
+; mrc.spi : get defocus using MRC program CTFFIND2
+d5 1
+a5 3
+; Requires
+;   ctffind*    a shell script
+;   readmrc.py    a python script
+d7 8
+a14 4
+; Inputs:
+;        micrographs (in SPIDER format)
+;        start, end micrograph numbers
+;        parameters to ctffind, including
+d21 10
+a30 8
+; Outputs:
+;       doc file of defocus and astigmatism information.
+;       power spectrum generated by ctffind2 (in SPIDER format).
+;       text report generated by ctffind2.
+
+; Exclude the edges of the micrograph
+x27 = 100  ; X distance from border
+x28 = 100  ; Y distance from border
+d32 1
+a32 1
+; Parameters for CTFFIND2. Use symbolic vars to send to shell script.
+d34 1
+a34 10
+FR G
+[cs] 2.26     ; Spherical aberration
+FR G
+[kv] 300      ; Electron beam voltage in kV
+FR G
+[ac] 0.1      ; amplitude contrast ratio
+FR G
+[mag] 100000   ; Magnification of original image (final mag on the F30)
+FR G
+[scansize] 15  ; Pixel size on scanner in microns (7, 14, etc.)
+d36 1
+a36 1
+; ----------- Input files --------------
+d38 1
+a38 4
+FR G
+[FILENUMS]../all_micrographs     ; file numbers
+FR G
+[mic]../Micrographs/mic{*****x11}   ; input template for micrographs
+d41 6
+a46 6
+FR G
+[defocus]defocus   ; output doc file
+FR G
+[mrc_out]power/powmrc   ; output power spectrum template 
+FR G
+[report]power/report ; output report file, created by CTFFIND2 
+d48 6
+d55 10
+a64 4
+x15=[scansize]/[mag]*10000 ; pixel size
+;
+DE
+[defocus]
+d66 12
+a77 3
+; temporary files
+FR G
+[tmp1]tmp89769
+d79 1
+a79 2
+FR G
+[tmp2]tmp92451.mrc    ; use for MRC power spectrum
+d81 2
+a82 2
+FR G
+[mrc_mic]tmpmic45.mrc
+d84 1
+a84 1
+; column labels for the output file
+d87 1
+a87 1
+sd e
+d90 34
+a123 26
+; get the filenumbers
+UD N,x20
+[FILENUMS]
+
+DO LB1 x65 = 1,x20
+
+UD x65,x11
+[FILENUMS]      ; x11 is now the file number
+
+FI x21,x22
+[mic]
+(12,2)
+
+x31 = x21 - (2*x27)   ; dimensions
+x32 = x22 - (2*x28)
+
+WI
+[mic]  ; input
+[tmp1]         ; output
+(x31,x32)      ; dimensions
+(x27,x28)      ; start coords
+
+CP TO CCP4
+[tmp1]
+[mrc_mic]
+(32)
+d125 2
+a126 1
+(x15,x15,x15) ; pixel size ; leave blanks above and below (call default values)
+d128 8
+a135 6
+;
+VM
+echo "calling ctffind with micrograph {****x11}"
+;
+VM
+./ctffind [mrc_mic] [tmp2] [cs] [kv] [ac] [mag] [scansize] > [report]{****x11}
+d137 4
+a140 4
+CP FROM CCP4        ; Comment out these lines if you
+[tmp2]              ; don't want to keep the output
+[mrc_out]{****x11}  ; power spectrum generated by CTFFIND3.
+N
+d142 2
+a143 2
+VM
+\rm [tmp2]
+d145 2
+a146 2
+VM
+./readmrc.py [report]{****x11} {****x11} >> [defocus].$DATEXT
+d148 1
+a148 2
+;VM                      ; Comment out these 2 lines if
+;\rm [report]{****x11}    ; you want to keep the report.
+d150 2
+d153 2
+a154 1
+LB1
+a155 2
+DE
+[tmp1]
+d159 1
+a159 1
+EN D
+@
+
+
+1.4
+log
+@changed extension bat to spi
+@
+text
+@d1 3
+d32 1
+a32 1
+[cs] 2.00     ; Spherical aberration
+d34 1
+a34 1
+[kv] 200      ; Electron beam voltage in kV
+d38 1
+a38 1
+[mag] 50000   ; Magnification of original image
+d40 1
+a40 1
+[scansize] 14  ; Pixel size on scanner in microns (7, 14, etc.)
+d45 1
+a45 1
+[FILENUMS]../filenums     ; file numbers
+d47 1
+a47 1
+[mic]../Micrographs/mic{***x11}   ; input template for micrographs
+d58 2
+a59 1
+
+d101 1
+a101 1
+CP TO MRC
+d104 3
+a106 1
+(-9999)
+d108 4
+d113 1
+a113 1
+ctffind [mrc_mic] [tmp2] [cs] [kv] [ac] [mag] [scansize] ] [report]{***x11}
+d115 4
+a118 3
+;CP FROM MRC        ; Comment out these 3 lines if you
+;[tmp2]             ; don't want to keep the output
+;[mrc_out]{***x11}  ; power spectrum generated by CTFFIND2.
+d124 1
+a124 1
+readmrc.py [report]{***x11} {***x11} ]] [defocus].$DATEXT
+d126 2
+a127 2
+;VM                  ; Comment out these 2 lines if
+;\rm [report]{***x11}    ; you want to keep the report.
+@
+
+
+1.3
+log
+@replaced <filenums> with [FILENUMS] in the rest of the file
+@
+text
+@d1 1
+a1 1
+; mrc.bat : get defocus using MRC program CTFFIND2
+d29 1
+a29 1
+<cs> 2.00     ; Spherical aberration
+d31 1
+a31 1
+<kv> 200      ; Electron beam voltage in kV
+d33 1
+a33 1
+<ac> 0.1      ; amplitude contrast ratio
+d35 1
+a35 1
+<mag> 50000   ; Magnification of original image
+d37 1
+a37 1
+<scansize> 14  ; Pixel size on scanner in microns (7, 14, etc.)
+d44 1
+a44 1
+<mic>../Micrographs/win   ; input template for micrographs
+d48 1
+a48 1
+<defocus>defocus   ; output doc file
+d50 1
+a50 1
+<mrc_out>powmrc   ; output power spectrum template 
+d52 1
+a52 1
+<report>report ; output report file, created by CTFFIND2 
+d57 1
+a57 1
+<defocus>
+d61 1
+a61 1
+<tmp1>tmp89769
+d64 1
+a64 1
+<tmp2>tmp92451.mrc    ; use for MRC power spectrum
+d67 1
+a67 1
+<mrc_mic>tmpmic45.mrc
+d71 1
+a71 1
+<defocus>
+d73 1
+a73 1
+<defocus>
+d85 1
+a85 1
+<mic>{***x11}
+d92 2
+a93 2
+<mic>{***x11}  ; input
+<tmp1>         ; output
+d98 2
+a99 2
+<tmp1>
+<mrc_mic>
+d103 1
+a103 1
+ctffind <mrc_mic> <tmp2> <cs> <kv> <ac> <mag> <scansize> > <report>{***x11}
+d106 2
+a107 2
+;<tmp2>             ; don't want to keep the output
+;<mrc_out>{***x11}  ; power spectrum generated by CTFFIND2.
+d110 1
+a110 1
+\rm <tmp2>
+d113 1
+a113 1
+readmrc.py <report>{***x11} {***x11} >> <defocus>.$DATEXT
+d116 1
+a116 1
+;\rm <report>{***x11}    ; you want to keep the report.
+d122 1
+a122 1
+<tmp1>
+d124 1
+a124 1
+\rm <mrc_mic>
+@
+
+
+1.2
+log
+@changed <filenums> to [FILENUMS]
+@
+text
+@d77 1
+a77 1
+<filenums>
+d82 1
+a82 1
+<filenums>      ; x11 is now the file number
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d42 1
+a42 1
+<filenums>../filenums     ; file numbers
+@

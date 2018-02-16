@@ -1,0 +1,581 @@
+head	1.10;
+access;
+symbols
+	Pre_gold:1.5;
+locks;
+comment	@# @;
+
+
+1.10
+date	2016.11.08.15.04.51;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2016.06.13.14.05.15;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2016.03.25.18.44.50;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2016.02.24.17.14.40;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2016.02.09.20.31.29;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2016.01.08.15.42.21;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2014.05.08.14.47.27;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2014.05.05.15.17.44;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2014.05.05.11.42.28;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2014.05.01.14.57.50;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@removed from refine-loop..
+@
+
+
+1.10
+log
+@cosmetic
+@
+text
+@([iter],[iter-end],[grp],[s],[bp-type], [prj-rad])
+
+ ; <html><head><title>Calculate a subset reconstruction for this group</title></head><body><pre>
+ ;
+ ; SOURCE: spider/docs/techs/recon1/Procs/refine-bp.spi   
+ ;         For gold standard reconstruction              ArDean Leith  May 2014
+ ;
+ ; PURPOSE: Calculate a subset reconstruction for this group
+ ;          (Note: If large images give memory problems with 'BP CG' switch to: 'BP 3F').  
+ ;
+ ; INPUT PARMETERS FROM CALLING LINE:   
+ ;          [iter]:     Iteration
+ ;          [grp]:      Group
+ ;          [s]:        Volume Subset
+ ;          [bp-type]:  Backprojection method wanted
+ ;          [prj-rad]:  Projection radius used
+ ;   
+ ; '##' denotes iteration, '##+' denotes next iteration, '@@' denotes subset,  '***' denotes group
+ ; INPUT FILES:
+ ;    [sel_parts_s]         input/sel_parts_***_s@@   Group particle selection file   (one for this invocation)
+ ;    [next_group_align_s]  final/align##+_***_s@@    Alignment parameter doc file    (one for this invocation)    
+ ;    [temp_out_images]     work/dala_***@@ or _8@@    Current aligned images template (one for this invocation)
+ ;
+ ; OUTPUT FILES:
+ ;    [group_vol]           work/vol_##+_***_s@@      Reconstructed volume            (one from this invocation)
+ ;
+ ; PARAMETERS:      Set seldom altered parameters here
+ [rp-lam]    = 0.2e-7;  0.2e-5           ; BP RP: lambda
+ [rp-cor]    = 0.0                       ; BP RP: correction limit
+ [rp-iter]   = 50                        ; BP RP: iteration limit
+ [rp-mode]   = 0                         ; BP RP: mode
+ [rp-min]    = 0.5                       ; BP RP: minimum    (not used in mode 0)
+ [rp-max]    = 0.5                       ; BP RP: maximum    (not used in mode 0)
+ [rp-smooth] = 0.5                       ; BP RP: smoothing  (not used in mode 0)
+
+ [cg-err]    = 1.0E-5                    ; BP CG: error limit, chi^2 limit
+ [cg-chi]    = 0.0                       ; BP CG: chi^2 limit (none)
+ [cg-iter]   = 25                        ; BP CG: iteration limit
+ [cg-mode]   = 1                         ; BP CG: mode
+ [cg-lam]    = 2000                      ; BP CG: weighting
+
+ ; ------------------------------- END BATCH HEADER -------------------------------------------
+
+ MY FL                         ; Flush results file
+  
+ ; If large images give problems allocating memory in 'BP CG' substitute 
+ ;   operation 'BP 3F' for 'BP CG'.  
+
+ [next-iter] = [iter] + 1
+
+ ; Switch to 'BP CG' on last iteration if not already
+ [bp-typet] = [bp-type]     ; 
+ IF ( [iter] == [iter-end] ) THEN
+   [bp-typet] = 1              ; Switch to 'BP CG' 
+ ENDIF
+
+ IF ( [bp-typet] == 1 ) THEN
+
+   SYS                         ; Echo progress
+     echo -n '  Back projecting with 'BP CG',  Iteration: {%I0%[iter]} Group:{%I3%[grp]}  On: ' ; hostname
+   MY FL                       ; Flush results file
+
+   ; Create volume using 'BP CG'  -----------------------------------------
+   BP CG                       ; Back Projection - CG
+     [temp_out_images]******   ; Current aligned images template     (input)
+     [sel_parts_s]             ; Group particle selection doc file   (input)
+     [prj-rad]                 ; Radius of restored object
+     [next_group_align_s]      ; Alignment parameters doc file       (input)
+     L ;  F too slow if big        ; Fourier-based spline interpolation
+     [next_group_vol_s]        ; Reconstructed volume                (output)
+     [cg-err],[cg-chi]         ; Error limit, chi^2 limit
+     [cg-iter],[cg-mode]       ; Iteration limit, mode
+     [cg-lam]                  ; Weighting
+
+ ELSEIF ( [bp-typet] == 2 ) THEN
+
+   ; Create volume using 'BP 3F' -----------------------------------------
+
+   SYS                         ; Echo progress
+     echo "  Back projecting with 'BP 3F',  Iteration: {%I0%[iter]} Group:{%I3%[grp]}"
+   MY FL                       ; Flush results file
+
+   BP 3F                       ; Back Projection - 3D Fourier
+     [temp_out_images]******   ; Current aligned images template     (input)
+     [sel_parts_s]             ; Group particle selection doc file   (input)
+     [next_group_align_s]      ; Alignment parameters doc file       (input)
+     [symmetry_doc]            ; Symmetries doc file (* = none)      (input)
+     [next_group_vol_s]        ; Reconstructed volume                (output)
+
+ ELSEIF ( [bp-typet] == 3 ) THEN
+
+   ; Create volume using 'BP RP' -----------------------------------------
+
+   SYS                         ; Echo progress
+     echo "  Back projecting with 'BP RP',  Iteration: {%I0%[iter]} Group:{%I3%[grp]}"
+   MY FL                       ; Flush results file
+
+   BP RP   [niter]             ; [niter] returns # iterations used
+     [temp_out_images]******   ; Current aligned images template     (input)
+     [sel_parts_s]             ; Group particle selection doc file   (input)
+     [prj-rad]                 ; Radius of restored object
+     [next_group_align_s]      ; Alignment parameters doc file       (input)
+     [symmetry_doc]            ; Symmetries doc file (* = none)      (input)
+     [next_group_vol_s]        ; Reconstructed volume                (output)
+     [rp-lam],[rp-cor]         ; Lambda, correction limit
+     [rp-iter], [rp-mode]      ; Iteration limit, mode
+     [rp-min],[rp-max]         ; Minimum, maximum 
+     [rp-smooth]               ; Smoothing constant
+
+ ELSEIF ( [bp-typet] ==  4 ) THEN
+   
+   ; Create volume using 'BP 3N' -----------------------------------------
+
+   SYS                         ; Echo progress
+     echo "  Back projecting with 'BP 3N',  Iteration: {%I0%[iter]} Group:{%I3%[grp]}"
+   MY FL                       ; Flush results file
+
+   BP 3N
+     [temp_out_images]******   ; Current aligned images template     (input)
+     [sel_parts_s]             ; Group particle selection doc file   (input)
+     [next_group_align_s]      ; Alignment parameters doc file       (input)
+     [symmetry_doc]            ; Symmetries doc file (* = none)      (input)
+     [next_group_vol_s]        ; Reconstructed volume                (output)
+
+ ENDIF
+
+ MY FL                         ; Flush results file
+
+ RE
+
+ ; </pre></body></html>
+@
+
+
+1.9
+log
+@echo
+@
+text
+@d60 1
+a60 1
+     echo -n'  Back projecting with 'BP CG',  Iteration: {%I0%[iter]} Group:{%I3%[grp]}  On: ' ; hostname
+@
+
+
+1.8
+log
+@needed [iter-end] parameter
+@
+text
+@d60 1
+a60 1
+     echo '  Back projecting with 'BP CG',  Iteration: {%I0%[iter]} Group:{%I3%[grp]}  On: ' ; hostname
+@
+
+
+1.7
+log
+@gold
+@
+text
+@d1 1
+a1 1
+([iter],[grp],[s],[bp-type], [prj-rad])
+@
+
+
+1.6
+log
+@Gold_standard
+@
+text
+@d5 1
+a5 1
+ ; SOURCE: spider/docs/techs/recon1/Procs/gold/refine-bp.spi   
+d9 1
+a9 1
+ ;          (Note: If large images give memory problems using 'BP CG' use  'BP 3F' instead).  
+d14 1
+a14 1
+ ;          [s]:        Subset
+d25 1
+a25 1
+ ;    [group_vol]          work/vol_##+_***_s@@      Reconstructed volume            (one from this invocation)
+d27 1
+a27 2
+ ;
+ ; Set seldom altered parameters and file names here
+d60 1
+a60 1
+     echo "  Back projecting with 'BP CG',  Iteration: {%I0%[iter]} Group:{%I3%[grp]}"
+@
+
+
+1.5
+log
+@Fourier-based spline slow if big for 'BP CG'
+@
+text
+@d1 1
+a1 1
+([iter],[grp],[bp-type], [prj-rad])
+d3 1
+a3 1
+ ; <html><head><title>Calculate overall and two half-set reconstructions for this group</title></head><body><pre>
+d5 2
+a6 1
+ ; SOURCE: spider/docs/techs/recon1/Procs/refine-bp.spi   
+d8 9
+a16 3
+ ; PURPOSE: Calculate overall and two half-set reconstructions for this group
+ ;
+ ; INPUT:   Iteration and group for desired filename must be read into this procedure
+d18 1
+a18 1
+ ;          '##' denotes iteration, '##+' denotes next iteration, and '***' denotes group
+d20 3
+a22 3
+ ;    [sel_parts]          input/select_***       Group particle selection files  (one)
+ ;    [next_group_align]   final/align##+_***     Alignment parameter doc files   (one)    
+ ;    [temp_out_images]    work/dala_***@@ or _8@@  Current aligned images template (one)
+d25 1
+a25 3
+ ;    [group_vol]          work/vol_##+_***       Reconstructed volume            (one)
+ ;    [group_vol]_s1       work/vol_##+_***_s1    Reconstructed volume subset 1   (one)      
+ ;    [group_vol]_s2       work/vol_##+_***_s2    Reconstructed volume subset 2   (one)       
+d29 13
+a41 13
+ [rp-lam]  = 0.2e-7;  0.2e-5           ; BP RP: lambda
+ [rp-cor]  = 0.0                       ; BP RP: correction limit
+ [rp-iter] = 50                        ; BP RP: iteration limit
+ [rp-mode] = 0                         ; BP RP: mode
+ [rp-min]  = 0.5                       ; BP RP: minimum    (not used in mode 0)
+ [rp-max]  = 0.5                       ; BP RP: maximum    (not used in mode 0)
+ [rp-smo]  = 0.5                       ; BP RP: smoothing  (not used in mode 0)
+
+ [cg-err]  = 1.0E-5                    ; BP CG: error limit 
+ [cg-chi]  = 0.0                       ; BP CG: chi^2 limit (none)
+ [cg-iter] = 25                        ; BP CG: iteration limit
+ [cg-mode] = 1                         ; BP CG: mode
+ [cg-lam]  = 2000                      ; BP CG: weighting
+d43 1
+a43 2
+ [selodd]  = 'work/sel_odd_{***[grp]}' ; BP 3N  Selection file for odd  particles   
+ [seleven] = 'work/sel_eve_{***[grp]}' ; BP 3N  Selection file for even particles  
+d45 1
+a45 1
+ ; -- END BATCH HEADER -- ----------------------------------------------------
+d47 2
+a48 4
+ ; If large images give problems allocating memory in 'BP **' substitute 
+ ;   operation 'BP 3F' or 'BP CG'.  Use that operation three times (with 3 
+ ;   appropriate selection files for the images to be included) to create 
+ ;   the three output volumes one by one.
+d52 5
+a56 1
+ IF ( [bp-type] == 1 ) THEN
+d58 1
+a58 1
+   ; Create volumes using 'BP CG 3'  -----------------------------------------
+d61 1
+a61 1
+     echo "  Back projecting with 'BP CG 3',  Iteration: {%I0%[iter]} Group:{%I3%[grp]}"
+d64 2
+a65 1
+   BP CG 3                     ; Back Projection - CG
+d67 1
+a67 1
+     [sel_parts]               ; Group particle selection doc file   (input)
+d69 3
+a71 5
+     [next_group_align]        ; Alignment parameters doc file       (input)
+     L                         ; Fourier-based spline slow if big
+     [next_group_vol]          ; Reconstructed vol - overall         (output)
+     [next_group_vol]_s1       ; Reconstructed vol - subset 1        (output)
+     [next_group_vol]_s2       ; Reconstructed vol - subset 2        (output)
+d76 1
+a76 1
+ ELSEIF ( [bp-type] == 2 ) THEN
+d78 1
+a78 1
+   ; Create volumes using 'BP 32 F' -----------------------------------------
+d81 1
+a81 1
+     echo "  Back projecting with 'BP 32F',  Iteration: {%I0%[iter]} Group:{%I3%[grp]}"
+d84 1
+a84 1
+   BP 32F                      ; Back Projection - 3D Fourier
+d86 2
+a87 2
+     [sel_parts]               ; Particle selection doc file         (input)
+     [next_group_align]        ; Alignment parameters doc file       (input)
+d89 1
+a89 3
+     [next_group_vol]          ; Reconstructed vol - overall         (output)
+     [next_group_vol]_s1       ; Reconstructed vol - subset 1        (output)
+     [next_group_vol]_s2       ; Reconstructed vol - subset 2        (output)
+d91 1
+a91 1
+ ELSEIF ( [bp-type] == 3 ) THEN
+d93 1
+a93 1
+   ; Create volumes using 'BP RP 3' -----------------------------------------
+d96 1
+a96 1
+     echo "  Back projecting with 'BP RP 3',  Iteration: {%I0%[iter]} Group:{%I3%[grp]}"
+d99 1
+a99 1
+   BP RP 3 [niter]             ; [niter] returns # iterations used
+d101 1
+a101 1
+     [sel_parts]               ; Particle selection doc file         (input)
+d103 1
+a103 1
+     [next_group_align]        ; Alignment parameters doc file       (input)
+d105 1
+a105 3
+     [next_group_vol]          ; Reconstructed vol - overall         (output)
+     [next_group_vol]_s1       ; Reconstructed vol - subset 1        (output)
+     [next_group_vol]_s2       ; Reconstructed vol - subset 2        (output)
+d109 1
+a109 1
+     [rp-smo]                  ; Smoothing constant
+d111 1
+a111 1
+ ELSEIF ( [bp-type] ==  4 ) THEN
+d113 1
+a113 1
+   ; Create volumes using 'BP 3N' -----------------------------------------
+a118 12
+   DE
+     [selodd]                  ; Selection file for odd  particles   (removed)
+   DE   
+     [seleven]                 ; Selection file for even particles   (removed)  
+
+   ; Split into odd and even selection lists
+   DOC SPLIT
+     [sel_parts]               ; Particle selection doc file         (input)
+     [selodd]                  ; Odd  particle selection doc file    (output)         
+     [seleven]                 ; Even particle selection doc file    (output)         
+
+   ; Reconstruct odd volume
+d121 2
+a122 2
+     [selodd]                  ; Odd particle selection doc file     (input)         
+     [next_group_align]        ; Alignment parameters doc file       (input)
+d124 1
+a124 1
+     [next_group_vol]_s1       ; Reconstructed vol - overall         (output)
+a125 15
+   ; Reconstruct even volume
+   BP 3N
+     [temp_out_images]******   ; Current aligned images template     (input)
+     [seleven]                 ; Even particle selection doc file    (input)
+     [next_group_align]        ; Alignment parameter doc file        (input)
+     [symmetry_doc]            ; Symmetries doc file (* = none)      (input)
+     [next_group_vol]_s2       ; Reconstructed vol - subset 2        (output)
+
+   ; Reconstruct combined volume
+   BP 3N
+     [temp_out_images]******   ; Current aligned images template     (input)
+     [sel_parts]               ; Particle selection doc file         (input)
+     [next_group_align]        ; Alignment parameters doc file       (input)
+     [symmetry_doc]            ; Symmetries doc file (* = none)      (input)
+     [next_group_vol]          ; Reconstructed vol - overall         (output)
+@
+
+
+1.4
+log
+@sub1 --> s1
+@
+text
+@d1 1
+a1 1
+([next-iter],[grp],[bp-type], [prj-rad])
+d32 1
+a32 1
+ [cg-err]  = 1.0E-5                    ; BP CG: error limit, chi^2 limit
+a41 2
+
+ MY FL                         ; Flush results file
+d48 2
+d53 5
+d63 1
+a63 1
+     F                         ; Fourier-based spline interpolation
+d75 4
+d92 4
+d113 5
+d135 1
+a135 1
+     [next_group_vol]_s1      ; Reconstructed vol - overall         (output)
+@
+
+
+1.3
+log
+@typo
+@
+text
+@d19 2
+a20 2
+ ;    [group_vol]_sub1     work/vol_##+_***_sub1  Reconstructed volume subset 1   (one)      
+ ;    [group_vol]_sub2     work/vol_##+_***_sub2  Reconstructed volume subset 2   (one)       
+d24 1
+a24 1
+ [rp-lam]  = 0.2e-7;  0.2e-5                    ; BP RP: lambda
+d60 2
+a61 2
+     [next_group_vol]_sub1     ; Reconstructed vol - subset 1        (output)
+     [next_group_vol]_sub2     ; Reconstructed vol - subset 2        (output)
+d76 2
+a77 2
+     [next_group_vol]_sub1     ; Reconstructed vol - subset 1        (output)
+     [next_group_vol]_sub2     ; Reconstructed vol - subset 2        (output)
+d90 2
+a91 2
+     [next_group_vol]_sub1     ; Reconstructed vol - subset 1        (output)
+     [next_group_vol]_sub2     ; Reconstructed vol - subset 2        (output)
+d117 1
+a117 1
+     [next_group_vol]_sub1     ; Reconstructed vol - overall         (output)
+d125 1
+a125 1
+     [next_group_vol]_sub2     ; Reconstructed vol - subset 2        (output)
+@
+
+
+1.2
+log
+@bugs fixed
+@
+text
+@d99 1
+a99 1
+   ; Create volumes using 'BP RP 3' -----------------------------------------
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d1 1
+a1 1
+([iter],[grp],[bp-type], [prj-rad])
+d11 1
+a11 1
+ ;  '##' denotes iteration and  '***' denotes group
+d14 2
+a15 2
+ ;    [group_align]        final/align##_***      Alignment parameter doc files   (one)    
+ ;    [temp_out_images]    work/dala_***@@ or_8@@   Current aligned images template (one)
+d18 3
+a20 3
+ ;    [group_vol]          work/vol_##_***        Reconstructed volume            (one)
+ ;    [group_vol]_sub1     work/vol_##_***_sub1   Reconstructed volume subset 1   (one)      
+ ;    [group_vol]_sub2     work/vol_##_***_sub2   Reconstructed volume subset 2   (one)       
+d24 1
+a24 1
+ [rp-lam]  = 0.2e-5                    ; BP RP: lambda
+d44 1
+a44 1
+ 
+d57 1
+a57 1
+     [group_align]             ; Alignment parameters doc file       (input)
+d59 3
+a61 3
+     [group_vol]               ; Reconstructed vol - overall         (output)
+     [group_vol]_sub1          ; Reconstructed vol - subset 1        (output)
+     [group_vol]_sub2          ; Reconstructed vol - subset 2        (output)
+d73 1
+a73 1
+     [group_align]             ; Alignment parameters doc file       (input)
+d75 3
+a77 3
+     [group_vol]               ; Reconstructed vol - overall         (output)
+     [group_vol]_sub1          ; Reconstructed vol - subset 1        (output)
+     [group_vol]_sub2          ; Reconstructed vol - subset 2        (output)
+d87 1
+a87 1
+     [group_align]             ; Alignment parameters doc file       (input)
+d89 3
+a91 3
+     [group_vol]               ; Reconstructed vol - overall         (output)
+     [group_vol]_sub1          ; Reconstructed vol - subset 1        (output)
+     [group_vol]_sub2          ; Reconstructed vol - subset 2        (output)
+d100 1
+a100 1
+ . DE
+d115 1
+a115 1
+     [group_align]             ; Alignment parameters doc file       (input)
+d117 1
+a117 1
+     [group_vol]               ; Reconstructed vol - overall         (output)
+d123 1
+a123 1
+     [group_align]             ; Alignment parameter doc file        (input)
+d125 1
+a125 1
+     [group_vol]_sub2          ; Reconstructed vol - subset 2        (output)
+d131 1
+a131 1
+     [group_align]             ; Alignment parameters doc file       (input)
+d133 1
+a133 1
+     [group_vol]               ; Reconstructed vol - overall         (output)
+@

@@ -1,0 +1,323 @@
+head	1.3;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+1.3
+date	2012.07.24.15.46.57;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2012.07.24.15.20.26;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2011.08.04.18.54.30;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@new
+@
+
+
+1.3
+log
+@sel group doc file empty bug
+@
+text
+@; <html><head><title>Restacks  particles</title></head><body><pre>
+;
+; PURPOSE: Restacks particles from a set of particle selection files 
+;          into specified number of new stacks.
+;  
+; SOURCE:  spider/docs/techs/recon/newprogs/restack.spi  
+; 
+; USAGE:   stest ; cd d_recnew/Refinement_small ; clean ; spider spi/pic @@restack
+
+ [newnumgrps] = 3                        ; Number of new groups
+
+ [id] = 'b'                              ; New stack id letter
+
+; ------------------ Input files -----------------------
+
+[old_sel_grp]  = 'input/sel_group'       ; Group selection file
+
+[old_sel_part] = 'input/sel_particles_'  ; Particle selection files (one / group) 
+
+[old_part]     = 'input/data'            ; Existing particle stacks (one / group)
+
+; ----------------- Output files -----------------------
+
+[new_sel_grp]  = 'sel_group_[id]'       ; New group selection file
+
+[new_sel_part] = 'sel_particles_[id]_'  ; New particle selection files (one / group) 
+
+[new_part]     = 'data_[id]_'           ; New particle stacks (one / group)
+
+; -------------- END BATCH HEADER -------------------------------
+
+MD                                 ; Skip unnecessary output 
+  VB OFF
+MD                                 ; Skip unnecessary output 
+  TR OFF
+
+UD N [num_grps]                    ; Find number of input groups
+  [old_sel_grp]                    ; Group selection file (input)
+
+[ntot] = 0                          ; Overall cumulative total
+[oldnumgrps] = 0                   ; Number of old groups
+
+DO                                 ; Loop over all old groups ------------
+
+   UD NEXT [key], [inpgrp]         ; Get input group number
+     [old_sel_grp]                 ; Group selection doc file (input)
+   IF ([key] .LE. 0) EXIT
+
+   UD N [numparts]
+     [old_sel_part]{***[inpgrp]}   ; Particle selection files (one / group) 
+
+   VM
+   echo ' '"Old group: {***[inpgrp]}  has: {*****[numparts]} particles."
+
+   ; Count number of selected particles
+   [ntot]       = [ntot]+[numparts]        
+   [oldnumgrps] = [oldnumgrps]+1        
+ENDDO
+
+UD NEXT E                          ; Finished with doc file
+  [old_sel_grp]                    ; Finished with doc file      (input)
+
+[newnpg] = [ntot]/[newnumgrps]     ; Number of particles in new groups
+[newnpg] = INT([newnpg] + 0.5)     ; Number of particles in new groups
+
+VM
+  echo ' '
+VM
+  echo ' '"Restacking: {*****[ntot]} particles."
+VM
+  echo ' '"Restacking: {***[oldnumgrps]} groups into: {***[newnumgrps]} groups, with {******[newnpg]} particles each."
+VM
+  echo ' '
+
+DE
+  [new_sel_grp]                    ; Group selection file        (removed)
+SD /     GROUP    
+  [new_sel_grp]                    ; Statistics doc file comment (output)
+
+[newnpg]  = [ntot]/[newnumgrps]    ; Number of particles in new groups
+[newnpg]  = INT([newnpg] + 0.5)    ; Number of particles in new groups
+
+[outgrp]  = 0
+[outpart] = [newnpg] + 1           ; To force new output group
+[needold] = 1                      ; To force new input group
+ 
+DO                                 ; Loop over all old particles ------------
+ 
+   IF ([needold] .GE. 1 ) THEN 
+      ; Start another input group
+
+      UD NEXT [key], [inpgrp]      ; Get next input group number
+        [old_sel_grp]              ; Group selection doc file    (input)
+      IF ([key] .LE. 0) EXIT       ; Finished with all input grps
+
+      [needold] = 0
+      ;VM
+      ;echo ' '"Starting input group: {***[inpgrp]}."
+   ENDIF
+
+   IF ([outpart] .GT. [newnpg] ) THEN 
+      ; Create another output group
+
+      IF ([outgrp] .GT. 0) THEN
+         ; Not first output group
+         VM
+           echo ' '"Filled group: [id]_{***[outgrp]} with: {******[outpart]} particles."
+
+         SD E
+           [new_sel_part]{***[outgrp]}        ; Finished output part. sel. doc file (closed)
+      ENDIF
+
+      [outgrp]  = [outgrp] + 1                ; New output group #
+      ;VM
+      ;echo ' '"Starting output group: [id]{***[outgrp]}."
+
+      SD [outgrp],[outgrp]
+      [new_sel_grp]                            ; Group selection doc file    (input)
+
+      DE
+        [new_sel_part]{***[outgrp]}           ; Group selection doc file    (removed)
+
+      SD /        PART_#     ORIG_MICRO    ORIG_PART_#     PREV_GRP    PREV_PART_#
+        [new_sel_part]{***[outgrp]}           ; Statistics doc file comment (output)
+
+      DE
+        [new_part]{***[outgrp]}               ; Group selection doc file    (removed)
+
+      [outpart] = 0
+   ENDIF
+
+   UD NEXT [key], [inpart]                    ; Get next input particle number
+     [old_sel_part]{***[inpgrp]}              ; Group selection doc file    (input)
+
+   IF ([key] .LE. 0) THEN
+      ; Finished input part. sel. doc file
+      [needold] = 1
+        
+      CYCLE                                   ; Finished with this input group
+   ENDIF
+
+   ; Have both particles
+   [outpart] = [outpart] + 1                  ; New output particle # 
+
+   FI H [mic],[img]
+     [old_part]{***[inpgrp]}@@{******[inpart]} ; Existing particle stack    (input)
+     MIC,NUM                                  ; Get micrograph and image #
+
+   CP
+     [old_part]{***[inpgrp]}@@{******[inpart]}  ; Existing particle stack    (input)
+     [new_part]{***[outgrp]}@@{******[outpart]} ; New particle stack         (output)
+
+   SD [outpart],[outpart],[mic],[img],[inpgrp],[inpart]
+     [new_sel_part]{***[outgrp]}              ; Group selection doc file   (output)
+
+ENDDO
+
+IF ([outpart] .GT. 0) THEN
+   VM
+     echo ' '"Filled group: [id]_{***[outgrp]} with: {******[outpart]} particles."
+
+   SD E
+     [new_sel_part]{***[outgrp]}               ; Finished output part. sel. doc file (closed)
+ENDIF
+
+UD NEXT E
+  [new_sel_grp]                                ; Group selection doc file    (input)
+
+VM
+  echo ' '
+
+EN
+; </body></pre></html>
+@
+
+
+1.2
+log
+@oldnumgrps & cosmetic
+@
+text
+@d101 1
+a101 1
+   IF ([outpart] .GE. [newnpg] ) THEN 
+d116 3
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d24 1
+a24 1
+[new_sel_grp]  = 'jnksel_group_[id]'       ; New group selection file
+d26 1
+a26 1
+[new_sel_part] = 'jnksel_particles_[id]_'  ; New particle selection files (one / group) 
+d28 1
+a28 1
+[new_part]     = 'jnkdata_[id]_'           ; New particle stacks (one / group)
+d33 1
+a33 1
+VB OFF
+d35 1
+a35 1
+TR OFF
+d38 1
+a38 1
+[old_sel_grp]                      ; Group selection file (input)
+d40 2
+a41 1
+[ntot]=0                           ; Overall cumulative total
+d46 1
+a46 1
+   [old_sel_grp]                   ; Group selection doc file (input)
+d50 1
+a50 1
+   [old_sel_part]{***[inpgrp]}     ; Particle selection files (one / group) 
+d56 2
+a57 1
+   [ntot]=[ntot]+[numparts]        
+d60 2
+a61 2
+UD NEXT E                          ; 
+[old_sel_grp]                      ; Finished with doc file      (input)
+d67 1
+a67 1
+echo ' '
+d69 1
+a69 1
+echo ' '"Restacking: {*****[ntot]} particles."
+d71 1
+a71 1
+echo ' '"Restacking: {***[num_grps]} groups into: {***[newnumgrps]} groups, with {******[newnpg]} particles each."
+d73 1
+a73 1
+echo ' '
+d76 1
+a76 1
+[new_sel_grp]                      ; Group selection file        (removed)
+d78 1
+a78 1
+[new_sel_grp]                      ; Statistics doc file comment (output)
+d93 1
+a93 1
+      [old_sel_grp]                ; Group selection doc file    (input)
+d107 1
+a107 1
+         echo ' '"Filled group: [id]_{***[outgrp]} with: {******[outpart]} particles."
+d110 1
+a110 1
+         [new_sel_part]{***[outgrp]}          ; Finished output part. sel. doc file (closed)
+d118 1
+a118 1
+      [new_sel_part]{***[outgrp]}             ; Group selection doc file    (removed)
+d121 1
+a121 1
+      [new_sel_part]{***[outgrp]}             ; Statistics doc file comment (output)
+d124 1
+a124 1
+      [new_part]{***[outgrp]}                 ; Group selection doc file    (removed)
+d130 1
+a130 1
+   [old_sel_part]{***[inpgrp]}                ; Group selection doc file    (input)
+d143 2
+a144 2
+   [old_part]{***[inpgrp]}@@{******[inpart]}   ; Existing particle stack    (input)
+   MIC,NUM                                    ; Get micrograph and image #
+d147 2
+a148 2
+   [old_part]{***[inpgrp]}@@{******[inpart]}   ; Existing particle stack    (input)
+   [new_part]{***[outgrp]}@@{******[outpart]}  ; New particle stack         (output)
+d151 1
+a151 1
+   [new_sel_part]{***[outgrp]}                ; Group selection doc file   (output)
+d157 1
+a157 1
+   echo ' '"Filled group: [id]_{***[outgrp]} with: {******[outpart]} particles."
+d160 1
+a160 1
+   [new_sel_part]{***[outgrp]}                 ; Finished output part. sel. doc file (closed)
+d164 1
+a164 1
+[new_sel_grp]                ; Group selection doc file    (input)
+d167 1
+a167 1
+echo ' '
+@
