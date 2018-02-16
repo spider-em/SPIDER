@@ -6,12 +6,12 @@
 
 [classNum]          = 1      ; volume number
 [numIter]           = 98     ; number of iterations of POCS
-[tilt-angle]        = 49     ; tilt angle
-[yprj-phi]          = 150    ; angle phi for y-projections (Euler angles will be (PHI,90,0))
-[docfileValuesYN]   = 1      ; override parameters below with (optional) filter docfile? (1==docfile, 0==header values)
+[tilt-angle]        = 49     ; maximum tilt angle
+[yprj-phi]          = 180    ; angle phi for y-projections (Euler angles will be (PHI,90,0))
+[docfileValuesYN]   = 0      ; override parameters below with (optional) filter docfile? (1==docfile, 0==header values)
 [header-type]       = 7      ; filter type (7==Butterworth, 5==Fermi, 3==Gaussian, 1==Tophat)
-[headerParam1]      = 40     ; Butterworth filter pass-band (Angstroms)
-[headerParam2]      = 30     ; Butterworth filter stop-band (Angstroms)
+[headerParam1]      = 30     ; Butterworth filter pass-band (Angstroms)
+[headerParam2]      = 20     ; Butterworth filter stop-band (Angstroms)
 [progress-interval] = 10     ; progress message written to screen every Nth iteration
 
 ; ------------------------ Inputs ------------------------
@@ -30,13 +30,15 @@ fr l
 fr l
 [pocs_dir]Pocs                                          ; output directory
 fr l
-[y_projections][pocs_dir]/yprj_{***[classNum]}          ; projection stack
+[y_projections]yprj_{***[classNum]}                     ; projection stack, in POCS_DIR (w/o "@")
+FR L
+[last_link]yprj-LAST                                    ; softlink to most recent stack of projections (for SPIRE)
 fr l
 [pocs_stats_doc][pocs_dir]/docpocsstats                 ; volume statistcs for each iteration
 fr l
-[pocs_vol][vol_dir]/volpocs{***[classNum]}              ; POCS volume
+[pocs_vol][vol_dir]/vcla{***[classNum]}-pocs            ; POCS volume
 fr l
-[filt_pocs_vol][vol_dir]/volpocs{***[classNum]}-filt    ; filtered POCS volume
+[filt_pocs_vol][vol_dir]/vcla{***[classNum]}-pocs-filt  ; filtered POCS volume
 
 ; ------------------- END BATCH HEADER -------------------
 
@@ -135,13 +137,13 @@ echo "if(! -d [pocs_dir]) mkdir [pocs_dir]"|csh
 [sliceNum] = 1   ; WAS [iter]  = 0
 
 DE
-[y_projections]@
+[pocs_dir]/[y_projections]@
 
 ; project in y
 pj 3
 [temp_vol_incore]
 [ydim],[ydim]
-[y_projections]@{***[sliceNum]}
+[pocs_dir]/[y_projections]@{***[sliceNum]}
 ([yprj-phi],90,0)
 
 ; Fourier transform
@@ -204,10 +206,14 @@ do lb1 [iter] = 1,[numIter]
     pj 3
     [temp_vol_incore]
     [ydim],[ydim]
-    [y_projections]@{***[sliceNum]}
+    [pocs_dir]/[y_projections]@{***[sliceNum]}
     ([yprj-phi],90,0)
 lb1
 ; end iteration-loop
+
+; create soft link of most recent projection stack for SPIRE
+SYS
+cd [pocs_dir] && rm -f [last_link].$DATEXT && ln -sv [y_projections].$DATEXT [last_link].$DATEXT ; echo
 
 ; close doc
 SD /        FMAX          FMIN          FAVG          S.D.
@@ -231,6 +237,7 @@ echo ; echo "Done" ; date
 
 en d
 
-; Modified 2015-08-13
+; Modified 2017-11-03
 ;    TO DO: read filter parameters using subroutine
+;    2016-04-20 (trs) -- creates link to more recent projection stack for SPIRE
 ;    2015-08-06 (trs) -- diagnostic y-projections written as stack (numbered from 2 to [numIters]+1)
