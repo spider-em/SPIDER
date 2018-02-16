@@ -1,9 +1,34 @@
-head	1.12;
+head	1.17;
 access;
 symbols;
 locks; strict;
 comment	@c @;
 
+
+1.17
+date	2018.01.31.20.34.11;	author leith;	state Exp;
+branches;
+next	1.16;
+
+1.16
+date	2018.01.30.20.50.45;	author leith;	state Exp;
+branches;
+next	1.15;
+
+1.15
+date	2018.01.23.16.48.08;	author leith;	state Exp;
+branches;
+next	1.14;
+
+1.14
+date	2018.01.22.17.55.52;	author leith;	state Exp;
+branches;
+next	1.13;
+
+1.13
+date	2017.05.26.16.44.25;	author leith;	state Exp;
+branches;
+next	1.12;
 
 1.12
 date	2016.11.15.15.26.50;	author leith;	state Exp;
@@ -70,9 +95,9 @@ desc
 @@
 
 
-1.12
+1.17
 log
-@INDEX(FCHAR,'NP') > 0
+@sqrt2m1 in butterworth, cosmetics
 @
 text
 @C++*********************************************************************
@@ -84,12 +109,15 @@ C             FQ Q PARAMS                          OCT 12 ARDEAN LEITH
 C             RAISED SINC                          OCT 13 ARDEAN LEITH    
 C             CREATED FROM FOUR1A                  NOV 14 ARDEAN LEITH    
 C             VOLUME IOPT 12 & 13 TRAP for ifort   JUN 15 ARDEAN LEITH    
+C             VOLUME FILTER BUG                    MAY 17 ARDEAN LEITH    
+C             SIMPLIFIED                           JAN 18 ARDEAN LEITH    
+C             SQRT2M1 in BUTTERWORTH               JAN 18 ARDEAN LEITH
 C       
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2015  Health Research Inc.,                         *
+C=* Copyright 1985-2018  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@@wadsworth.org                                        *
 C=*                                                                    *
@@ -109,9 +137,14 @@ C **********************************************************************
 C
 C FOUR_FQ 
 c
-C PURPOSE:  APPLIES FOURIER FILTERS TO 2-D OR 3-D REAL PICTURES
-C            'FQ Q'   : QUICK FILTERING (IN CORE, 2-D OR 3-D)
-C            'FQ QNP' : QUICK FILTERING (IN CORE, 2-D OR 3-D) NO PAD
+C PURPOSE: APPLIES FOURIER FILTERS TO 2-D OR 3-D REAL PICTURES
+C            'FQ'    : QUICK FILTERING (IN CORE, 2-D OR 3-D)
+C            'FQ NP' : QUICK FILTERING (IN CORE, 2-D OR 3-D) NO PAD
+C
+C NOTE:  BUTTERWORTH FILTERS APPEAR TO BE OFFSET FROM MY EXPECTED
+C        CENTRAL LINE BETWEEN PASS BAND AND STOP BAND BUT THIS GOES
+C        WAY BACK BEFOR SPIDER 17.0 AND MAYBE FOREVER.  I SUGGEST
+C        NOT USING IT??
 C
 C NOTE:  APPEARS TO HAVE UNDOCUMENTED AND UNTESTED ELLIPTICAL 
 C        FILTRATION FOR OPTIONS: 1,2,3,4.   THIS WILL GIVE BAD 
@@ -122,8 +155,8 @@ C        SUBSTITUTION OF PRECALCULATED INTERMEDIATE VARIABLES NOT
 C        USEFULL FOR SPEED SINCE TIME IS DOMINATED BY FFT. SEE RCS
 C        VERSIONS FOR TESTING THIS
 C
-C        'FF' (ffilts.f)            SETS X1 TO: (NX  / 2)**2 BUT
-C        'FQ' (four_fq.f or fq_q.f) SETS X1 TO: (NXF / 2)**2 WHERE
+C        'FF' (ffilts.f)     SETS XD2SQ TO: (NX  / 2)**2 BUT
+C        'FQ' (four_fq.f)    SETS XD2SQ TO: (NXF / 2)**2 WHERE
 C             NX  IS X DIMENSION OF POSSIBLY PADDED IMAGE
 C             NXF IS SLIGHTLY LARGER DUE TO MIXED RADIX FOURIER PAD
 C        SO THEY GIVE SLIGHTLY DIFFERENT RESULTS.  I SUSPECT THAT
@@ -189,8 +222,9 @@ C       OPEN REAL OR FOURIER SPACE INPUT FILE
      &   '  9 - RAISED COS. LOW-PASS,   10 - RAISED COS. HIGH-PASS' ,/,
      &   ' 13 - RAISED SINC WINDOW,     14 - B FACTOR')
 
-        IWANTFOU = 0
-        CALL RDPRI2S(IOPT,IWANTFOU,NOT_USED,'FILTER TYPE (1-14)',IRTFLG)
+        IWANTFOU = 0    ! HIDDEN FOURIER OUTPUT OPTION
+        CALL RDPRI2S(IOPT,IWANTFOU,NOT_USED,
+     &               'FILTER TYPE (1-10,13,14)',IRTFLG)
         IF (IRTFLG. NE. 0) GOTO 999
         
         IF (IOPT < 1 .OR. IOPT > 14) THEN
@@ -207,7 +241,7 @@ C       OPEN REAL OR FOURIER SPACE INPUT FILE
 
         PARM2 = 0.0
         PARM3 = 0.0
-        BFPS  = 0.0
+        BFPS  = 0.0    ! ARRAY OP
 
         IF (IOPT == 5 .OR. IOPT == 6)  THEN
 C          FERMI DISTRIBUTION FILTER ****************************
@@ -218,7 +252,7 @@ C          FERMI DISTRIBUTION FILTER ****************************
            IF (IRTFLG .NE. 0) RETURN
 
            IF (PARM1 < 0.0 .OR. PARM1 > 1.0) 
-     &         PARM1 = 0.5 * PARM1 / (NX/2)     ! RADIUS INPUT
+     &         PARM1 = PARM1 / NX     ! RADIUS INPUT
 
            CALL RDPRM1S(PARM3,NOT_USED,
      &                     'TEMPERATURE (0=CUTOFF)',IRTFLG)
@@ -235,8 +269,6 @@ C          BUTTERWORTH  FILTER ********************************
      &        NMAX,0,.FALSE.,BFPS,NGOT,IRTFLG)
            IF (IRTFLG .NE. 0) RETURN
 
-           ORD = 2.0 * ALOG10(EPS / SQRT(AA**2 - 1.0) )
-
            IF (BFPS(1) > 1.0) THEN
 C             RADIUS INPUT
               PARM1 = BFPS(1) / NX
@@ -250,8 +282,15 @@ C             FREQUENCY INPUT
            IF (BFPS(3) == 0.0 .AND. BFPS(4) == 0.0) THEN
 C             BUTTERWORTH CIRCULAR FILTER
 
-              PARM3 = ORD / ALOG10(PARM1 / PARM2)
-              PARM1 = PARM1 / EPS**(2. / PARM3)
+              ORD   = 2.0 * ALOG10(EPS / SQRT(AA**2 - 1.0) )
+
+              ORD   = ORD   / ALOG10(PARM1 / PARM2)
+              PARM1 = PARM1 / EPS**(2. / ORD)
+
+              PARM3 = ORD
+
+              WRITE(NOUT,*)
+     &         ' BUTTERWORTH CIRCULAR FILTER, ORD: ',ORD
 
            ELSE
 C             BUTTERWORTH ELLIPTIC FILTER
@@ -263,9 +302,11 @@ C             LOW-PASS  IOPT=11,  HIGH-PASS IOPT=12
      &              'OPTION NOT IMPLEMENTED FOR VOLUMES',IOPT)
                  GOTO 1000
               ENDIF
-           ENDIF
 
-           !write(6,*) 'ord,parm1:',parm3,parm1
+              ORD   = 2.0 * ALOG10(EPS / SQRT(AA**2 - 1.0) )
+              WRITE(NOUT,*)
+     &         ' BUTTERWORTH ELIPTICAL FILTER, ORD: ',ORD
+           ENDIF
 
         ELSEIF ( IOPT == 9  .OR. IOPT == 10)  THEN
 C          RAISED COSINE FILTER ********************************
@@ -278,7 +319,7 @@ C          RAISED COSINE FILTER ********************************
            IF (IRTFLG .NE. 0) RETURN
 
            IF (PARM1 < 0.0 .OR. PARM1 > 1.0) 
-     &         PARM1 = 0.5 * PARM1 / (NX/2)     ! RADIUS INPUT
+     &         PARM1 = PARM1 / NX     ! RADIUS INPUT
 
            IF (PARM2 == -9999999) THEN
               ! SAME AS PARM1
@@ -286,7 +327,7 @@ C          RAISED COSINE FILTER ********************************
 
            ELSEIF  (PARM2 < 0.0 .OR. PARM2 > 1.0) THEN
               ! RADIUS INPUT
-              PARM2 = 0.5 * PARM2 / (NY/2)   
+              PARM2 = PARM2 / NY   
            ENDIF
 
         ELSEIF (IOPT == 14)  THEN
@@ -294,17 +335,21 @@ C          B FACTOR FILTER  ************************************
 
            WRITE(NOUT,*)
      &         ' NORMALIZES AMPLITUDES BY A "B" TEMPERATURE FACTOR'
-           WRITE(NOUT,*)' AMP = AMP*D*(EXP(Bs**2))'
+           WRITE(NOUT,*)' AMP = AMP*D*(EXP(B*F**2))'
 
-           CALL RDPRM1S(PARM1, NOT_USED,'B FACTOR',   IRTFLG)
+           PARM1 = -200
+           CALL RDPRM1S(PARM1, NOT_USED,'B FACTOR (PIXEL**2)',   IRTFLG)
            IF (IRTFLG .NE. 0) RETURN
 
-           PARM2 = 0.5
+           PARM2 = 1.0
            CALL RDPRM1S(PARM2, NOT_USED,'D MULTIPLIER', IRTFLG)
            IF (IRTFLG .NE. 0) RETURN
 
            CALL RDPRM1S(PARM3, NOT_USED,'FREQUENCY CUTOFF',  IRTFLG)
            IF (IRTFLG .NE. 0) RETURN
+           IF (PARM3 < 0.0 .OR. PARM3 > 0.5) THEN
+              WRITE(NOUT,'(A)') '  Allowed Cutoff Range: 0 .. 0.5'
+           ENDIF
 
            PARM3 = PARM3**2
          
@@ -322,7 +367,7 @@ C          RAISED SINC WINDOW
 
            PARM1 = PARM1T
            IF (PARM1T < 0.0 .OR. PARM1T > 1.0) THEN
-              PARM1 = 0.5 * PARM1 / (NX/2)     ! RADIUS INPUT
+              PARM1 = PARM1 / NX     ! RADIUS INPUT
               WRITE(NOUT,'(A,F8.4)') '  Frequency: ',PARM1
            ENDIF
 
@@ -332,7 +377,7 @@ C          RAISED SINC WINDOW
 
            ELSEIF  (PARM2T < 0.0 .OR. PARM2T > 1.0) THEN
 C             RADIUS INPUT FOR PARM2
-              PARM2 = 0.5 * PARM2T / (NY/2)   
+              PARM2 = PARM2T / NY   
            ENDIF
 
         ENDIF
@@ -549,7 +594,7 @@ C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2014, Health Research Inc.,                         *
+C=* Copyright 1985-2018, Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@@wadsworth.org                                        *
 C=*                                                                    *
@@ -597,133 +642,180 @@ C--*******************************************************************
         INTEGER            :: NX,NY,IRTFLG
 
         REAL               :: ZEROTERM
-        REAL               :: ORD,PARM1SQ,PARM2SQ
+        REAL               :: ORD,PARM1SQ,PARM2SQ,SQRT2M1
 
-        REAL               :: X1,Y1
-        REAL               :: F,F2,FPE,FSE,ORDT,PARMT,FSQ,EXPCORR
+        REAL               :: XD2SQ,YD2SQ,FSQDP,FSQ,FSQD4
+        REAL               :: F,F2,FPE,FSE,ORDT,PARMT,EXPCORR
         INTEGER            :: J,I,IX,IY, NR2
         
         REAL, PARAMETER    :: PI  = 3.14159265358979323846
         REAL, PARAMETER    :: EPS = 0.882
 
+        real       :: bsavi(lsd),bsavv(lsd),bsavf(lsd)
+        integer    :: it
+        real       :: xd2sqdp1sqinv,xd2sqdp1sq
+
+        XD2SQ   = FLOAT(N2X/2)**2
+
         NR2     = N2Y / 2
-        X1      = FLOAT(N2X/2)**2
-        Y1      = FLOAT(NR2)  **2
+        YD2SQ   = FLOAT(NR2)**2
 
         ORD     = PARM3       ! FOR BUTTERWORTH FILTER
         PARM1SQ = PARM1**2
         PARM2SQ = PARM2**2
-      
+
+        SQRT2M1 = (SQRT(2.0)-1)
 
 C       KEEP ZERO TERM FOR HIGH PASS OPTIONS
         ZEROTERM = B(1,1)
+            
+        !xd2sqdp1sq    =   xd2sq/parm1sq
+        !xd2sqdp1sqinv = 1/xd2sq/parm1sq
+
+        !write(6,*) ' p1,p2,p3:        ',        parm1,parm2,parm3
+        !write(6,*) ' p1sq,p2sq:       ',        parm1sq,parm2sq
+        !write(6,*) ' nx,xd2sq,n2x:    ',        nx,xd2sq,n2x
+        !write(6,*) ' xd2sqdp1sqinv,zeroterm: ', xd2sqdp1sqinv,zeroterm
 
         !write(6,*) ' sum1:',sum(b(1:n2x, 1:n2y)),zeroterm
 
-c$omp  parallel do private(j,i,iy,ix,f,f2,fpe,fse,ordt,parmt,
-c$omp&                     fsq,expcorr)
+c$omp  parallel do private(j,i,iy,ix,it,f,f2,fpe,fse,ordt,parmt,
+c$omp&                     fsq,fsqdp,fsqd4,expcorr)
         DO J=1,N2Y
 
            IY = (J-1)
            IF (IY > NR2) IY = IY - N2Y
 
+
            DO I=1,LSD,2
 
-              IX = (I-1) / 2
+              IX    = (I-1) / 2
+              FSQ   = (FLOAT(IX*IX)/XD2SQ +
+     &                 FLOAT(IY*IY)/YD2SQ)
+
+              FSQDP = (FLOAT(IX*IX)/XD2SQ/PARM1SQ +
+     &                 FLOAT(IY*IY)/YD2SQ/PARM2SQ)
+
+              !it        = (i -1)/2 + 1    ! 1,1,2
+              !f         = float(ix)/n2x + float(iy)/n2y
+              !bsavf(it) = f
+              !write(6,*) ' it,ix,iy,f:',it,ix,iy,f
 
               IF (IOPT == 1) THEN
 C                LOWPASS *************************************
 
-                 IF (0.25 * (FLOAT(IX*IX)/X1/PARM1SQ +
-     &                       FLOAT(IY*IY)/Y1/PARM2SQ) > 1.0) THEN
+                 !bsavv(it) =  1.0
+                 IF (0.25 * FSQDP > 1.0) THEN
 
-                    B(I,  J) = 0.0
-                    B(I+1,J) = 0.0
+                    B(I,  J)  = 0.0
+                    B(I+1,J)  = 0.0
+
+                   !bsavv(it) = 0.0
                  ENDIF
 
               ELSEIF (IOPT == 2) THEN   
 C                HIGH PASS ***********************************
 
-                 IF ( (IX.NE.0 .OR. IY.NE.0) .AND.
-     &                0.25 * (FLOAT(IX*IX)/X1/PARM1SQ + 
-     &                        FLOAT(IY*IY)/Y1/PARM2SQ) <= 1.0) THEN
+                 !bsavv(it) =  1.0
+ 
+                 IF ((IX.NE.0 .OR. IY.NE.0) .AND. 
+     &               (0.25*FSQDP) <= 1.0) THEN
 
-                    B(I,  J) = 0.0
-                    B(I+1,J) = 0.0
+                    B(I,  J)  = 0.0
+                    B(I+1,J)  = 0.0
+ 
+                   !bsavv(it) = 0.0
                  ENDIF
 
               ELSEIF(IOPT == 3)  THEN
 C                GAUSSIAN LOW PASS ***************************
 
-                 F = 0.125 * (FLOAT(IX*IX)/X1/PARM1SQ +
-     &                        FLOAT(IY*IY)/Y1/PARM2SQ)
+                 F = 0.125 * FSQDP
+
+                 !bsavi(it) = F
 
                  IF (F < 16.0)  THEN
-                    F        = EXP(-F)
-                    B(I,  J) = B(I,  J) * F
-                    B(I+1,J) = B(I+1,J) * F
+                    F         = EXP(-F)
+                    B(I,  J)  = B(I,  J) * F
+                    B(I+1,J)  = B(I+1,J) * F
+                   !bsavv(it) = F
                  ELSE
-                    B(I,  J) = 0.0
-                    B(I+1,J) = 0.0
+                    B(I,  J)  = 0.0
+                    B(I+1,J)  = 0.0
+                   !bsavv(it) = 0.0
                  ENDIF
 
               ELSEIF (IOPT==4)  THEN    
 C                GAUSSIAN HIGH PASS **************************
 
                  IF (IX .NE. 0 .OR. IY .NE. 0)  THEN
-                    F = 0.125 * (FLOAT(IX*IX)/X1/PARM1SQ +
-     &                           FLOAT(IY*IY)/Y1/PARM2SQ)
+                    F = 0.125 * FSQDP
+
+                   !bsavv(it) = 1.0
+                   !bsavi(it) = F
 
                     IF (F < 16.0)  THEN
-                       F        = 1.0 - EXP(-F)
-                       B(I,  J) = B(I,  J) * F
-                       B(I+1,J) = B(I+1,J) * F
+                       F         = 1.0 - EXP(-F)
+                       B(I,  J)  = B(I,  J) * F
+                       B(I+1,J)  = B(I+1,J) * F
+
+                      !bsavv(it) = F
                     ENDIF
                  ENDIF
 
               ELSEIF (IOPT == 5 .OR. IOPT == 6)  THEN
 C                FERMI DISTRIBUTION FILTER *******************
               
-                 F = (0.5 * SQRT(FLOAT(IX*IX)/X1 +
-     &                           FLOAT(IY*IY)/Y1) - PARM1) / PARM3
+                 F         = (0.5 * SQRT(FSQ) - PARM1) / PARM3
 
-                 F        = AMIN1(AMAX1(F,-10.0), 10.0)
-                 F        = (1.0/(1.0 + EXP(F)))
+                 F         = MIN(MAX(F,-10.0), 10.0)
+                 F         = (1.0/(1.0 + EXP(F)))
 
-                 B(I,  J) = B(I,  J) * F
-                 B(I+1,J) = B(I+1,J) * F
+                 B(I,  J)  = B(I,  J) * F
+                 B(I+1,J)  = B(I+1,J) * F
+
+                 !bsavi(it) = (0.5 * sqrt(fsq) - parm1) / parm3
+                 !bsavv(it) = f
 
               ELSEIF (IOPT == 7) THEN
 C                BUTTERWORTH LOWPASS FILTER ******************
 
-                 F        = 0.5 * SQRT(FLOAT(IX*IX)/X1 +
-     &                                 FLOAT(IY*IY)/Y1)
+                 F = 0.5 * SQRT(FSQ)
 
-                 F        = SQRT(1.0 / (1.0 + (F/PARM1)**ORD))
+                !F = SQRT(1.0 / (1.0 +           (F/PARM1)**ORD)) ! al jan 2018
+                 F = SQRT(1.0 / (1.0 + SQRT2M1 * (F/PARM1)**ORD)) 
 
-                 B(I,J)   = B(I,  J) * F
-                 B(I+1,J) = B(I+1,J) * F
+                 B(I,J)    = B(I,  J) * F
+                 B(I+1,J)  = B(I+1,J) * F
+
+                 !bsavi(it) = 0.5 * sqrt(fsq)
+                 !bsavv(it) = f
 
               ELSEIF (IOPT == 8) THEN
 C                BUTTERWORTH HIGHPASS FILTER *****************
         
+                 !bsavi(it) = 0
+
                  IF (IX.NE.0 .OR. IY.NE. 0) THEN
-                    F = 0.5 * SQRT(FLOAT(IX*IX)/X1 +
-     &                             FLOAT(IY*IY)/Y1)
+                    F = 0.5 * SQRT(FSQ)
 
-                    F = (1.0 - SQRT(1.0 / (1.0+(F/PARM1)**ORD)))
+                   !F  = (1.0 - SQRT(1.0 / (1.0 +(F/PARM1)**ORD)))
+                    F  = (1.0 - SQRT(1.0 / 
+     &                    (1.0 + SQRT2M1 *(F/PARM1)**ORD))) ! al jan 2018
 
-                    B(I,  J) = B(I,  J) * F
-                    B(I+1,J) = B(I+1,J) * F
+                    B(I,  J)  = B(I,  J) * F
+                    B(I+1,J)  = B(I+1,J) * F
+
+                   !bsavi(it) = 0.5 * sqrt(fsq)
+                   !bsavv(it) = f
                  ENDIF
 
 
               ELSEIF (IOPT == 9) THEN
 C                RAISED COSINE LOWPASS FILTER ******************
 
-                 F = 0.5 * SQRT(FLOAT(IX*IX)/X1 +
-     &                          FLOAT(IY*IY)/Y1)
-
+                 F = 0.5 * SQRT(FSQ)
+ 
                  F = (F - PARM1) / (PARM2 - PARM1)
 
                  IF (F < 0) THEN
@@ -734,14 +826,14 @@ C                RAISED COSINE LOWPASS FILTER ******************
                     F2 = 0.5 * (1 + COS(PI*F))
                  ENDIF
 
-                 B(I,  J) = B(I,  J) * F2
-                 B(I+1,J) = B(I+1,J) * F2
+                 B(I,  J)  = B(I,  J) * F2
+                 B(I+1,J)  = B(I+1,J) * F2
+                 !bsavv(it) = F2
 
               ELSEIF (IOPT == 10) THEN
 C                RAISED COSINE HIGHPASS FILTER ******************
 
-                 F = 0.5 * SQRT(FLOAT(IX*IX)/X1 +
-     &                          FLOAT(IY*IY)/Y1)
+                 F = 0.5 * SQRT(FSQ)
 
                  F = (F - PARM1) / (PARM2 - PARM1)
 
@@ -753,8 +845,9 @@ C                RAISED COSINE HIGHPASS FILTER ******************
                     F2 = 0.5 * (1 - COS(PI*F))
                  ENDIF
 
-                 B(I,  J) = B(I,  J) * F2
-                 B(I+1,J) = B(I+1,J) * F2
+                 B(I,  J)  = B(I,  J) * F2
+                 B(I+1,J)  = B(I+1,J) * F2
+                 !bsavv(it) = F2
 
               ELSEIF (IOPT == 11) THEN 
 C                BUTTERWORTH ELLIPTIC LOWPASS FILTER *********  
@@ -763,55 +856,57 @@ C                DIRECTION ON THE PLANE
 
                  IF (IX.NE.0 .OR. IY.NE.0) THEN
 
-                    FPE = ATAN2(BFPS(1)*SQRT(FLOAT(IY*IY)/Y1),
-     &                          BFPS(3)*SQRT(FLOAT(IX*IX)/X1))
+                    FPE = ATAN2(BFPS(1)*SQRT(FLOAT(IY*IY)/YD2SQ),
+     &                          BFPS(3)*SQRT(FLOAT(IX*IX)/XD2SQ))
                     FPE = SQRT((BFPS(1)*COS(FPE))**2 + 
      &                         (BFPS(3)*SIN(FPE))**2)
 
-                    FSE = ATAN2(BFPS(2)*SQRT(FLOAT(IY*IY)/Y1),
-     &                          BFPS(4)*SQRT(FLOAT(IX*IX)/X1))
+                    FSE = ATAN2(BFPS(2)*SQRT(FLOAT(IY*IY)/YD2SQ),
+     &                          BFPS(4)*SQRT(FLOAT(IX*IX)/XD2SQ))
                     FSE = SQRT((BFPS(2)*COS(FSE))**2 + 
      &                         (BFPS(4)*SIN(FSE))**2)
 
-                    ORDT     = ORD  /ALOG10(FPE / FSE)
-                    PARMT    = FPE/ EPS**(2. / ORDT)
+                    ORDT      = ORD  /ALOG10(FPE / FSE)
+                    PARMT     = FPE/ EPS**(2. / ORDT)
 
-                    F        = 0.5*SQRT(FLOAT(IX*IX)/X1+FLOAT(IY*IY)/Y1)
-                    F        = SQRT(1.0 / (1.0 + (F/PARMT)**ORDT))
+                    F         = 0.5*SQRT(FSQ)
+                    F         = SQRT(1.0 / (1.0 + (F/PARMT)**ORDT))
 
-                    B(I,  J) = B(I,  J) * F
-                    B(I+1,J) = B(I+1,J) * F
-                 ENDIF
+                    B(I,  J)  = B(I,  J) * F
+                    B(I+1,J)  = B(I+1,J) * F
+                    !bsavv(it) = F
+                ENDIF
 
               ELSEIF (IOPT == 12) THEN
 C                BUTTERWORTH ELLIPTIC HIGHPASS FILTER ********* 
 
                  IF (IX .NE. 0 .OR. IY.NE. 0) THEN
 
-                    FPE = ATAN2(BFPS(1)*SQRT(FLOAT(IY*IY)/Y1),
-     &                          BFPS(3)*SQRT(FLOAT(IX*IX)/X1))
+                    FPE = ATAN2(BFPS(1)*SQRT(FLOAT(IY*IY)/YD2SQ),
+     &                          BFPS(3)*SQRT(FLOAT(IX*IX)/XD2SQ))
                     FPE = SQRT((BFPS(1)*COS(FPE))**2 +
      &                         (BFPS(3)*SIN(FPE))**2)
 
-                    FSE = ATAN2(BFPS(2)*SQRT(FLOAT(IY*IY)/Y1),
-     &                          BFPS(4)*SQRT(FLOAT(IX*IX)/X1))
+                    FSE = ATAN2(BFPS(2)*SQRT(FLOAT(IY*IY)/YD2SQ),
+     &                          BFPS(4)*SQRT(FLOAT(IX*IX)/XD2SQ))
                     FSE = SQRT((BFPS(2)*COS(FSE))**2 + 
      &                         (BFPS(4)*SIN(FSE))**2)
 
                     ORDT     = ORD / ALOG10(FPE / FSE)
                     PARMT    = FPE / (EPS)**(2. / ORDT)
 
-                    F        = 0.5*SQRT(FLOAT(IX*IX)/X1+FLOAT(IY*IY)/Y1)
+                    F        = 0.5*SQRT(FSQ)
                     F        = (1.0-SQRT(1.0/(1.0+(F/PARMT)**ORDT)))
 
-                    B(I,  J) = B(I,  J) * F
-                    B(I+1,J) = B(I+1,J) * F
+                    B(I,  J)  = B(I,  J) * F
+                    B(I+1,J)  = B(I+1,J) * F
+
+                    !bsavv(it) = F
                  ENDIF
 
               ELSEIF (IOPT == 13) THEN
 C                RAISED SINC WINDOW **************************
-                 F = 0.5 * SQRT(FLOAT(IX*IX)/X1/PARM1SQ +
-     &                          FLOAT(IY*IY)/Y1/PARM2SQ)
+                 F = 0.5 * SQRT(FSQDP)
 
                  IF (F <= 0.0001) THEN
                     F2 = 1
@@ -821,24 +916,40 @@ C                RAISED SINC WINDOW **************************
                     F2 = SIN(PI*F) / (PI*F)
                  ENDIF
 
-                 B(I,  J) = B(I,  J) * (1 + 9 * F2)
-                 B(I+1,J) = B(I+1,J) * (1 + 9 * F2)
+                 B(I,  J)  = B(I,  J) * (1 + 9 * F2)
+                 B(I+1,J)  = B(I+1,J) * (1 + 9 * F2)
 
-              ELSEIF (IOPT == 14) THEN
+                !bsavv(it) = (1 + 9 * F2)
+
+             ELSEIF (IOPT == 14) THEN
 C                B FACTOR FILTER **************************
 
-                 FSQ = (FLOAT(IX*IX) / X1 + 
-     &                  FLOAT(IY*IY) / Y1) * 0.25
+                 FSQD4     = FSQ * 0.25
 
-                 IF (FSQ < PARM3)  THEN
-                    EXPCORR  = EXP(FSQ * PARM1)
+                 !bsavi(it) = fsqd4
+                 !bsavv(it) = 1.0
 
-                    B(I,  J) = B(I,  J) * PARM2 * EXPCORR
-                    B(I+1,J) = B(I+1,J) * PARM2 * EXPCORR
+                 IF (FSQD4 < PARM3)  THEN
+                    EXPCORR  = EXP(FSQD4 * PARM1)
+
+                    B(I,  J)  = B(I,  J) * PARM2 * EXPCORR
+                    B(I+1,J)  = B(I+1,J) * PARM2 * EXPCORR
+                   !bsavv(it) = PARM2 * EXPCORR
+
                  ENDIF
-
               ENDIF
            ENDDO
+
+#ifdef NEVER
+           if (j ==1) then
+             do it = 1,33
+               write(6,888) bsavi(it), bsavf(it), bsavv(it)
+888            format (f12.4, f12.4, f12.4)
+             enddo
+             stop
+           endif
+#endif
+
         ENDDO
 
 C       RESTORE ZERO TERM FOR HIGH PASS OPTIONS
@@ -869,12 +980,13 @@ C                PARM2 BUG                      DEC 2012 ARDEAN LEITH
 C                FREQ UNIT CUTOFF = 1           AUG 2013 ARDEAN LEITH 
 C                RAISED SINC                    FEB 2014 ARDEAN LEITH 
 C                FROM FQ_Q                      NOV 2014 ARDEAN LEITH 
+C                VOLUME ZD2SQ FILTER BUG           MAY 2017 ARDEAN LEITH    
 C        
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2014, Health Research Inc.,                         *
+C=* Copyright 1985-2018, Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@@wadsworth.org                                        *
 C=*                                                                    *
@@ -921,9 +1033,9 @@ C--*******************************************************************
         INTEGER            :: LSD,N2X,N2Y,N2Z
         INTEGER            :: NX,NY,NZ,IRTFLG
 
-        REAL               :: ORD,PARM1SQ,PARM2SQ
+        REAL               :: ORD,PARM1SQ,PARM2SQ,SQRT2M1
 
-        REAL               :: X1,Y1,Z1
+        REAL               :: XD2SQ,YD2SQ,ZD2SQ,FSQDP,FSQD4
         REAL               :: F,F2,FPE,FSE,ORDT,PARMT,FSQ,EXPCORR
         REAL               :: ZEROTERM
         INTEGER            :: K,J,I, IX,IY,IZ, NR2,NL2
@@ -934,14 +1046,16 @@ C--*******************************************************************
         NR2     = N2Y / 2
         NL2     = N2Z / 2
 
-        X1      = FLOAT(N2X/2)**2
-        Y1      = FLOAT(NR2)  **2
-        Y1      = FLOAT(NL2)  **2
+        XD2SQ      = FLOAT(N2X/2)**2
+        YD2SQ      = FLOAT(NR2)  **2
+        ZD2SQ      = FLOAT(NL2)  **2
 
         ORD     = PARM3
         PARM1SQ = PARM1**2
         PARM2SQ = PARM2**2
       
+        SQRT2M1 = (SQRT(2.0)-1)
+
 
         IF (IOPT == 11 .OR. IOPT == 12) THEN 
 C          BUTTERWORTH ELLIPTIC LOWPASS FILTER *********       
@@ -955,7 +1069,7 @@ C       KEEP ZERO TERM FOR HIGH PASS OPTIONS
         ZEROTERM = B(1,1,1)
 
 c$omp   parallel do private(i,j,k,ix,iy,iz,f,f2,fpe,fse,ordt,parmt,
-c$omp&                      fsq,expcorr)
+c$omp&                      fsq,fsqdp,fsqd4,expcorr)
       
         DO K=1,N2Z
 
@@ -968,12 +1082,17 @@ c$omp&                      fsq,expcorr)
 
               DO I=1,LSD,2
                  IX = (I-1) / 2
+                 FSQDP = (FLOAT(IX*IX)/XD2SQ/PARM1SQ +
+     &                    FLOAT(IY*IY)/YD2SQ/PARM2SQ +
+     &                    FLOAT(IZ*IZ)/ZD2SQ/PARM2SQ)
+
+                 FSQ   = (FLOAT(IX*IX)/XD2SQ +
+     &                    FLOAT(IY*IY)/YD2SQ +
+     &                    FLOAT(IZ*IZ)/ZD2SQ)
 
                  IF (IOPT == 1) THEN
 C                   LOWPASS *************************************
-                    IF (0.25 * (FLOAT(IX*IX)/X1/PARM1SQ +
-     &                          FLOAT(IY*IY)/Y1/PARM2SQ +
-     &                          FLOAT(IZ*IZ)/Z1/PARM2SQ) > 1.0) THEN
+                    IF (0.25 * FSQDP > 1.0) THEN
 
                        B(I,  J,K) = 0.0
                        B(I+1,J,K) = 0.0
@@ -982,9 +1101,7 @@ C                   LOWPASS *************************************
                  ELSEIF (IOPT == 2) THEN        
 C                   HIGH PASS ***********************************
                     IF ( (IX.NE.0 .OR. IY .NE.0 .OR. IZ .NE. 0) .AND.
-     &                 0.25 * (FLOAT(IX*IX)/X1/PARM1SQ + 
-     &                         FLOAT(IY*IY)/Y1/PARM2SQ +
-     &                         FLOAT(IZ*IZ)/Z1/PARM2SQ) <= 1.0) THEN
+     &                 0.25 * FSQDP <= 1.0) THEN
 
                        B(I,  J,K) = 0.0
                        B(I+1,J,K) = 0.0
@@ -992,12 +1109,10 @@ C                   HIGH PASS ***********************************
 
                  ELSEIF(IOPT == 3)  THEN
 C                   GAUSSIAN LOW PASS ***************************
-                    F = 0.125 * (FLOAT(IX*IX)/X1/PARM1SQ +
-     &                           FLOAT(IY*IY)/Y1/PARM2SQ +
-     &                           FLOAT(IZ*IZ)/Z1/PARM2SQ)
+                    F = 0.125 * FSQDP
 
                     IF (F < 16.0)  THEN
-                       F           = EXP(-F)
+                       F          = EXP(-F)
                        B(I,  J,K) = B(I,  J,K) * F
                        B(I+1,J,K) = B(I+1,J,K) * F
                     ELSE
@@ -1009,9 +1124,7 @@ C                   GAUSSIAN LOW PASS ***************************
 C                   GAUSSIAN HIGH PASS **************************
 
                     IF (IX .NE. 0 .OR. IY .NE. 0 .OR. IZ .NE. 0)THEN
-                       F = 0.125 * (FLOAT(IX*IX)/X1/PARM1SQ +
-     &                              FLOAT(IY*IY)/Y1/PARM2SQ +
-     &                              FLOAT(IZ*IZ)/Z1/PARM2SQ)
+                       F = 0.125 * FSQDP
 
                        IF (F < 16.0)  THEN
                           F          = 1.0 - EXP(-F)
@@ -1023,12 +1136,10 @@ C                   GAUSSIAN HIGH PASS **************************
                  ELSEIF (IOPT == 5 .OR. IOPT == 6)  THEN
 C                   FERMI DISTRIBUTION FILTER *******************
               
-                    F = (0.5 * SQRT(FLOAT(IX*IX)/X1 +
-     &                              FLOAT(IY*IY)/Y1 +
-     &                              FLOAT(IZ*IZ)/Z1)-PARM1) / PARM3
+                    F = (0.5 * SQRT(FSQ)-PARM1) / PARM3
 
-                    F        = AMIN1(AMAX1(F,-10.0), 10.0)
-                    F        = 1.0 / (1.0 + EXP(F))
+                    F          = MIN(MAX(F,-10.0), 10.0)
+                    F          = 1.0 / (1.0 + EXP(F))
 
                     B(I,  J,K) = B(I,  J,K) * F
                     B(I+1,J,K) = B(I+1,J,K) * F
@@ -1036,11 +1147,10 @@ C                   FERMI DISTRIBUTION FILTER *******************
                  ELSEIF (IOPT == 7) THEN
 C                   BUTTERWORTH LOWPASS FILTER ******************
 
-                    F        = 0.5 * SQRT(FLOAT(IX*IX)/X1 +
-     &                                    FLOAT(IY*IY)/Y1 +
-     &                                    FLOAT(IZ*IZ)/Z1)
+                    F          = 0.5 * SQRT(FSQ)
 
-                    F           = SQRT(1.0/ (1.0 + (F / PARM1)**ORD) )
+                    F          = SQRT(1.0 / 
+     &                           (1.0 + SQRT2M1 * (F / PARM1)**ORD) )
 
                     B(I,  J,K) = B(I,  J,K) * F
                     B(I+1,J,K) = B(I+1,J,K) * F
@@ -1049,11 +1159,10 @@ C                   BUTTERWORTH LOWPASS FILTER ******************
 C                   BUTTERWORTH HIGHPASS FILTER *****************
         
                     IF (IX.NE.0 .OR. IY.NE. 0 .OR. IZ.NE. 0) THEN
-                       F = 0.5 * SQRT(FLOAT(IX*IX)/X1 +
-     &                                FLOAT(IY*IY)/Y1 +
-     &                                FLOAT(IZ*IZ)/Z1)
+                       F = 0.5 * SQRT(FSQ)
    
-                       F = 1.0 - SQRT(1.0/ (1.0 + (F / PARM1)**ORD))
+                       F = 1.0 - SQRT(1.0 / 
+     &                          (1.0 + SQRT2M1 * (F / PARM1)**ORD))
 
                        B(I,  J,K) = B(I,  J,K) * F
                        B(I+1,J,K) = B(I+1,J,K) * F
@@ -1063,11 +1172,9 @@ C                   BUTTERWORTH HIGHPASS FILTER *****************
                  ELSEIF (IOPT == 9) THEN
 C                   RAISED COSINE LOWPASS FILTER ******************
 
-                    F = 0.5 * SQRT(FLOAT(IX*IX)/X1 +
-     &                             FLOAT(IY*IY)/Y1 +
-     &                             FLOAT(IZ*IZ)/Z1)
+                    F = 0.5 * SQRT(FSQ)
 
-C                   F = (F-FP) / (FS-FP)
+C                   F = (F-FP)    / (FS-FP)
                     F = (F-PARM1) / (PARM2 - PARM1)
 
                     IF (F < 0) THEN
@@ -1084,9 +1191,7 @@ C                   F = (F-FP) / (FS-FP)
                  ELSEIF (IOPT == 10) THEN
 C                   RAISED COSINE HIGHPASS FILTER ******************
 
-                    F = 0.5 * SQRT(FLOAT(IX*IX)/X1 +
-     &                             FLOAT(IY*IY)/Y1 +
-     &                             FLOAT(IZ*IZ)/Z1)
+                    F = 0.5 * SQRT(FSQ)
 
                     F = (F-PARM1) / (PARM2 - PARM1)
 
@@ -1104,9 +1209,7 @@ C                   RAISED COSINE HIGHPASS FILTER ******************
                  ELSEIF (IOPT == 13) THEN
 C                   RAISED SINC WINDOW **************************
 
-                    F = 0.5 * SQRT(FLOAT(IX*IX)/X1/PARM1SQ +
-     &                             FLOAT(IY*IY)/Y1/PARM2SQ +
-     &                             FLOAT(IZ*IZ)/Z1/PARM2SQ)
+                    F = 0.5 * SQRT(FSQDP)
 
                     IF (F <= 0.0001) THEN
                        F2 = 1
@@ -1120,14 +1223,12 @@ C                   RAISED SINC WINDOW **************************
                     B(I+1,J,K) = B(I+1,J,K) * (1 + 9 * F2)
    
                  ELSEIF (IOPT == 14) THEN
-C                   B FACTOR FILTER **************************
+C                   B FACTOR FILTER *****************************
 
-                    FSQ = (FLOAT(IX*IX) / X1 + 
-     &                     FLOAT(IY*IY) / Y1 +
-     &                     FLOAT(IZ*IZ) / Z1) * 0.25
+                    FSQD4 = FSQ * 0.25
       
-                    IF (FSQ < PARM3)  THEN
-                       EXPCORR    = EXP(FSQ * PARM1)
+                    IF (FSQD4 < PARM3)  THEN
+                       EXPCORR    = EXP(F * PARM1)
 
                        B(I,J,K)   = B(I,J,K)  * PARM2 * EXPCORR
                        B(I+1,J,K) = B(I+1,J,K)* PARM2 * EXPCORR
@@ -1148,16 +1249,478 @@ C       RESTORE ZERO TERM FOR HIGH PASS OPTIONS
         END
 
 
+
+
+@
+
+
+1.16
+log
+@speeded up substitutions,  simplified,  butterworth poor note
+@
+text
+@d11 2
+a12 1
+C             SIMPLIFIED                           JAN 18  ARDEAN LEITH    
+d123 1
+a123 1
+        IWANTFOU = 0
+d142 1
+a142 1
+        BFPS  = 0.0
+d153 1
+a153 1
+     &         PARM1 = 0.5 * PARM1 / (NX/2)     ! RADIUS INPUT
+a169 2
+           ORD = 2.0 * ALOG10(EPS / SQRT(AA**2 - 1.0) )
+
+d183 9
+a191 2
+              PARM3 = ORD   / ALOG10(PARM1 / PARM2)
+              PARM1 = PARM1 / EPS**(2. / PARM3)
+d203 4
+d220 1
+a220 1
+     &         PARM1 = 0.5 * PARM1 / (NX/2)     ! RADIUS INPUT
+d228 1
+a228 1
+              PARM2 = 0.5 * PARM2 / (NY/2)   
+d268 1
+a268 1
+              PARM1 = 0.5 * PARM1 / (NX/2)     ! RADIUS INPUT
+d278 1
+a278 1
+              PARM2 = 0.5 * PARM2T / (NY/2)   
+d495 1
+a495 1
+C=* Copyright 1985-2014, Health Research Inc.,                         *
+d543 1
+a543 1
+        REAL               :: ORD,PARM1SQ,PARM2SQ
+d565 2
+d580 1
+a580 1
+c$omp  parallel do private(j,i,iy,ix,f,f2,fpe,fse,ordt,parmt,
+d587 1
+d597 2
+a598 2
+              it        = (i -1)/2 + 1    ! 1,1,2
+              f         = float(ix)/n2x + float(iy)/n2y
+d600 1
+d611 1
+a611 1
+                    !bsavv(it) = 0.0
+d625 1
+a625 1
+                    !bsavv(it) = 0.0
+d639 1
+a639 1
+                    !bsavv(it) = F
+d643 1
+a643 1
+                    !bsavv(it) = 0.0
+d652 2
+a653 2
+                    !bsavv(it) = 1.0
+                    !bsavi(it) = F
+d660 1
+a660 1
+                       !bsavv(it) = F
+d681 1
+a681 1
+                 F         = 0.5 * SQRT(FSQ)
+d683 2
+a684 1
+                 F         = SQRT(1.0 / (1.0 + (F/PARM1)**ORD))
+d700 3
+a702 1
+                    F = (1.0 - SQRT(1.0 / (1.0+(F/PARM1)**ORD)))
+d707 2
+a708 2
+                    !bsavi(it) = 0.5 * sqrt(fsq)
+                    !bsavv(it) = f
+d715 1
+a715 2
+                 F         = 0.5 * SQRT(FSQ)
+                 !bsavi(it) = F
+d734 1
+a734 2
+                 F         = 0.5 * SQRT(FSQ)
+                 !bsavi(it) = F
+d767 1
+a767 1
+                    ORDT     = ORD  /ALOG10(FPE / FSE)
+d820 1
+a820 1
+                 !bsavv(it) = (1 + 9 * F2)
+d835 1
+a835 1
+                    !bsavv(it) = PARM2 * EXPCORR
+d934 1
+a934 1
+        REAL               :: ORD,PARM1SQ,PARM2SQ
+d955 2
+d1050 2
+a1051 1
+                    F          = SQRT(1.0/ (1.0 + (F / PARM1)**ORD) )
+d1062 2
+a1063 1
+                       F = 1.0 - SQRT(1.0/ (1.0 + (F / PARM1)**ORD))
+d1075 1
+a1075 1
+C                   F = (F-FP) / (FS-FP)
+a1147 8
+
+
 C  B FACTOR FOR 64X64 IMAGE (INCREASES AMPLITUDES NEAR ORIGIN)
-C    X1 = (NX/2)*2 = 32
+C    XD2SQ = (NX/2)*2 = 32
 C
 C    IX     FSQ      B*FSQ
 C     1     1/1024   B/1024
 C    64     1/16     B/16
+@
 
 
+1.15
+log
+@improved comments and explanations and prompts
+@
+text
+@d11 1
+d41 5
+d55 2
+a56 2
+C        'FF' (ffilts.f)     SETS X1 TO: (NX  / 2)**2 BUT
+C        'FQ' (four_fq.f)    SETS X1 TO: (NXF / 2)**2 WHERE
+d184 1
+a184 1
+              PARM3 = ORD / ALOG10(PARM1 / PARM2)
+a198 2
+           !write(6,*) 'ord,parm1:',parm3,parm1
+
+d535 2
+a536 2
+        REAL               :: X1,Y1
+        REAL               :: F,F2,FPE,FSE,ORDT,PARMT,FSQ,EXPCORR
+d542 6
+d549 1
+a549 2
+        X1      = FLOAT(N2X/2)**2
+        Y1      = FLOAT(NR2)  **2
+a553 1
+      
+d557 8
+d569 1
+a569 1
+c$omp&                     fsq,expcorr)
+d577 10
+a586 1
+              IX = (I-1) / 2
+d591 5
+a595 2
+                 IF (0.25 * (FLOAT(IX*IX)/X1/PARM1SQ +
+     &                       FLOAT(IY*IY)/Y1/PARM2SQ) > 1.0) THEN
+d597 1
+a597 2
+                    B(I,  J) = 0.0
+                    B(I+1,J) = 0.0
+d603 4
+a606 3
+                 IF ( (IX.NE.0 .OR. IY.NE.0) .AND.
+     &                0.25 * (FLOAT(IX*IX)/X1/PARM1SQ + 
+     &                        FLOAT(IY*IY)/Y1/PARM2SQ) <= 1.0) THEN
+d608 4
+a611 2
+                    B(I,  J) = 0.0
+                    B(I+1,J) = 0.0
+d617 3
+a619 2
+                 F = 0.125 * (FLOAT(IX*IX)/X1/PARM1SQ +
+     &                        FLOAT(IY*IY)/Y1/PARM2SQ)
+d622 4
+a625 3
+                    F        = EXP(-F)
+                    B(I,  J) = B(I,  J) * F
+                    B(I+1,J) = B(I+1,J) * F
+d627 3
+a629 2
+                    B(I,  J) = 0.0
+                    B(I+1,J) = 0.0
+d636 4
+a639 2
+                    F = 0.125 * (FLOAT(IX*IX)/X1/PARM1SQ +
+     &                           FLOAT(IY*IY)/Y1/PARM2SQ)
+d642 5
+a646 3
+                       F        = 1.0 - EXP(-F)
+                       B(I,  J) = B(I,  J) * F
+                       B(I+1,J) = B(I+1,J) * F
+d653 4
+a656 2
+                 F = (0.5 * SQRT(FLOAT(IX*IX)/X1 +
+     &                           FLOAT(IY*IY)/Y1) - PARM1) / PARM3
+d658 2
+a659 2
+                 F        = AMIN1(AMAX1(F,-10.0), 10.0)
+                 F        = (1.0/(1.0 + EXP(F)))
+d661 2
+a662 2
+                 B(I,  J) = B(I,  J) * F
+                 B(I+1,J) = B(I+1,J) * F
+d667 1
+a667 2
+                 F        = 0.5 * SQRT(FLOAT(IX*IX)/X1 +
+     &                                 FLOAT(IY*IY)/Y1)
+d669 1
+a669 1
+                 F        = SQRT(1.0 / (1.0 + (F/PARM1)**ORD))
+d671 5
+a675 2
+                 B(I,J)   = B(I,  J) * F
+                 B(I+1,J) = B(I+1,J) * F
+d680 2
+d683 1
+a683 2
+                    F = 0.5 * SQRT(FLOAT(IX*IX)/X1 +
+     &                             FLOAT(IY*IY)/Y1)
+d687 5
+a691 2
+                    B(I,  J) = B(I,  J) * F
+                    B(I+1,J) = B(I+1,J) * F
+d698 3
+a700 3
+                 F = 0.5 * SQRT(FLOAT(IX*IX)/X1 +
+     &                          FLOAT(IY*IY)/Y1)
+
+d711 3
+a713 2
+                 B(I,  J) = B(I,  J) * F2
+                 B(I+1,J) = B(I+1,J) * F2
+d718 2
+a719 2
+                 F = 0.5 * SQRT(FLOAT(IX*IX)/X1 +
+     &                          FLOAT(IY*IY)/Y1)
+d731 3
+a733 2
+                 B(I,  J) = B(I,  J) * F2
+                 B(I+1,J) = B(I+1,J) * F2
+d742 2
+a743 2
+                    FPE = ATAN2(BFPS(1)*SQRT(FLOAT(IY*IY)/Y1),
+     &                          BFPS(3)*SQRT(FLOAT(IX*IX)/X1))
+d747 2
+a748 2
+                    FSE = ATAN2(BFPS(2)*SQRT(FLOAT(IY*IY)/Y1),
+     &                          BFPS(4)*SQRT(FLOAT(IX*IX)/X1))
+d753 1
+a753 1
+                    PARMT    = FPE/ EPS**(2. / ORDT)
+d755 2
+a756 2
+                    F        = 0.5*SQRT(FLOAT(IX*IX)/X1+FLOAT(IY*IY)/Y1)
+                    F        = SQRT(1.0 / (1.0 + (F/PARMT)**ORDT))
+d758 4
+a761 3
+                    B(I,  J) = B(I,  J) * F
+                    B(I+1,J) = B(I+1,J) * F
+                 ENDIF
+d768 2
+a769 2
+                    FPE = ATAN2(BFPS(1)*SQRT(FLOAT(IY*IY)/Y1),
+     &                          BFPS(3)*SQRT(FLOAT(IX*IX)/X1))
+d773 2
+a774 2
+                    FSE = ATAN2(BFPS(2)*SQRT(FLOAT(IY*IY)/Y1),
+     &                          BFPS(4)*SQRT(FLOAT(IX*IX)/X1))
+d781 1
+a781 1
+                    F        = 0.5*SQRT(FLOAT(IX*IX)/X1+FLOAT(IY*IY)/Y1)
+d784 4
+a787 2
+                    B(I,  J) = B(I,  J) * F
+                    B(I+1,J) = B(I+1,J) * F
+d792 1
+a792 2
+                 F = 0.5 * SQRT(FLOAT(IX*IX)/X1/PARM1SQ +
+     &                          FLOAT(IY*IY)/Y1/PARM2SQ)
+d802 2
+a803 2
+                 B(I,  J) = B(I,  J) * (1 + 9 * F2)
+                 B(I+1,J) = B(I+1,J) * (1 + 9 * F2)
+d805 3
+a807 1
+              ELSEIF (IOPT == 14) THEN
+d810 7
+a816 2
+                 FSQ = (FLOAT(IX*IX) / X1 + 
+     &                  FLOAT(IY*IY) / Y1) * 0.25
+d818 3
+a820 2
+                 IF (FSQ < PARM3)  THEN
+                    EXPCORR  = EXP(FSQ * PARM1)
+a821 2
+                    B(I,  J) = B(I,  J) * PARM2 * EXPCORR
+                    B(I+1,J) = B(I+1,J) * PARM2 * EXPCORR
+a822 1
+
+d825 11
+d866 1
+a866 1
+C                VOLUME Z1 FILTER BUG           MAY 2017 ARDEAN LEITH    
+d872 1
+a872 1
+C=* Copyright 1985-2017, Health Research Inc.,                         *
+d921 1
+a921 1
+        REAL               :: X1,Y1,Z1
+d932 3
+a934 3
+        X1      = FLOAT(N2X/2)**2
+        Y1      = FLOAT(NR2)  **2
+        Z1      = FLOAT(NL2)  **2
+d953 1
+a953 1
+c$omp&                      fsq,expcorr)
+d966 7
+d976 1
+a976 3
+                    IF (0.25 * (FLOAT(IX*IX)/X1/PARM1SQ +
+     &                          FLOAT(IY*IY)/Y1/PARM2SQ +
+     &                          FLOAT(IZ*IZ)/Z1/PARM2SQ) > 1.0) THEN
+d985 1
+a985 3
+     &                 0.25 * (FLOAT(IX*IX)/X1/PARM1SQ + 
+     &                         FLOAT(IY*IY)/Y1/PARM2SQ +
+     &                         FLOAT(IZ*IZ)/Z1/PARM2SQ) <= 1.0) THEN
+d993 1
+a993 3
+                    F = 0.125 * (FLOAT(IX*IX)/X1/PARM1SQ +
+     &                           FLOAT(IY*IY)/Y1/PARM2SQ +
+     &                           FLOAT(IZ*IZ)/Z1/PARM2SQ)
+d996 1
+a996 1
+                       F           = EXP(-F)
+d1008 1
+a1008 3
+                       F = 0.125 * (FLOAT(IX*IX)/X1/PARM1SQ +
+     &                              FLOAT(IY*IY)/Y1/PARM2SQ +
+     &                              FLOAT(IZ*IZ)/Z1/PARM2SQ)
+d1020 1
+a1020 3
+                    F = (0.5 * SQRT(FLOAT(IX*IX)/X1 +
+     &                              FLOAT(IY*IY)/Y1 +
+     &                              FLOAT(IZ*IZ)/Z1)-PARM1) / PARM3
+d1022 2
+a1023 2
+                    F        = AMIN1(AMAX1(F,-10.0), 10.0)
+                    F        = 1.0 / (1.0 + EXP(F))
+d1031 1
+a1031 3
+                    F        = 0.5 * SQRT(FLOAT(IX*IX)/X1 +
+     &                                    FLOAT(IY*IY)/Y1 +
+     &                                    FLOAT(IZ*IZ)/Z1)
+d1033 1
+a1033 1
+                    F           = SQRT(1.0/ (1.0 + (F / PARM1)**ORD) )
+d1042 1
+a1042 3
+                       F = 0.5 * SQRT(FLOAT(IX*IX)/X1 +
+     &                                FLOAT(IY*IY)/Y1 +
+     &                                FLOAT(IZ*IZ)/Z1)
+d1054 1
+a1054 3
+                    F = 0.5 * SQRT(FLOAT(IX*IX)/X1 +
+     &                             FLOAT(IY*IY)/Y1 +
+     &                             FLOAT(IZ*IZ)/Z1)
+d1073 1
+a1073 3
+                    F = 0.5 * SQRT(FLOAT(IX*IX)/X1 +
+     &                             FLOAT(IY*IY)/Y1 +
+     &                             FLOAT(IZ*IZ)/Z1)
+d1091 1
+a1091 3
+                    F = 0.5 * SQRT(FLOAT(IX*IX)/X1/PARM1SQ +
+     &                             FLOAT(IY*IY)/Y1/PARM2SQ +
+     &                             FLOAT(IZ*IZ)/Z1/PARM2SQ)
+d1105 1
+a1105 1
+C                   B FACTOR FILTER **************************
+d1107 1
+a1107 3
+                    FSQ = (FLOAT(IX*IX) / X1 + 
+     &                     FLOAT(IY*IY) / Y1 +
+     &                     FLOAT(IZ*IZ) / Z1) * 0.25
+d1109 2
+a1110 2
+                    IF (FSQ < PARM3)  THEN
+                       EXPCORR    = EXP(FSQ * PARM1)
+d1132 1
+a1132 1
+C    X1 = (NX/2)*2 = 32
+@
 
 
+1.14
+log
+@cosmetic
+@
+text
+@d36 3
+a38 3
+C PURPOSE:  APPLIES FOURIER FILTERS TO 2-D OR 3-D REAL PICTURES
+C            'FQ Q'   : QUICK FILTERING (IN CORE, 2-D OR 3-D)
+C            'FQ QNP' : QUICK FILTERING (IN CORE, 2-D OR 3-D) NO PAD
+d49 2
+a50 2
+C        'FF' (ffilts.f)            SETS X1 TO: (NX  / 2)**2 BUT
+C        'FQ' (four_fq.f or fq_q.f) SETS X1 TO: (NXF / 2)**2 WHERE
+d117 2
+a118 1
+        CALL RDPRI2S(IOPT,IWANTFOU,NOT_USED,'FILTER TYPE (1-14)',IRTFLG)
+d222 1
+a222 1
+           WRITE(NOUT,*)' AMP = AMP*D*(EXP(BF**2))'
+d225 1
+a225 1
+           CALL RDPRM1S(PARM1, NOT_USED,'B FACTOR',   IRTFLG)
+d234 3
+@
+
+
+1.13
+log
+@VOLUME Z1 FILTER BUG
+@
+text
+@d16 1
+a16 1
+C=* Copyright 1985-2017  Health Research Inc.,                         *
+d221 1
+a221 1
+           WRITE(NOUT,*)' AMP = AMP*D*(EXP(Bs**2))'
+d223 1
+d227 1
+a227 1
+           PARM2 = 0.5
+@
+
+
+1.12
+log
+@INDEX(FCHAR,'NP') > 0
+@
+text
+@d10 1
+d16 1
+a16 1
+C=* Copyright 1985-2015  Health Research Inc.,                         *
+d796 1
+d802 1
+a802 1
+C=* Copyright 1985-2014, Health Research Inc.,                         *
+d864 1
+a864 1
+        Y1      = FLOAT(NL2)  **2
 @
 
 

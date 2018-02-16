@@ -39,12 +39,13 @@ C                FORMAT(  1PG13.6)                APR 2011 ARDEAN LEITH
 C                LUNDOCWRTDATF FORMAT             APR 2012 ARDEAN LEITH
 C                LABEL 92 UNDEFINED IF NOT MPI    MAR 2015 ARDEAN LEITH
 C                ENDFILE --> EOF FOR ifort        JUN 2015 ARDEAN LEITH
+C                LUNDOCWRTDAT FLUSH ALWAYS        NOV 2017 ARDEAN LEITH
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2015  Health Research Inc.,                         *
+C=* Copyright 1985-2017  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -189,13 +190,12 @@ C           MUST USE NEW FORMAT
             IF (MYPID <= 0)
      &         WRITE(LUNDOC,92) IKEY,NLIST,(DLIST(K),K=1,NLIST)
 92             FORMAT(I10,' ',I4,10000(' ',1PG13.6))
-         
+
          ELSEIF (IKEY <= 99999) THEN
 C           WRITE LINE OF REGISTERS WITH KEY (I5)
             IF (MYPID <= 0) THEN
                WRITE(LUNDOC,93) IKEY,NLIST,(DLIST(K),K=1,NLIST)
 93             FORMAT(I5,' ',I1,10000(' ',1PG13.6))
-               IF (MYPID <= 0) CALL FLUSHFILE(LUNDOC)
             ENDIF
 
          ELSEIF (IKEY <= 999999) THEN
@@ -203,9 +203,11 @@ C           WRITE LINE OF REGISTERS WITH KEY (I6)
             IF (MYPID <= 0) THEN
                WRITE(LUNDOC,94) IKEY,NLIST,(DLIST(K),K=1,NLIST)
 94             FORMAT(I6,' ',I1,10000(' ',1PG13.6))
-               IF (MYPID <= 0) CALL FLUSHFILE(LUNDOC)
             ENDIF
          ENDIF
+
+C        SOMETIMES DOES NOT WRITE TO DISK NOV 2017 al
+         IF (MYPID <= 0) CALL FLUSHFILE(LUNDOC)
 
       ELSEIF (LUNDOC < 0) THEN
 C        WANT TO WRITE REGULAR KEY TO INCORE DOC. FILE --------------
@@ -244,7 +246,6 @@ C           FILE LIST INDEX OUT OF RANGE
 
       IRTFLG = 0
 
-      RETURN
       END
 
 
@@ -322,6 +323,7 @@ C           WANT TO CREATE COMMENT KEY IN INCORE DOC. FILE
          IF (MYPID <= 0) THEN
             WRITE(LUNDOC,91) IKEYT,NLIST,(DLIST(K),K=1,NLIST)
 91          FORMAT(' ;',I8,1X,I1,1X,10000(1PG13.6,1X))
+
             CALL FLUSHFILE(LUNDOC)
          ENDIF
 
@@ -331,7 +333,7 @@ C        WANT TO WRITE REGULAR KEY TO DISK BASED DOC. FILE -----------
          IF (MYPID <= 0) THEN
             WRITE(LUNDOC,FORMOUT) IKEY,NLIST,(DLIST(K),K=1,NLIST)
          
-            IF (MYPID <= 0) CALL FLUSHFILE(LUNDOC)
+            CALL FLUSHFILE(LUNDOC)
          ENDIF
 
       ELSEIF (LUNDOC < 0) THEN
@@ -371,7 +373,6 @@ C           FILE LIST INDEX OUT OF RANGE
 
       IRTFLG = 0
 
-      RETURN
       END
 
 

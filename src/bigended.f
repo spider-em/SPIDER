@@ -50,4 +50,106 @@ C       GET CURRENT ARCHITECTURE ENDED-NESS
         END
 
 
+C       UNUSED BELOW FOR LEGACY REFERENCE ONLY FROM MRC -------------
+
+#ifdef NEVER
+
+C ---------------------- SETSTAMP -----------------------------------
+ 
+      SUBROUTINE SETSTAMP(MACHSTMP,ISSWABT)
+
+C     PURPOSE: SETS MACHINE STAMP FOR THIS ARCHITECTURE
+C  
+C     NOTE: I HAVE EXTRACTED THIS FROM THE MRC 2000 CODE AND
+C           CONVERTED TO FORTRAN. BUT I MAY HAVE BOTCHED IT? al
+C  
+C     Bytes 213 and 214 contain 4 `nibbles' (half-bytes) indicating 
+C     the representation of float, complex, integer and character 
+C     datatypes. Bytes 215 and 216 are unused. The CCP4 library contains 
+C     a general representation of datatypes, but in practice it is 
+C     safe to use 0x44 0x44 0x00 0x00 for little endian machines, and 
+C     0x11 0x11 0x00 0x00 for big endian machines. The CCP4 library 
+C     uses this information to automatically byte-swap data if 
+C     appropriate, when tranferring data files between machines.  
+
+      INTEGER * 4 :: MACHSTMP
+      LOGICAL     :: ISSWABT
+
+      INCLUDE 'CMBLOCK.INC'
+
+c       Little-ended Intel and some MIPS
+#if defined(MIPSEL) || defined(i386) || defined(i860)
+#  define NATIVEIT 4
+#  define NATIVEFT 4
+#endif
+
+C       AN attempt at machines using the powerPC chip.             
+#if defined (SP_PPC)
+#  define NATIVEIT 1
+#  define NATIVEFT 1
+#endif
+
+C       Compaq alpha's running Unix.             
+#ifdef __alpha
+#  define NATIVEFT 4
+#  define NATIVEIT 4
+#endif
+
+C        SGI Altix running GNU/Linux.             
+#ifdef __ia64
+#  define NATIVEFT 4
+#  define NATIVEIT 4
+#endif
+
+C       Big-endian ieee includes SGI machines,       
+C       HP (68k-based or RISC), RS/6000 and all        
+C       Suns except obsolete i386-based ones.       
+
+#if defined(MIPSEB) || defined(__hpux) || defined(_AIX) || defined(m68k) || defined(mc68000) || defined(sparc)
+#  define NATIVEIT 1
+#  define NATIVEFT 1
+#endif
+
+C       Little-endian AMD OPTERON,       
+#if defined  __x86_64__ || defined __ORDER_LITTLE_ENDIAN__
+#  define NATIVEIT 4
+#  define NATIVEFT 4
+#endif
+
+
+#if defined(SP_IBMSP3) 
+#  define NATIVEIT 1
+#  define NATIVEFT 1
+#endif
+
+
+#ifndef NATIVEFT
+#error "Can't determine machine number format"
+#endif
+
+      NATIVEFTT = NATIVEFT
+      NATIVEITT = NATIVEIT
+
+C     write(6,*) '  ISSWABT:   ',isswabt
+C     write(6,*) '  NATIVEFTT: ',nativeftt
+C     write(6,*) '  NATIVEITT: ',nativeitt
+      write(6,*) '  MACHSTMP:  ',machstmp
+      IF (ISSWABT) THEN
+C        RUNNING WITH NON-NATIVE BYTE-SWAPPING
+         IF (NATIVEFTT == 1) THEN
+            MACHSTMP = 4369
+         ELSE
+            MACHSTMP = 286326784
+         ENDIF
+      ELSE
+         IF (NATIVEFTT == 1) THEN
+            MACHSTMP = 286326784
+         ELSE
+            MACHSTMP = 4369
+         ENDIF
+       ENDIF
+#endif
+
+
+
  

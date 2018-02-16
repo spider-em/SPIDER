@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #
-# SOURCE: /usr8/spider/utils/old2raw.perl
+# SOURCE: /usr16/software/spider/utils/old2raw.perl
 # CHANGES:              Author:                Sandeep Sibal Nov. 1994
 #       Changed index to table format          ArDean Leith  Jan. 1997 
 #       Adds "Eulerian angles" link            ArDean Leith  Feb. 2002
@@ -21,6 +21,7 @@
 #       Do not menu obsolete 'PJ *' operations ArDean Leith  Feb. 2014
 #       Removed obsolete 'RM *' operations     ArDean Leith  Sep. 2014
 #       Moved raw man dir                      ArDean Leith  Mar. 2015
+#       spider_root -> usr16                   ArDean Leith  Apr. 2017
 #
 # PURPOSE:  Converts ascii text manuals of SPIDER in $text_mans_dir to HTML 
 #           (only files with .man  extensions are processed), and 
@@ -31,8 +32,12 @@
 # Locations and definitions previously in: htdefs.ph;
 $LOCK_EX       = 1;
 $LOCK_UN       = 8;
-$spider_root   = qq($ENV{'SPIDER_ROOT'});
-$spider_root   = "/usr8/spider";
+$spider_root   = qq($ENV{'SPIDER_DIR'});
+print " SPIDER source dir: $spider_root \n";
+
+##$spider_root   = "/usr16/software/spider";
+## print "SPIDER source dir: $spider_root \n";
+
 
 $hr            = qq(<p>\n);
 $mans_dir      = qq(man);                     # Directory for headerized html man pages wrt docs

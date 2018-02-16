@@ -1,13 +1,14 @@
 
 C++*********************************************************************
 C
-C  COPYTOJPG.F  -- NEW                             APR 13 ArDean Leith                    ARDEAN LEITH
+C  COPYTOJPG.F  -- NEW                             APR 13 ArDean Leith
 C                  ECHO                            APR 16 ArDean Leith
+C                  WORKS ON VOLUME SLICES NOW      JAN 18 ArDean Leith
 C **********************************************************************
 C=* AUTHOR: A. LEITH                                                   *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2016  Health Research Inc.,                         *
+C=* Copyright 1985-2018  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -23,7 +24,7 @@ C=* GNU General Public License (www.gnu.org/licenses) for details.     *
 C=*                                                                    *
 C **********************************************************************
 C
-C   COPYTOJPG(LUNO,FILOLD,LUNT,NX,NY,NZ)
+C   COPYTOJPG(LUNO,FILOLD,LUNT,NX,NY,NZ,VERBOSET,IDELAY))
 C
 C   PURPOSE:      CONVERT SPIDER IMAGE FILE TO JPEG FORMAT USING
 C                 IMAGEMAGICK
@@ -44,7 +45,7 @@ C--*********************************************************************
         CHARACTER(LEN=MAXNAM) :: FILNEW
         INTEGER               :: IDELAY
 
-        INTEGER               :: NRECS
+        INTEGER               :: NRECS,ISLICE,NOT_USED,ISKIP
         INTEGER               :: IRTFLG
 
         REAL                  :: BUF(NX)
@@ -52,25 +53,30 @@ C--*********************************************************************
         CHARACTER *16         :: STRNX, STRNY
         INTEGER               :: NC2, NC3
         INTEGER               :: NDUM,LENREC,IERR,NLETN
-        INTEGER               :: IROW
+        INTEGER               :: IROW,IDUM
         REAL                  :: FLOW,FHI,RANGENEW
         REAL                  :: RANGEOLD,CON,CON2
         CHARACTER * 1         :: NULL     = CHAR(0)
         LOGICAL               :: ASKNAM   = .FALSE.
         LOGICAL               :: CALLERRT = .TRUE.
+        LOGICAL               :: erri2
 
         CHARACTER(LEN=17)     :: FILTMP = 'JUNK_FOR_JPG.gray' 
  
         INTEGER               :: lnblnkn
 
-        IF (NZ .NE. 1) THEN
-           CALL ERRT(101,'DOES NOT WORK ON VOLUMES',NDUM)
-           RETURN
+        ISLICE = 1
+        IF (NZ > 1) THEN
+C          THIS IS A VOLUME
+           CALL RDPRI1S(ISLICE,NOT_USED,'SLICE',IRTFLG)
+           IF (IRTFLG .NE. 0) RETURN
+           IF (ERRI2(ISLICE,IDUM, 1, 1,NZ, IDUM,IDUM)) RETURN
+
         ENDIF
 
 C       OPEN TEMP FILE FOR NORMALIZED DATA
 C       I DO NOT SEE ANY WAY THAT IMAGEMAGICK CAN HANDLE FLOATING DATA
-C       THAT HAS NEGATIVE VALUES WITH ANY OPTION I HAVE TRIED
+C       THAT HAS NEGATIVE VALUES WITH ANY OPTION I HAVE TRIED!!
        
         LENREC = NX * 4
         CALL OPAUXFILE(ASKNAM,FILTMP,NULL,LUNT,LENREC,'U',
@@ -94,16 +100,18 @@ C          GET INPUT IMAGE STATISTICS FIRST
         CON       = RANGENEW / RANGEOLD
         CON2      = FLOW - CON * FMIN
 
+        ISKIP    = NY * (ISLICE - 1)
         DO  IROW = 1,NY
-           CALL REDLIN(LUNO,BUF,NX,IROW)
+           CALL REDLIN(LUNO,BUF,NX,IROW + ISKIP)
 
            BUF = CON2 + CON * BUF    ! ARRAY OP
 
+C          WRITE TO TEMP FILE AS POSITIVE FLOATING POINT
            WRITE(LUNT,REC=IROW,IOSTAT=IERR) BUF
         ENDDO
         CLOSE(LUNO)
         CLOSE(LUNT)
- 
+
         IF (FILNEW == NULL) THEN
 C          GET NAME FOR JPEG FILE
         
@@ -136,7 +144,7 @@ C          GET NAME FOR JPEG FILE
         ENDIF
 
         !write(6,*) COMLIN
-
+ 
 C       ECHO COMLIN
         CALL CSVMS(COMLIN,.TRUE.,IRTFLG)
 

@@ -1,13 +1,13 @@
 #!/usr/bin/perl
 #
-# SOURCE: /usr8/spider/utils/editall.perl
+# SOURCE: /usr16/software/spider/utils/editall.perl
 #
 # PURPOSE:  Edit all files in a directory 
 #
-# CHANGES:         Author:    ArDean Leith June 2013
-# USAGE:   /usr8/spider/utils/editall.perl 
+# CHANGES:     Author:    ArDean Leith June 2013
+# USAGE:       /usr16/software/spider/utils/editall.perl 
 
-$edit_dir = qq(/usr8/spider/rawdocs/exa/images);  # Files to be edited 
+$edit_dir = qq(/usr16/software/spider/rawdocs/exa/images);  # Files to be edited 
 $new_dir  = qq($edit_dir/jnk);                    # Dir for edited files
 
 	

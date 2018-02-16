@@ -6,70 +6,77 @@
  ;
  ; PURPOSE: Filter original reference volume to limit resolution.
  ;
- ; CALLED FROM: 
- ;
  ; ----------------- Original input file ---  May have to EDIT this name, This file must exist ------
 
- [ref_vol_unfilt] = '../../reference_oct09'       ; Unfiltered reference volume (one)   
+ [ref_vol_unfilt] = '../../reference_oct09'  ; Unfiltered reference volume (one)   
 
  ; -------------- Output files -- No need to edit for default refinement ---------------------
 
- [ref_vol] = '../../reference_oct09_fq'           ; Filtered reference volume   (one)   
+ [ref_vol] = [ref_vol_unfilt]'_fq'           ; Filtered reference volume   (one)   
 
  ; ---- Edit these parameters for your project ---------------------------------------------
 
- [sp_pixsiz]   = 1.17                             ; Pixel size (A) ( See: ../params  EM parameters file)
+ [sp_pixsiz] = 1.17                          ; Pixel size (A) ( See: ../params  EM parameters file)
 
- [filt-angstr] = 40                               ; Low pass filtration level (A) 
+ [filt-ang2] =  40                           ; Low pass filtration level (A) 
 
- [filt-stop]   = 0.05                             ; Filter stop offset  (Spatial freq)
+ [filt-ang1] = [filt-ang2] + 5               ; Low pass filtration level (A) 
 
  ; -------------------------------- END BATCH HEADER ---------------------------------------
 
- FI H [nx]                  ; Query row length value (images/volumes must be square)
-   [ref_vol_unfilt]         ; Initial unfiltered reference volume    (input)
-   NX                       ; Dimension wanted (cubic)
+ ; Get window size
+ FI H [nx]                    ; Query row length value (volumes must be cubic)
+   [ref_vol_unfilt]           ; Initial unfiltered reference volume  (input)
+   NX                         ; Dimension wanted (cubic)
 
- ; Echo to results file    
+ ; Echo pixel size to results file    
  [sp_pixsiz]
 
- [pixels]   = [sp_pixsiz] * [filt-angstr]
+ [filt-fq1]  = [sp_pixsiz] / [filt-ang1]  ;  Convert A to filter frequencies 
+ [filt-pix1] = [filt-fq1] * [nx]          ;  Convert A to filter radii                  
 
- [filt-fq1] = [pixels] / [nx]            ; Pass-band
- [filt-fq2] = [filt-fq1] + [filt-stop]   ; Stop-band
-
- [filt-pix1] = [filt-fq1] * [nx]         ; Pass-band
- [filt-pix1]
- [filt-pix2] = [filt-fq2] * [nx]         ; Stop-band
- [filt-pix2]
-
- [filt-ang1] = [filt-pix1] / [sp_pixsiz] ; Pass-band
- [filt-ang1]
- [filt-ang2] = [filt-pix2] / [sp_pixsiz] ; Stop-band
- [filt-ang2]
+ [filt-fq2]  = [sp_pixsiz] / [filt-ang2]  ;  Convert A to filter frequencies 
+ [filt-pix2] = [filt-fq2]  * [nx]         ;  Convert A to filter radii            
 
  SYS
-   echo ' ' ; echo -n '  Low-pass filtration:' 
+   echo ; echo '  Butterworth low-pass filtration of: [ref_vol_unfilt]' 
  SYS
-   echo -n '  Angstroms:  {%f9.4%[filt-ang1]} ... {%f9.4%[filt-ang2]}'  
+   echo    '       Angstroms: {%f5.1%[filt-ang1]}  ...  {%f5.1%[filt-ang2]}'  
  SYS
-   echo    '    Freq: {%f6.4%[filt-fq1]} ... {%f6.4%[filt-fq2]}'  
+   echo    '       Freq:     {%f6.4%[filt-fq1]} ... {%f6.4%[filt-fq2]}'  
+ SYS
+   echo    '       Pixels:    {%f8.1%[filt-pix1]}  ... {%f8.1%[filt-pix2]}'  
  
  ; Filter reference volume to limit resolution
- FQ NP                      ; Quick filter          
-   [ref_vol_unfilt]         ; Initial unfiltered reference volume   (input)
-   [ref_vol]                ; Filtered reference volume             (output)
+ FQ NP                      ; Non-padded filter          
+   [ref_vol_unfilt]         ; Initial unfiltered reference volume (input)
+   [ref_vol]                ; Filtered reference volume           (output)
    7                        ; Butterworth low pass filter
    [filt-fq1],[filt-fq2]    ; Pass-band and stop-band spatial freq.
 
+ FS [max],[min]             ; Query volume range
+   [ref_vol]                ; Filtered reference volume         (input)
  SYS
-   echo '  Created Low-passed reference: [ref_vol]  From: [ref_vol_unfilt]'
+   echo '  Low passed reference range: {%f9.4%[min]} ... {%f9.4%[max]}'  
 
- FS [max],[min]             ; Query row length value (images/volumes must be square)
-   [ref_vol]                ; Filtered reference volume    (input)
+ [nzd2] = [nx] / 2          ; Central slice number (cubic)
+ PS Z                       ; Extract slice from volume
+   [ref_vol]                ; Volume                            (input)
+   [ref_vol]_slice          ; Image slice                       (output)
+   [nzd2]                   ; Central slice number
+ DIS                        ; Display central slice
+   [ref_vol]_slice          ; Central slice                     (input)
+                            ; Options
+
+ PW L                       ; Logarithmic power spectrum
+   [ref_vol]_slice          ; Central slice                     (output)
+   [ref_vol]_pw              ; Central slice power spectrum      (output)
+ DIS                        ; Display 
+   [ref_vol]_pw              ; Central slice power spectrum      (input)
+                            ; Options
+ 
  SYS
-   echo '  Output range : {%f9.4%[min]} ... {%f9.4%[max]}'  
-
-
+   echo 
+  
  EN
  ; </pre></body></html>

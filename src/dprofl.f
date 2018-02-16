@@ -3,12 +3,13 @@ C++*********************************************************************
 C
 C DPROFL_G.F   CREATED FROM DPROFL               DEC 2014 ArDean Leith
 C              INTEL_COMPILER DOES NOT LIKE //   NOV 2016 ArDean Leith
+C              INTEL_COMPILER DOES NOT LIKE //   JAN 2018 ArDean Leith
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2016  Health Research Inc.,                         *
+C=* Copyright 1985-2018  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -177,7 +178,7 @@ c              WRITE(LUNGPL,'(A,ES12.4,A,ES12.4,A)')
 
               IF (IT < NLIST) THEN
                  WRITE(LUNGPL,'(A,I5,A)') 
-     &             '"-" using 1:2 with line title "Line:',I,',", \\'
+     &             '"-" using 1:2 with line title "Line:',I,',", \'
               ELSE
                  WRITE(LUNGPL,'(A,I5,A)') 
      &             '"-" using 1:2 with line title "Line:',I,'"'

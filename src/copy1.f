@@ -23,12 +23,12 @@ C               'CP TO JPG'                         APR 13 ArDean Leith
 C               'CP TO VOL'                         MAY 13 ArDean Leith
 C               'CP FROM TIF'                       MAR 14 ArDean Leith
 C               'CP TO MRC' STACKS                  JUN 15 ArDean Leith
-C
+C               REMOVED XPLO OPS                    JAN 18 ArDean Leith
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2015  Health Research Inc.,                         *
+C=* Copyright 1985-2018  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -183,12 +183,12 @@ C             FROM SPIDER IMAGE FILE INTO MRC FORMAT ------- 'CP TO MRC'
 
               IF (ISSTACK) THEN 
 C                COPYING WHOLE STACK
-                 CALL COPYTOCCP4_STK(LUN1,LUN2,FILOLD, 
+                 CALL COPYTOMRC_STK(LUN1,LUN2,FILOLD, 
      &                             ILIST,NIMG,MAXIM,IMGNUM,
      &                             NX,NY,NZ)
              ELSE
 C                COPYING IMAGE/VOLUME
-                 CALL COPYTOCCP4(LUN1,LUN2,NX,NY,NZ)
+                 CALL COPYTOMRC(LUN1,LUN2,NX,NY,NZ)
               ENDIF
 
            CASE ('PO')
@@ -205,7 +205,7 @@ C             FROM SPIDER FORMAT TO TIFF FORMAT ----------- 'CP TO TIFF'
  
            CASE ('XP')
 C             SPIDER IMAGE FILE INTO XPLOR FILES --------- 'CP TO XPLOR'
-              CALL COPYTOXPLOR(LUN1,FILOLD,LUN2,NX,NY,NZ)
+              CALL ERRT(101,'OBSOLETE OPERATION',NE)
 
            CASE ('JP')
 C             SPIDER IMAGE FILE INTO JPG FILES ------------- 'CP TO JPG'
@@ -232,7 +232,7 @@ C             EDITABLE IMAGE FILE TO SPIDER IMAGE FILE - 'CP FROM ASCII'
 
            CASE ('MR','CC')
 C             FROM MRC FORMAT TO SPIDER ------------------ 'CP FROM MRC'
-              CALL COPYFROMCCP4(LUN1,LUN2,NX,NY,NZ)
+              CALL COPYFROMMRC(LUN1,LUN2,NX,NY,NZ)
 
            CASE ('PD')
 C             FROM PDB FILE TO SPIDER VOLUME FILE -------- 'CP FROM PDB'
@@ -266,7 +266,7 @@ C             FROM NT FORMAT TO SPIDER -------------------- 'CP FROM NT'
 
            CASE ('XP')
 C             FROM XPLO FORMAT TO SPIDER ------------------ 'CP FROM XP'
-              CALL COPYFROMXPLO(LUN1,LUN2,MAXDIM)
+              CALL ERRT(101,"OBSOLETE OPERATION",NE)
 
            CASE ('SG')
 C             FROM TO SGI BYTE FORMAT --------------------- 'CP FROM SG'

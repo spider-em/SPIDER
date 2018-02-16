@@ -19,12 +19,13 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 # General Public License for more details.
 
-print "verifybyview.py, Modified 2015 March 18"  
+print "verifybyview.py, Modified 2016 July 5"  
 #    TO DO: when changing #columns, link max to current
 #    TO DO: checkbutton to enable/disable paint-select
 #    TO DO: use arbitrary label for class montage
 #    TO DO: add arbitrary label to particle montage
 #    TO DO: in createMontage, use unsaved select values
+#    2016-07-05 -- import montage
 #    2012-04-25 -- can search for BYHAND files (rather than reopen classes to select them)
 #    2012-04-24 -- if initial filename field is blank, will use default
 #    2012-04-24 -- if particle list not found, will pop up error window
@@ -67,7 +68,9 @@ import Image, ImageTk
 import os,sys,re
 from math import sqrt
 from SpiderImagePlugin import *
-from Spider import Spiderutils, montage
+#from Spider import Spiderutils, montage al 2016
+from Spider import Spiderutils
+import montage 
 import ImagePalette
 
 def backup(filename):

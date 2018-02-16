@@ -98,7 +98,7 @@ ELEMENTS =  \
  $(LIB)(bpcq.o)   \
  $(LIB)(bpcqp.o)  \
  $(LIB)(bprp.o)   \
- $(LIB)(bprp3.o)   \
+ $(LIB)(bprp3.o)  \
  $(LIB)(bprj2.o)  \
  $(LIB)(bps2.o)   \
  $(LIB)(bpwr.o)   \
@@ -108,7 +108,7 @@ ELEMENTS =  \
  $(LIB)(buterp.o) \
  $(LIB)(calc.o)   \
  $(LIB)(cald.o)   \
- $(LIB)(cang.o)     \
+ $(LIB)(cang.o)   \
  $(LIB)(ccc.o)    \
  $(LIB)(cconect.o)\
  $(LIB)(ccrd_2.o) \
@@ -150,9 +150,9 @@ ELEMENTS =  \
  $(LIB)(copy1.o) \
  $(LIB)(copyangles.o)  \
  $(LIB)(copyangles_1.o)\
- $(LIB)(copybrix.o)\
- $(LIB)(copyfromccp4.o)\
- $(LIB)(copytoccp4.o)\
+ $(LIB)(copybrix.o)    \
+ $(LIB)(copyfrommrc.o) \
+ $(LIB)(copytomrc.o)   \
  $(LIB)(copyemi.o) \
  $(LIB)(copyd.o)   \
  $(LIB)(copye.o)   \
@@ -172,12 +172,12 @@ ELEMENTS =  \
  $(LIB)(coupe.o) \
  $(LIB)(cppb.o)  \
  $(LIB)(cproj.o) \
- $(LIB)(cr180_2.o) \
- $(LIB)(crcse1.o)  \
- $(LIB)(crcse2.o)  \
- $(LIB)(crcse3.o)  \
- $(LIB)(crosrmg.o) \
- $(LIB)(crosrng.o) \
+ $(LIB)(cr180_2.o)   \
+ $(LIB)(crcse1.o)    \
+ $(LIB)(crcse2.o)    \
+ $(LIB)(crcse3.o)    \
+ $(LIB)(crosrmg.o)   \
+ $(LIB)(crosrng.o)   \
  $(LIB)(crosrng_2.o) \
  $(LIB)(crosrng_trans.o) \
  $(LIB)(crosrng_ds.o)  \
@@ -187,7 +187,7 @@ ELEMENTS =  \
  $(LIB)(crsm_2.o) \
  $(LIB)(cslice.o) \
  $(LIB)(csvms.o)  \
- $(LIB)(ctffind3.o) \
+ $(LIB)(ctffind3.o)  \
  $(LIB)(cutxslice.o) \
  $(LIB)(cutyslice.o) \
  $(LIB)(cutzslice.o) \

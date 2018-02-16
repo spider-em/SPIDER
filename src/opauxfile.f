@@ -8,12 +8,13 @@ C               LUNSETLUNS                       FEB 2003 ArDean Leith
 C               REMOVED IRTFLG INPUT             APR 2004 ArDean Leith
 C               SUPPORT FOR LUN=101              NOV 2006 ArDean Leith
 C               IRTFLG = 1 IF NOT EXIST          SEP 2014 ArDean Leith
+C               CONVERT LITTLE ENDED OPTION      JAN 2018 ArDean Leith
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2014  Health Research Inc.,                         *
+C=* Copyright 1985-2018  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -67,7 +68,7 @@ C **********************************************************************
 
         INTEGER           :: LUNT,LENREC,IRTFLG
         CHARACTER(LEN=*)  :: FILNAM,EXTENT,PROMPTT,DISP
-        LOGICAL           :: CALLERRT,EX,ASKNAME
+        LOGICAL           :: CALLERRT,EX,ASKNAME,CONVERT_TO_LITTLE
         CHARACTER(LEN=96) :: PROMPT
         CHARACTER(LEN=80) :: EXTEN
         CHARACTER(LEN=11) :: FORMVAR
@@ -123,8 +124,9 @@ C          MAKE SURE THIS IS NOT TREATED AS INLINE FILE
         ENDIF
 
 C       SET STATUS FOR OPEN
-        STATVAR = 'NEW'
+        CONVERT_TO_LITTLE = (DISP(2:2) == 'L')
 
+        STATVAR = 'NEW'
         IF (DISP(1:1) == 'N' .OR. DISP(1:1) == 'U') 
      &     STATVAR = 'REPLACE'
 
@@ -175,6 +177,15 @@ C          COMPUTE RECL UNITS (DIFFERS WITH OS &A COMPILER FLAGS)
 	         OPEN(UNIT=LUN,STATUS=STATVAR,
      &               FORM=FORMVAR, ACCESS=ACCVAR, RECL=LENOPN,
      &               IOSTAT=IRTFLGT)
+
+              ELSEIF (CONVERT_TO_LITTLE) THEN
+C                FORCE OUTPUT TO LITTLE_ENDIAN
+
+	         OPEN(UNIT=LUN,FILE=FILNAM(1:NCHAR),STATUS=STATVAR,
+     &               CONVERT='LITTLE_ENDIAN',
+     &               FORM=FORMVAR, ACCESS=ACCVAR, RECL=LENOPN,
+     &               IOSTAT=IRTFLGT)
+
               ELSE
 	         OPEN(UNIT=LUN,FILE=FILNAM(1:NCHAR),STATUS=STATVAR,
      &               FORM=FORMVAR, ACCESS=ACCVAR, RECL=LENOPN,

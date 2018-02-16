@@ -11,7 +11,7 @@ C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2014, Health Research Inc.,                         *
+C=* Copyright 1985-2017, Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -48,6 +48,8 @@ C           OUTIM_Q
 C           FMRS_1 
 C           FMRS_1D 
 C           QUADRI_Q
+C
+C   NOTE: SOMETIMES FAILS, IS BUGGY, SHOULD BE REWRITTEN al
 C
 C23456789012345678901234567890123456789012345678901234567890123456789012
 C--*********************************************************************
@@ -149,6 +151,7 @@ C       FILL NUMR
 
         MAXRIN = NUMR(3,NRING) - 2  ! WHY -2 ??
 
+
 C       CHECK WHETHER USER HAS OWN REFERENCE FILE TO CENTER THE AVERAGE.
 C       DISP = 'Z' WILL NOT CALL ERRT IN OPFIL IF NOT EXISTING
         MAXIM = 0
@@ -207,7 +210,7 @@ C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2012  Health Research Inc.,                         *
+C=* Copyright 1985-2017  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -307,33 +310,47 @@ C       GET IMAGE DATA
         CALL GETIMA_Q(A,LSD,NX,NY,IMI,ILIST,NIMA,
      &                QIMAGES,INPIC,INCORE)
 
-C       COPIES IMAGE DATA FROM A INTO B
+C       COPIES IMAGE DATA FROM A INTO B (PARALLEL)
         CALL COP(A,B,NSNR)
 
-C       FT ON IMAGE DATA IN ARRAY B
+C       FFT ON IMAGE DATA IN ARRAY B
         INS = 1
         CALL FMRS_2(B,NX,NY,INS)
 
 C       BLOB - BLOB; B-CURRENT IMAGE; C-CCF.
 
+C       CROSS CORRELATE BLOB WITH B
         LSC = NX+2-MOD(NX,2)
         CALL CCRS_2(BLOB,B,C, LSC,NX,NY)
 
+C       FIND PEAK IN CROSS CORRELATION
         CALL FINDMX_Q(C,LSD,NX,NY,NSI,CMX1,SX1,SY1)
 
+C       SHIFT A INTO REFERN
         ISX1        = SX1
         ISY1        = SY1
         PARA(2,IMI) = ISX1
         PARA(3,IMI) = ISY1
         CALL SHFI_Q(A,REFERN,LSD,NX,NY,ISX1,ISY1)
 
-C       PRINT  *,' FIRST IMAGE WITH BLOB',IMI,ISX1,ISY1
+        !PRINT  *,' FIRST IMAGE WITH BLOB',IMI,ISX1,ISY1
+
+C       COPY REFERN INTO REFER
         CALL COP(REFERN,REFER,NSNR)
+
+C       INTERPOLATE REFER INTO POLAR COORDINATES IN REFER_CIRC
         CALL ALRQ_Q(REFER,LSD,NX,NY,NUMR,REFER_CIRC,LCIRC,
      &                NRING,MODE,IPIC)
+
+C       FFT OF POLAR RINGS
         CALL FOURING_Q(REFER_CIRC,LCIRC,NUMR,NRING,TEMP,MODE)
+
+        !write(6,*)' In gali_p, refer1:', refer(61,34)
+
+C       FORWARD FFT ON REFER
         INS = 1
         CALL FMRS_2(REFER,NX,NY,INS)
+
 
 C       GO THROUGH ALL THE REMAINING IMAGES.
         CHANGE = .FALSE.
@@ -345,7 +362,7 @@ C       GO THROUGH ALL THE REMAINING IMAGES.
               DO  I=1,NIMA
                  IF (.NOT.IMAGE(I))  THEN
                     IMI = IMI + 1
-                    IF (IMI .EQ. M)  THEN
+                    IF (IMI == M)  THEN
                        IMI = I
                        GOTO  801
                     ENDIF
@@ -357,17 +374,21 @@ C       GO THROUGH ALL THE REMAINING IMAGES.
 C          GET IMAGE DATA
            CALL GETIMA_Q(A,LSD,NX,NY,IMI,ILIST,NIMA,
      &                   QIMAGES,INPIC,INCORE)
+
 C          COPY IMAGE DATA ARRAY A INTO ARRAY B
            CALL COP(A,B,NSNR)
-           INS = 1
 
-C          FT ON IMAGE DATA IN ARRAY B
+C          FORWARD FFT ON IMAGE DATA IN ARRAY B
+           INS = 1
            CALL FMRS_2(B,NX,NY,INS)
 
 C          BLOB - BLOB; B-CURRENT IMAGE; C-CCF.
 
+C          CROSS CORRELATE BLOB WITH B INTO C
            LSC = NX+2-MOD(NX,2)
            CALL CCRS_2(BLOB,B,C, LSC,NX,NY)
+
+C          FIND PEAK IN CROSS CORRELATION IMAGE C
 
            CALL FINDMX_Q(C,LSD,NX,NY,NSI,CMX1,SX1,SY1)
 
@@ -377,15 +398,26 @@ C          BLOB - BLOB; B-CURRENT IMAGE; C-CCF.
            PARA(2,IMI) = ISX1
            PARA(3,IMI) = ISY1
 
+C          SHIFT IMAGE A INTO B
            CALL SHFI_Q(A,B,LSD,NX,NY,ISX1,ISY1)
 
-C          PRINT  *,' NEXT IMAGE WITH BLOB',IMI,ISX1,ISY1
+           !PRINT  *,' NEXT IMAGE WITH BLOB',IMI, ISX1,ISY1
 
 C          RUN ROTATION-SHIFT ALIGNMENT
-C          INPUT:  THREE REAL IMAGES, A, B AND REFERN
-C          OUTPUT: B - REAL ALIGNED IMAGE, PARA - UDATED PARAMETERS
+C          INPUT:   THREE REAL IMAGES, A, B AND REFERN
+C          OUTPUT:  B - REAL ALIGNED IMAGE, PARA - UDATED PARAMETERS
 C          SCRATCH: D
-C          NOCHANGE=.TRUE. - NO CHANGE IN THE POSITION OF THE IMAGE
+C          NOCHANGE = .TRUE. - NO CHANGE IN THE POSITION OF THE IMAGE
+C
+C          CONTENTS:
+C          BLOB   : IMAGE FOR CENTERING AVERAGE *
+C          A      : IMAGE DATA
+C          B      : COPY OF IMAGE DATA --> FFT OF IMAGE DATA 
+C                   THEN SHIFTED IMAGE A
+C          D      : ??
+C          C      : CROSS CORRELATION OF BLOB WITH B
+C          REFER  : FFT OF SHIFTED IMAGE
+C          REFERN : SHIFTED IMAGE 
 
            CALL ALROSI_Q(A,B,D,C,REFER,LSD,NX,NY,NSI,
      &          PARA(1,IMI),NOCHANGE,
@@ -393,12 +425,12 @@ C          NOCHANGE=.TRUE. - NO CHANGE IN THE POSITION OF THE IMAGE
      &          TEMP,MODE,KTN)
            IF (.NOT. NOCHANGE)  CHANGE = .TRUE.
 
-C          ADD IMAGE TO THE REFERENCE
+C          WEIGHTED ADD SHIFTED IMAGE B TO THE SHIFTED REFERENCE REFERN
+C          CALL UPDTF  (REFERN,B,NSNR,KTN)
+           CALL UPDTF_R(REFERN,B,NX,NY,LSD,KTN)
 
-C          CALL  UPDTF(REFERN,B,NSNR,KTN)
-           CALL  UPDTF_R(REFERN,B,NX,NY,LSD,KTN)
         ENDDO
-	
+
 C       CORRECT CENTER
 
         IF (USEBLOB)  THEN
@@ -407,24 +439,32 @@ C       CORRECT CENTER
            YS = -(YS-NY/2-1)
         ELSE
 C          BLOB - BLOB; REFERN-CURRENT AVERAGE; D-CCF.
+
+C          COPY REFERN INTO REFER
            CALL COP(REFERN,REFER,NSNR)
+
+C          FORWARD FFT ON REFER
            INS = +1
            CALL FMRS_2(REFER,NX,NY,INS)
 
+C          CROSS CORRELATE BLOB WITH REFER INTO D
            LSC = NX+2-MOD(NX,2)
            CALL CCRS_2(BLOB,REFER,D, LSC,NX,NY)
 
+C          FIND PEAK IN D
            CALL FINDMX_Q(D,LSD,NX,NY,NSI,CMX1,XS,YS)
         ENDIF
 
-C        PRINT *, '  CENTER CORRECTION  ',XS,YS
+C       PRINT *, '  CENTER CORRECTION  ',XS,YS
 
+C       ROTATE AND SHIFT REFERN INTO REFER
         CALL RTQS_Q(REFERN,REFER,LSD,NX,NY,ZERO,XS,YS)
         DO IMI=1,NIMA
            PARA(2,IMI) = PARA(2,IMI)+XS
            PARA(3,IMI) = PARA(3,IMI)+YS
         ENDDO
 
+C       SAVE IMAGE FROM REFER
         CALL OUTIM_Q(REFER,LSD,NX,NY,1)
 
         CALL OUTPR(PARA,NIMA,1)
@@ -442,7 +482,6 @@ C       IF NO CHANGES TERMINATE
 
 C       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 C       REFINE THE ALIGNMENT
-C       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
         ITER = 0
         DNRM = 0.0D0
@@ -474,7 +513,7 @@ c$omp      end parallel do
                  DO I=1,NIMA
                     IF (.NOT. IMAGE(I))  THEN
                        IMI = IMI+1
-                       IF (IMI.EQ.M)  THEN
+                       IF (IMI == M)  THEN
                           IMI = I
                           GOTO  901
                        ENDIF
@@ -484,7 +523,7 @@ c$omp      end parallel do
 
 901           IMAGE(IMI) = .TRUE.
 
-C             PRINT *,' IMAGE  #  ',IMI
+              !PRINT *,' IMAGE  #  ',IMI
 C             GET IMAGE DATA IN ARRAY A
               CALL GETIMA_Q(A,LSD,NX,NY,IMI,ILIST,NIMA,
      &                      QIMAGES,INPIC,INCORE)
@@ -494,6 +533,8 @@ C             GET IMAGE DATA IN ARRAY A
 
 C             SUBTRACT THE IMAGE FROM THE REFERENCE
               CALL SUBAF(REFER,C,REFERTMP,NSNR,NIMA)
+
+C             COPY REFERTMP INTO E
               CALL COP(REFERTMP,E,NSNR)
 
 C             RUN ROTATION-SHIFT ALIGNMENT
@@ -517,6 +558,7 @@ C              CALL UPDTF(REFERN,C,NSNR,KTN)
            ENDDO
 
 C          CORRECT CENTER
+
            IF (USEBLOB)  THEN
               CALL CENT_Q(REFERN,LSD,NX,NY,XS,YS)
               XS = -(XS-NX/2-1)
@@ -524,17 +566,25 @@ C          CORRECT CENTER
            ELSE
 
 C             BLOB - BLOB; REFERN-CURRENT AVERAGE; D-CCF.
+
+C             COPY REFERN INTO REFER
               CALL COP(REFERN,REFER,NSNR)
+
+C             FORWARD FFT ON REFER
               INS = +1
               CALL FMRS_2(REFER,NX,NY,INS)
 
+C             CROSS CORRELATE BLOB WITH REFER INTO D
               LSC = NX+2-MOD(NX,2)
               CALL CCRS_2(BLOB,REFER,D, LSC,NX,NY)
 
+C             FIND PEAK IN D
               CALL FINDMX_Q(D,LSD,NX,NY,NSI,CMX1,XS,YS)
            ENDIF
 
+C          ROTATE AND SHIFT REFERN INTO REFER
            CALL RTQS_Q(REFERN,REFER,LSD,NX,NY,ZERO,XS,YS)
+
 c$omp      parallel do private(imi)
            DO IMI=1,NIMA
               PARA(2,IMI) = PARA(2,IMI) + XS
@@ -542,13 +592,22 @@ c$omp      parallel do private(imi)
            ENDDO
 c$omp      end parallel do
 
+C          SAVE REFER IMAGE
            CALL OUTIM_Q(REFER,LSD,NX,NY,ITER+1)
+
            CALL OUTPR(PARA,NIMA,ITER+1)
+
            TEMP(1,1) = FNRM(REFER,NSNR)
            WRITE(NOUT,5091)  ITER+1,TEMP(1,1)
            NITER = ITER + 1
 
-           IF (TEMP(1,1) .GE. DNRM)  THEN
+           IF (NITER > 100) THEN
+              CALL ERRT(101,
+     &         'POSSIBLE ENDLESS LOOP AFTER, ITERATIONS:',NITER)
+           GOTO 9999
+        ENDIF
+
+           IF (TEMP(1,1) >= DNRM)  THEN
               DNRM = TEMP(1,1)
               IF (.NOT.CHANGE)  GOTO 9999
            ELSE
@@ -556,7 +615,7 @@ c$omp      end parallel do
            ENDIF
 
 C          END OF INFINITE ITERATIONS
-        END DO
+        ENDDO
 
 9999    IF (ALLOCATED(A))          DEALLOCATE(A)
         IF (ALLOCATED(B))          DEALLOCATE(B)

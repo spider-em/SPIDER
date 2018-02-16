@@ -13,7 +13,7 @@ C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2016  Health Research Inc.,                         *
+C=* Copyright 1985-2018  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -32,7 +32,7 @@ C=*                                                                    *
 C **********************************************************************
 C                                                                      
 C  GETHEDCCP4(HEADBUF,NX,NY,NZ,IMODE,DMIN,DMAX,
-C             DMEAN,RMS,NSYMBT,ISSWABT,FLIP,MACHST,ISPG,MZ,IRTFLG)
+C             DMEAN,RMS,NSYMBT,FLIP,MACHST,ISPG,MZ,IRTFLG)
 C                                                                      
 C  PURPOSE:     DECODE CCP4 (MRC IMAGE 2000) HEADER      
 C                                            
@@ -93,11 +93,20 @@ C        DMAX  < DMIN                        MAX & MIN UNDETERMINED
 C        DMEAN < (SMALLER OF DMIN and DMAX)  DMEAN     UNDETERMINED
 C        RMS   < 0.0                         RMS       UNDETERMINED
 C
+C     Bytes 213 and 214 contain 4 `nibbles' (half-bytes) indicating 
+C     the representation of float, complex, integer and character 
+C     datatypes. Bytes 215 and 216 are unused. The CCP4 library contains 
+C     a general representation of datatypes, but in practice it is 
+C     safe to use 0x44 0x44 0x00 0x00 for little endian machines, and 
+C     0x11 0x11 0x00 0x00 for big endian machines. The CCP4 library 
+C     uses this information to automatically byte-swap data if 
+C     appropriate, when tranferring data files between machines.  
+C
 C23456789012345678901234567890123456789012345678901234567890123456789012
 CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 
         SUBROUTINE GETHEDCCP4(HEADBUF,NX,NY,NZ,IMODE,DMIN,DMAX,
-     &             DMEAN,RMS,NSYMBT,ISSWABT,FLIP,MACHST,
+     &             DMEAN,RMS,NSYMBT,FLIP,MACHST,
      &             ISPG,MZ,IRTFLG)
 
         IMPLICIT NONE
@@ -107,12 +116,12 @@ CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
         INTEGER               :: NX,NY,NZ,IMODE
         REAL                  :: DMIN,DMAX,DMEAN,RMS
         INTEGER               :: NSYMBT
-        LOGICAL               :: ISSWABT,FLIP
+        LOGICAL               :: FLIP
         INTEGER               :: MACHST,ISPG,MZ,IRTFLG
 
         CHARACTER(LEN=800)    :: CLABLS
         CHARACTER(LEN=4)      :: MAP,CVAL
-        LOGICAL               :: BIGENDARCH,BIGENDED
+        LOGICAL               :: ISSWABT,BIGENDARCH,BIGENDED
         LOGICAL               :: BIGENDFILE,SAMEENDFILE
 
         INTEGER               :: MAPC,MAPR,MAPS,LNBLNKN,NXSTART
@@ -125,26 +134,37 @@ CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
         INTEGER               :: LENMAP
         CHARACTER(LEN=1)      :: LXYZ(3)
 
+        LOGICAL               :: isswab
+
         DATA LXYZ/'X','Y','Z'/
 
 C       GET CURRENT ARCHITECTURE ENDED-NESS
         BIGENDARCH = BIGENDED(0)
 
-C       DETERMINE CURRENT FILE ENDED-NESS
+C       FIND IF CURRENTLY SWAPPING BYTES DURING FILE OUTPUT
+C       THIS MAY BE DONE BY COMPILER, SO HAVE TO ACTUALLY TEST OUTPUT
+
+        ISSWABT = ISSWAB(99)
+
+
+C       DETERMINE CURRENT FILE ENDED-NESS AS READ IN
 
         CALL MVNFLIP(HEADBUF(17), MAPC, .FALSE.)
         CALL MVNFLIP(HEADBUF(18), MAPR, .FALSE.)
         CALL MVNFLIP(HEADBUF(19), MAPS, .FALSE.)
 
-        !write(6,*) ' mapc,mapr,maps: ',mapc,mapr,maps
+C       write(6,*) ' mapc,mapr,maps: ',mapc,mapr,maps
 
         SAMEENDFILE = ((MAPC == 1) .OR. (MAPR == 1) .OR. (MAPS == 1))
 
         BIGENDFILE = ((      SAMEENDFILE .AND.       BIGENDARCH) .OR.
      &                (.NOT. SAMEENDFILE .AND. .NOT. BIGENDARCH))
 
-C       IF FILE ENDEDNESS DIFFERS FROM THIS MACHINES MUST FLIP BYTES
+C       IF FILE ENDEDNESS (AS READ IN!) DIFFERS FROM THIS MACHINES 
+C       MUST FLIP BYTES
         FLIP = .NOT. SAMEENDFILE
+
+C       write(6,*) '  FLIP: ',flip,'  SAMEENDFILE ',sameendfile 
 
 C       WRITE OUT CONVERSION INFORMATION
         IF (VERBOSE) THEN       
@@ -160,10 +180,10 @@ C       WRITE OUT CONVERSION INFORMATION
               WRITE(NOUT,*)' Reading little ended file'
            ENDIF
 
-           IF (.NOT. ISSWABT) THEN
-              WRITE(NOUT,*)' SPIDER I/O Native byte order'
+           IF (ISSWABT) THEN
+               WRITE(NOUT,*)' SPIDER I/O Non-native byte order'
            ELSE
-              WRITE(NOUT,*)' SPIDER I/O Non-native byte order'
+               WRITE(NOUT,*)' SPIDER I/O Native byte order'
            ENDIF
 
            IF (FLIP) THEN
@@ -172,7 +192,7 @@ C       WRITE OUT CONVERSION INFORMATION
         ENDIF
 
 C       GET MAP TYPE FROM INPUT FILE
-        CALL MVNREV(HEADBUF(53),MAP,ISSWABT)
+        CALL MVNREV(HEADBUF(53),MAP,FLIP)
           
         LENMAP = lnblnkn(MAP)
         IF (LENMAP <= 0) THEN
@@ -214,7 +234,7 @@ C           OLD STYLE, MRC MAP OR UNKNOWN FILE TYPE
         DMEAN   = HEADBUF(22)
 
 C       GET EXTTYP (NOW 'MRCO')
-        CALL MVNREV(HEADBUF(27),CVAL,ISSWABT)
+        CALL MVNREV(HEADBUF(27),CVAL,FLIP)
 
 C       GET VERSION NUMBER 
         CALL MVNFLIP(HEADBUF(28),IVERSION,     FLIP)
@@ -236,7 +256,7 @@ C       GET VERSION NUMBER
 C          GET LABELS
            INOW = 1
            DO I = 57,56 + NLABL * 20
-              CALL MVNREV(HEADBUF(I),CLABLS(INOW:INOW+3),ISSWABT)
+              CALL MVNREV(HEADBUF(I),CLABLS(INOW:INOW+3),FLIP)
               INOW = INOW + 4
            ENDDO
         ENDIF

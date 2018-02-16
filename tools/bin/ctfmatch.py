@@ -33,7 +33,7 @@ from commands import getoutput
 from support import Spiderutils
 
 import webbrowser
-webpage = "http://www.wadsworth.org/spider_doc/spider/docs/spire/guitools/ctfmatch/ctfmatch.html"
+webpage = "http://www.wadsworth.org/spider_doc/spider/tools/docs/ctfmatch.html"
 
 def ctfhelp():
     try:

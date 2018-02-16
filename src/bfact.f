@@ -6,7 +6,7 @@ C************************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2014  Health Research Inc.,                         *
+C=* Copyright 1985-2018  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -50,15 +50,15 @@ C***********************************************************************
 
          WRITE(NOUT,*)
      &     ' NORMALIZES AMPLITUDES BY A "B" TEMPERATURE FACTOR'
-         WRITE(NOUT,*)' AMP = AMP*D(EXP(Bs**2))'
+         WRITE(NOUT,*)' AMP = AMP*D*(EXP(B*F**2))'
 
-         CALL RDPRM1S(PARM_B,     NOT_USED,'B FACTOR',   IRTFLG)
+         CALL RDPRM1S(PARM_B,     NOT_USED,'B FACTOR (PIXEL**2)',IRTFLG)
          IF (IRTFLG .NE. 0) RETURN
 
-         CALL RDPRM1S(PARM_D,     NOT_USED,'D CONSTANT', IRTFLG)
+         CALL RDPRM1S(PARM_D,   NOT_USED,'D MULTIPLIER CONSTANT',IRTFLG)
          IF (IRTFLG .NE. 0) RETURN
 
-         CALL RDPRM1S(PARM_CUTOFF,NOT_USED,'FQ CUTOFF',  IRTFLG)
+         CALL RDPRM1S(PARM_CUTOFF,NOT_USED,'FREQUENCY CUTOFF',  IRTFLG)
          IF (IRTFLG .NE. 0) RETURN
 
          FQCSQ = PARM_CUTOFF**2

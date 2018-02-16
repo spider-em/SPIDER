@@ -1,16 +1,16 @@
 #!/bin/sh
 #
-# SOURCE: /usr8/spider/utils/send-fftw.sh
+# SOURCE: /usr16/software/spider/utils/send-fftw.sh
 #
 # PURPOSE: Copy fftw3 files to distribution without duplicating a lot of stuff
 
 # du -ak | grep '\.a' | grep -v '\.am'
 
 # Source of fftw3 files
-fftw_src="/usr8/spider/fftw"
+fftw_src="/usr16/software/spider/fftw"
 
 # Distribution destination
-fftw_dest="/usr8/send/spider/fftw"
+fftw_dest="/usr16/software/send/spider/fftw"
 
 # FFTW3 targets included in copy
 #fftw_sources="fftw3-intel fftw3-32 fftw3-opt64 fftw3-intel64 fftw3-osx-32 fftw3-osx-64  fftw3-osx-32-pgi fftw3-osx-64-pgi " apr15

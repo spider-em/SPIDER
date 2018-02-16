@@ -1,12 +1,12 @@
 C++*********************************************************************
 C
-C $$ FINDMX_Q.FOR
+C FINDMX_Q.F    COSMETIC                        NOV  2017 ARDEAN LEITH
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Copyright 1985-2017  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -24,41 +24,49 @@ C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
 C **********************************************************************
 C
+C FINDMX_Q(D,LSD,NX,NY,NSI,PEAKV,SX,SY)
 C
-C IMAGE_PROCESSING_ROUTINE
+C PURPOSE: FIND MAXIMUM LOCATION AND VALUE IN IMAGE: 
+C              D (NXxNY) ACTUAL SIZE: (LSDxNY).  ONLY SEARCHES NSI
+C              PIXELS FROM CENTER OF IMAGE
 C
-C        1         2         3         4         5         6         7
 C23456789012345678901234567890123456789012345678901234567890123456789012
 C--*********************************************************************
-C
-C $$ FINDMX_Q.FOR
-C
-         SUBROUTINE  FINDMX_Q(D,LSD,NSAM,NROW,NSI,CMX,SX,SY)
-         DIMENSION  D(LSD,NROW),Z(-1:1,-1:1)
 
-         JC=NROW/2+1
-         IC=NSAM/2+1
-         CMX=D(IC,JC)
-         DO    JT=-NSI,NSI
-            J=JT+JC
-            DO    IT=-NSI,NSI
-               I=IT+IC
-               IF(CMX.LE.D(I,J))  THEN
-                  CMX=D(I,J)
-                  IX=I
-                  IY=J
+         SUBROUTINE FINDMX_Q(D,LSD,NX,NY,NSI,PEAKV,SX,SY)
+
+         REAL   :: D(LSD,NY), Z(-1:1,-1:1)
+
+         JC    = NY / 2+1
+         IC    = NX / 2+1
+         PEAKV = D(IC,JC)
+
+         DO JT= -NSI,NSI
+            J = JT + JC
+            DO IT = -NSI,NSI
+               I = IT + IC
+               IF (PEAKV <= D(I,J))  THEN
+                  PEAKV = D(I,J)
+                  IX    = I
+                  IY    = J
                ENDIF
             ENDDO         
          ENDDO
-         SX=IX-IC
-         SY=IY-JC
-         IF(IY.LT.2.OR.IY.GT.NROW-1.OR.IX.LT.2.OR.IX.GT.NSAM-1) RETURN
-         DO    J=-1,1
-            DO    I=-1,1
-               Z(I,J)=D(IX+I,IY+J)
+
+         SX = IX - IC
+         SY = IY - JC
+
+         IF(IY < 2 .OR. IY > NY-1 .OR. IX < 2 .OR. IX > NX-1) RETURN
+
+         DO J=-1,1
+            DO I = -1,1
+               Z(I,J) = D(IX+I,IY+J)
             ENDDO
          ENDDO
-         CALL  PARABL(Z,XSH,YSH,CMX)
-         SX=SX+XSH
-         SY=SY+YSH
+
+         CALL PARABL(Z,XSH,YSH,PEAKV)
+
+         SX = SX + XSH
+         SY = SY + YSH
+
          END

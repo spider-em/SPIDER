@@ -1,23 +1,24 @@
 #!/usr/bin/csh
 #
-# SOURCE:   /usr8/spider/utils/wwwupdate.csh 
+# SOURCE:   /usr16/software/spider/utils/wwwupdate.csh 
 #
 # PURPOSE: Copies all website SPIDER documents to: CSS's desired location
 #          CSS will then copy from that location into external 
 #          Wadsworth website once a day
 #
 # USAGE:   wwwupdate.csh 
-
+#
 # CHANGES: new                                ArDean Leith  May 94
 #          python tools                       ArDean Leith  Apr 14
 #          tmpdir                             ArDean Leith  Jul 15
-
+#          usr16                              ArDean Leith  Apr 17
+#
 # Root location for our local source files
-set spider_root  = /usr8/spider    
-set tmpdir       = $spider_root/utils/jnk_raw_www_docs        
-set spider_send  = /usr8/send/
-
-set spiredir     = /usr8/spider/spire/    
+set spider_root  = /usr16/software/spider    
+set tmpdir       = /usr16/software/spider/utils/jnk_raw_www_docs        
+set spider_send  = /usr16/software/send
+set spiredir     = /usr16/software/spider/spire/
+    
 set docsdir      = $spider_root/docs/
 set srcdir       = $spider_root/src/ 
 set procsdir     = $spider_root/proc/ 
@@ -37,8 +38,9 @@ set wwwdocsdir    = $wwwhostdir/docs
 
 # For Wadsworth WWW. Set rsync = verbose, compressed, update, 
 #        preserve executability, preserve time, follow Symlinks
-#set sendit = 'rsync -vzuEtL' pre 4/27/2012 for Linux target
-set sendit  = 'rsync -vzuptL  --exclude="RCS" --exclude="Attic" '
+set sendit   = 'rsync -vzuptL  --exclude="RCS" --exclude="Attic" '
+
+alias senditr   'rsync -vzuptLr --delete --exclude="RCS" --exclude="Attic" --exclude="dev" '
 
 pushd .
 cd $spider_root/utils
@@ -72,20 +74,19 @@ ssh $wwwhost mkdir -p $wwwdir/docs/man
 $sendit     $tmpdir/man/*               $wwwdocsdir/man/
 
 echo " Copied headerized SPIDER man files " >> $LOGFILE
-echo " $sendit     $tmpdir/man/*               $wwwdocsdir/man/"
 
 # Copy headerized SPIDER doc files  ----------------------------------
 echo " Copying headerized SPIDER doc files xxxxxxxxxxxxxxxxxxxxxxx" 
-$sendit    $tmpdir/*                    $wwwdocsdir
-
+senditr    $tmpdir/*                    $wwwdocsdir
 echo " Copied headerized SPIDER doc files " >> $LOGFILE
 
 # Copy exa, icons, buttons, img & spidui SPIDER doc files ------------
 echo " Copying exa, icons, buttons, img & spidui SPIDER files xxxxxxxxxxxxxxxxxxx" 
 $sendit    $docsdir/img/*               $wwwdocsdir/img/
 $sendit    $docsdir/buttons/*           $wwwdocsdir/buttons/
-$sendit -r $docsdir/spipylib/*          $wwwdocsdir/spipylib/
-$sendit -r $docsdir/exa/*               $wwwdocsdir/exa/
+
+senditr    $docsdir/spipylib            $wwwdocsdir 
+senditr    $docsdir/exa                 $wwwdocsdir
 
 echo " Copied exa, icons, buttons, img & spidui SPIDER files " >> $LOGFILE
 
@@ -94,18 +95,19 @@ echo " Copying non-headerized SPIDER doc files xxxxxxxxxxxxxxxxxxx"
 $sendit    $docsdir/spider.html        \
            $docsdir/spider_license.html $docsdir/spider_avail.html  \
            $docsdir/spi-register.html   $docsdir/spi-download.html  \
-           $docsdir/*.gif               $docsdir/*.jpg              \
-           $docsdir/*.spi               $docsdir/*.css              \
+           $docsdir/*.pdf               $docsdir/*.css              \
            $docsdir/spider78.html                                   $wwwdocsdir/
 
 echo " Copied non-headerized SPIDER doc files " >> $LOGFILE
 
 # Copy SPIDER source files ------------------------------------------
 echo " Copying SPIDER src files xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" 
-$sendit -r --exclude="*.o"   --exclude="*.mod"   --exclude="jnk*"   \
-           --exclude="*.a"   --exclude="ifort/"  --exclude="gfort/" \
-           --exclude="RCS"   --exclude="Attic"                      \
-           $srcdir/*  $wwwhostdir/src
+
+senditr    --exclude="*.o"   --exclude="*.mod"      --exclude="jnk*"   \
+           --exclude="*.a"   --exclude="ifort-jnk"  --exclude="gfort"  \
+           $srcdir           $wwwhostdir/src
+
+
 echo " Copied SPIDER source files " >> $LOGFILE
 
 # Copy SPIDER python tools files ------------------------------------------
@@ -113,7 +115,7 @@ echo " Copying  $toolsdir   xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 ssh  $wwwhost mkdir -p $wwwhostdir/tools
 $sendit    $toolsdir/*.html   $toolsdir/*.py $wwwhostdir/tools
 $sendit    $toolsdir/bin/*py                 $wwwhostdir/tools/bin
-$sendit -r $toolsdir/docs                    $wwwhostdir/tools
+senditr    $toolsdir/docs                    $wwwhostdir/tools
 echo " Copied python tools files" >> $LOGFILE
 
 
@@ -150,8 +152,9 @@ echo " Copied external SPIDER tech files " >> $LOGFILE
 
 echo " Copying various external tar files xxxxxxxxxxxxxxxxxxxxxxxxx" 
 
-$sendit -v $docsdir/techs/supclass/tar_archive/*  $wwwdocsdir/techs/supclass/tar_archive 
-$sendit -v $docsdir/techs/verify/tar_archive/*    $wwwdocsdir/techs/verify/tar_archive 
+
+$sendit  $docsdir/techs/supclass/tar_archive/*  $wwwdocsdir/techs/supclass/tar_archive 
+$sendit  $docsdir/techs/verify/tar_archive/*    $wwwdocsdir/techs/verify/tar_archive 
 
 #echo " Copying SPIDER distribution file xxxxxxxxxxxxxxxxxxxxxxxxx" 
 #$sendit -v $spider_send/spiderweb.*tar.gz        $wwwhostdir/download
@@ -169,7 +172,7 @@ exit 1
 
 #############  Unused below here ##
 
-# cp /usr8/send/spiderweb.tar.gz        $wwwhostdir/download/spiderweb.15.10.tar.gz
+# cp //usr16/software/send/spiderweb.tar.gz        $wwwhostdir/download/spiderweb.15.10.tar.gz
 # scp -p spi-download.html $wwwhost':/export/apache/vhosts/spider.wadsworth.org/htdocs/spider_doc/spider/docs
 # " scp -p reference_based.tar.gz nnewton:/usr3/WWW/wwwinternal/spider_doc/spider/download"
 #  Legacy: sterecon stuff is in /~leith/www/sterecon

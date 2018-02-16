@@ -3,18 +3,25 @@
 # SOURCE:  install.py
 #
 # PURPOSE: Installs SPIDER python tools.
-#          Put Executables in directory: tools-?.?.?/bin
+#          Puts executables in directory: tools/bin
 
 import  os,sys, glob
 from    commands import getoutput
 from    shutil import copy, copytree, rmtree
 import  findprog, testinstall
 
-# 19 apps
-apps = ['scatter.py',    'pyplot.py',       'ctfdemo.py',    'xplor.py',     'emancoords2spiderdoc.py', 
-        'ctfgroup.py',   'ctfcircle.py',    'ctfmatch.py',   'classavg.py',  'montage.py',
-        'mkfilenums.py', 'spiconvert.py',   'binarytree.py', 'viewstack.py', 'xmippsel2spiderdoc.py',
-        'qview.py',      'verifybyview.py', 'montagefromdoc.py']
+# 20 apps
+apps = ['binarytree.py',               'montagefromdoc.py',
+        'classavg.py',                 'montage.py',
+        'ctfcircle.py',                'pyplot.py',
+        'ctfdemo.py',                  'qview.py',
+        'ctfgroup.py',                 'scatter.py', 
+        'ctfmatch.py',                 'spiconvert.py',
+        'emancoords2spiderdoc.py',     'verifybyview.py',
+        'emanrctcoords2spiderdoc.py',  'viewstack.py',
+        'mkapps.py',                   'xmippsel2spiderdoc.py',
+        'mkfilenums.py',               'xplor.py']
+
 
 tools_install_dir = os.getcwd()
 bindir            = os.path.join(tools_install_dir, "bin")

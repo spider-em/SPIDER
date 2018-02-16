@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #
-# SOURCE: /usr8/spider/utils/raw2docs.perl
+# SOURCE: /usr16/software/spider/utils/raw2docs.perl
 #       exa buttons and links                  ArDean Leith  Jan. 2013
 #       Nobuttons flag supported               ArDean Leith  Mar. 2015
 #
@@ -13,7 +13,7 @@
 
 # Previously in: htdefs.ph;
 $spider_root   = qq($ENV{'SPIDER_ROOT'});
-$spider_root   = "/usr8/spider";
+$spider_root   = "/usr16/software/spider";
 
 $rawdocs_dir   = qq($spider_root/rawdocs);
 $manhtml_dir   = qq($spider_root/docs/man);

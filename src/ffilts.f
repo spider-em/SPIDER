@@ -1,10 +1,11 @@
 C++*******************************************************************
 C
-C FFILTS.F                          USED OPFILE   NOV 00 ARDEAN LEITH
-C                                   ADDED BFACTOR OCT 01 BILL BAXTER
-C                                   OPFILEC       FEB 03 ARDEAN LEITH
-C                                   GAUSSIAN BUG  FEB 04 PP
-C                                   SAMPLED ADDED MAR 07 C. RENKEN
+C FFILTS.F               USED OPFILE               NOV 00 ARDEAN LEITH
+C                        ADDED BFACTOR             OCT 01 BILL BAXTER
+C                        OPFILEC                   FEB 03 ARDEAN LEITH
+C                        GAUSSIAN BUG              FEB 04 PP
+C                        SAMPLED ADDED             MAR 07 C. RENKEN
+C                        SQRT2M1 in BUTTERWORTH    JAN 18 ARDEAN LEITH
 C
 C **********************************************************************
 C=*                                                                    *
@@ -35,14 +36,6 @@ C        LUN         LOGICAL UNIT NUMBER OF FOURIER FILE TO BE FILTERED
 C        LUN         LOGICAL UNIT NUMBER OF FOURIER FILE OUTPUT
 C        NX,NY,NZ    DIMENSIONS OF FOURIER FILE
 C        NXO         X DIMENSION OF ORIGINAL REAL-SPACE FILE
-C  
-C  NOTE:
-C        'FF' (ffilts.f)            SETS X1 TO: (NX  / 2)**2 BUT
-C        'FQ' (four_fq.f or fq_q.f) SETS X1 TO: (NXF / 2)**2 WHERE
-C             NX  IS X DIMENSION OF POSSIBLY PADDED IMAGE
-C             NXF IS SLIGHTLY LARGER DUE TO MIXED RADIX FOURIER PAD
-C        SO THEY GIVE SLIGHTLY DIFFERENT RESULTS.  I SUSPECT THAT
-C        'FF' IS ACTUALLY CORRECT?
 C
 C--*******************************************************************
 
@@ -56,6 +49,8 @@ C--*******************************************************************
 	COMPLEX             :: CB(1)
         CHARACTER *(MAXNAM) :: FILNAM
 	CHARACTER*1         :: NULL = CHAR(0)
+
+        REAL                :: SQRT2M1
 
 	INTEGER, PARAMETER  :: LUNF = 27
 
@@ -129,8 +124,8 @@ C          BUTTERWORTH FILTER ****************************************
            ORD   = 2.  * ALOG10(EPS / SQRT(AA**2-1.0))
            ORD   = ORD / ALOG10(FP  / FS)
 
-	   IF (FP > 0.5)  FP = FP / NX  ! NOT TESTED
-	   IF (FS > 0.5)  FS = FS / NX  ! NOT TESTED
+	   IF (FP > 0.5)  FP = FP / NXO   
+	   IF (FS > 0.5)  FS = FS / NXO   
 
            PARM1 = FP / (EPS)**(2./ORD)
 
@@ -147,12 +142,13 @@ C          SAMPLED SPACE FILTER *********************************
         ENDIF
 
 
+
 C       OTHER FILTERS ***********************************************
 
-952	CALL RDPRM1S(PARM1,NOT_USED, 
+   	CALL RDPRM1S(PARM1,NOT_USED, 
      &        'FILTER RADIUS (IN FREQUENCY OR PIXEL UNITS)',IRTFLG)
 
-	IF (PARM1 < 0.0 .OR. PARM1 > 0.5) PARM1 = 0.5 * PARM1/(NXO/2)
+	IF (PARM1 < 0.0 .OR. PARM1 > 0.5) PARM1 = PARM1 / NXO
 
 
 	IF (IOPT == 5 .OR. IOPT == 6)  THEN
@@ -168,35 +164,42 @@ C          EXPONENTIAL FOR HIGH-PASS OPTION
 5768	NS2 = NX/2
 	NR2 = NY/2
 	NL2 = NZ/2
+
 	X1  = FLOAT(NXO/2)**2
 	Y1  = FLOAT(NR2)**2
 
+        !write(6,*) ' nx,nxo,x1: ',nx,NXO,x1
+
 	IF (NZ == 1) THEN
-	   Z1 = 1.0
+	   Z1   = 1.0
 	ELSE
-	   Z1 = FLOAT(NL2)**2
+	   Z1   = FLOAT(NL2)**2
 	ENDIF
-	PARM = PARM1**2
+
+	PARM    = PARM1**2
+
+        SQRT2M1 = (SQRT(2.0)-1)
 
 	DO K=1,NZ
 	   IZ = K-1
-	   IF (IZ .GT. NL2)  IZ = IZ-NZ
+	   IF (IZ  >  NL2)  IZ = IZ-NZ
 
 	   DO J=1,NY
 	      IY = J-1
-	      IF (IY .GT. NR2)  IY = IY-NY
+	      IF (IY  >  NR2)  IY = IY-NY
 	      NR = J+(K-1)*NY
 	      CALL  REDLIN(LUN,B,NX,NR )
 
 	      DO  2  I=1,NS2
 	         IX=I-1
-		 IF (IOPT .EQ. 11) GOTO 800
+		 IF (IOPT  ==  11) GOTO 800
 
 	         GOTO(100,200,300,400,500,500,600,700),IOPT
 
+
 C       LOWPASS ******************************************************
 100	IF (0.25*(FLOAT(IX*IX)/X1+FLOAT(IY*IY)/Y1+FLOAT(IZ*IZ)/Z1)
-     &	       .GT. PARM)  CB(I) = CMPLX(0.0,0.0)
+     &	        >  PARM)  CB(I) = CMPLX(0.0,0.0)
 	GOTO  2
 
 C       HIGH PASS ****************************************************
@@ -228,34 +231,36 @@ C       FERMI DISTRIBUTION FILTER *************************************
 500	ARG = (0.5*SQRT(
      &	   FLOAT(IX*IX)/X1+FLOAT(IY*IY)/Y1+FLOAT(IZ*IZ)/Z1)-PARM1)/TEMP
 	ARG = AMIN1(AMAX1(ARG,-10.0),10.0)
-	IF (IOPT.EQ.6.AND.IX.NE.0.AND.IY.NE.0.AND.IZ.NE.0) GOTO 2
+	IF (IOPT == 6.AND.IX.NE.0.AND.IY.NE.0.AND.IZ.NE.0) GOTO 2
 	CB(I) = CB(I) * (1.0/(1.0+EXP(ARG)))
 	GOTO 2
 
 C       BUTTERWORTH  LOWPASS FILTER **********************************
 600	ARG = 0.5*SQRT(
      &	   FLOAT(IX*IX)/X1+FLOAT(IY*IY)/Y1+FLOAT(IZ*IZ)/Z1)
-	CB(I) = CB(I) * SQRT(1.0/(1.0+(ARG/PARM1)**ORD))
+	CB(I) = CB(I) * SQRT(1.0/(1.0+SQRT2M1*(ARG/PARM1)**ORD))
 	GOTO 2
 
 C       BUTTERWORTH HIGHPASS FILTER **********************************
 700     IF (IX.NE.0 .OR. IY.NE.0 .OR. IZ.NE.0) THEN
            ARG = 0.5*SQRT(
      &	      FLOAT(IX*IX)/X1+FLOAT(IY*IY)/Y1+FLOAT(IZ*IZ)/Z1)
-	   CB(I) = CB(I)*(1.0-SQRT(1.0/(1.0+(ARG/PARM1)**ORD)))
+	   CB(I) = CB(I)*(1.0-SQRT(1.0/(1.0+SQRT2M1*(ARG/PARM1)**ORD)))
 	ENDIF
         GOTO 2
 
-C       SAMPLED SPACE FILTER *****************************************
-800     ARG = SQRT(FLOAT(IX*IX + IY*IY + IZ*IZ))
-	IF (ARG .EQ. 0.0) ARG = 1.0
+C          SAMPLED SPACE FILTER **************************************
+800        ARG = SQRT(FLOAT(IX*IX + IY*IY + IZ*IZ))
+	   IF (ARG  ==  0.0) ARG = 1.0
 
-        F = 3*NUMPRJ*((ARG+0.5)**2 - (ARG-0.5)**2)/
+           F = 3*NUMPRJ*((ARG+0.5)**2 - (ARG-0.5)**2)/
      &            (4*((ARG+0.5)**3 - (ARG-0.5)**3))
 
-	IF (F .GT. 1) F = 1.0
-        CB(I) = CB(I) * F
+	   IF (F  >  1) F = 1.0
+           CB(I) = CB(I) * F
  
+
+
 2	   CONTINUE
 	   CALL WRTLIN(LUNO,B,NX,NR)
 

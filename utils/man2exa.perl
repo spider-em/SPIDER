@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #
-# SOURCE: /usr8/spider/utils/man2exa.perl
+# SOURCE: /usr16/software/spider/utils/man2exa.perl
 #
 # PURPOSE:  Converts ascii manuals of SPIDER in $oldman_dir to exa shell
 #
@@ -8,7 +8,7 @@
 
 
 $spider_root = qq($ENV{'SPIDER_ROOT'});
-$spider_root = "/usr8/spider";
+$spider_root = "/usr16/software/spider";
 
 $hr          = qq(<p>\n);
 

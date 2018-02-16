@@ -99,7 +99,7 @@ C       @@@@@@@@@@@@@@@@@@@  DECLARATIONS @@@@@@@@@@@@@@@@@@@@@@@@@@@@@
         CHARACTER(LEN=MAXNAM) :: RESULT,LOG,SPIRE_FILE
 
         CHARACTER(LEN=160)    :: MESG,PLINE,ARG4,ARGNOW,FCHARNOBLANK
-        CHARACTER(LEN=39)     :: CVERS
+        CHARACTER(LEN=40)     :: CVERS
         CHARACTER(LEN=12)     :: CDATT
         CHARACTER(LEN=8)      :: ZEIT
         CHARACTER(LEN=7)      :: RESULM
@@ -159,7 +159,7 @@ C       @@@@@@@@@@@@@@@@@@@@@@@@@@ DATA STATEMENTS @@@@@@@@@@@@@@@@@@@@
 C       @@@@@@@@@@@@@@@@@@@@@@ VERSION INITIALIZATION @@@@@@@@@@@@@@@@@
 
 CHERE               123456789 123456789 123456789 1234567890 
-        DATA CVERS/'VERSION:  UNIX  24.03 Issued: 5/26/2017 '/
+        DATA CVERS/'VERSION:  UNIX 24.06  ISSUED:  2/12/2018'/
 
         DATA RESULM/'results'/
         DATA LOGM/'LOG'/
@@ -319,11 +319,22 @@ C           PRINT OUT HEADING WITH VERSION AND RELEASE DATES
             WRITE(NOUT,9093)CVERS
             WRITE(NOUT,9094)CDATT(1:11),CTIM
 
+#if defined(SP_IFC) || defined(__INTEL_COMPILER)
+ 9090   FORMAT('  \__`O O''__/        SPIDER -- COPYRIGHT')
+#else
  9090   FORMAT('  \\__`O O''__/        SPIDER -- COPYRIGHT')
- 9091   FORMAT('  ,__xXXXx___        HEALTH RESEARCH INC., ALBANY, NY.') 
+#endif
+
+ 9091   FORMAT('  ,__xXXXx__         HEALTH RESEARCH INC., MENANDS, NY') 
  9092   FORMAT('   __xXXXx__')
+
+#if defined(SP_IFC) || defined(__INTEL_COMPILER)
+ 9093   FORMAT('  /  /xxx\  \        ',A)
+ 9094   FORMAT('    /     \          DATE:     ',A,'    AT  ',A,/)
+#else
  9093   FORMAT('  /  /xxx\\  \\        ',A)
  9094   FORMAT('    /     \\          DATE:     ',A,'    AT  ',A,/)
+#endif
 
             WRITE(NOUT,9097)
  9097       FORMAT('  If SPIDER is useful, please cite:',/,
@@ -1020,8 +1031,7 @@ C@@@@@@@@@@@@@@@@@@@ OTHER LOCAL OPERATIONS @@@@@@@@@@@@@@@@@@@@@@@@@@@
 
 C     IQ VAR      ------------------------------------------------- IQ
 C            123456789 123456789 123456789 1234567890 
-C     CVERS/'VERSION:  UNIX  20.07 ISSUED: 1/30/2012'/ 
-8300  READ(CVERS(17:21),*) FVERS
+8300  READ(CVERS(16:20),*) FVERS
       WRITE(NOUT,8301) FVERS
 8301  FORMAT('  SPIDER VERSION: ',F5.2,/)
       CALL REG_SET_NSEL(1,1,FVERS, 0.0,0.0,0.0,0.0,IRTFLG)   

@@ -26,9 +26,10 @@ C **********************************************************************
 C
 C FOURING_Q(CIRC,LCIRC,NUMR,NRING,EO,MODE)
 C
-C  PARAMETERS:
-C               CIRC   - FT OF RINGS MULTIPLIED BY WEIGHTS   (SENT/RET)
-C               EO  WEIGHTING?                                     RET. 
+C PARAMETERS:
+C             CIRC   - FT OF RINGS MULTIPLIED BY WEIGHTS   (SENT/RET)
+C             EO  WEIGHTING?                                     RET. 
+C
 C23456789012345678901234567890123456789012345678901234567890123456789012
 C--*********************************************************************
 
@@ -43,7 +44,7 @@ C--*********************************************************************
         IF (MODE .EQ. 'F')  PI = 2*PI
         E = 0.0
 
-c$omp   parallel do private(i,j,nval,qt),reduction(+:e)
+c$omp   parallel do private(i,j,nval,igo,qt),reduction(+:e)
         DO  I=1,NRING
            NVAL = NUMR(3,I) - 2
            IGO  = NUMR(2,I)
@@ -58,7 +59,7 @@ c$omp   parallel do private(i,j,nval,qt),reduction(+:e)
 
 c       parallel do private(i,inv,nval,igo)(FAILS MAKING PLAN WITH FFTW3)
         DO I=1,NRING
-           INV  = +1
+           INV  = +1              ! FMRS USES INV AS ERROR RETURN
            NVAL = NUMR(3,I) - 2
            IGO  = NUMR(2,I)
            CALL FMRS_1(CIRC(IGO),NVAL,INV)

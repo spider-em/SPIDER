@@ -1,12 +1,12 @@
 C++*********************************************************************
 C
-C PW3SR.F                       HALF BUG FIXED FEB 02 ArDean Leith
-C
+C PW3SR.F                       HALF BUG FIXED   FEB 02  ArDean Leith
+C                               PARALLEL         FEB 18  ArDean Leith
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Copyright 1985-2018  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -24,51 +24,100 @@ C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
 C **********************************************************************
 C
-C PW3SR(Q,NSAM,NROW,NSLICE,MODE)
+C PW3SR(Q,NX,NY,NZ,MODE)
 C
 C PURPOSE: POWER SPECTRUM OF VOLUME
-C
-C IMAGE_PROCESSING_ROUTINE
 C
 C23456789012345678901234567890123456789012345678901234567890123456789012
 C--*********************************************************************
 
-        SUBROUTINE PW3SR(Q,NSAM,NROW,NSLICE,MODE)
+        SUBROUTINE PW3SR(Q,NX,NY,NZ,MODE)
 
-        DIMENSION    Q(NSAM+2-MOD(NSAM,2),NROW,NSLICE)
-        CHARACTER*1  MODE
-        LOGICAL*1    IFND,IFNL
+        IMPLICIT NONE
+        REAL         :: Q(NX+2-MOD(NX,2),NY,NZ)
+        INTEGER      :: NX,NY,NZ
+        CHARACTER    :: MODE
 
-        NNNN  = NSAM+2-MOD(NSAM,2)
-        IFND  = MOD(NROW,2).EQ.0
-        IFNL  = MOD(NSLICE,2).EQ.0
-        NSC   = NSAM/2+1
+        LOGICAL      :: EVENY,EVENZ,WANTLOG,WANT2,WANTPH
+        INTEGER      :: LSD,LSDM1,NSC,K,J,I,JJ,KK,NSL,KB,II,JB
+        INTEGER      :: NXD2,NYD2,NZD2
+        REAL         :: SCL,SCLSQ,TEMP,FVAL
 
-        SCL = 2.0/FLOAT(NSAM)/FLOAT(NROW)/FLOAT(NSLICE)
 
-        DO K=1,NSLICE
-	   IF (MODE .EQ. '2')  THEN
-              DO J=1,NROW
-                 DO I=NNNN-1,1,-2
-                    Q(NNNN-1-(NNNN-1-I)/2,J,K) =
-     &               SCL*SCL*(Q(I+1,J,K)*Q(I+1,J,K)+Q(I,J,K)*Q(I,J,K))
-                 ENDDO
+        LSD   = NX + 2 - MOD(NX,2)
+        LSDM1 = LSD -1
+
+        EVENY = MOD(NY,2) == 0
+        EVENZ = MOD(NZ,2) == 0
+
+        NSC   = NXD2+1               ! REDEFINED BELOW
+
+        NXD2  = NX/2
+        NYD2  = NY/2
+        NZD2  = NX/2
+
+        WANTPH  = (INDEX(MODE,'P') > 0)
+        WANTLOG = (INDEX(MODE,'L') > 0)
+        WANT2   = (INDEX(MODE,'2') > 0)
+
+C       SCALE FACTOR
+        SCL   = 2.0 / FLOAT(NX) / FLOAT(NY) / FLOAT(NZ)
+        SCLSQ = SCL * SCL
+
+C       LOOP OVER ALL ROWS, PUTTING AMPS IN RIGHT HALF OF ROW
+
+	IF (WANT2)  THEN    ! UNDOCUMENTED
+C         SQUARE OF STANDARD POWER SPECTRUM
+c$omp     parallel do private(k,j,i)
+          DO K=1,NZ
+            DO J=1,NY
+              DO I=LSDM1,1,-2
+                 Q(LSDM1-(LSDM1-I)/2,J,K) = SCLSQ *
+     &               (Q(I+1,J,K)*Q(I+1,J,K) + Q(I,J,K)*Q(I,J,K))
               ENDDO
+            ENDDO
+          ENDDO
 
-	   ELSE
-              DO J=1,NROW
-                 DO I=NNNN-1,1,-2
-                    Q(NNNN-1-(NNNN-1-I)/2,J,K) =
-     &               SCL*SQRT(Q(I+1,J,K)*Q(I+1,J,K)+Q(I,J,K)*Q(I,J,K))
-                 ENDDO
+        ELSEIF (WANTLOG) THEN
+C         LOG OF STANDARD POWER SPECTRUM
+c$omp     parallel do private(k,j,i,fval)
+          DO K=1,NZ
+            DO J=1,NY
+              DO I=LSDM1,1,-2
+                 FVAL = SCL * 
+     &                  SQRT(Q(I+1,J,K)*Q(I+1,J,K)+Q(I,J,K)*Q(I,J,K))
+
+                 IF (FVAL > 0.0) THEN
+                    Q(LSDM1-(LSDM1-I)/2,J,K) = LOG10(FVAL)
+                 ELSE
+C                   CAN NOT TAKE LOG!!
+                    Q(LSDM1-(LSDM1-I)/2,J,K) = 0.0
+                 ENDIF
               ENDDO
-	   ENDIF
-        ENDDO
+            ENDDO
+          ENDDO
 
-        DO K=1,NSLICE
-           DO J=1,NROW/2
-              JJ = J+NROW/2+MOD(NROW,2)
-              DO I=NSC,NNNN-1
+        ELSE
+C         STANDARD POWER SPECTRUM
+c$omp     parallel do private(k,j,i)
+          DO K=1,NZ
+             DO J=1,NY
+               DO I=LSDM1,1,-2
+                  Q(LSDM1-(LSDM1-I)/2,J,K) = SCL *
+     &                SQRT(Q(I+1,J,K)*Q(I+1,J,K)+Q(I,J,K)*Q(I,J,K))
+               ENDDO
+             ENDDO
+          ENDDO
+        ENDIF
+
+       
+C       INTERCHANGE TOP AND BOTTEM HALF OF RIGHT HALF COLUMNS
+          
+c$omp   parallel do private(k,j,jj,i,temp)
+        DO K=1,NZ
+           DO J=1,NYD2
+              JJ = J + NYD2 + MOD(NY,2)
+              DO I=NSC,LSDM1
                  TEMP      = Q(I,J,K)
                  Q(I,J,K)  = Q(I,JJ,K)
                  Q(I,JJ,K) = TEMP
@@ -76,22 +125,23 @@ C--*********************************************************************
            ENDDO
         ENDDO
 
-        IF (.NOT. IFND)  THEN
-           DO K=1,NSLICE
-              DO I=NSC,NNNN-1
-                 TEMP = Q(I,NROW/2+1,K)
-                 DO J=NROW/2+1,NROW-1
+        IF (.NOT. EVENY)  THEN
+           DO K=1,NZ
+              DO I=NSC,LSDM1
+                 TEMP = Q(I,NYD2+1,K)
+                 DO J=NYD2+1,NY-1
                     Q(I,J,K) = Q(I,J+1,K)
                  ENDDO
-                 Q(I,NROW,K) = TEMP
+                 Q(I,NY,K) = TEMP
               ENDDO
            ENDDO
         ENDIF   
 
-        DO K=1,NSLICE/2
-           KK=K+NSLICE/2+MOD(NSLICE,2)
-           DO J=1,NROW
-              DO I=NSC,NNNN-1
+c$omp   parallel do private(k,kk,j,i,temp)
+        DO K=1,NZD2
+           KK = K + NZD2 + MOD(NZ,2)
+           DO J=1,NY
+              DO I=NSC,LSDM1
                  TEMP      = Q(I,J,K)
                  Q(I,J,K)  = Q(I,J,KK)
                  Q(I,J,KK) = TEMP
@@ -99,36 +149,37 @@ C--*********************************************************************
            ENDDO
         ENDDO
 
-        IF (.NOT. IFNL)  THEN
-           DO J=1,NROW
-              DO I=NSC,NNNN-1
-                 TEMP=Q(I,J,NSLICE/2+1)
-                 DO K=NSLICE/2+1,NSLICE-1
-                    Q(I,J,K)   = Q(I,J,K+1)
+        IF (.NOT. EVENZ)  THEN
+           DO J=1,NY
+              DO I=NSC,LSDM1
+                 TEMP = Q(I,J,NZD2+1)
+                 DO K=NZD2+1,NZ-1
+                    Q(I,J,K) = Q(I,J,K+1)
                  ENDDO
-                 Q(I,J,NSLICE) = TEMP
+                 Q(I,J,NZ) = TEMP
               ENDDO
            ENDDO
         ENDIF   
 
-        NSC = NNNN/2-1
-        NSL = NSLICE/2
-        IF (IFND)  THEN
-           IF (IFNL)  THEN
-              KB=2
+C       REVERSE COLS ON RIGHT HALF OF FIRST LINE INTO LEFT HALF
+        NSC = LSD / 2 - 1
+        NSL = NZD2
+        IF (EVENY)  THEN
+           IF (EVENZ)  THEN
+              KB = 2
               DO I=1,NSC
-                 II=NNNN-I
+                 II       = LSD - I
                  Q(I,1,1) = Q(II,1,1)
               ENDDO
            ELSE
-              KB=1
+              KB = 1
            ENDIF
 
            JB = 2
-           DO K=KB,NSLICE
-              KK=NSLICE-K+KB
+           DO K=KB,NZ
+              KK = NZ-K+KB
               DO I=1,NSC
-                 II       = NNNN-I
+                 II       = LSD - I
                  Q(I,1,K) = Q(II,1,KK)
               ENDDO
            ENDDO
@@ -136,31 +187,58 @@ C--*********************************************************************
            JB=1
         ENDIF
 
-        IF (IFNL)  THEN
-           KB=2
-           DO J=JB,NROW
-              JJ=NROW-J+JB
+        IF (EVENZ)  THEN
+           KB = 2
+           DO J=JB,NY
+              JJ = NY-J+JB
               DO I=1,NSC
-                 II       = NNNN-I
+                 II       = LSD - I
                  Q(I,J,1) = Q(II,JJ,1)     
               ENDDO
            ENDDO
         ELSE
            KB=1
         ENDIF
-        DO K=KB,NSLICE
-           KK = NSLICE-K+KB
-           DO J=JB,NROW
-              JJ=NROW-J+JB
+
+C       REVERSE COLS ON RIGHT HALF OF REMAINING LINES INTO LEFT HALF 
+
+c$omp parallel do private(k,kk,j,jj,i,ii)
+        DO K=KB,NZ
+           KK = NZ-K+KB
+           DO J=JB,NY
+              JJ=NY-J+JB
               DO I=1,NSC
-                 II       = NNNN-I
+                 II       = LSD - I
                  Q(I,J,K) = Q(II,JJ,KK)
               ENDDO
            ENDDO
         ENDDO
 
-        IF (MODE .EQ. 'L') CALL AL10(Q,NNNN*NROW*NSLICE)
-
-	Q(NSAM/2+1,NROW/2+1,NSLICE/2+1) = Q(NSAM/2,NROW/2,NSLICE/2)
+C       REPLACE ORIGIN WITH ADJACENT VALUE TO HELP CONTRAST
+	Q(NXD2+1,NYD2+1,NZD2+1) = Q(NXD2,NYD2,NZD2)
 
         END
+
+
+
+#ifdef NEVER
+         subroutine  checkit(x,nx,lsd,ny,nz)
+
+         real    :: x(lsd,ny,nz)
+         integer :: nx,ny,nz
+
+         !write(6,*)' log(1),log(0):',n,log10(1.0),log10(0.0),log10(-1.0)
+
+         do   k=1,nz
+         do   j=1,ny
+         do   i=1,nx
+            if (x(i,j,k) < 0) then
+               write (6,*) 'i,j,k,q(ijk):',i,j,k,x(i,j,k)
+               stop
+            endif
+         enddo
+         enddo
+         enddo
+         end
+
+#endif

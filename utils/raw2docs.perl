@@ -1,10 +1,11 @@
 #!/usr/bin/perl
 #
-# SOURCE: /usr8/spider/utils/raw2docs.perl
+# SOURCE: /usr16/software/spider/utils/raw2docs.perl
 #
 # CHANGES:
 #         Added exa buttons and links            ArDean Leith  Jan. 2013
 #         Moved raw man dir                      ArDean Leith  Mar. 2015
+#         usr16                                  ArDean Leith  Apr. 2017
 #
 # PURPOSE: Puts buttons, header, and trailer on html documents. If -wadsworth
 #          copies files to external Web site
@@ -12,8 +13,8 @@
 #          their replacements done. The $rel_path is suitably modified  enroute..
 #
 # Locations and definitions previously in: htdefs.ph;
-$spider_root   = qq($ENV{'SPIDER_ROOT'});
-$spider_root   = "/usr8/spider";
+$spider_root   = qq($ENV{'SPIDER_DIR'});
+print " SPIDER source dir: $spider_root \n";
 
 $raw_docs_dir  = qq($spider_root/rawdocs);   # Unheaderized HTML docs directory
 $docs_dir      = qq($spider_root/docs);      # Final headerized HTML docs directory

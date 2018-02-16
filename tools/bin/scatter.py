@@ -32,7 +32,7 @@ import Image, ImageTk, ImageChops
 from support import Spiderutils
 
 import webbrowser
-webpage = "http://www.wadsworth.org/spider_doc/spider/docs/spire/guitools/scatter.html"
+webpage = "http://www.wadsworth.org/spider_doc/spider/tools/docs/scatter.html"
 
 # returns "" if user hits 'cancel'
 def askfilename():

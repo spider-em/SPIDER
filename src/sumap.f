@@ -1,7 +1,7 @@
 
 C++*********************************************************************
 C
-C $$ SUMAP.FOR
+C SUMAP.F
 C
 C **********************************************************************
 C=*                                                                    *
@@ -25,23 +25,22 @@ C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
 C **********************************************************************
 C
+C SUMAP
 C
-C IMAGE_PROCESSING_ROUTINE
-C
-C        1         2         3         4         5         6         7
 C23456789012345678901234567890123456789012345678901234567890123456789012
 C--*********************************************************************
 
-
         SUBROUTINE SUMAP(
      &  ANGOLD,XSHOLD,YSHOLD,ANGNEW,XSHNEW,YSHNEW,ANGSUM,XSHSUM,YSHSUM)
+
         PARAMETER (QUADPI = 3.141592653589793238462643383279502884197)
         PARAMETER (DGR_TO_RAD = (QUADPI/180))
 
-        C=COS(ANGNEW*DGR_TO_RAD)
-        S=-SIN(ANGNEW*DGR_TO_RAD)
-        XSHSUM=XSHNEW+XSHOLD*C-YSHOLD*S
-        YSHSUM=YSHNEW+XSHOLD*S+YSHOLD*C
-        ANGSUM=AMOD(ANGNEW+ANGOLD,360.0)
+        C      = COS(ANGNEW*DGR_TO_RAD)
+        S      = -SIN(ANGNEW*DGR_TO_RAD)
+        XSHSUM = XSHNEW+XSHOLD*C-YSHOLD*S
+        YSHSUM = YSHNEW+XSHOLD*S+YSHOLD*C
+        ANGSUM = AMOD(ANGNEW+ANGOLD,360.0)
+
         END
 

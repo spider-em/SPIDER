@@ -4,10 +4,10 @@
 
 # ORIGINAL SOURCE: /usr8/spider/spire/spire_linux-1.5.5
 
-# CURRENT SOURCE:  /usr8/spider/tools-src/tools-create-dist.csh
+# CURRENT SOURCE:  /usr16/software/spider/tools-src/tools-create-dist.csh
 
 # Set some variables for input locations
-set spiroot = /usr8/spider    
+set spiroot = /usr16/software/spider    
 set srcdir  = $spiroot/tools-src
 
 # Set some variables for output locations
@@ -68,7 +68,7 @@ tar cvf tools.tar *
 tar --delete -vf  tools.tar use-spider-utils-create-tools-dist-to-update
 gzip tools.tar  
 
-echo ' 'Use:  /usr8/spider/utils/tosend.csh  to update distribution release
+echo ' 'Use:  /usr16/software/spider/utils/tosend.csh  to update distribution release
 
 exit
 
@@ -76,11 +76,11 @@ exit
 # ------------------------------ File notes  ---------------------
 
 # Master copy
-#/usr8/spider/tools-src    79Mb    Has: Attic,RCS     Lacks: *.pyc
+#/usr16/software/spider/tools-src    79Mb    Has: Attic,RCS     Lacks: *.pyc
 
-# Distribution copy created using: /usr8/spider/utils/create-tools-dist.csh
-#/usr8/spider/tools-dist  105Mb    Has: tar=51Mb      Lacks: tst, *.pyc, RCS 
+# Distribution copy created using: /usr16/software/spider/utils/create-tools-dist.csh
+#/usr16/software/spider/tools-dist  105Mb    Has: tar=51Mb      Lacks: tst, *.pyc, RCS 
 
 # Local execution copy
-#/usr8/spider/tools        91Mb    Has tar.gz=21Mb
+#/usr16/software/spider/tools        91Mb    Has tar.gz=21Mb
 

@@ -1,12 +1,13 @@
 
 C ++********************************************************************
 C
-C OPSTREAMFILE             STREAM IO               FEB 13 ArDean Leith
+C OPSTREAMFILE  STREAM IO                        FEB 2013 ArDean Leith
+C               CONVERT LITTLE ENDED OPTION      JAN 2018 ArDean Leith
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2015  Health Research Inc.,                         *
+C=* Copyright 1985-2018  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -27,7 +28,8 @@ C
 C OPSTREAMFILE(ASKNAME,FILNAM,EXTENT,LUNT, FORMVAR, DISP, 
 C              PROMPTT,CALLERRT,IRTFLG)
 C                                                                      
-C PURPOSE: 
+C PURPOSE: OPENS NON-SPIDER STREAM FILE (CAN HAVE EXTENSION OTHER
+C          THAN DATEXC)
 C
 C NOTES: 
 C
@@ -50,7 +52,7 @@ C***********************************************************************
         LOGICAL           :: CALLERRT
         INTEGER           :: IRTFLG
 
-        LOGICAL           :: EX
+        LOGICAL           :: EX,CONVERT_TO_LITTLE
         CHARACTER(LEN=96) :: PROMPT
         CHARACTER(LEN=80) :: EXTEN
         CHARACTER(LEN=7)  :: STATVAR
@@ -106,7 +108,9 @@ C          MAKE SURE THIS IS NOT TREATED AS INLINE FILE
         ENDIF
 
 C       SET STATUS FOR OPEN
-        STATVAR = 'NEW'
+
+        CONVERT_TO_LITTLE = (DISP(2:2) == 'L')
+        STATVAR           = 'NEW'
 
         IF (DISP(1:1) == 'N' .OR. DISP(1:1) == 'U') 
      &     STATVAR = 'REPLACE'
@@ -145,13 +149,35 @@ C       COMPUTE RECL UNITS (DIFFERS WITH OS &A COMPILER FLAGS)
 
         IF (MYPID <= 0) THEN
            IF (STATVAR == 'SCRATCH') THEN
-	      OPEN(UNIT=LUN,STATUS=STATVAR,
+              IF (CONVERT_TO_LITTLE) THEN
+C                FORCE OUTPUT TO LITTLE_ENDIAN
+
+	         OPEN(UNIT=LUN,STATUS=STATVAR,
+     &             CONVERT='LITTLE_ENDIAN',
      &             FORM=FORMVAR, ACCESS='STREAM',
      &             IOSTAT=IRTFLGT)
+
+	      ELSE
+
+	         OPEN(UNIT=LUN,STATUS=STATVAR,
+     &             FORM=FORMVAR, ACCESS='STREAM',
+     &             IOSTAT=IRTFLGT)
+              ENDIF
            ELSE
-	      OPEN(UNIT=LUN,FILE=FILNAM(1:NCHAR),STATUS=STATVAR,
+
+              IF (CONVERT_TO_LITTLE) THEN
+C               FORCE OUTPUT TO LITTLE_ENDIAN
+
+	        OPEN(UNIT=LUN,FILE=FILNAM(1:NCHAR),STATUS=STATVAR,
+     &             CONVERT='LITTLE_ENDIAN',
      &             FORM=FORMVAR, ACCESS='STREAM', 
      &             IOSTAT=IRTFLGT)
+             ELSE
+	        OPEN(UNIT=LUN,FILE=FILNAM(1:NCHAR),STATUS=STATVAR,
+     &             FORM=FORMVAR, ACCESS='STREAM', 
+     &             IOSTAT=IRTFLGT)
+             ENDIF
+
            ENDIF
         ENDIF
 

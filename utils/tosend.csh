@@ -1,9 +1,9 @@
 #! /bin/csh
 #
-# SOURCE:  /usr8/spider/utils/tosend.csh
+# SOURCE:  /usr16/software/spider/utils/tosend.csh
 #
 # PURPOSE: Update local copy of SPIDER distribution        
-#          The distribution copy is currently in:  /usr8/send/spider/...
+#          The distribution copy is currently in:  /usr16/software/send/spider/...
 #
 # NEXT:    The combined SPIDER/WB distribution can then be placed in a compressed
 #            tar archive and put in the download directory on the
@@ -15,48 +15,49 @@
 #          Nextresults                 Feb 2009
 #          Rewrite for Linux & rsync   Mar 2009
 #          Rewrite for /usr8           Jul 2010
+#          Rewrite for /usr16          Apr 2017
 
 echo 
-echo "Did you run: /usr8/spider/docs/techs/recon/spr2tar.csh          first?"
-echo "Did you run: /usr8/spider/docs/techs/recon1a/Utils/spr2tar.csh  first?"
-echo "Did you run: /usr8/spider/docs/techs/recon1b/Utils/spr2tar.csh  first?"
-echo "Did you run: /usr8/spider/utils/create-tools-dist.csh           first?"
+echo "Did you run: /usr16/software/spider/docs/techs/recon/spr2tar.csh          first?"
+echo "Did you run: /usr16/software/spider/docs/techs/recon1a/Utils/spr2tar.csh  first?"
+echo "Did you run: /usr16/software/spider/docs/techs/recon1b/Utils/spr2tar.csh  first?"
+echo "Did you run: /usr16/software/spider/utils/create-tools-dist.csh           first?"
 echo 
 
 # Set some variables for input locations
-set spiroot    = /usr8/spider    
+set spiroot      = /usr16/software/spider    
 
-set srcdir     = $spiroot/src
-set bindir     = $spiroot/bin
-set mandir     = $spiroot/man
-set procdir    = $spiroot/proc
-set docdir     = $spiroot/docs
-set tipsdir    = $spiroot/docs/tips
-set pubsubdir  = $spiroot/pubsub
-set fftwdir    = $spiroot/fftw
-set toolsdir   = $spiroot/tools
-set spiredir   = $spiroot/spire 
+set srcdir       = $spiroot/src
+set bindir       = $spiroot/bin
+set mandir       = $spiroot/man
+set procdir      = $spiroot/proc
+set docdir       = $spiroot/docs
+set tipsdir      = $spiroot/docs/tips
+set pubsubdir    = $spiroot/pubsub
+set fftwdir      = $spiroot/fftw
+set toolsdir     = $spiroot/tools
+set spiredir     = $spiroot/spire 
 set spiredistdir = $spiroot/spire-dist 
    
-set jwebdir    = /usr8/web/jweb 
+set jwebdir      = /usr16/software/web/jweb 
 
 # Set some variables for output locations
-set destroot   = /usr8/send     
+set destroot     = /usr16/software/send     
 
-set srcdest    = $destroot/spider/src
-set docdest    = $destroot/spider/docs 
-set mandest    = $destroot/spider/man
-set procdest   = $destroot/spider/proc
-set bindest    = $destroot/spider/bin
-set fftwdest   = $destroot/spider/fftw
-set pubsubdest = $destroot/spider/pubsub
-set spiredest  = $destroot/spider/spire
-set toolsdest  = $destroot/spider/tools
-set jwebdest   = $destroot/web/jweb
+set srcdest      = $destroot/spider/src
+set docdest      = $destroot/spider/docs 
+set mandest      = $destroot/spider/man
+set procdest     = $destroot/spider/proc
+set bindest      = $destroot/spider/bin
+set fftwdest     = $destroot/spider/fftw
+set pubsubdest   = $destroot/spider/pubsub
+set spiredest    = $destroot/spider/spire
+set toolsdest    = $destroot/spider/tools
+set jwebdest     = $destroot/web/jweb
 
 # Make necessary dir
-mkdir -p $destroot/spider    $srcdest $docdest $mandest 
-mkdir -p $procdest $fftwdest $pubsubdest
+mkdir -p $destroot/spider     $srcdest $docdest $mandest 
+mkdir -p $procdest $fftwdest  $pubsubdest
 mkdir -p $destroot $jwebdest
 
 # Set rsync = verbose, compressed, update, 
@@ -70,16 +71,19 @@ set excludes = "--exclude="RCS" --exclude="Attic" --exclude="dev" "
 
 echo  'Copying src files. xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
 
-$sendit -d  $srcdir/*.f   \
-            $srcdir/*.INC \
-            $srcdir/Make* \
-            $srcdir/*.inc \
+$sendit -d  $srcdir/*.f      \
+            $srcdir/*.INC    \
+            $srcdir/Make*    \
+            $srcdir/*.inc    \
+            $srcdir/makeall  \
             $srcdir/Nextversion   $srcdest
 
 # Replace Makebody.inc with distribution version
-$sendit -d $srcdir/Makebody.inc.send  $srcdest/Makebody.inc
+\cp -p $srcdir/Makebody.inc.send  $srcdest/Makebody.inc
 
 $sendit -d $excludes $srcdir/Makefile_samples/*  $srcdest/Makefile_samples
+$sendit -dv $excludes $srcdir/pgi_mods/*         $srcdest/pgi_mods
+$sendit -dv $excludes $srcdir/ifort_mods/*       $srcdest/ifort_mods
  
 # --------------------- Copy man files -------------------------------
 
@@ -142,18 +146,20 @@ $sendit -r $spiredistdir/spire_linux-1.5.5.tar.gz $spiredest
 
 # --------------------- Copy JWeb files ---------------------------
 
-echo 'Copying JWeb Linux, & Windows files. xxxxxxxxxxxxxxxx'
+echo 'Copying JWeb files. xxxxxxxxxxxxxxxx'
 
-$sendit -r $excludes       \
-           $jwebdir/linux  \
-           $jwebdir/win    \
-           $jwebdir/src    $jwebdest
+$sendit -r $excludes                    \
+           $jwebdir/src                 \
+           $jwebdir/linux.tar.gz    $jwebdest
 
 # --------------------- Copy  html doc & tech files --------------------------
 
 echo 'Copying html doc & tech files. xxxxxxxxxxxxxxxxxxxxxx'
 
-$sendit -r  $excludes --exclude="tips"                    \
+$sendit -rL  $excludes --exclude="tips"                   \
+           --exclude="tar_archive/rct2*"                  \
+           --exclude="spiproject.1*"                      \
+           --exclude="spiproject.tar.gz"                  \
            --exclude="techs/lgstr/tomo/data"              \
            --exclude="techs/lgstr/tomo/output"            \
            --exclude="exa/images/bp3fpart*dat"            \
@@ -167,17 +173,17 @@ echo 'SPIDER successfully copied to: distribution dir '
 echo ' '
 echo 'Check for extra  tar archives '
 echo 'Update FFTW files with: send-fftw.sh '
-echo 'Update executables with make in src dir '
-echo 'Update Web  with:       /usr8/web/utils/tosend.sh '
-echo 'touch /usr8/send/spider/bin/CONTAINS_SPIDER_RELEASE_24.00 '
-echo 'Archive and compress the distribution in: /usr8/send '
+echo 'Update executables with makeall in src dir (on staten & valcour)'
+echo 'Update Web  with:       /usr16/software/web/utils/tosend.sh '
+echo 'touch /usr16/software/send/spider/bin/CONTAINS_SPIDER_RELEASE_24.03 '
+echo 'Archive and compress the distribution in: /usr16/software/send '
 echo 'set wwwdir = spider-stage:/export/apache/vhosts/spider.wadsworth.org/htdocs/spider_doc/spider '
-echo 'scp -p /usr8/send/spiderweb.23.02.tar.gz  $wwwdir/download '
-echo 'Edit: /usr8/spider/docs/spi-download.html '
-echo 'scp -p /usr8/spider/docs/spi-download.html  $wwwdir/docs '
-echo 'Update external web pages using: /usr8/spider/utils/wwwupdate.sh '
+echo 'scp -p /usr16/software/send/spiderweb.24.03.tar.gz  $wwwdir/download '
+echo 'Edit:  /usr16/software/spider/docs/spi-download.html '
+echo 'scp -p /usr16/software/spider/docs/spi-download.html  $wwwdir/docs '
+echo 'Update external web pages using: /usr16/software/spider/utils/wwwupdate.csh '
 echo ' '
 
-#echo 'Update executables from OSX spider '
 
 exit 0
+rm -v spider/docs/techs/recon*/spiproject.1*
