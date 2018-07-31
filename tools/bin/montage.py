@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-# montage.py : display a set of SPIDER images files in a window.
+# montage.py : Display a set of SPIDER images files in a window.
 #
 # Spider Python Library
 # Copyright (C) 2006  Health Research Inc.
@@ -8,7 +8,7 @@
 # HEALTH RESEARCH INCORPORATED (HRI),
 # ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455
 #
-# Email:  spider@wadsworth.org
+# Email:  spider@health.ny.gov
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License as
@@ -20,24 +20,25 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 # General Public License for more details.
 
-from Tkinter import *
 import Pmw
-
-from tkFileDialog import askopenfilename, asksaveasfilename
-from   tkMessageBox   import showinfo, showerror
-import Image, ImageTk
 import os,sys
-from math import sqrt
-#from SpiderImagePlugin import *
-from Spider import Spiderutils, SpiderImageSeries
-from Spider.Spiderarray import spider2array, array2image
+
+from   PIL                 import Image
+from   PIL                 import ImageTk
+from   Tkinter             import *
+from   tkFileDialog        import askopenfilename, asksaveasfilename
+from   tkMessageBox        import showinfo, showerror
+from   math                import sqrt
+from   SpiderImagePlugin   import *
+from   Spider              import Spiderutils, SpiderImageSeries
+from   Spider              import Spiderarray
 
 class selectionClass:
     def __init__(self, value, key, color, label, activecolor=None):
-        self.value = value # int
-        self.key = key     # string of a number
-        self.color = color
-        self.label = label # for radiobutton menu
+        self.value  = value   # Int
+        self.key    = key     # String of a number
+        self.color  = color
+        self.label  = label   # For radiobutton menu
         self.active = ""
         if activecolor != None:
             self.active = activecolor
@@ -61,7 +62,7 @@ def newcolor(value):
 
 
 def volume2imagelist(filename):
-    " converts a Spider volume into a list of PIL images"
+    " Converts a Spider volume into a list of PIL images"
     imlist = []
     V = spider2array(filename)
     x = V.flat    # flatten to 1D array to get extrema
@@ -84,11 +85,13 @@ def volume2imagelist(filename):
 #    #else:
 #   return xSpiderImageSeries.loadImageSeries(filelist)
 
+
 # ******************************************************************************
 # class montage
-#       input image list can be a list of filenames or a previously loaded
+#       Input image list can be a list of filenames or a previously loaded
 #       list of Image.images
 #       Create the toplevel window outside and pass it in
+
 class montage:
     def __init__(self, master, imagelist, title=None,
                  ncol=None, useLabels=0, savefilename=None, startkey="1"):
@@ -101,7 +104,7 @@ class montage:
         elif type(imagelist[0]) == type("string"):  # i.e., a filename
             self.imagelist = SpiderImageSeries.loadImageSeries(imagelist)
         if len(self.imagelist) < 1:
-            print "no images loaded"
+            print "No images loaded"
             return
             
         if title == None: title = "Images"
@@ -131,7 +134,7 @@ class montage:
         self.sizeVar.set(1)
         self.showVar = IntVar()
         self.showVar.set(self.useLabels)
-        self.bd = 2  # border around images
+        self.bd = 2  # Border around images
         sysbgd = self.systembackground = "#d9d9d9"
         actbgd = "#ececec"
 
@@ -151,13 +154,13 @@ class montage:
         #self.createMontage()
 
     def selectcallback(self, name, index, mode):
-        "called whenever self.selectedColor changes "
+        "Called whenever self.selectedColor changes "
         key = self.selectedColor.get()
         sc = self.selectClasses[key]
         self.ClassButton.configure(text=sc.label, background=sc.color)
         
     def makeMenus(self):
-        # ------- create the menu bar -------
+        # ------- Create the menu bar -------
         self.mBar = Frame(self.top, relief='raised', borderwidth=1)
         self.mBar.pack(side='top', fill = 'x')
         self.balloon = Pmw.Balloon(self.top)
@@ -227,7 +230,7 @@ class montage:
 
 
     def montagesize(self):
-        " returns number of columns to use "
+        " Returns number of columns to use "
         nimgs = len(self.imagelist)
         labelheight = 0
         if self.useLabels != 0:
@@ -260,7 +263,7 @@ class montage:
                 self.sf.component("clipper").configure(width=wd)
         self.top.lift()
 
-    # resizing: if the user changes the window size with the mouse, then the calls
+    # Resizing: if the user changes the window size with the mouse, then the calls
     # below to configure the frame size have no effect
     # sizefrom(who="program") didn't help on SGI
 
@@ -277,10 +280,10 @@ class montage:
         
 
     def display(self, parent):
-        size = self.sizeVar.get()
-        xhalf = int(self.xsize/2)
+        size   = self.sizeVar.get()
+        xhalf  = int(self.xsize/2)
         xtwice = 2*self.xsize
-        yhalf = int(self.ysize/2)
+        yhalf  = int(self.ysize/2)
         ytwice = 2*self.ysize
         if size != 1:
             if size == 0:
@@ -333,7 +336,7 @@ class montage:
 
     def saveSelections(self):
         """
-        savasfilename can't append to a file - if the file exists an error
+        Savasfilename can't append to a file - if the file exists an error
         message pops up.
         if output specified, don't ask (put it in window in menubar?)
         """
@@ -342,7 +345,7 @@ class montage:
         if len(filename) == 0:
             return
 
-        # construct a dictionary to pass to writedocfile
+        # Construct a dictionary to pass to writedocfile
         headers = ['file_number', 'class']
         F = {}
         key = self.startkey.get()
@@ -404,25 +407,26 @@ class montage:
         w = Toplevel(self.top)
         w.title("Montage")
         self.parmWindow(w)
-        self.top.wait_window(w) # wait for window to be destroyed
+        self.top.wait_window(w) # Wait for window to be destroyed
         try:
             i = int(self.ncolVar.get())
             if i != self.ncol:
                 self.ncol = i
                 self.createMontage()
         except:
-            print "no. of columns must be an integer"
+            print "Number of columns must be an integer"
             return
 
     def parmWindow(self,win):
         fe = Frame(win)
-        # number of columns
+        # Number of columns
         Label(fe,text="no. columns:").pack(side='left', padx=2, pady=2)
         e = Entry(fe, textvariable=self.ncolVar)
         e.pack(side='left', fill='x', expand=1, pady=2, padx=2)
         fe.pack(side='top',fill='both', expand=1)
         e.bind('<Return>', lambda e, w=win: self.parmquit(w))
-       # bottom
+	
+        # Bottom
         fbut = Frame(win, borderwidth=2) #relief='raised',
         Button(fbut, text='Ok', command=win.destroy).pack(padx=2,pady=2)
         fbut.pack(side='bottom', fill='x', expand=1)
@@ -431,15 +435,17 @@ class montage:
         win.destroy()
 
 # -------------------------------------------------------------------
+
 if __name__ == "__main__":
 
     root = Tk()
     root.title('Montage.py')
         
+	
     if sys.argv[1:]:
         filelist = sys.argv[1:]
     else:
-        filelist=None
+        filelist = None
     
     #Image.register_open("SPIDER", SpiderImageFile)
     mn = montage(root, filelist, useLabels=1)

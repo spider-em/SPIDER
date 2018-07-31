@@ -7,7 +7,7 @@
 # HEALTH RESEARCH INCORPORATED (HRI),
 # ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455
 #
-# Email:  spider@wadsworth.org
+# Email:  spider@health.ny.gov
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License as
@@ -52,17 +52,17 @@ print "montagefromdoc.py, Modified 2012 Apr 10"
 #    2007-07-07 -- added "undo filters" button, help pop-up window for keyboard shortcuts
 #    2007-06-29 -- added "smooth" button -- removed incompatible (?) contrast slidebar
 
-from Tkinter import *
-import Pmw
+from   Tkinter           import *
+import                   Pmw
 
-from tkFileDialog import askopenfilename, asksaveasfilename
-from   tkMessageBox   import showinfo, showerror
-import Image, ImageTk, ImageEnhance, ImageFilter
+from   tkFileDialog      import askopenfilename, asksaveasfilename
+from   tkMessageBox      import showinfo, showerror
+from   PIL               import Image, ImageTk, ImageEnhance, ImageFilter
+from   PIL               import ImagePalette
 import os,sys, string
-from math import sqrt
-from SpiderImagePlugin import *
-from Spider import Spiderutils
-import ImagePalette
+from   math              import sqrt
+from   SpiderImagePlugin import *
+from   Spider            import Spiderutils
 
 def backup(filename):
     if os.path.exists(filename):

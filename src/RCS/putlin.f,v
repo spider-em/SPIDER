@@ -1,4 +1,4 @@
-head	1.20;
+head	1.21;
 access;
 symbols
 	pre_getangas:1.20
@@ -21,6 +21,11 @@ symbols
 locks; strict;
 comment	@c @;
 
+
+1.21
+date	2018.06.13.16.18.16;	author leith;	state Exp;
+branches;
+next	1.20;
 
 1.20
 date	2010.06.24.13.26.34;	author leith;	state Exp;
@@ -128,21 +133,23 @@ desc
 @
 
 
-1.20
+1.21
 log
-@GPL_2010
+@no common buf usage now
 @
 text
 @
 C++*********************************************************************
 C
-C PUTLIN.F                          NEW          OCT 94 ArDean Leith 
-C                                   FILNAMANDEXT MAR 03 ArDean Leith
+C PUTLIN.F            NEW                        OCT 1994 ArDean Leith 
+C                     FILNAMANDEXT               MAR 2003 ArDean Leith
+C                     NO MAXDIM                  JUN 2018 ArDean Leith
+C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Copyright 1985-2018  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@@wadsworth.org                                        *
 C=*                                                                    *
@@ -160,39 +167,39 @@ C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
 C **********************************************************************
 C
-C  PUTLIN(LUN,LUNDOC,MAXDIM)
+C  PUTLIN(LUN,LUNDOC)
 C
 C  PURPOSE: PUTS LINES IN SPIDER IMAGE FROM DOC FILE. THIS SHOULD USE
 C           BRESENHAMS ALGORITM FOR SPEED BUT I AM IN A HURRY SO I 
 C           JUST BORROWED SOME EXISTING CODE!!!!! 
-C            
-C	  LUN 		LOGICAL UNIT NUMBER OF INPUT FILE
-C	  LUNDOC	LOGICAL UNIT NUMBER OF DOCUMENT FILE
-C	  MAXDIM        MAX. BUFFER SIZE
+C 
+C  PARAMETERS:           
+C	    LUN         LOGICAL UNIT NUMBER OF INPUT FILE
+C	    LUNDOC      LOGICAL UNIT NUMBER OF DOCUMENT FILE
 C
 C--*********************************************************************
  
-	SUBROUTINE PUTLIN(LUN,LUNDOC,MAXDIM)
+	SUBROUTINE PUTLIN(LUN,LUNDOC)
 
 	INCLUDE 'CMBLOCK.INC' 
         INCLUDE 'CMLIMIT.INC'
 
-        CHARACTER(LEN=MAXNAM)   ::   DOCNAM,FILNAM,FILTST
-	COMMON /COMMUN/DOCNAM,FILNAM,FILTST
+        INTEGER               :: LUN,LUNDOC
 
-C       ACTUAL BUF LENGTH IS MAXDIM
-	COMMON BUF(1)
+        CHARACTER(LEN=MAXNAM) :: DOCNAM,FILNAM,FILTST
+        CHARACTER(LEN=1)      :: NULL = CHAR(0)
+        REAL, ALLOCATABLE     :: BUF(:)
 
         PARAMETER (MAXKEY=9999) 
         PARAMETER (MAXREG=7)    
         COMMON /DOC_BUF/ DBUF(MAXREG,MAXKEY*2)
 
-	DIMENSION     PLIST(MAXREG+1)
-        CHARACTER     NULL,DISP
-        LOGICAL       EX,NEWCNT
-        INTEGER       CNTNUM
+	REAL                  :: PLIST(MAXREG+1)
 
-        NULL = CHAR(0)
+        CHARACTER(LEN=1)      :: DISP
+        LOGICAL               :: EX,NEWCNT
+        INTEGER               :: CNTNUM
+        INTEGER               :: ICALL,LER,IRTFLG,NKEY,MAXIM
 
 C       OPEN DOC FILE THAT CONTAINS COORDINATES, ~9 ALLOWS EXTENSION
 12      CALL FILERD(DOCNAM,NLET,DATEXC,'COORDINATE DOCUMENT~9',IRTFLG)
@@ -200,7 +207,7 @@ C       OPEN DOC FILE THAT CONTAINS COORDINATES, ~9 ALLOWS EXTENSION
         ICALL = 0
         CALL UNSDAL(DOCNAM,ICALL,LUNDOC,1,PLIST,1,DBUF,
      &              MAXKEY,MAXREG,NKEY,LER)
-        IF (LER .GT. 0) GOTO 999
+        IF (LER > 0) GOTO 999
 
 C       GET NAME FOR EXISTING OR NEW IMAGE FILE
 10      CALL FILERD(FILNAM,NLET,NULL,'OUTPUT IMAGE',IRTFLG)
@@ -216,16 +223,19 @@ C       SEE IF THE IMAGE ALREADY EXISTS
         IF (EX) DISP = 'O'
 
 C       OPEN IMAGE FILE
-        IFORM  = 1
-        NSAM   = 0
-        NROW   = 0
-        NSLICE = 0
-        MAXIM  = 0
-        CALL OPFILEC(0,.FALSE.,FILNAM,LUN,DISP,IFORM,NSAM,NROW,NSLICE,
-     &             MAXIM,'IMAGE',.FALSE.,IRTFLG)
+        IFORM = 1
+        NX    = 0
+        NY    = 0
+        NZ    = 0
+        MAXIM = 0
+        CALL OPFILEC(0,.FALSE.,FILNAM,LUN,DISP,IFORM,NX,NY,NZ,
+     &              MAXIM,'IMAGE',.FALSE.,IRTFLG)
         IF (IRTFLG .NE. 0) GOTO 10
-        IF (NSAM * NROW .GT. MAXDIM) THEN
-           CALL ERRT(6,'PUTLIN',NE)
+
+        ALLOCATE(BUF(NX*NY), STAT=IRTFLG)
+        IF (IRTFLG .NE. 0) THEN
+           MWANT = NX*NY
+           CALL ERRT(46,'PUTLIN; BUF',MWANT)
            GOTO 999
         ENDIF
 
@@ -233,11 +243,11 @@ C       OPEN IMAGE FILE
 14      ICOLX = 1
         ICOLY = 2 
         CALL RDPRIS(ICOLX,ICOLY,NOT_USED,'X-COL., Y-COL.',IRTFLG)
-        IF (IRTFLG .EQ. -1) GOTO 12
+        IF (IRTFLG == -1) GOTO 12
         ICOLX = ICOLX + 1
         ICOLY = ICOLY + 1
-        IF ((ICOLX .LT. 0      .OR. ICOLY .LT. 0) .OR.
-     &      (ICOLX .GT. MAXREG .OR. ICOLY .GT. MAXREG)) THEN
+        IF ((ICOLX < 0      .OR. ICOLY < 0) .OR.
+     &      (ICOLX > MAXREG .OR. ICOLY > MAXREG)) THEN
            CALL ERRT(101,'COLUMN OUT OF REGISTER RANGE',NE)
            GOTO 10
         ENDIF
@@ -245,20 +255,20 @@ C       OPEN IMAGE FILE
 
 C       ICOLI IS COLUMN OF DOC FILE CONTAINING INTENSITY
 16      ICOLI = -55
-        IF (IRTFLG .EQ. -1) GOTO 12
+        IF (IRTFLG == -1) GOTO 12
         CALL RDPRI1S(ICOLI,NOT_USED,
      &     'LINE INTENSITY COL. (< 0 ASKS FOR INTENSITY INPUT)',IRTFLG)
-        IF (IRTFLG .EQ. -1) GOTO 14
+        IF (IRTFLG == -1) GOTO 14
 
-17      IF (ICOLI .LT. 0) THEN
+17      IF (ICOLI < 0) THEN
           CALL RDPRM1S(FOREGR,NOT_USED,'LINE INTENSITY',IRTFLG)
-           IF (IRTFLG .EQ. -1) GOTO 16
+           IF (IRTFLG == -1) GOTO 16
 
            FOREGR2 = FOREGR
            ICOLI   = -1
         ELSE
            ICOLI = ICOLI + 1
-           IF (ICOLI .LT. 0 .OR. ICOLI .GT. MAXREG) THEN
+           IF (ICOLI < 0 .OR. ICOLI > MAXREG) THEN
               CALL ERRT(101,'COLUMN OUT OF MAX. REGISTER RANGE',NE)
               GOTO 16
            ENDIF
@@ -268,38 +278,38 @@ C       ICOLI IS COLUMN OF DOC FILE CONTAINING INTENSITY
            BACKGR = 0.0
            CALL RDPRM2S(BACKGR,NDUM,NOT_USED,'BACKGROUND INTENSITY',
      &                  IRTFLG)
-          IF (IRTFLG .EQ. -1 .AND. ICOLI .EQ. -1) GOTO 17
-          IF (IRTFLG .EQ. -1 ) GOTO 16
+          IF (IRTFLG == -1 .AND. ICOLI == -1) GOTO 17
+          IF (IRTFLG == -1 ) GOTO 16
         ENDIF
 
 C       ICOLCNT IS COLUMN OF DOC FILE CONTAINING CONTOUR NUMBER
 181     ICOLCNT = 0
         CALL RDPRIS(ICOLCNT,IDUM,NOT_USED,
      &       'CONTOUR NO. COL. (= 0 FOR NONE)',IRTFLG)
-        IF (IRTFLG .EQ. -1 .AND. .NOT. EX)      GOTO 18
-        IF (IRTFLG .EQ. -1 .AND. ICOLI .EQ. -1) GOTO 17
-        IF (IRTFLG .EQ. -1) GOTO 16
+        IF (IRTFLG == -1 .AND. .NOT. EX)      GOTO 18
+        IF (IRTFLG == -1 .AND. ICOLI == -1) GOTO 17
+        IF (IRTFLG == -1) GOTO 16
         ICOLCNT = ICOLCNT + 1
       
 19      XFACT = 1.0
         YFACT = 1.0
         CALL RDPRM2S(XFACT,YFACT,NOT_USED,'X-FACTOR, Y-FACTOR',IRT)
-        IF (IRT .EQ. -1) GOTO 181
+        IF (IRT == -1) GOTO 181
 
 20      XOFF = 0.0
         YOFF = 0.0
 	CALL RDPRM2S(XOFF,YOFF,NOT_USED,'X-OFFSET, Y-OFFSET',IRT)
-        IF (IRT .EQ. -1) GOTO 19
+        IF (IRT == -1) GOTO 19
 
         IF (EX) THEN
 C          FILL BUFFER WITH EXISTING IMAGE
-           DO IREC = 1, NROW
-              J = (IREC -1) * NSAM
-              CALL REDLIN(LUN,BUF(J),NSAM,IREC)
+           DO IREC = 1, NY
+              J = (IREC -1) * NX
+              CALL REDLIN(LUN,BUF(J),NX,IREC)
            ENDDO
         ELSE
 C          FILL BUFFER WITH BACKGROUND VALUE
-           DO IVOX = 1, NSAM*NROW
+           DO IVOX = 1, NX*NY
               BUF(IVOX) = BACKGR
            ENDDO
         ENDIF
@@ -312,10 +322,10 @@ C          GET COORDS FROM DOCUMENT FILE
 
            IX2 = DBUF(ICOLX,I) * XFACT + XOFF
            IY2 = DBUF(ICOLY,I) * YFACT + YOFF
-           IF (IY2   .LT. 0) IY2 = NROW + IY2 + 1
-           IF (ICOLI .GT. 0) FOREGR2 = DBUF(ICOLI,I)
+           IF (IY2   < 0) IY2     = NY + IY2 + 1
+           IF (ICOLI > 0) FOREGR2 = DBUF(ICOLI,I)
 
-           IF (ICOLCNT .GT. 1) THEN
+           IF (ICOLCNT > 1) THEN
 C             READ CONTOUR NUMBER FROM DOC FILE
               CNTNUM = DBUF(ICOLCNT,I)
 c*************************
@@ -333,27 +343,27 @@ C             START A NEW CONTOUR
 
               IX1 = IX2
               IY1 = IY2
-              IF (IY1 .LT. 0) IY1 = NROW - IY1 + 1
-              IF (ICOLI .GT. 0) FOREGR = DBUF(ICOLI,11)
+              IF (IY1 < 0) IY1 = NY - IY1 + 1
+              IF (ICOLI > 0) FOREGR = DBUF(ICOLI,11)
 
-              IF ((IX1 .GT. NSAM .OR. IX1 .LE. 0) .OR.
-     &            (IY1 .GT. NROW .OR. IY1 .LE. 0)) THEN
+              IF ((IX1 > NX .OR. IX1 <= 0) .OR.
+     &            (IY1 > NY .OR. IY1 <= 0)) THEN
                   IONE = 1
                   WRITE(NOUT,91) IONE,IX1,IY1
               ENDIF
               NEWCNT = .FALSE.
 
-           ELSEIF ((IX2 .GT. NSAM .OR. IX2 .LE. 0) .OR.
-     &         (IY2 .GT. NROW .OR. IY2 .LE. 0)) THEN
+           ELSEIF ((IX2 > NX .OR. IX2 <= 0) .OR.
+     &             (IY2 > NY .OR. IY2 <= 0)) THEN
               WRITE(NOUT,91) I,IX2,IY2
 91            FORMAT('*** POINT NO.',I4,':(',I4,',',I4,
      &               ') OUT OF IMAGE LIMITS')
 
            ELSE
 C             POINT IS WITHIN IMAGE
-              IF (IY1 .EQ. IY2) THEN
+              IF (IY1 == IY2) THEN
 C                HORIZONTAL LINE WOULD CAUSE DIVISION BY ZERO
-                 ICON = (IY1 -1) * NSAM
+                 ICON = (IY1 -1) * NX
                  IGO  = MIN(IX1,IX2)
                  IEND = MAX(IX1,IX2)
                  DO IX = IGO,IEND
@@ -363,21 +373,21 @@ C                HORIZONTAL LINE WOULD CAUSE DIVISION BY ZERO
               ELSE
                  FACT =  FLOAT(IX2-IX1) /  FLOAT(IY2-IY1)
                  FCON =  - FACT * IY1 + 0.5
-                 IF (IX1 .GT. IX2) FCON = - FACT * IY1 - 0.5
+                 IF (IX1 > IX2) FCON = - FACT * IY1 - 0.5
                  IGO  = MIN(IY1,IY2)
                  IEND = MAX(IY1,IY2)
 
                  IXL = IX1
-                 IF (IY2 .LT. IY1) IXL = IX2
+                 IF (IY2 < IY1) IXL = IX2
 
                  DO IY = IGO,IEND
 C                  FIND X VALUE FOR THIS Y COORDINATE
                    IX = IX1 + IFIX(FACT * FLOAT(IY) + FCON)
 
 C                  SET BUFFER AT THIS LOCATION TO FOREGROUND
-                   BUF((IY -1) * NSAM + IX) = FOREGR
+                   BUF((IY -1) * NX + IX) = FOREGR
 
-                   IF (IABS(IX - IXL) .GT. 1) THEN
+                   IF (IABS(IX - IXL) > 1) THEN
 C                    MUST ADD IN INTERPOLATED X VALUES 
                      IGOX  = MIN(IX,IXL)
                      IENDX = MAX(IX,IXL)
@@ -385,14 +395,14 @@ C                    MUST ADD IN INTERPOLATED X VALUES
 
                      IYT   = IYL
                      IYEND = IY
-                     IF (IX .LT. IXL) THEN
+                     IF (IX < IXL) THEN
                          IYT   = IY
                          IYEND = IYL
                      ENDIF
 
                      DO IXT = IGOX,IENDX
-                         BUF((IYT -1) * NSAM + IXT) = FOREGR
-                        IF (IXT .EQ. IHALF) IYT = IYEND                       
+                         BUF((IYT -1) * NX + IXT) = FOREGR
+                        IF (IXT == IHALF) IYT = IYEND                       
                      ENDDO
                    ENDIF
                    IXL = IX
@@ -412,16 +422,176 @@ C          SET NEW STARTING POINT
         ENDDO
 
 C       PLACE BUFFER BACK IN IMAGE FILE
+        DO IREC = 1, NY
+           J = (IREC - 1) * NX
+           CALL WRTLIN(LUN,BUF(J),NX,IREC)
+        ENDDO
+
+        CALL SETPRM(LUN,NX,NY,0.,0.,0.,'U') 
+          
+999	CLOSE(LUN)
+	
+	END
+@
+
+
+1.20
+log
+@GPL_2010
+@
+text
+@d4 4
+a7 2
+C PUTLIN.F                          NEW          OCT 94 ArDean Leith 
+C                                   FILNAMANDEXT MAR 03 ArDean Leith
+d12 1
+a12 1
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+d30 1
+a30 1
+C  PUTLIN(LUN,LUNDOC,MAXDIM)
+d35 4
+a38 4
+C            
+C	  LUN 		LOGICAL UNIT NUMBER OF INPUT FILE
+C	  LUNDOC	LOGICAL UNIT NUMBER OF DOCUMENT FILE
+C	  MAXDIM        MAX. BUFFER SIZE
+d42 1
+a42 1
+	SUBROUTINE PUTLIN(LUN,LUNDOC,MAXDIM)
+d47 1
+a47 2
+        CHARACTER(LEN=MAXNAM)   ::   DOCNAM,FILNAM,FILTST
+	COMMON /COMMUN/DOCNAM,FILNAM,FILTST
+d49 3
+a51 2
+C       ACTUAL BUF LENGTH IS MAXDIM
+	COMMON BUF(1)
+d57 1
+a57 4
+	DIMENSION     PLIST(MAXREG+1)
+        CHARACTER     NULL,DISP
+        LOGICAL       EX,NEWCNT
+        INTEGER       CNTNUM
+d59 4
+a62 1
+        NULL = CHAR(0)
+d70 1
+a70 1
+        IF (LER .GT. 0) GOTO 999
+d86 7
+a92 7
+        IFORM  = 1
+        NSAM   = 0
+        NROW   = 0
+        NSLICE = 0
+        MAXIM  = 0
+        CALL OPFILEC(0,.FALSE.,FILNAM,LUN,DISP,IFORM,NSAM,NROW,NSLICE,
+     &             MAXIM,'IMAGE',.FALSE.,IRTFLG)
+d94 5
+a98 2
+        IF (NSAM * NROW .GT. MAXDIM) THEN
+           CALL ERRT(6,'PUTLIN',NE)
+d106 1
+a106 1
+        IF (IRTFLG .EQ. -1) GOTO 12
+d109 2
+a110 2
+        IF ((ICOLX .LT. 0      .OR. ICOLY .LT. 0) .OR.
+     &      (ICOLX .GT. MAXREG .OR. ICOLY .GT. MAXREG)) THEN
+d118 1
+a118 1
+        IF (IRTFLG .EQ. -1) GOTO 12
+d121 1
+a121 1
+        IF (IRTFLG .EQ. -1) GOTO 14
+d123 1
+a123 1
+17      IF (ICOLI .LT. 0) THEN
+d125 1
+a125 1
+           IF (IRTFLG .EQ. -1) GOTO 16
+d131 1
+a131 1
+           IF (ICOLI .LT. 0 .OR. ICOLI .GT. MAXREG) THEN
+d141 2
+a142 2
+          IF (IRTFLG .EQ. -1 .AND. ICOLI .EQ. -1) GOTO 17
+          IF (IRTFLG .EQ. -1 ) GOTO 16
+d149 3
+a151 3
+        IF (IRTFLG .EQ. -1 .AND. .NOT. EX)      GOTO 18
+        IF (IRTFLG .EQ. -1 .AND. ICOLI .EQ. -1) GOTO 17
+        IF (IRTFLG .EQ. -1) GOTO 16
+d157 1
+a157 1
+        IF (IRT .EQ. -1) GOTO 181
+d162 1
+a162 1
+        IF (IRT .EQ. -1) GOTO 19
+d166 3
+a168 3
+           DO IREC = 1, NROW
+              J = (IREC -1) * NSAM
+              CALL REDLIN(LUN,BUF(J),NSAM,IREC)
+d172 1
+a172 1
+           DO IVOX = 1, NSAM*NROW
+d185 2
+a186 2
+           IF (IY2   .LT. 0) IY2 = NROW + IY2 + 1
+           IF (ICOLI .GT. 0) FOREGR2 = DBUF(ICOLI,I)
+d188 1
+a188 1
+           IF (ICOLCNT .GT. 1) THEN
+d206 2
+a207 2
+              IF (IY1 .LT. 0) IY1 = NROW - IY1 + 1
+              IF (ICOLI .GT. 0) FOREGR = DBUF(ICOLI,11)
+d209 2
+a210 2
+              IF ((IX1 .GT. NSAM .OR. IX1 .LE. 0) .OR.
+     &            (IY1 .GT. NROW .OR. IY1 .LE. 0)) THEN
+d216 2
+a217 2
+           ELSEIF ((IX2 .GT. NSAM .OR. IX2 .LE. 0) .OR.
+     &         (IY2 .GT. NROW .OR. IY2 .LE. 0)) THEN
+d224 1
+a224 1
+              IF (IY1 .EQ. IY2) THEN
+d226 1
+a226 1
+                 ICON = (IY1 -1) * NSAM
+d236 1
+a236 1
+                 IF (IX1 .GT. IX2) FCON = - FACT * IY1 - 0.5
+d241 1
+a241 1
+                 IF (IY2 .LT. IY1) IXL = IX2
+d248 1
+a248 1
+                   BUF((IY -1) * NSAM + IX) = FOREGR
+d250 1
+a250 1
+                   IF (IABS(IX - IXL) .GT. 1) THEN
+d258 1
+a258 1
+                     IF (IX .LT. IXL) THEN
+d264 2
+a265 2
+                         BUF((IYT -1) * NSAM + IXT) = FOREGR
+                        IF (IXT .EQ. IHALF) IYT = IYEND                       
+d285 3
+a287 3
         DO IREC = 1, NROW
            J = (IREC - 1) * NSAM
            CALL WRTLIN(LUN,BUF(J),NSAM,IREC)
-        ENDDO
-
+d290 1
+a290 1
         CALL SETPRM(LUN,NSAM,NROW,0.,0.,0.,'U') 
-          
-999	CLOSE(LUN)
+d293 1
+a293 1
 	RETURN
-	END
 @
 
 

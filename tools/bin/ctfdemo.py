@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-# ctfdemo.py : demonstration of CTF parameters
+# ctfdemo.py : Demonstration of CTF parameters
 #
 # Spider Python Library
 # Copyright (C) 2006  Health Research Inc.
@@ -8,7 +8,7 @@
 # HEALTH RESEARCH INCORPORATED (HRI),
 # ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455
 #
-# Email:  spider@wadsworth.org
+# Email:  spider@health.ny.gov
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License as
@@ -20,9 +20,9 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 # General Public License for more details.
 
-from Tkinter import * 
+from   Tkinter import * 
+from   math    import *
 import Pmw
-from math import *
 
 class CTFplot:
     " default values "
@@ -31,10 +31,10 @@ class CTFplot:
                  defocus = 20000,
                  kev = 200,
                  pixelsize = 2.82,
-                 src = 0.0,  # source size
+                 src = 0.0,    # source size
                  spread = 0.0, # defocus spread
                  acr = 0.0,    # amplitude contrast ratio
-                 gep = 2):   # Gaussian envelope parameter
+                 gep = 2):     # Gaussian envelope parameter
         self.top = master
         self.top.title("ctfdemo")
         self.cs = StringVar();      self.cs.set(cs)
@@ -97,9 +97,9 @@ class CTFplot:
                                     command=self.showSquared)
         Optbtn['menu'] = Optbtn.menu
        
-        # ------- widgets start here -------
+        # ------- Widgets start here -------
         ff = Frame(master)
-        fg = Frame(ff, relief='raised', borderwidth=2) # upper left frane for plot
+        fg = Frame(ff, relief='raised', borderwidth=2) # Upper left frame for plot
         self.g = Pmw.Blt.Graph(fg) 
         self.curveLine = 'model'
         self.g.line_create(self.curveLine,
@@ -117,7 +117,7 @@ class CTFplot:
 
         self.g.configure(title='Transfer function demo')
         self.g.legend_configure(hide=1)
-        # fix the limits of the axes (o.w. axes move, not plot)
+        # Fix the limits of the axes (o.w. axes move, not plot)
         ymin,ymax = self.g.axis_limits("y")
         self.g.axis_configure("y", min=ymin, max=ymax)
         xmin,xmax = self.g.axis_limits("x")
@@ -129,7 +129,7 @@ class CTFplot:
         self.g.grid(row=0, column=0, sticky='nsew')
         fg.columnconfigure(0, weight=1) 
 
-        fp = Frame(ff, relief='raised', borderwidth=2)  #upper right frame for pixsize
+        fp = Frame(ff, relief='raised', borderwidth=2)  #Upper right frame for pixsize
 
         plabel = Label(fp,text="pixelsize")
         pslider = Scale(fp, orient='vertical', from_=0, to=6,

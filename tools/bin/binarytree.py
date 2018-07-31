@@ -6,7 +6,7 @@
 # HEALTH RESEARCH INCORPORATED (HRI),
 # ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455
 #
-# Email:  spider@wadsworth.org
+# Email:  spider@health.ny.gov
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License as
@@ -28,12 +28,13 @@ print "tree.py, Modified 2015 Sep 15"
 #    2009-06-02 -- allows skipped nodes
 
 import sys
-from Spider import Spiderutils
-from Tkinter import *
-import Image
-import ImageTk
 import os
 import Pmw 
+
+from   Spider  import Spiderutils
+from   Tkinter import *
+from   PIL     import Image
+from   PIL     import ImageTk
 
 def backup(filename):
     if os.path.exists(filename):

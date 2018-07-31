@@ -15,7 +15,7 @@ apps = ['scatter.py', 'pyplot.py', 'ctfdemo.py', 'xplor.py', 'montagefromdoc.py'
 
 _TARGETDIR = 'scripts'
 
-# Find the python executable for spire
+# Find the Python executable for spire
 
 numargs = len(sys.argv[1:])
 
@@ -35,16 +35,16 @@ if numargs == 0:
             sys.exit(1)
     Pythonprog = os.path.join(spiredir,"bin/python")
 
-elif numargs == 1:   # 1st arg is the bin directory
-    bindir = sys.argv[1]
+elif numargs  == 1:   # 1st arg is the bin directory
+    bindir     = sys.argv[1]
     spiredir,basename = os.path.split(bindir)
-    targetdir = os.path.join(spiredir,_TARGETDIR)
+    targetdir  = os.path.join(spiredir,_TARGETDIR)
     Pythonprog = os.path.join(bindir, "python")
 
 else:
-    bindir = sys.argv[1]
+    bindir     = sys.argv[1]
     spiredir,basename = os.path.split(bindir)
-    targetdir = sys.argv[2]
+    targetdir  = sys.argv[2]
     Pythonprog = os.path.join(bindir, "python")
             
 if not os.path.exists(Pythonprog):
@@ -60,14 +60,14 @@ for app in apps:
     app_path = os.path.join(targetdir,app)
     txt = "#!/bin/sh\n\n"
     txt += 'exec "%s" "%s" "$@"' % (Pythonprog, app_path)
-    print "creating %s script" % appscript
+    print "Creating %s script" % appscript
     try:
         fp = open(appscript, 'w')
         fp.write(txt)
         fp.close()
         os.chmod(appscript, 0775)
         copy(app,targetdir)
-        print "copying %s to %s" % (app, targetdir)
+        print "Copying %s to %s" % (app, targetdir)
         if os.path.exists(os.path.join(targetdir,app)):
            os.remove(app)
     except:

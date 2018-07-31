@@ -6,7 +6,7 @@
 # HEALTH RESEARCH INCORPORATED (HRI),
 # ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455
 #
-# Email:  spider@wadsworth.org
+# Email:  spider@health.ny.gov
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License as
@@ -23,7 +23,7 @@
 #    2009-03-16 -- posted
 
 import os, string, sys
-from Spider import Spiderutils
+from Spider            import Spiderutils
 from SpiderImagePlugin import *
 
 def backup(filename):

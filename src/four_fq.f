@@ -10,6 +10,7 @@ C             VOLUME IOPT 12 & 13 TRAP for ifort   JUN 15 ARDEAN LEITH
 C             VOLUME FILTER BUG                    MAY 17 ARDEAN LEITH    
 C             SIMPLIFIED                           JAN 18 ARDEAN LEITH    
 C             SQRT2M1 in BUTTERWORTH               JAN 18 ARDEAN LEITH
+C             HIDDEN PLOT OPTION                   JAN 18 ARDEAN LEITH
 C       
 C **********************************************************************
 C=*                                                                    *
@@ -41,12 +42,12 @@ C            'FQ NP' : QUICK FILTERING (IN CORE, 2-D OR 3-D) NO PAD
 C
 C NOTE:  BUTTERWORTH FILTERS APPEAR TO BE OFFSET FROM MY EXPECTED
 C        CENTRAL LINE BETWEEN PASS BAND AND STOP BAND BUT THIS GOES
-C        WAY BACK BEFOR SPIDER 17.0 AND MAYBE FOREVER.  I SUGGEST
-C        NOT USING IT??
+C        WAY BACK BEFOR SPIDER 17.0 AND MAYBE FOREVER.  FIXED IN
+C        JAN 2018
 C
 C NOTE:  APPEARS TO HAVE UNDOCUMENTED AND UNTESTED ELLIPTICAL 
 C        FILTRATION FOR OPTIONS: 1,2,3,4.   THIS WILL GIVE BAD 
-C        ERRORS IF PERSON ENTERS MORE THAN ONE VALUE ON THE INPUT
+C        ERRORS IF USER ENTERS MORE THAN ONE VALUE ON THE INPUT
 C        PARAMETER LINE AS IT IS USED FOR ELLIPSES. al nov 2014
 C
 C        SUBSTITUTION OF PRECALCULATED INTERMEDIATE VARIABLES NOT
@@ -60,6 +61,9 @@ C             NXF IS SLIGHTLY LARGER DUE TO MIXED RADIX FOURIER PAD
 C        SO THEY GIVE SLIGHTLY DIFFERENT RESULTS.  I SUSPECT THAT
 C        'FF' IS ACTUALLY CORRECT?
 C
+C NOTE:  PADDING OPTIONS (OTHER THAN NO_PAD) HAVE NO VISABLE EFFECT
+C        WITH MOST INPUTS al
+C 
 C23456789012345678901234567890123456789012345678901234567890123456789012
 C--*********************************************************************
 
@@ -81,8 +85,8 @@ C--*********************************************************************
         REAL                   :: ORD,FP,FS,PARM1T,PARM2T,AVET
         REAL                   :: PARM1,PARM2,PARM3,PADVAL
         REAL                   :: BFPS(4)
-        INTEGER                :: IWANTFOU,NLETF,ITYPE
-        LOGICAL                :: WANTFOU
+        INTEGER                :: IWANTETC,NLETF,ITYPE
+        LOGICAL                :: WANTFOU,WANTPLOT,WANTMAGS
         CHARACTER (LEN=1)      :: NULL = CHAR(0)
 
         REAL, PARAMETER        :: EPS = 0.882
@@ -120,22 +124,42 @@ C       OPEN REAL OR FOURIER SPACE INPUT FILE
      &   '  9 - RAISED COS. LOW-PASS,   10 - RAISED COS. HIGH-PASS' ,/,
      &   ' 13 - RAISED SINC WINDOW,     14 - B FACTOR')
 
-        IWANTFOU = 0    ! HIDDEN FOURIER OUTPUT OPTION
-        CALL RDPRI2S(IOPT,IWANTFOU,NOT_USED,
+        IWANTETC = 0    ! HIDDEN FOURIER OUTPUT OPTION
+
+C       HIDDEN PAD TYPE OPTION, DEFAULT IS TYPE 2
+        IPADTYPE = 2    ! PAD WITH BORDER AVERAGE (LEGACY PAD TYPE)
+        IF ( INDEX(FCHAR,'NP') > 0)  THEN
+C          NO PADDING
+           IPADTYPE = 0    ! NO PADDING
+        ENDIF
+
+        CALL RDPRI3S(IOPT,IWANTETC,IPADTYPE,NOT_USED,
      &               'FILTER TYPE (1-10,13,14)',IRTFLG)
         IF (IRTFLG. NE. 0) GOTO 999
         
         IF (IOPT < 1 .OR. IOPT > 14) THEN
            CALL ERRT(102,'ILLEGAL VALUE FOR FILTER TYPE',IOPT)
            GOTO 1000
-        ENDIF
-
-       IF (NZ > 1 .AND. IOPT == 13 ) THEN
+        ELSEIF (NZ > 1 .AND. IOPT == 13 ) THEN
            CALL ERRT(101,'OPTION NOT IMPLEMENTED FOR VOLUMES',IOPT)
            GOTO 1000
         ENDIF
          
-        WANTFOU = (IWANTFOU == 1)
+        WANTFOU  = (IWANTETC == 1)  ! FOURIER OUTPUT ONLY
+        WANTPLOT = (IWANTETC == 2)  ! TRANSFER PLOT TO TERMINAL 
+        WANTMAGS = (IWANTETC == 3)  ! UNIMPLEMENTED
+
+C       IPADTYPE: 0 == NONE,  1== ZEROPAD, 2==BORDERPAD, 3==AVG PAD
+        IF ( IPADTYPE == 1) THEN
+           WRITE(NOUT,*) ' Padded with zeroes'
+        ELSEIF ( IPADTYPE == 2) THEN
+           WRITE(NOUT,*) ' Padded with image/volume border average'
+        ELSEIF ( IPADTYPE == 3) THEN
+           WRITE(NOUT,*) ' Padded with image/volume average'
+        ELSEIF (IPADTYPE < 0 .OR. IPADTYPE > 3 ) THEN
+           CALL ERRT(102,'ILLEGAL VALUE FOR PAD TYPE',IPADTYPE)
+           GOTO 1000
+        ENDIF
 
         PARM2 = 0.0
         PARM3 = 0.0
@@ -280,10 +304,6 @@ C             RADIUS INPUT FOR PARM2
 
         ENDIF
 
-
-C       IPADTYPE: 0 == NONE,  1== ZEROPAD, 2==BORDERPAD, 3==AVG PAD
-        IPADTYPE = 2    ! PAD WITH ZEROES
-
         IF ( INDEX(FCHAR,'NP') > 0)  THEN
 C          NO PADDING
            IPADTYPE = 0    ! NO PADDING
@@ -314,10 +334,9 @@ C          2x PADDING
            GOTO 999
         ENDIF
 
-
         IF (IPADTYPE == 0) THEN
 
-C          NO PADDING AT ALL, EXCEPT FOR FFT PAD IN BUFFER
+C          NO PADDING AT ALL, EXCEPT FOR FFT PAD NEEDED IN BUFFER
            PADVAL = 0
 
 C          LOAD IMAGE/VOLUME INTO FFT PADDED BUFFER
@@ -392,7 +411,7 @@ c$omp         parallel do private(k)
 
         ENDIF
 
-        !write(6,*) ' pad:',padval
+        WRITE(NOUT,*) '  Pad value:',padval
 
 C       FORWARD FFT, FFT PADDED
         INV = 1
@@ -408,14 +427,14 @@ C          IMAGE
      &                '  Dimensions used: ',N2X,' x ',N2Y
 
            CALL FQ2(IOPT, PARM1,PARM2,PARM3,BFPS, BB, 
-     &              LSD,N2X,N2Y, NX,NY, IRTFLG)
+     &              LSD,N2X,N2Y, NX,NY, IWANTETC,IRTFLG)
         ELSE
 C          VOLUME
            WRITE(NOUT,"(A,I0,A,I0,A,I0)") 
      &           '  Dimensions used: ',N2X,' x ',N2Y,' x ',N2Z
 
            CALL FQ3(IOPT, PARM1,PARM2,PARM3,BFPS, BB, 
-     &              LSD,N2X,N2Y,N2Z, NX,NY,NZ, IRTFLG)
+     &              LSD,N2X,N2Y,N2Z, NX,NY,NZ, IWANTETC,IRTFLG)
         ENDIF
 
 C       OPEN OUTPUT FILE
@@ -437,12 +456,13 @@ C             NON-FOURIER VOLUME
      &                  MAXIM,' ',.TRUE.,IRTFLG)
            IF (IRTFLG. NE. 0) GOTO 999
 
-C          STORE FILTERED FFT
+C          STORE FILTERED FFT AND EXIT WITHOUT FURTHER OUTPUT
            CALL WRTVOL(LUN2,N2X,N2Y,1,N2Z,BB,IRTFLG) 
            GOTO 999
 
         ENDIF
 
+C       OPEN REAL SPACE FILTERED OUTPUT FILE
         CALL OPFILEC(LUN1,.FALSE.,FILNAM,LUN2,'U',ITYPE,NX,NY,NZ,
      &               MAXIM,' ',.FALSE.,IRTFLG)
         IF (IRTFLG. NE. 0) GOTO 999
@@ -458,7 +478,7 @@ C       INVERSE FFT,  POSSIBLY PADDED
 
         !write(6,*) ' sum3:',sum(bb(1:nx, 1:ny, 1))
 
-C       STORE FILTERED IMAGE
+C       STORE FILTERED IMAGE, CAN NOT USE: WRTVOL
         IRECT = 1
         DO K=1,NZ
            DO J=1,NY
@@ -510,7 +530,8 @@ C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
 C **********************************************************************
 C
-C FQ2(IOPT,PARM1,PARM2,PARM3,BFPS,B, LSD,N2X,N2Y, NX,NY, IRTFLG)
+C FQ2(IOPT,PARM1,PARM2,PARM3,BFPS,B, LSD,N2X,N2Y, NX,NY, 
+C     IWANTETC,IRTFLG)
 C
 C PURPOSE: QUICK FILTERING OF REAL-SPACE IMAGE FILE BY FFT
 C
@@ -522,12 +543,14 @@ C        B             BUFFER
 C        LSD           X DIMENSION OF FOURIER FILE
 C        NX,NY         DIMENSIONS OF REAL-SPACE FILE
 C        N2X,N2Y       DIMENSIONS OF PADDED FILE
+C        IWANTETC      OPTIONAL OUTPUTS
+C        IRTFLG        ERROR FLAG
 C
 C23456789012345678901234567890123456789012345678901234567890123456789012  
 C--*******************************************************************
 
         SUBROUTINE FQ2(IOPT, PARM1,PARM2,PARM3,BFPS, 
-     &                  B, LSD,N2X,N2Y, NX,NY, IRTFLG)
+     &                  B, LSD,N2X,N2Y, NX,NY, IWANTETC,IRTFLG)
         
         IMPLICIT NONE
         INCLUDE 'CMBLOCK.INC'
@@ -537,21 +560,23 @@ C--*******************************************************************
         REAL               :: BFPS(4)
         REAL               :: B(LSD,N2Y)
         INTEGER            :: LSD,N2X,N2Y
-        INTEGER            :: NX,NY,IRTFLG
+        INTEGER            :: NX,NY,IWANTETC,IRTFLG
 
         REAL               :: ZEROTERM
         REAL               :: ORD,PARM1SQ,PARM2SQ,SQRT2M1
 
+        REAL               :: TR,TRA
         REAL               :: XD2SQ,YD2SQ,FSQDP,FSQ,FSQD4
-        REAL               :: F,F2,FPE,FSE,ORDT,PARMT,EXPCORR
-        INTEGER            :: J,I,IX,IY, NR2
-        
+        REAL               :: F,F2,FPE,FSE,ORDT,PARMT,EXPCORR,FN
+        INTEGER            :: J,I,IX,IY, NR2, N
+          
         REAL, PARAMETER    :: PI  = 3.14159265358979323846
         REAL, PARAMETER    :: EPS = 0.882
 
-        real       :: bsavi(lsd),bsavv(lsd),bsavf(lsd)
-        integer    :: it
-        real       :: xd2sqdp1sqinv,xd2sqdp1sq
+        REAL               :: TRPLOT_TR(LSD),TRPLOT_F(LSD)
+
+        integer            :: IT
+        real               :: xd2sqdp1sqinv,xd2sqdp1sq
 
         XD2SQ   = FLOAT(N2X/2)**2
 
@@ -569,16 +594,22 @@ C       KEEP ZERO TERM FOR HIGH PASS OPTIONS
             
         !xd2sqdp1sq    =   xd2sq/parm1sq
         !xd2sqdp1sqinv = 1/xd2sq/parm1sq
+                    
+        !write(6,*) ' exp(-.697):      ',        exp(-0.697)
+        !write(6,*) ' sqrt(0.03105):   ',        sqrt(0.03105)
 
         !write(6,*) ' p1,p2,p3:        ',        parm1,parm2,parm3
         !write(6,*) ' p1sq,p2sq:       ',        parm1sq,parm2sq
         !write(6,*) ' nx,xd2sq,n2x:    ',        nx,xd2sq,n2x
         !write(6,*) ' xd2sqdp1sqinv,zeroterm: ', xd2sqdp1sqinv,zeroterm
+        !write(6,*) ' '
 
-        !write(6,*) ' sum1:',sum(b(1:n2x, 1:n2y)),zeroterm
+        !write(6,*)
+!     &     '  i   j  it  ix   iy    f     fsq   fsqdp   tr'
+
 
 c$omp  parallel do private(j,i,iy,ix,it,f,f2,fpe,fse,ordt,parmt,
-c$omp&                     fsq,fsqdp,fsqd4,expcorr)
+c$omp&                     fsq,fsqdp,fsqd4,expcorr,tr)
         DO J=1,N2Y
 
            IY = (J-1)
@@ -588,164 +619,151 @@ c$omp&                     fsq,fsqdp,fsqd4,expcorr)
            DO I=1,LSD,2
 
               IX    = (I-1) / 2
+
               FSQ   = (FLOAT(IX*IX)/XD2SQ +
      &                 FLOAT(IY*IY)/YD2SQ)
 
               FSQDP = (FLOAT(IX*IX)/XD2SQ/PARM1SQ +
      &                 FLOAT(IY*IY)/YD2SQ/PARM2SQ)
 
-              !it        = (i -1)/2 + 1    ! 1,1,2
-              !f         = float(ix)/n2x + float(iy)/n2y
-              !bsavf(it) = f
-              !write(6,*) ' it,ix,iy,f:',it,ix,iy,f
+              F     = SQRT(FSQ) / 2.0
+
+              IF (IWANTETC == 2  .AND. J == 1) THEN
+                IT           = (I -1)/2 + 1   ! 1,1,2
+                TRPLOT_F(IT) = F
+ !              write(6,'(A,5i5,2f7.2)') ' ij,it,ixy,f,fsq:',
+ !    &                                   i,j,it,ix,iy,f,fsq,
+              ENDIF
+
 
               IF (IOPT == 1) THEN
 C                LOWPASS *************************************
 
-                 !bsavv(it) =  1.0
+                 TR = 1.0
+
                  IF (0.25 * FSQDP > 1.0) THEN
 
-                    B(I,  J)  = 0.0
-                    B(I+1,J)  = 0.0
-
-                   !bsavv(it) = 0.0
+                    TR        = 0.0
+                    B(I,  J)  = TR
+                    B(I+1,J)  = TR
                  ENDIF
 
               ELSEIF (IOPT == 2) THEN   
 C                HIGH PASS ***********************************
 
-                 !bsavv(it) =  1.0
- 
+                 TR = 1.0
+
                  IF ((IX.NE.0 .OR. IY.NE.0) .AND. 
      &               (0.25*FSQDP) <= 1.0) THEN
 
-                    B(I,  J)  = 0.0
-                    B(I+1,J)  = 0.0
- 
-                   !bsavv(it) = 0.0
-                 ENDIF
+                    TR       = 0.0
+                    B(I,  J) = TR
+                    B(I+1,J) = TR
+                  ENDIF
 
               ELSEIF(IOPT == 3)  THEN
 C                GAUSSIAN LOW PASS ***************************
 
-                 F = 0.125 * FSQDP
+                 TRA = 0.125 * FSQDP
+                 TR  = 0.0
 
-                 !bsavi(it) = F
-
-                 IF (F < 16.0)  THEN
-                    F         = EXP(-F)
-                    B(I,  J)  = B(I,  J) * F
-                    B(I+1,J)  = B(I+1,J) * F
-                   !bsavv(it) = F
+                 IF (TRA < 16.0)  THEN
+                    TR       = EXP(-TRA)
+                    B(I,  J) = B(I,  J) * TR
+                    B(I+1,J) = B(I+1,J) * TR
                  ELSE
-                    B(I,  J)  = 0.0
-                    B(I+1,J)  = 0.0
-                   !bsavv(it) = 0.0
+                    B(I,  J) = TR
+                    B(I+1,J) = TR
                  ENDIF
+           !write(6,'(5i4,6f7.2)')i,j,it,ix,iy,f,fsq,fsqdp,tempr2
 
               ELSEIF (IOPT==4)  THEN    
 C                GAUSSIAN HIGH PASS **************************
 
                  IF (IX .NE. 0 .OR. IY .NE. 0)  THEN
-                    F = 0.125 * FSQDP
+                    TRA = 0.125 * FSQDP
+                    TR  = 1.0
 
-                   !bsavv(it) = 1.0
-                   !bsavi(it) = F
-
-                    IF (F < 16.0)  THEN
-                       F         = 1.0 - EXP(-F)
-                       B(I,  J)  = B(I,  J) * F
-                       B(I+1,J)  = B(I+1,J) * F
-
-                      !bsavv(it) = F
-                    ENDIF
+                    IF (TRA < 16.0)  THEN
+                       TR       = 1.0 - EXP(-TRA)
+                       B(I,  J) = B(I,  J) * TR
+                       B(I+1,J) = B(I+1,J) * TR
+                   ENDIF
                  ENDIF
 
               ELSEIF (IOPT == 5 .OR. IOPT == 6)  THEN
 C                FERMI DISTRIBUTION FILTER *******************
               
-                 F         = (0.5 * SQRT(FSQ) - PARM1) / PARM3
+                 TR        = (0.5 * SQRT(FSQ) - PARM1) / PARM3
 
-                 F         = MIN(MAX(F,-10.0), 10.0)
-                 F         = (1.0/(1.0 + EXP(F)))
+                 TR        = MIN(MAX(TR,-10.0), 10.0)
+                 TR        = (1.0/(1.0 + EXP(TR)))
 
-                 B(I,  J)  = B(I,  J) * F
-                 B(I+1,J)  = B(I+1,J) * F
-
-                 !bsavi(it) = (0.5 * sqrt(fsq) - parm1) / parm3
-                 !bsavv(it) = f
+                 B(I,  J)  = B(I,  J) * TR
+                 B(I+1,J)  = B(I+1,J) * TR
 
               ELSEIF (IOPT == 7) THEN
 C                BUTTERWORTH LOWPASS FILTER ******************
 
-                 F = 0.5 * SQRT(FSQ)
+                 TRA  = 0.5 * SQRT(FSQ)
 
-                !F = SQRT(1.0 / (1.0 +           (F/PARM1)**ORD)) ! al jan 2018
-                 F = SQRT(1.0 / (1.0 + SQRT2M1 * (F/PARM1)**ORD)) 
+                !tr = sqrt(1.0 / (1.0 +           (tra/parm1)**ord)) ! al jan 2018
+                 TR = SQRT(1.0 / (1.0 + SQRT2M1 * (TRA/PARM1)**ORD)) 
 
-                 B(I,J)    = B(I,  J) * F
-                 B(I+1,J)  = B(I+1,J) * F
-
-                 !bsavi(it) = 0.5 * sqrt(fsq)
-                 !bsavv(it) = f
+                 B(I,J)    = B(I,  J) * TR
+                 B(I+1,J)  = B(I+1,J) * TR
 
               ELSEIF (IOPT == 8) THEN
 C                BUTTERWORTH HIGHPASS FILTER *****************
         
-                 !bsavi(it) = 0
-
                  IF (IX.NE.0 .OR. IY.NE. 0) THEN
-                    F = 0.5 * SQRT(FSQ)
+                    TRA = 0.5 * SQRT(FSQ)
 
-                   !F  = (1.0 - SQRT(1.0 / (1.0 +(F/PARM1)**ORD)))
-                    F  = (1.0 - SQRT(1.0 / 
-     &                    (1.0 + SQRT2M1 *(F/PARM1)**ORD))) ! al jan 2018
+                   !tr  = (1.0 - sqrt(1.0 / (1.0 +(tra/parm1)**ord)))
+                    TR = (1.0 - SQRT(1.0 / 
+     &                    (1.0 + SQRT2M1 *(TRA/PARM1)**ORD))) ! al jan 2018
 
-                    B(I,  J)  = B(I,  J) * F
-                    B(I+1,J)  = B(I+1,J) * F
+                    B(I,  J)  = B(I,  J) * TR
+                    B(I+1,J)  = B(I+1,J) * TR
 
-                   !bsavi(it) = 0.5 * sqrt(fsq)
-                   !bsavv(it) = f
                  ENDIF
 
 
               ELSEIF (IOPT == 9) THEN
 C                RAISED COSINE LOWPASS FILTER ******************
 
-                 F = 0.5 * SQRT(FSQ)
- 
-                 F = (F - PARM1) / (PARM2 - PARM1)
+                 TRA = 0.5 * SQRT(FSQ)
+                 TRA = (TRA - PARM1) / (PARM2 - PARM1)
 
-                 IF (F < 0) THEN
-                    F2 = 1
-                 ELSEIF (F > 1) THEN
-                    F2 = 0
+                 IF (TRA < 0) THEN
+                    TR = 1
+                 ELSEIF (TRA > 1) THEN
+                    TR = 0
                  ELSE
-                    F2 = 0.5 * (1 + COS(PI*F))
+                    TR = 0.5 * (1 + COS(PI*TRA))
                  ENDIF
 
-                 B(I,  J)  = B(I,  J) * F2
-                 B(I+1,J)  = B(I+1,J) * F2
-                 !bsavv(it) = F2
+                 B(I,  J)  = B(I,  J) * TR 
+                 B(I+1,J)  = B(I+1,J) * TR 
 
               ELSEIF (IOPT == 10) THEN
 C                RAISED COSINE HIGHPASS FILTER ******************
 
-                 F = 0.5 * SQRT(FSQ)
+C                RAISED COSINE HIGHPASS FILTER ******************
 
-                 F = (F - PARM1) / (PARM2 - PARM1)
+                 TRA = 0.5 * SQRT(FSQ)
+                 TRA = (TRA - PARM1) / (PARM2 - PARM1)
 
-                 IF (F < 0) THEN
-                    F2 = 0
-                 ELSEIF (F > 1) THEN
-                    F2 = 1
+                 IF (TRA < 0) THEN
+                    TR = 0
+                 ELSEIF (TRA > 1) THEN
+                    TR = 1
                  ELSE
-                    F2 = 0.5 * (1 - COS(PI*F))
+                    TR = 0.5 * (1 - COS(PI*TRA))
                  ENDIF
 
-                 B(I,  J)  = B(I,  J) * F2
-                 B(I+1,J)  = B(I+1,J) * F2
-                 !bsavv(it) = F2
+                 B(I,  J)  = B(I,  J) * TR 
+                 B(I+1,J)  = B(I+1,J) * TR 
 
               ELSEIF (IOPT == 11) THEN 
 C                BUTTERWORTH ELLIPTIC LOWPASS FILTER *********  
@@ -767,12 +785,11 @@ C                DIRECTION ON THE PLANE
                     ORDT      = ORD  /ALOG10(FPE / FSE)
                     PARMT     = FPE/ EPS**(2. / ORDT)
 
-                    F         = 0.5*SQRT(FSQ)
-                    F         = SQRT(1.0 / (1.0 + (F/PARMT)**ORDT))
+                    TR        = 0.5 * SQRT(FSQ)
+                    TR        = SQRT(1.0 / (1.0 + (TR/PARMT)**ORDT))
 
-                    B(I,  J)  = B(I,  J) * F
-                    B(I+1,J)  = B(I+1,J) * F
-                    !bsavv(it) = F
+                    B(I,  J)  = B(I,  J) * TR
+                    B(I+1,J)  = B(I+1,J) * TR
                 ENDIF
 
               ELSEIF (IOPT == 12) THEN
@@ -793,62 +810,59 @@ C                BUTTERWORTH ELLIPTIC HIGHPASS FILTER *********
                     ORDT     = ORD / ALOG10(FPE / FSE)
                     PARMT    = FPE / (EPS)**(2. / ORDT)
 
-                    F        = 0.5*SQRT(FSQ)
-                    F        = (1.0-SQRT(1.0/(1.0+(F/PARMT)**ORDT)))
+                    TR       = 0.5*SQRT(FSQ)
+                    TR       = (1.0-SQRT(1.0/(1.0+(TR/PARMT)**ORDT)))
 
-                    B(I,  J)  = B(I,  J) * F
-                    B(I+1,J)  = B(I+1,J) * F
+                    B(I,  J)  = B(I,  J) * TR
+                    B(I+1,J)  = B(I+1,J) * TR
 
-                    !bsavv(it) = F
                  ENDIF
 
               ELSEIF (IOPT == 13) THEN
 C                RAISED SINC WINDOW **************************
-                 F = 0.5 * SQRT(FSQDP)
+                 TRA = 0.5 * SQRT(FSQDP)
 
-                 IF (F <= 0.0001) THEN
-                    F2 = 1
-                 ELSEIF (F >= 1.0) THEN
-                    F2 = 0
+                 IF (TRA <= 0.0001) THEN
+                    TR = 1
+                 ELSEIF (TRA >= 1.0) THEN
+                    TR = 0
                  ELSE
-                    F2 = SIN(PI*F) / (PI*F)
+                    TR = SIN(PI*TRA) / (PI*TRA)
                  ENDIF
 
-                 B(I,  J)  = B(I,  J) * (1 + 9 * F2)
-                 B(I+1,J)  = B(I+1,J) * (1 + 9 * F2)
+                 B(I,  J)  = B(I,  J) * (1 + 9 * TR)
+                 B(I+1,J)  = B(I+1,J) * (1 + 9 * TR)
 
-                !bsavv(it) = (1 + 9 * F2)
+                !TRPLOT_TR(it) = (1 + 9 * tempr2)
 
              ELSEIF (IOPT == 14) THEN
 C                B FACTOR FILTER **************************
 
-                 FSQD4     = FSQ * 0.25
-
-                 !bsavi(it) = fsqd4
-                 !bsavv(it) = 1.0
+                 FSQD4  = FSQ * 0.25
+                 TR     = 1.0
 
                  IF (FSQD4 < PARM3)  THEN
-                    EXPCORR  = EXP(FSQD4 * PARM1)
+                    TR       = EXP(FSQD4 * PARM1)
 
-                    B(I,  J)  = B(I,  J) * PARM2 * EXPCORR
-                    B(I+1,J)  = B(I+1,J) * PARM2 * EXPCORR
-                   !bsavv(it) = PARM2 * EXPCORR
+                    B(I,  J) = B(I,  J) * PARM2 * TR
+                    B(I+1,J) = B(I+1,J) * PARM2 * TR
 
                  ENDIF
               ENDIF
-           ENDDO
 
-#ifdef NEVER
-           if (j ==1) then
-             do it = 1,33
-               write(6,888) bsavi(it), bsavf(it), bsavv(it)
-888            format (f12.4, f12.4, f12.4)
-             enddo
-             stop
-           endif
-#endif
+              IF (IWANTETC == 2 .AND. J == 1) THEN
+                 TRPLOT_TR(IT) = TR
+                 !write(6,'(5i4,3f7.2,f8.4)')i,j,it,ix,iy,f,fsq,fsqdp,tr
+              ENDIF
 
-        ENDDO
+           ENDDO          ! END OF: DO I=1....
+        ENDDO             ! END OF: DO J=1...
+
+        IF (IWANTETC == 2) THEN  
+          DO N = 1,LSD/2
+            WRITE(6,'(I5,3F12.4)') N,TRPLOT_F(N), TRPLOT_TR(N)
+          ENDDO
+        ENDIF
 
 C       RESTORE ZERO TERM FOR HIGH PASS OPTIONS
         IF (IOPT == 2 .OR. IOPT == 4 .OR. 
@@ -902,7 +916,8 @@ C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
 C **********************************************************************
 C
-C FQ_3(IOPT,PARM1,PARM2,PARM3,BFPS, B, LSD,N2X,N2Y, NX,NY, IRTFLG)
+C FQ_3(IOPT,PARM1,PARM2,PARM3,BFPS, B, LSD,N2X,N2Y, NX,NY, 
+C      IWANTETC,IRTFLG)
 C
 C PURPOSE: QUICK FILTERING OF REAL-SPACE IMAGE FILE BY FFT
 C
@@ -914,12 +929,14 @@ C        B             BUFFER
 C        LSD           X DIMENSION OF FOURIER FILE
 C        NX,NY,NZ      DIMENSIONS OF REAL-SPACE FILE
 C        N2X,N2Y,N2Z   DIMENSIONS OF PADDED FILE
+C        IWANTETC      OPTIONAL OUTPUTS
+C        IRTFLG        ERROR FLAG
 C
 C23456789012345678901234567890123456789012345678901234567890123456789012  
 C--*******************************************************************
 
         SUBROUTINE FQ3(IOPT, PARM1,PARM2,PARM3,BFPS, 
-     &                  B, LSD,N2X,N2Y,N2Z, NX,NY,NZ, IRTFLG)
+     &                  B, LSD,N2X,N2Y,N2Z, NX,NY,NZ, IWANTETC,IRTFLG)
         
         IMPLICIT NONE
         INCLUDE 'CMBLOCK.INC'
@@ -929,7 +946,7 @@ C--*******************************************************************
         REAL               :: BFPS(4)
         REAL               :: B(LSD,N2Y,N2Z)
         INTEGER            :: LSD,N2X,N2Y,N2Z
-        INTEGER            :: NX,NY,NZ,IRTFLG
+        INTEGER            :: NX,NY,NZ,IWANTETC,IRTFLG
 
         REAL               :: ORD,PARM1SQ,PARM2SQ,SQRT2M1
 
@@ -944,9 +961,9 @@ C--*******************************************************************
         NR2     = N2Y / 2
         NL2     = N2Z / 2
 
-        XD2SQ      = FLOAT(N2X/2)**2
-        YD2SQ      = FLOAT(NR2)  **2
-        ZD2SQ      = FLOAT(NL2)  **2
+        XD2SQ   = FLOAT(N2X/2)**2
+        YD2SQ   = FLOAT(NR2)  **2
+        ZD2SQ   = FLOAT(NL2)  **2
 
         ORD     = PARM3
         PARM1SQ = PARM1**2

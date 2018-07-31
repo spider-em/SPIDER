@@ -565,21 +565,22 @@ ELEMENTS =  \
  $(LIB)(parst.o) \
  $(LIB)(patch.o) \
  $(LIB)(pdates.o) \
- $(LIB)(pdb.o) \
- $(LIB)(picksl.o) \
- $(LIB)(picksv.o) \
- $(LIB)(pj3g.o) \
+ $(LIB)(pdb.o)     \
+ $(LIB)(picksl.o)  \
+ $(LIB)(picksv.o)  \
+ $(LIB)(pj2d.o)    \
+ $(LIB)(pj3g.o)    \
  $(LIB)(pj3_fbs.o) \
- $(LIB)(pj3_n.o) \
- $(LIB)(pj3q_n.o) \
- $(LIB)(pkd.o) \
- $(LIB)(pksr3.o) \
- $(LIB)(plnedg.o) \
- $(LIB)(plot1.o) \
- $(LIB)(plot2.o) \
+ $(LIB)(pj3_n.o)   \
+ $(LIB)(pj3q_n.o)  \
+ $(LIB)(pkd.o)     \
+ $(LIB)(pksr3.o)   \
+ $(LIB)(plnedg.o)  \
+ $(LIB)(plot1.o)   \
+ $(LIB)(plot2.o)   \
  $(LIB)(polar_cc.o) \
  $(LIB)(polish.o) \
- $(LIB)(poj.o) \
+ $(LIB)(poj.o)    \
  $(LIB)(polfit.o) \
  $(LIB)(pollsq.o) \
  $(LIB)(polqs.o) \

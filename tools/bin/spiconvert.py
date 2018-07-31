@@ -3,12 +3,12 @@
 # A simple SPIDER image converter.
 # Output format determined by extension.
 
-import Image
-import os, sys
+from  PIL import Image
+import           os, sys
 
 if len(sys.argv[1:]) < 2:
     print "Syntax: spiconvert.py infile outfile"
-    print "To save as a spider file, use extension .spi"
+    print "To save as a SPIDER file, must specify extension: .spi"
     sys.exit()
 
 filename = sys.argv[1]
@@ -17,14 +17,14 @@ outfile  = sys.argv[2]
 im = Image.open(filename)
 
 if im.format == 'SPIDER':
-    # convert a Spider file, output determined by extension
+    # Convert a Spider file, output determined by extension
     im = im.convert2byte()
     im.save(outfile)
 else:
-    # convert a non-Spider file
+    # Convert a non-Spider file
     f, ext = os.path.splitext(outfile)
     if ext == '.spi':   
-        im.save(outfile, 'SPIDER') # convert to Spider
+        im.save(outfile, 'SPIDER') # Convert to Spider
     else:
-        im.save(outfile)  # converts according to extension
+        im.save(outfile)  # Converts according to extension
 

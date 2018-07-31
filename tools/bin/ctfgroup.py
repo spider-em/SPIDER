@@ -9,7 +9,7 @@
 # HEALTH RESEARCH INCORPORATED (HRI),
 # ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455
 #
-# Email:  spider@wadsworth.org
+# Email:  spider@health.ny.gov
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License as
@@ -22,15 +22,16 @@
 # General Public License for more details.
 
 import re, os, sys
-from   math import *
-from   Tkinter        import *
 import Pmw
-from   tkMessageBox   import askokcancel
-from   tkFileDialog   import askopenfilename, asksaveasfilename
-from   commands       import getoutput
-
 import pyplot
-from   Spider.Spiderutils import *
+
+from   math                import *
+from   Tkinter             import *
+from   tkMessageBox        import askokcancel
+from   tkFileDialog        import askopenfilename, asksaveasfilename
+from   commands            import getoutput
+
+from   Spider.Spiderutils  import *
 
 re_nums = re.compile('\d+\D')  # integers followed by one non-int char
 

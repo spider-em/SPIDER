@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
-# SOURCE: scatter.py  
-# PURPOSE: scatterplot display
+# SOURCE:  scatter.py  
+# PURPOSE: Scatterplot display
 #
 # Spider Python Library
 # Copyright (C) 2006  Health Research Inc.
@@ -9,7 +9,7 @@
 # HEALTH RESEARCH INCORPORATED (HRI),
 # ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455
 #
-# Email:  spider@wadsworth.org
+# Email:  spider@health.ny.gov
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License as
@@ -21,22 +21,22 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 # General Public License for more details.
 
-import os,string,sys
-import re
-from commands import getoutput
+import                os,string,sys
+import                re
+from commands         import getoutput
 
-from Tkinter import *
-import Pmw, tkMessageBox
-from   tkFileDialog   import askopenfilename, asksaveasfilename
-import Image, ImageTk, ImageChops
-from support import Spiderutils
+from Tkinter          import *
+import                Pmw, tkMessageBox
+from tkFileDialog     import askopenfilename, asksaveasfilename
+from PIL              import  Image, ImageTk, ImageChops
+from Spider           import  Spiderutils
 
 import webbrowser
 webpage = "http://www.wadsworth.org/spider_doc/spider/tools/docs/scatter.html"
 
-# returns "" if user hits 'cancel'
+# Returns "" if user hits 'cancel'
 def askfilename():
-    " if you hit 'cancel', askopenfilename returns an empty tuple "
+    " If you hit 'cancel', askopenfilename returns an empty tuple "
     f = askopenfilename()
     if len(f) == 0:
         return ""
@@ -147,7 +147,8 @@ class scatter:
         self.oldvalue = StringVar()
         self.oldvalue.set("")
         self.command = StringVar()
-        self.command.set("qview.py file***.dat")
+        ###self.command.set("qview.py file***.dat")  July 2018 al
+        self.command.set("qview file***.dat")
 
         # magnifying variables
         self.magnifyVar = IntVar() ; self.magnifyVar.set(0)
@@ -245,7 +246,7 @@ class scatter:
     def mkbottom(self, master):
         fb = Frame(master)
 
-        # pack from right to left
+        # Pack from right to left
         cmdentry = Entry(fb, textvariable=self.command, background='white',
                          width = 40)
         cmdentry.pack(side='right', padx=5, pady=10)
@@ -270,7 +271,7 @@ class scatter:
         fb.pack(side='bottom', fill='x') #,expand=1)
         
     def statusMessage(self,msg,timeout=5):
-        " cleared after t=timeout seconds : 0 means never clear"
+        " Cleared after t=timeout seconds : 0 means never clear"
         self.statusbar.configure(text=msg)
         if timeout > 0:
             t = timeout * 1000 # ms
@@ -361,7 +362,7 @@ class scatter:
         self.entermarker(self.keyvalue.get())
             
     def entermarker(self, mk):
-        " numbers are markers. all other symbols are elements"
+        " Numbers are markers. all other symbols are elements"
         if self.g.element_exists(mk):
             self.g.element_configure(mk, fill=self.activecolor)   
         elif self.g.marker_exists(mk):
@@ -394,7 +395,7 @@ class scatter:
                               fill = color)
 
     def mkPixelist(self, graph=None):
-        " creates x sorted list of pixels (x,y,key) in self.pixlist "
+        " Creates x sorted list of pixels (x,y,key) in self.pixlist "
         fcoords = []
         keys = self.D.keys()
         for k in keys:
@@ -688,7 +689,7 @@ class scatter:
         self.selectedPolygon = name
 
     def polybounds(self, coords):
-        " returns 4 tuple of polygon's bounding box"
+        " Returns 4 tuple of polygon's bounding box"
         c = coords[0]
         xmax = xmin = c[0]
         ymin = ymax = c[1]
@@ -756,7 +757,7 @@ class scatter:
         e.sort()
 
         E = []
-        # make header for doc file and column headings
+        # Make header for doc file and column headings
         E.append(Spiderutils.makeDocfileHeader(filename))
         xaxis = self.xaxisVar.get()
         if xaxis == "": xaxis = 'x axis'
@@ -791,7 +792,7 @@ class scatter:
             self.statusMessage('ERROR: unable to write to %s' % filename, timeout=0)
 
     def getpixels(self, image):
-        " returns list of pixels above threshold "
+        " Returns list of pixels above threshold "
         I = list(image.getdata())
         wd,ht = image.size
         if wd == 0 or ht == 0:
@@ -823,7 +824,7 @@ class scatter:
         return fkeys
 
     def Bltgraph2Image(self, graph):
-        " returns a PIL image of graph region only"
+        " Returns a PIL image of graph region only"
         wd = int(graph.cget('width'))
         ht = int(graph.cget('height'))
         
@@ -1077,7 +1078,7 @@ class scatter:
             #D = spiderutils.readSpiderDocFile(filename, [xcol,ycol])
             D = Spiderutils.readdoc(filename, keys='all')
         except:
-            print "unable to get data from %s" % filename
+            print "Unable to get data from %s" % filename
             return
 
         keys = D.keys()

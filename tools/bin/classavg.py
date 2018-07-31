@@ -9,7 +9,7 @@
 # HEALTH RESEARCH INCORPORATED (HRI),
 # ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455
 #
-# Email:  spider@wadsworth.org
+# Email:  spider@health.ny.gov
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License as
@@ -21,19 +21,20 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 # General Public License for more details.
 
-from   Tkinter import *
-import Pmw
-from   tkFileDialog import askopenfilename
-import Image, ImageTk
-
 import re,os,sys
-
-from   SpiderImagePlugin import *
-from support import Spiderutils
 import montage
 
+
+from   Tkinter           import *
+from   tkFileDialog      import askopenfilename
+import Pmw
+from   PIL               import Image, ImageTk
+
+from   SpiderImagePlugin import *
+from   Spider            import Spiderutils
+
 # -------------------------------------------------------------------
-# classAverages:  Inherits from Spider.montage
+# classAverages:  Inherits from support.montage
 #                 overrides makeMenus() and display()
 
 class classAverages(montage.montage): 

@@ -3,14 +3,13 @@
 # The Python Imaging Library
 # $Id: ctfcircle.py,v 1.1 2013/12/02 15:38:11 leith Exp $
 #
-# this demo script illustrates how a 1-bit BitmapImage can be used
+# PURPOSE: illustrates how a 1-bit BitmapImage can be used
 # as a dynamically updated overlay
-#
 
-from Tkinter import *
-import Image, ImageTk, ImageDraw
 import sys
-from SpiderImagePlugin import *
+from   Tkinter           import *
+from   PIL               import Image, ImageTk, ImageDraw
+from   SpiderImagePlugin import *
 
 #
 # an image viewer

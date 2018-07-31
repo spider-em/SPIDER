@@ -178,7 +178,7 @@ c              WRITE(LUNGPL,'(A,ES12.4,A,ES12.4,A)')
 
               IF (IT < NLIST) THEN
                  WRITE(LUNGPL,'(A,I5,A)') 
-     &             '"-" using 1:2 with line title "Line:',I,',", \'
+     &             '"-" using 1:2 with line title "Line:',I,',", \\'
               ELSE
                  WRITE(LUNGPL,'(A,I5,A)') 
      &             '"-" using 1:2 with line title "Line:',I,'"'

@@ -31,6 +31,8 @@ C **********************************************************************
 C
 C FOUR1(MAXMEM)
 C
+C CALLS: FQ, FT, FF, FL, FP, EF, PW, RF, CF, GF, RD, FD, 16=FSC, 17=FRC
+C
 C--*********************************************************************
 
         SUBROUTINE FOUR1(MAXMEM)
@@ -192,7 +194,7 @@ C       GENERATES REDUCED FOURIER TRANSFORM FROM MASKED FOURIER
         RETURN
 
 
-C       FILTER ACCORDING TO A DOCUMENT FILE ---------------------- 'FD'
+C       FILTER ACCORDING TO A DOCUMENT FILE --------------------- 'FD'
 
 12      IF (FCHAR(4:4) == 'R') THEN
            CALL  ERRT(101,'REMOVED UNDOCUMENTED OPERATION IN 2014',NE)

@@ -60,12 +60,13 @@ C                           'IN S' BUG            ARDEAN LEITH 01/10/14
 C                           'CE' UNCOCUMENTED     ARDEAN LEITH 02/10/14
 C                           'MA' FMIN             ARDEAN LEITH 12/10/14
 C                           'DIS' ADDED           ARDEAN LEITH  1/05/15
+C                           PUTLIN PARAMETES      ARDEAN LEITH  6/13/18
 C 
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2014  Health Research Inc.,                         *
+C=* Copyright 1985-2018  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -982,7 +983,7 @@ C       PP LL   PUT LINE
 19      CONTINUE
         IF (FCHAR(4:5) == 'LL') THEN
 C          PUT CONTINUOUS LINE IN IMAGE FILE
-           CALL PUTLIN(LUN1,LUN2,MAXDIM)
+           CALL PUTLIN(LUN1,LUN2)
 
 
         ELSEIF (FCHAR(4:4) == 'S') THEN

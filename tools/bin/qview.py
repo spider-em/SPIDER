@@ -1,15 +1,14 @@
 #!/usr/bin/env python
 
-# SOURCE:  qview.py
-# PURPOSE: diplay a SPIDER image
+# SOURCE:  spider/tools/bin/qview.py
+# PURPOSE: Display a SPIDER image
 # 
 # Spider Python Library
 # Copyright (C) 2006  Health Research Inc.
-#
 # HEALTH RESEARCH INCORPORATED (HRI),
 # ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455
 #
-# Email:  spider@wadsworth.org
+# Email:  spider@health.ny.gov
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License as
@@ -37,17 +36,24 @@ qview.py -s image.dat
       See echo-client.py, echo-server.py in Programming Python p 526 ff
 """
 
-import os, sys, threading
-from   socket import *
-import time
+import                 os, sys, threading
+import                 time
+from   socket          import *
 
-from   Tkinter import *
-from   tkMessageBox   import askyesno
-import Pmw, tkMessageBox
-import Image, ImageTk
-#from   Spider import Spiderutils, SpiderImageSeries
-from   support import Spiderutils, SpiderImageSeries
+from   Spider          import *  
+from   Spider          import SpiderImageSeries  
+import                 SpiderImagePlugin          
 
+from   Tkinter         import *
+from   tkMessageBox    import askyesno
+
+import                 Pmw                                            
+
+from   PIL             import ImageTk
+from   PIL             import Image                                
+
+
+#print '\n'.join(sys.path)                             
 
 serverHost = 'localhost'
 serverPort = 50527
@@ -236,19 +242,19 @@ class QuickWindow:
 #
 
 def findServer():
-    sockobj = socket(AF_INET, SOCK_STREAM)      # make a TCP/IP socket object
+    sockobj = socket(AF_INET, SOCK_STREAM)      # Make a TCP/IP socket object
     try:
-        sockobj.connect((serverHost, serverPort)) # connect to server machine,port
+        sockobj.connect((serverHost, serverPort)) # Connect to server machine,port
         return sockobj
     except:
         return None
 
 def helpmessage():
-    print "usage: qview.py [-s] imagefile(s)"
+    print "Usage: qview.py [-s] imagefile(s)"
     sys.exit()
 
 def processargs(args):
-    " returns (serverflag, filelist, directory) "
+    " Returns (serverflag, filelist, directory) "
     serverflag = 0
     readall = 0
     filenames = []
@@ -260,8 +266,8 @@ def processargs(args):
         elif item == '-h' or item == '-help':
             helpmessage()
         elif os.path.isdir(item):
-            # qview dir : reads all files in directory, but
-            # qview *   : should not read subdirectories
+            # qview dir : Reads all files in directory, but
+            # qview *   : Should not read subdirectories
             if len(filenames) > 0:
                 continue
             cwd = os.path.abspath(item)
@@ -278,7 +284,7 @@ def processargs(args):
         files = os.listdir(os.getcwd())
         filenames = []
         for file in files:
-            if not os.path.exists(file):  # why is this needed?
+            if not os.path.exists(file):  # Why is this needed?
                 continue
             # only include binary files
             if not os.path.isdir(file) \
@@ -286,16 +292,24 @@ def processargs(args):
                and file[0] != '.':   
                 filenames.append(file)
         if len(filenames) == 0:
-            print "no images found in %s" % os.getcwd()
+            print "No images found in: %s" % os.getcwd()
             sys.exit()
             
     return (serverflag, filenames, cwd)
 
+
+
 def loadimages(filelist, directory=None):
-    " checks if files can be loaded by Image. Return list of images. "
+    " Check if files can be loaded by Image. Return list of images. "
     if directory != None:
         os.chdir(directory)
+	
+    #print("qview.loadimages,               Calling SpiderImageSeries.loadImageSeries")  #!!!!!!!!
+
     imlist = SpiderImageSeries.loadImageSeries(filelist, DISPLAY_ALL=1)
+
+    #print("qview.loadimages,               After SpiderImageSeries.loadImageSeries")    #!!!!!!!!
+
     return imlist
     
 
@@ -312,7 +326,7 @@ if __name__ == '__main__':
     if length < 1:
         helpmessage()
 
-    # process an exit request
+    # Process an exit request
     if sys.argv[1] == EXIT:
         sockobj = findServer()
         if sockobj:           # then send info to server, and exit
@@ -323,14 +337,18 @@ if __name__ == '__main__':
 
     serverflag, filelist, cwd = processargs(sys.argv[1:])
 
-    # no server: just start up image window
+    # No server: just start up image window
     if serverflag == 0 :
+	#print("qview,              Calling loadimages: %s") %filelist  #!!!!!!!!!!!!!
         imglist = loadimages(filelist, directory=cwd)
+	#print("qview,              After loadimages")                  #!!!!!!!!!!!!!
+
         if len(imglist) < 1:
             sys.exit()
         root = Tk()
-        qw = QuickWindow(root, imglist=imglist, useserver=0)
+        qw   = QuickWindow(root, imglist=imglist, useserver=0)
         root.mainloop()
+
 
     # -s = 'use same window' or 'use server'
     else:
@@ -339,17 +357,18 @@ if __name__ == '__main__':
         # see if an existing server can be found
         sockobj = findServer()
         # ----- Client -----
-        if sockobj:           # then send info to server, and exit
+        if sockobj:           # Then send info to server, and exit
             if verbose:
-                print "sending %s to existing server" % filename
+                print "Sending %s to existing server" % filename
             sockobj.send(filename)     # send line to server over socket
             data = sockobj.recv(1024)  # receive line from server
             if verbose:
-                print "the qview client received %s" % data
+                print "qview client received %s" % data
                 if data.find("qview") < 0:
                     print "qview client received incorrect feedback from server"
-                    # data should be of form "qview : filename"
+                    # Data should be of form "qview : filename"
             sockobj.close()
+
         # ----- Server -----
         else:
             root = Tk()

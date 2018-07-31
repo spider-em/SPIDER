@@ -1,6 +1,9 @@
 #!/usr/bin/env python
-from Tkinter import *
-import Image, ImageTk
+
+from   Tkinter import *
+from   PIL     import Image
+from   PIL     import ImageTk
+
 import os, sys
 
 class Viewer:

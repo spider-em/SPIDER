@@ -10,7 +10,7 @@
 # HEALTH RESEARCH INCORPORATED (HRI),
 # ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455
 #
-# Email:  spider@wadsworth.org
+# Email:  spider@health.ny.gov
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License as
@@ -23,17 +23,18 @@
 # General Public License for more details.
 
 import os, string, sys
-from commands import getoutput
+from   commands import getoutput
 import webbrowser
 
-from Tkinter import *
+from   Tkinter import *
 from   tkFileDialog   import askdirectory
 from   tkMessageBox   import askyesno
-import Image, ImageTk
+from   PIL            import Image
+from   PIL            import ImageTk
 import Pmw
 
-from idlelib import ZoomHeight
-from support import Spiderutils
+from   idlelib        import ZoomHeight
+from   Spider         import Spiderutils
 
 icondict = {}
 

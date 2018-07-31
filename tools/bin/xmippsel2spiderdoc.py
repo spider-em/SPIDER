@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import os, string, sys
-from Spider import Spiderutils
+from   Spider import Spiderutils
 
 if sys.argv[1:]:
     file = sys.argv[1]
@@ -30,5 +30,5 @@ if sys.argv[1:]:
     else:
         print "Error!", "Unable to read %s" % file
 else:
-    print "syntax: makefilenums.py inputtextfile outputspiderdoc"
+    print "Syntax: makefilenums.py inputtextfile outputspiderdoc"
     

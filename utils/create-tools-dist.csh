@@ -4,11 +4,11 @@
 
 # ORIGINAL SOURCE: /usr8/spider/spire/spire_linux-1.5.5
 
-# CURRENT SOURCE:  /usr16/software/spider/tools-src/tools-create-dist.csh
+# CURRENT SOURCE:  /usr16/software/spider/utils/create-tools-dist.csh
 
 # Set some variables for input locations
 set spiroot = /usr16/software/spider    
-set srcdir  = $spiroot/tools-src
+set srcdir  = $spiroot/tools
 
 # Set some variables for output locations
 set destdir  = $spiroot/tools-dist
@@ -23,49 +23,18 @@ set excludes = "--exclude="RCS" --exclude="Attic" --exclude="\*.pyc" --exclude="
 # Make necessary dir
 mkdir -p $destdir 
 
+##\rm *.pyc */*.pyc */*/*.pyc */*/*/*.pyc */*/*/*/*.pyc */*/*/*/*/*.pyc  */*/*/*/*/*/*.pyc */*/*/*/*/*/*/*.pyc */*/*/*/*/*/*/*/*.pyc
+
 # ------------------ Copy source files --------------------------------
 
 echo  'Copying tools src files. '
 
 $sendit -r $excludes --exclude="*.pyc" --exclude="orig" --exclude="tst" $srcdir/*  $destdir
 
-# ------------------ Remove tools shell script files --------------------------------
-
-#cd $destdir/bin/
-
-# montage-spi is to overcome montage name collision
-
-\rm $destdir/bin/montage-spi
- 
-\rm $destdir/bin/binarytree
-\rm $destdir/bin/classavg
-\rm $destdir/bin/ctfcircle
-\rm $destdir/bin/ctfdemo
-\rm $destdir/bin/ctfgroup
-\rm $destdir/bin/ctfmatch
-\rm $destdir/bin/emancoords2spiderdoc
-\rm $destdir/bin/emanrctcoords2spiderdoc
-\rm $destdir/bin/mkapps
-\rm $destdir/bin/mkfilenums
-\rm $destdir/bin/montagefromdoc
-\rm $destdir/bin/montage
-\rm $destdir/bin/pyplot
-\rm $destdir/bin/qview
-\rm $destdir/bin/scatter
-\rm $destdir/bin/spiconvert
-\rm $destdir/bin/verifybyview
-\rm $destdir/bin/viewstack
-\rm $destdir/bin/xmippsel2spiderdoc
-\rm $destdir/bin/xplor
-
-\rm $destdir/bin-python/python 
-
-
 # ------------------ Create tar archive --------------------------------
 cd $destdir
 \rm -f tools.tar tools.tar.gz
 tar cvf tools.tar *
-tar --delete -vf  tools.tar use-spider-utils-create-tools-dist-to-update
 gzip tools.tar  
 
 echo ' 'Use:  /usr16/software/spider/utils/tosend.csh  to update distribution release
@@ -79,7 +48,7 @@ exit
 #/usr16/software/spider/tools-src    79Mb    Has: Attic,RCS     Lacks: *.pyc
 
 # Distribution copy created using: /usr16/software/spider/utils/create-tools-dist.csh
-#/usr16/software/spider/tools-dist  105Mb    Has: tar=51Mb      Lacks: tst, *.pyc, RCS 
+#/usr16/software/spider/tools-dist  105Mb    Has: tar=40Mb      Lacks: *.pyc, RCS 
 
 # Local execution copy
 #/usr16/software/spider/tools        91Mb    Has tar.gz=21Mb

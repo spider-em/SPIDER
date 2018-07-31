@@ -6,7 +6,7 @@
 # HEALTH RESEARCH INCORPORATED (HRI),
 # ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455
 #
-# Email:  spider@wadsworth.org
+# Email:  spider@health.ny.gov
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License as
@@ -21,11 +21,11 @@
 # make file numbers from a list of filenames. First file is the output file!
 
 import sys
-from Spider.Spiderutils import writedoc, filenumber
 import os
+from Spider.Spiderutils import writedoc, filenumber
 
 def unique(L):
-    " remove duplicates from a list "
+    " Remove duplicates from a list "
     D = {}
     for n in L:
         D[n] = 1

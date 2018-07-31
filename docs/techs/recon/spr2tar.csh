@@ -19,7 +19,7 @@ echo " "; echo " Read mr.html  to get list of desired reconstruction procedure f
 ./mkdirs.py -n myproject
 
 # Create Docs directory to hold important html files & some useful info.
-mkdir myproject/Docs
+mkdir -p myproject/Docs
 
 echo " " ; echo " Copy other useful files to "Docs" directory -----"
 

@@ -22,6 +22,7 @@
 #       Removed obsolete 'RM *' operations     ArDean Leith  Sep. 2014
 #       Moved raw man dir                      ArDean Leith  Mar. 2015
 #       spider_root -> usr16                   ArDean Leith  Apr. 2017
+#       Do not menu bad 'TF ED' operation      ArDean Leith  Jun. 2018
 #
 # PURPOSE:  Converts ascii text manuals of SPIDER in $text_mans_dir to HTML 
 #           (only files with .man  extensions are processed), and 
@@ -853,6 +854,9 @@ for ($i = 1; $i <=2; $i++)
             {next;}
         # Leave out obsolete 'HD D' operation from index
         if ($oper =~ m/^HD D/)
+            {next;}
+        # Leave out obsolete 'TF ED' operation from index
+        if ($oper =~ m/^TF ED|^CTF ED/)
             {next;}
 
 

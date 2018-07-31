@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-# mkdirs.py
+# /usr16/software/spider/docs/techs/recon/mkdirs.py
 # Creates directories, and loads batch files into subdirectories.
 
 import string

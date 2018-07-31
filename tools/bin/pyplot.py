@@ -9,7 +9,7 @@
 # HEALTH RESEARCH INCORPORATED (HRI),
 # ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455
 #
-# Email:  spider@wadsworth.org
+# Email:  spider@health.ny.gov
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License as
@@ -23,7 +23,7 @@
 
 from   Tkinter import *
 import Pmw
-import tkMessageBox  # Used for showerror
+import tkMessageBox               # Used for showerror
 from   tkFileDialog import asksaveasfilename, askopenfilename
 import Gnuplot, Gnuplot.funcutils
 import os

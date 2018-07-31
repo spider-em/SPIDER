@@ -14,18 +14,19 @@ fftw_dest="/usr16/software/send/spider/fftw"
 
 # FFTW3 targets included in copy
 #fftw_sources="fftw3-intel fftw3-32 fftw3-opt64 fftw3-intel64 fftw3-osx-32 fftw3-osx-64  fftw3-osx-32-pgi fftw3-osx-64-pgi " apr15
-fftw_sources="fftw3-intel fftw3-32 fftw3-opt64 fftw3-intel64" 
+## DONE fftw_sources="fftw3-intel fftw3-32 fftw3-opt64 fftw3-intel64" 
+ fftw_sources="fftw337-intel64-icc" 
 
 # Name of FFTW3 distribution directory in distribution destination
 build_dir="${fftw_dest}/FFTW3_dist"
    
 # Copy the target FFTW3 object library files
-echo Copying: config, howto, AUTHORS COPY, .libs lib files   
+echo Copying: config, howto, AUTHORS, COPY, and  lib, files   
 for i in ${fftw_sources}
   do
   cd ${fftw_src}/${i}
   mkdir -p $fftw_dest/${i} 
-  cp -rpuf --parents config* how* AUTHORS COPY* .libs lib $fftw_dest/${i}   
+  cp -rpuf --parents config* how* AUTHORS COPY*  lib $fftw_dest/${i}   
 done
 echo " "
 

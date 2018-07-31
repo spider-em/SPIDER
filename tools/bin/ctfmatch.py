@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 # SOURCE:  ctfmatch.py 
-# PURPOSE: Display CTF doc files created by SPIDER's 'TF ED' command
+# PURPOSE: Display CTF doc files 
 #
 # Spider Python Library
 # Copyright (C) 2006  Health Research Inc.
@@ -9,7 +9,7 @@
 # HEALTH RESEARCH INCORPORATED (HRI),
 # ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455
 #
-# Email:  spider@wadsworth.org
+# Email:  spider@health.ny.gov
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License as
@@ -21,16 +21,16 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 # General Public License for more details.
 
-from Tkinter import * 
+from   Tkinter        import * 
 from   tkFileDialog   import askopenfilename, asksaveasfilename
 import tkMessageBox
 import Pmw
-from math import *
 import string, sys
 import os, time
-from commands import getoutput
+from   math           import *
+from   commands       import getoutput
 
-from support import Spiderutils
+from Spider           import Spiderutils
 
 import webbrowser
 webpage = "http://www.wadsworth.org/spider_doc/spider/tools/docs/ctfmatch.html"
@@ -44,7 +44,7 @@ def ctfhelp():
 def ctfabout():
     s = "CTFmatch 1.0\n\n" + \
         "A tool for analyzing the output " +\
-        "from SPIDER's TF ED command."
+        "from support's CTF FIND command."
     tkMessageBox.showinfo("About CTFmatch 1.0", s)
 
 def integer(astring):
@@ -78,7 +78,7 @@ def writedoc(filename, column1=1, column2=0):
             fp.write(data)
             fp.close()
         except:
-            print "unable to write to %s" % filename
+            print "Unable to write to %s" % filename
             return 0
     # if it's a new file
     else:
@@ -96,7 +96,7 @@ def writedoc(filename, column1=1, column2=0):
             fp.write(data)
             fp.close()
         except:
-           print "unable to create %s" % filename
+           print "Unable to create %s" % filename
            return 0
     return 1
             

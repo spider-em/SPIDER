@@ -4,12 +4,12 @@ C
 C MRCP.F                    FILENAMES LENGTHENED   JAN 89 ARDEAN LEITH
 C                           USED OPFILE            NOV 00 ARDEAN LEITH
 C                           YEARS OLD BUG FIXED    MAR 16 ARDEAN LEITH
-C
+C                           INTEGER BUG            JUN 18 ARDEAN LEITH
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2016  Health Research Inc.,                         *
+C=* Copyright 1985-2018  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -70,7 +70,7 @@ C--*********************************************************************
 
         INTEGER               :: NLETD,LERR,LAUF,N0,K,IX,IY
         REAL                  :: SUM,PHI,CP,SP,X,Y,XCENTER,YCENTER
-        INTEGER               :: DX,DY,DDX,DDY,B1,B2,W
+        REAL                  :: DX,DY,DDX,DDY,B1,B2,W
 
         REAL, ALLOCATABLE     :: A(:,:), BUF(:)
 
@@ -93,7 +93,7 @@ C       CYLINDRICAL PROJECTION
         CALL FILERD(FLN1,NLET,NULL,'OUTPUT',IRTFLG)
         IF (IRTFLG .NE. 0) GOTO 998
 
-        PHI0 =0
+        PHI0 = 0
         CALL RDPRM1S(PHI0,NOT_USED,
      &              'STARTING ANGLE (0 = 3 OCLOCK)',IRTFLG)
         IF (IRTFLG .NE. 0) GOTO 998
@@ -129,7 +129,7 @@ C       CYLINDRICAL PROJECTION
      &         ' DEGREES,      X DIMENSION:',I5)
         
 88      CALL RDPRM(WINK,NOT_USED,
-     &       'NEW ANGULAR INCREMENT OR <RET>')
+     &       'NEW ANGULAR INCREMENT OR <CR>')
 
         IF (WINK .NE. 0) THEN
           AINC    = WINK
@@ -174,11 +174,11 @@ C     GO THROUGH THE VOLUME
         XCENTER = DBUF(IRX+1,LAUF,1)
         YCENTER = DBUF(IRY+1,LAUF,1)
         WRITE(NOUT,102) LAUF,XCENTER,YCENTER
-102     FORMAT('  SLICE # ',I3,'  CENTER AT: (',F7.2,',',F7.2,')')
+102     FORMAT('  SLICE #:',I4,'  CENTER AT: (',F7.2,',',F7.2,')')
 
 C       READ IN SLICE (PERPENDICULAR TO Y)
         DO I = 1,NZ
-          N0 = (I-1)*NY+LAUF
+          N0 = (I-1) * NY + LAUF
           CALL REDLIN(LUN1,BUF,NX,N0)
           DO  K=1,NX
             A(K,I) = BUF(K)
@@ -197,8 +197,8 @@ C       LOOP ALONG PHI
 
           DO  K=IRADI,IRAD
             RAD = K
-            X   = RAD*CP+XCENTER
-            Y   = RAD*SP+YCENTER
+            X   = RAD * CP + XCENTER
+            Y   = RAD * SP + YCENTER
 
             IF (X >= 1 .AND. X <  NX .AND.
      &          Y >= 1 .AND. Y <  NZ) THEN
@@ -207,10 +207,10 @@ C             PIXEL IS WITHIN SLICE
               IY  = INT(Y)
 
 
-              DX  = X-IX
-              DY  = Y-IY
-              DDX = 1-DX
-              DDY = 1-DY
+              DX  = X - IX
+              DY  = Y - IY
+              DDX = 1 - DX
+              DDY = 1 - DY
               IF (MITO) THEN
 C                MODIFED MAXIMUM PROJECTION 
                  SUM = MAX(A(IX,IY), SUM)
@@ -223,10 +223,10 @@ C                   HAVE A POSITIVE PIXEL, FIND DISTANCE FROM CENTER
                  ENDIF
  
               ELSE
-                 B1  = A(IX,IY)  *DDX+A(IX+1,IY)  *DX
-                 B2  = A(IX,IY+1)*DDX+A(IX+1,IY+1)*DX
-                 W   = B2*DY+B1*DDY
-                 SUM = SUM+W
+                 B1  = A(IX,IY)   * DDX + A(IX+1,IY)   * DX
+                 B2  = A(IX,IY+1) * DDX + A(IX+1,IY+1) * DX
+                 W   = B2 * DY + B1 * DDY
+                 SUM = SUM + W
               ENDIF
             ENDIF
 	  ENDDO

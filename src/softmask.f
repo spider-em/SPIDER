@@ -3,13 +3,14 @@ C **********************************************************************
 C
 C  SOFTMASK                                      APR 2013 ArDean Leith 
 C              3D BUG                            MAY 2014 ArDean Leith 
+C              PARALLELIZED AND SPEEDED UP       FEB 2018 ArDean Leith
 C
 C **********************************************************************
 C=*  AUTHOR: ArDean Leith                                              *
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2014  Health Research Inc.,                         *
+C=* Copyright 1985-2018  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -48,8 +49,8 @@ C--*********************************************************************
 
 C     DOC FILE POINTER
       REAL,    ALLOCATABLE   :: BUFIMG(:,:,:)
-      INTEGER, ALLOCATABLE   :: ISURFX(:),ISURFY(:),ISURFZ(:)
-      REAL,    ALLOCATABLE   :: BUF(:)
+      INTEGER, ALLOCATABLE   :: ISURFX(:),ISURFY(:),ISURFZ(:),ISURFN(:)
+      REAL,    ALLOCATABLE   :: BUF(:,:)
       INTEGER, ALLOCATABLE   :: ILIST1(:),ILIST2(:)
 
       CHARACTER (LEN=MAXNAM) :: FILPATIN,FILPATOUT
@@ -65,6 +66,7 @@ C     DOC FILE POINTER
       INTEGER                :: NLET,NIMG,LOCAT,LOCAST,NPIX,MAXIMOUT
       INTEGER                :: IMGNUMOUT,NIMGT,NIMGOUT,NC
       INTEGER                :: NINDX1,NINDX2,I,IDISTSQ,NINSIDE
+      INTEGER                :: NX1,NY1,NZ1,NX2,NY2,NZ2,NHW,IGO,IEND
                
       REAL                   :: HW,THRESH,DIST,WGH,DISTY
 
@@ -113,10 +115,11 @@ C     SINGLE IMAGE/VOLUME OPERATION
       NPIX = NX * NY * NZ        
       ALLOCATE(BUFIMG(NX,NY,NZ), 
      &         ISURFX(NPIX), ISURFY(NPIX), ISURFZ(NPIX),
-     &         BUF(NX), 
+     &         ISURFN(NZ),
+     &         BUF(NX,NY), 
      &         STAT=IRTFLG)
         IF (IRTFLG .NE. 0) THEN 
-           MWANT = NPIX*4 + NX
+           MWANT = NPIX*4 + NZ *NX*NY
            CALL ERRT(46,'SOFTMASK; SLICE1...,',MWANT)
            GOTO 9999
         ENDIF
@@ -154,13 +157,15 @@ C        COSINE EDGE MASKING
 
 	 CALL RDPRM1S(HW,NOT_USED,'WIDTH',IRTFLG)
          IF (IRTFLG .NE. 0) GOTO 9999
+         NHW = IFIX(HW)
 
       ELSE IF (MODE == 'G' ) THEN
 C        GAUSSIAN EDGE MASKING
 
 	 CALL RDPRM1S(HW,NOT_USED,'HALFWIDTH',IRTFLG)
          IF (IRTFLG .NE. 0) GOTO 9999
-         HW = -1.0 / (HW**2)
+         NHW = IFIX( 2.0 * HW)
+         HW  = -1.0 / (HW**2)
       ENDIF
 
       NINDX1  = 1
@@ -176,10 +181,12 @@ C       READ IMAGE OR VOLUME
         NINSIDE = 0
 
         IF (NZ > 1) THEN
-C         VOLUME
-          !write(nout,*)  'Image #:',IMGNUM,nx,ny,nz
+C         THIS IS A VOLUME
 
+C         FIND SURFACE VOXELS
           DO IZ = 1,NZ
+!!c$omp      parallel do private(i,j,ninside,ixm1,ixp1,iym1,iyp1,
+!!c$omp&                         izm1,izp1),reduction(+:nsurf)                     
              DO IY = 1, NY
                 DO IX = 1, NX
 
@@ -213,7 +220,8 @@ C                        THIS IS A SURFACE VOXEL
                    ENDIF
                 ENDDO
              ENDDO
-          ENDDO
+             ISURFN(IZ) = NSURF
+          ENDDO      ! END OF: DO IZ=1,NZ
 
           IF (VERBOSE .AND. IMGNUM > 0) THEN
              WRITE(NOUT,91) IMGNUM,NINSIDE,NSURF 
@@ -226,38 +234,64 @@ C                        THIS IS A SURFACE VOXEL
           ENDIF
 
 
+          NX1 = MAX(1, (MINVAL(ISURFX) - NHW))
+          NX2 = MIN(NX,(MAXVAL(ISURFX) + NHW))
+          NY1 = MAX(1, (MINVAL(ISURFY) - NHW))
+          NY2 = MIN(NY,(MAXVAL(ISURFY) + NHW))
+          NZ1 = MAX(1, (MINVAL(ISURFZ) - NHW))
+          NZ2 = MIN(NZ,(MAXVAL(ISURFZ) + NHW))
+
+C         CREATE SOFTMASK
+
           DO IZ = 1,NZ
+
+C            FOR SPEED IGNORE SLICES ABOVE AND BELOW MASKED EXTENT
+             IGO  = MAX(1,     ISURFN(MAX(1, (IZ - NHW))))
+             IEND = MIN(NSURF, ISURFN(MIN(NZ,(IZ + NHW))))
+c            write(6,*) '  z,i1,i1,isurfn:',iz,igo,iend,isurfn(iz)
+
+             IF (IEND <= 0 .OR. IGO == IEND) THEN
+C               OUTSIDE OF MASK AREA, SAVE OUTPUT SLICE
+                BUF = 0.0         ! ARRAY OP
+                CALL WRTVOL(LUNOUT,NX,NY,IZ,IZ,BUF,IRTFLG)
+                CYCLE
+             ENDIF
+
+c$omp        parallel do private(iy,ix,idistsqmin,idistsq,i,dist,wgh)                     
              DO IY = 1, NY
                 DO IX = 1, NX
 
                    IF (BUFIMG(IX,IY,IZ) >= THRESH) THEN
-C                     IN 100% AREA 
-
-                      BUF(IX) =  BUFIMG(IX,IY,IZ)
+C                     INSIDE 100% MASK AREA 
+                      BUF(IX,IY) =  BUFIMG(IX,IY,IZ)
 
                    ELSE
-C                     NOT IN 100% MASK AREA 
+C                     DEFINATELY NOT IN 100% MASK AREA 
+                      IF (IX < NX1 .OR. IX > NX2 .OR.
+     &                    IY < NY1 .OR. IY > NY2 .OR.
+     &                    IZ < NZ1 .OR. IZ > NZ2) THEN
+C                        OUTSIDE OF SOFTMASK AREA
+                         BUF(IX,IY) = 0.0
+                         CYCLE
+                      ENDIF
    
                       IDISTSQMIN = HUGE(IDISTSQMIN)
-                      DO I = 1,NSURF
-
+                      DO I = IGO,IEND
                          IDISTSQ = (IX - ISURFX(I))**2 + 
      &                             (IY - ISURFY(I))**2 +
      &                             (IZ - ISURFZ(I))**2
 
-                         IF (IDISTSQ < IDISTSQMIN) THEN
-C                           DISTANCE IS LESS THAN PREVIOUS CLOSEST
+C                        IS DISTANCE LESS THAN PREVIOUS CLOSEST?
+                         IDISTSQMIN = MIN(IDISTSQ,IDISTSQMIN)
 
-                            IDISTSQMIN = IDISTSQ
-                         ENDIF
-                      ENDDO   ! END OF: DO I = 1,NSURF
+                      ENDDO   ! END OF: DO I=IGO,IEND
 
                       DIST = SQRT(FLOAT(IDISTSQMIN))
 
 	              IF (MODE == 'C' ) THEN
 C                        COSINE EDGE MASKING
 
-		         BUF(IX)  = (1.0 + 
+		         BUF(IX,IY)  = (1.0 + 
      &                     COS(QUADPI*MIN(1.0, DIST/HW))) * 0.5
 
                       ELSE IF (MODE == 'G' ) THEN
@@ -266,16 +300,16 @@ C                        GAUSSIAN EDGE MASKING
 		         WGH  = HW * DIST **2
 
 		         IF (WGH < -50.0)  THEN
-		            BUF(IX) = 0.0
+		            BUF(IX,IY) = 0.0
 		         ELSE
-		            BUF(IX) = EXP(WGH)
+		            BUF(IX,IY) = EXP(WGH)
 		         ENDIF
                       ENDIF
                    ENDIF       ! END OF: (BUFIMG(IX,IY,IZ) < THRESH....
 	        ENDDO          ! END OF:DO IX = 1, NX
 
-C               SAVE OUTPUT VOL
-                CALL WRTLIN(LUNOUT,BUF,NX,(IZ -1)*NY+IY)
+C               SAVE OUTPUT SLICE
+                CALL WRTVOL(LUNOUT,NX,NY,IZ,IZ,BUF,IRTFLG)
  
 	     ENDDO          ! END OF:DO IY = 1, NY
 	  ENDDO             ! END OF:DO IZ = 1, NZ
@@ -328,19 +362,34 @@ C                      THIS IS A SURFACE PIXEL
 95           FORMAT('  OBJECT PIXELS:',I7,'  SURFACE PIXELS: ',I7)
           ENDIF
 
+          NX1 = MAX(1, (MINVAL(ISURFX) - NHW))
+          NX2 = MIN(NX,(MAXVAL(ISURFX) + NHW))
+          NY1 = MAX(1, (MINVAL(ISURFY) - NHW))
+          NY2 = MIN(NY,(MAXVAL(ISURFY) + NHW))
+
+C         CREATE SOFTMASK
+c$omp     parallel do private(iy,ix,idistsqmin,idistsq,i,dist, wgh)                     
           DO IY = 1, NY
              DO IX = 1, NX
 
                 IF (BUFIMG(IX,IY,IZ) >= THRESH) THEN
 C                  IN 100% AREA 
 
-                   BUF(IX) = BUFIMG(IX,IY,IZ)
+                   BUF(IX,IY) = BUFIMG(IX,IY,IZ)
                    !if(iy == 80)write(6,*)  'Ix:',ix,iy,buf(ix)
 
                 ELSE
-C                  NOT IN 100% MASK AREA 
-   
+C                  DEFINATLY NOT IN 100% MASK AREA 
+                   IF (IX < NX1 .OR. IX > NX2 .OR.
+     &                 IY < NY1 .OR. IY > NY2) THEN
+C                      OUTSIDE OF SOFTMASK AREA
+                      BUF(IX,IY) = 0.0
+                      CYCLE
+                   ENDIF
+
+C                  FIND CLOSEST SURFACE PIXEL
                    IDISTSQMIN = HUGE(IDISTSQMIN)
+
                    DO I = 1,NSURF
 
                       IDISTSQ = (IX - ISURFX(I))**2 + 
@@ -348,7 +397,7 @@ C                  NOT IN 100% MASK AREA
                       !if(iy == 80)write(6,*) 'I:',IDISTSQ
 
 C                     IF DISTANCE IS LESS THAN PREVIOUS CLOSEST
-                      IF (IDISTSQ < IDISTSQMIN) IDISTSQMIN = IDISTSQ
+                      IDISTSQMIN = MIN(IDISTSQ,IDISTSQMIN)
 
                    ENDDO   ! END OF: DO I = 1,NSURF
 
@@ -357,7 +406,7 @@ C                     IF DISTANCE IS LESS THAN PREVIOUS CLOSEST
 	           IF (MODE == 'C' ) THEN
 C                     COSINE EDGE MASKING
 
-		      BUF(IX)  = (1.0 + 
+		      BUF(IX,IY)  = (1.0 + 
      &                    COS(QUADPI*MIN(1.0, DIST/HW))) * 0.5
 
                    ELSE IF (MODE == 'G' ) THEN
@@ -366,9 +415,9 @@ C                     GAUSSIAN EDGE MASKING
 		      WGH  = HW * DIST **2
 
 		      IF (WGH < -50.0)  THEN
-		         BUF(IX) = 0.0
+		         BUF(IX,IY) = 0.0
 		      ELSE
-		         BUF(IX) = EXP(WGH)
+		         BUF(IX,IY) = EXP(WGH)
 		      ENDIF
                       !if(iy == 80)write(6,*)'v:',ix,iy,dist,wgh,buf(ix)
 
@@ -376,13 +425,11 @@ C                     GAUSSIAN EDGE MASKING
 
                 ENDIF    ! END OF: (BUFIMG(IX,IY,IZ) < THRESH....
 	     ENDDO       ! END OF:DO IX = 1, NX
-
-C            SAVE OUTPUT IMAGE
-             CALL WRTLIN(LUNOUT,BUF,NX,IY)
- 
 	   ENDDO         ! END OF:DO IY = 1, NY
-        ENDIF     
 
+C          SAVE OUTPUT IMAGE
+           CALL WRTVOL(LUNOUT,NX,NY,1,1,BUF,IRTFLG)
+        ENDIF     
 
 C       SET OPERATION LINE REGISTERS
         CALL REG_SET_NSEL(1,2,FLOAT(NINSIDE),FLOAT(NSURF),

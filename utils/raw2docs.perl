@@ -317,7 +317,7 @@ sub print_trailer
    {
    return qq(<hr> <small>&copy; <a href="$rel_path/copyright.html"> \
    Copyright Notice</a> /           &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;  \
-   Enquiries: <a href="mailto:spider\@wadsworth.org">spider\@wadsworth.org</a> </small></a>\n);
+   Enquiries: <a href="mailto:spider\@health.ny.gov">spider\@health.gov.ny</a> </small></a>\n);
    }
 
 #---------------------------------------------------------------------------

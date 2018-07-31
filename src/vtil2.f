@@ -28,12 +28,13 @@ C                  REMOVED 'BP 3F O'               1/04/13 ARDEAN LEITH
 C                  'BP 3F P','BP 3F M'             2/14/13 ARDEAN LEITH
 C                  'SK' PARAMETERS                 5/20/13 ARDEAN LEITH
 C                  'DR ERR' REMOVED                2/10/14 ARDEAN LEITH
+C                  'PJ 2D' ADDED                   5/24/18 ARDEAN LEITH
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2014  Health Research Inc.,                         *
+C=* Copyright 1985-2018  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
@@ -64,21 +65,19 @@ C--*********************************************************************
         INCLUDE 'CMLIMIT.INC'
 
         INTEGER               :: MAXDIM
-        INTEGER, PARAMETER    :: MAXSAM = 4096
-        REAL                  :: BUF(MAXSAM + 1)
 
         LOGICAL               :: REFRINGS,REPLACE
 
         CHARACTER(LEN=MAXNAM) :: FILNAM,FIL
 
+        INTEGER               :: MAXIM  
+        INTEGER               :: MAXIM2 
+        INTEGER               :: IRTFLG 
+
         INTEGER, PARAMETER    :: LUN1   = 8            
         INTEGER, PARAMETER    :: LUN2   = 9
         INTEGER, PARAMETER    :: LUN3   = 10
         INTEGER, PARAMETER    :: LUN4   = 11
-
-        INTEGER               :: MAXIM  
-        INTEGER               :: MAXIM2 
-        INTEGER               :: IRTFLG 
 
         MAXIM  = 0
         MAXIM2 = 0
@@ -198,6 +197,9 @@ C         MOST "PJ" ROUTINES OPEN THEIR OWN FILES
 
           NCT = lnblnkn(FCHAR)
           SELECT CASE(FCHAR(4:NCT))
+
+          CASE ('2')
+              CALL PJ2D(LUN1,LUN2,LUN3)
 
           CASE ('3')
               IF (USE_FBS_INTERP) THEN 

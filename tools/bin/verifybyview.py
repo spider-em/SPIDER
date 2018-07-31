@@ -7,7 +7,7 @@
 # HEALTH RESEARCH INCORPORATED (HRI),
 # ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455
 #
-# Email:  spider@wadsworth.org
+# Email:  spider@health.ny.gov
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License as
@@ -60,18 +60,18 @@ print "verifybyview.py, Modified 2016 July 5"
 #    2005-04-07 -- reads in pre-existing good-particle lists
 #               -- program remembers colors and display size for particle montages
 
-from   Tkinter import *
-import Pmw
-from   tkFileDialog import askopenfilename, askdirectory
-from   tkMessageBox   import showerror
-import Image, ImageTk
 import os,sys,re
-from math import sqrt
-from SpiderImagePlugin import *
-#from Spider import Spiderutils, montage al 2016
-from Spider import Spiderutils
+import Pmw
 import montage 
-import ImagePalette
+
+from   Tkinter           import *
+from   tkFileDialog      import askopenfilename, askdirectory
+from   tkMessageBox      import showerror
+from   PIL               import Image, ImageTk
+from   PIL               import ImagePalette
+from   math              import sqrt
+from   SpiderImagePlugin import *
+from   Spider            import Spiderutils
 
 def backup(filename):
     if os.path.exists(filename):
@@ -862,7 +862,7 @@ class pmontage:
         win.destroy()
 
 # -------------------------------------------------------------------
-# classAverages:  inherits from Spider.montage
+# classAverages:  inherits from support.montage
 #                 overrides makeMenus() and display()
 # -------------------------------------------------------------------
 
