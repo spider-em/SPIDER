@@ -3,9 +3,8 @@
 
 **SPIDER**  (**S**ystem for **P**rocessing **I**mage **D**ata from **E**lectron microscopy and **R**elated fields) 
 is an image processing system for electron microscopy, especially usefull for single-particle reconstruction. 
-[*SPIDER*](http://spider.wadsworth.org/spider_doc/spider/docs/spider.html) has been in use since 1978. 
-  
-SPIDER contains over 210,000 lines of Fortran code and 7400 files. 
+[*SPIDER*](http://spider.wadsworth.org/spider_doc/spider/docs/spider.html) has been in use since 1978 and contains 
+over 210,000 lines of Fortran code and 7400 files. 
 The complete distribution can easily be downloaded from the 
 [Wadsworth Center](http://spider.wadsworth.org/spider_doc/spider/docs/spi-register.html). 
 
@@ -38,8 +37,7 @@ The complete distribution can easily be downloaded from the
                      [operations](http://spider.wadsworth.org/spider_doc/spider/docs/operations_doc.html) and
                      [techniques](http://spider.wadsworth.org/spider_doc/spider/docs/techniques.html).  
                   
-   6.   Includes [source code](http://spider.wadsworth.org/spider_doc/spider/src) and   
-                 executables for use on Linux. 
+   6.   Includes [source code](http://spider.wadsworth.org/spider_doc/spider/src) and executables for use on Linux. 
  
 * History:
 
@@ -49,14 +47,13 @@ The complete distribution can easily be downloaded from the
            [Wadsworth Center](http://www.wadsworth.org) in Albany, NY.
        
    2.  Contributors (in chronological order): 
-                    J. Frank,    B. Shimkin,   H. Dowse,       L. Miranda,  C. Mannella,   J. P. Bretaudiere, 
-                    M. V. Heel,  A. Verschoor, M. Radermacher, A. Leith,     J. M. Carazo, P. Penczek,    S. Sibal,  
-                    L. Odesanya, Y. H. Li,     M. Ladjadj,     Y. Chen,      K. R. Lata,   J. Zhu,        W. P. Liu,   B. Rath, 
-                    C. Yang,     B. Baxter,    R. Hegerl,      A. Frangakis, L. Joyeux,    Z. Huang,      R. J. Renka,
-                    T. Shaikh,   J. Sengupta,  J. LeBarron,    N. Boisset,   H. Gao,       G. Kishchenko, J. M. Kennedy.                
-
-                    In addition SPIDER is dependent on the Fourier package [FFTW](http://www.fftw.org") by 
-                    M. Frigo and SG Johnson.  
+          J. Frank,    B. Shimkin,   H. Dowse,       L. Miranda,  C. Mannella,   J. P. Bretaudiere, 
+          M. V. Heel,  A. Verschoor, M. Radermacher, A. Leith,     J. M. Carazo, P. Penczek,    S. Sibal, 
+          L. Odesanya, Y. H. Li,     M. Ladjadj,     Y. Chen,      K. R. Lata,   J. Zhu,        W. P. Liu,   B. Rath, 
+          C. Yang,     B. Baxter,    R. Hegerl,      A. Frangakis, L. Joyeux,    Z. Huang,      R. J. Renka, 
+          T. Shaikh,   J. Sengupta,  J. LeBarron,    N. Boisset,   H. Gao,       G. Kishchenko, J. M. Kennedy.
+                
+          In addition SPIDER is dependent on the Fourier package [FFTW](http://www.fftw.org) by M. Frigo and SG Johnson.  
                
    3.   Maintained since 2007 by: ArDean Leith & Tanvir Shaikh. During these 12 years they added numerous 
         operations, procedures, parallelizations, and over 500 pages of documentation.  There have been no 
