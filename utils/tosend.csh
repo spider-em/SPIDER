@@ -5,7 +5,7 @@
 # PURPOSE: Update local copy of SPIDER distribution        
 #          The distribution copy is currently in:  /usr16/software/send/spider/...
 #
-# NEXT:    The combined SPIDER/WB distribution can then be placed in a compressed
+# NEXT:    The combined SPIDER/Web distribution can then be placed in a compressed
 #            tar archive and put in the download directory on the
 #            external SPIDER website.
 #
@@ -16,12 +16,13 @@
 #          Rewrite for Linux & rsync   Mar 2009
 #          Rewrite for /usr8           Jul 2010
 #          Rewrite for /usr16          Apr 2017
+#          spire plus tools            Nov 2018
 
 echo 
 echo "Did you run: /usr16/software/spider/docs/techs/recon/spr2tar.csh          first?"
 echo "Did you run: /usr16/software/spider/docs/techs/recon1a/Utils/spr2tar.csh  first?"
 echo "Did you run: /usr16/software/spider/docs/techs/recon1b/Utils/spr2tar.csh  first?"
-echo "Did you run: /usr16/software/spider/utils/create-tools-dist.csh           first?"
+echo "Did you run: /usr16/software/spider/utils/create-spire-dist.csh           first?"
 echo 
 
 # Set some variables for input locations
@@ -33,9 +34,7 @@ set mandir       = $spiroot/man
 set procdir      = $spiroot/proc
 set docdir       = $spiroot/docs
 set tipsdir      = $spiroot/docs/tips
-set pubsubdir    = $spiroot/pubsub
 set fftwdir      = $spiroot/fftw
-set toolsdir     = $spiroot/tools
 set spiredir     = $spiroot/spire 
 set spiredistdir = $spiroot/spire-dist 
    
@@ -50,22 +49,20 @@ set mandest      = $destroot/spider/man
 set procdest     = $destroot/spider/proc
 set bindest      = $destroot/spider/bin
 set fftwdest     = $destroot/spider/fftw
-set pubsubdest   = $destroot/spider/pubsub
 set spiredest    = $destroot/spider/spire
-set toolsdest    = $destroot/spider/tools
 set jwebdest     = $destroot/web/jweb
 
 # Make necessary dir
+mkdir -p $destroot  
 mkdir -p $destroot/spider     $srcdest $docdest $mandest 
-mkdir -p $procdest $fftwdest  $pubsubdest
-mkdir -p $destroot $jwebdest
+mkdir -p $procdest $fftwdest  
+mkdir -p $jwebdest
 
-# Set rsync = verbose, compressed, update, 
-#             preserve executability, preserve time, follow Symlinks
+# Set rsync = compressed, update, preserve executability, 
+#             preserve time, follow Symlinks
 set sendit  = 'rsync -zuEt --out-format="%n%L" --delete '
 
 set excludes = "--exclude="RCS" --exclude="Attic" --exclude="dev" "  
-
 
 # ------------------ Copy source files --------------------------------
 
@@ -81,10 +78,9 @@ $sendit -d  $srcdir/*.f      \
 # Replace Makebody.inc with distribution version
 \cp -p $srcdir/Makebody.inc.send  $srcdest/Makebody.inc
 
-$sendit -d $excludes $srcdir/Makefile_samples/*  $srcdest/Makefile_samples
-$sendit -dv $excludes $srcdir/pgi_mods/*         $srcdest/pgi_mods
-$sendit -dv $excludes $srcdir/ifort_mods/*       $srcdest/ifort_mods
- 
+$sendit -d  $excludes $srcdir/Makefile_samples/*  $srcdest/Makefile_samples
+$sendit -dv $excludes $srcdir/ifort_mods/*        $srcdest/ifort_mods
+
 # --------------------- Copy man files -------------------------------
 
 echo 'Copying man files. xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
@@ -109,13 +105,7 @@ $sendit -d $tipsdir/utilities.html      \
            $tipsdir/timebprp.spi        \
            $tipsdir/timing.html        $docdest/tips            
  
-# --------------------- Copy PubSub* files ---------------------------
-
-echo 'Copying pubsub files. xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
-
-$sendit -d $excludes  $pubsubdir/*   $pubsubdest
-
-# --------------------- Copy proc files ---------------------------
+# --------------------- Copy proc files ------------------------------
 
 echo 'Copying proc files. xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
 $sendit -d $excludes       \
@@ -127,58 +117,47 @@ $sendit -d $excludes       \
            $procdir/*.tom  \
            $procdir/*.perl      $procdest
 
-# --------------------- Copy Python tools files ----------------------
+# --------------------- Copy Spire and Python tools files ------------
 
-echo 'Copying Python tools files  xxxxxxxxxxxxxxxxxxxxxxxxx'
-$sendit -r $excludes \
-           $toolsdir/readme*      \
-           $toolsdir/install.html \
-           $toolsdir/tools.tar.gz \
-           $toolsdir/docs             $toolsdest
+echo 'Copying Spire and Python tools files. xxxxxxxxxxxxxx'
 
-# --------------------- Copy Spire files ---------------------------
+$sendit -r $spiredistdir/*    $spiredest
 
-echo 'Copying Spire distribution files. xxxxxxxxxxxxxxxxxxx'
+# --------------------- Copy JWeb files -----------------------------
 
-$sendit -r $spiredir/readme*                      $spiredest
-$sendit -r $excludes $spiredir/doc                $spiredest
-$sendit -r $spiredistdir/spire_linux-1.5.5.tar.gz $spiredest
-
-# --------------------- Copy JWeb files ---------------------------
-
-echo 'Copying JWeb files. xxxxxxxxxxxxxxxx'
+echo 'Copying JWeb files. xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
 
 $sendit -r $excludes                    \
            $jwebdir/src                 \
            $jwebdir/linux.tar.gz    $jwebdest
 
-# --------------------- Copy  html doc & tech files --------------------------
+# --------------------- Copy  html doc & tech files -----------------
 
 echo 'Copying html doc & tech files. xxxxxxxxxxxxxxxxxxxxxx'
 
-$sendit -rL  $excludes --exclude="tips"                   \
-           --exclude="tar_archive/rct2*"                  \
-           --exclude="spiproject.1*"                      \
-           --exclude="spiproject.tar.gz"                  \
-           --exclude="techs/lgstr/tomo/data"              \
-           --exclude="techs/lgstr/tomo/output"            \
-           --exclude="exa/images/bp3fpart*dat"            \
+$sendit -rL  $excludes --exclude="tips"                       \
+           --exclude="tar_archive/rct2*"                      \
+           --exclude="spiproject.1*"                          \
+           --exclude="spiproject.tar.gz"                      \
+           --exclude="techs/lgstr/tomo/data"                  \
+           --exclude="techs/lgstr/tomo/output"                \
+           --exclude="exa/images/bp3fpart*dat"                \
            --exclude="techs/recon1a/natproc_data_mics.tar.gz" \
            $docdir/*   $docdest
 
-# ----------------------------------------------------------------
+# ------------------------------------------------------------------
 
 echo ' '
 echo 'SPIDER successfully copied to: distribution dir '
 echo ' '
 echo 'Check for extra  tar archives '
 echo 'Update FFTW files with: send-fftw.sh '
-echo 'Update executables with makeall in src dir (on staten & valcour)'
+echo 'Update executables with makeall in src dir (on gyan & valcour)'
 echo 'Update Web  with:       /usr16/software/web/utils/tosend.sh '
-echo 'touch /usr16/software/send/spider/bin/CONTAINS_SPIDER_RELEASE_24.03 '
+echo 'touch /usr16/software/send/spider/bin/CONTAINS_SPIDER_RELEASE_25.00 '
 echo 'Archive and compress the distribution in: /usr16/software/send '
 echo 'set wwwdir = spider-stage:/export/apache/vhosts/spider.wadsworth.org/htdocs/spider_doc/spider '
-echo 'scp -p /usr16/software/send/spiderweb.24.03.tar.gz  $wwwdir/download '
+echo 'scp -p /usr16/software/send/spiderweb.25.00.tar.gz  $wwwdir/download '
 echo 'Edit:  /usr16/software/spider/docs/spi-download.html '
 echo 'scp -p /usr16/software/spider/docs/spi-download.html  $wwwdir/docs '
 echo 'Update external web pages using: /usr16/software/spider/utils/wwwupdate.csh '

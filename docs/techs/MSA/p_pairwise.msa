@@ -1,0 +1,424 @@
+; PAIRWISE REFERENCE-FREE ALIGNMENT
+; 
+; Adapted from Michael Radermacher's rfreeprepdoc.rec and rfreeal2001.rec
+;
+; Described in Marco S, Chagoyen M, de la Fraga LG, Carazo JM, Carrascosa JL (1996)
+; "A variant to the Random Approximation of the reference-free algorithm."
+; Ultramicroscopy. Vol 66: pg. 5-10.
+
+; ---------------- Parameters ----------------
+
+RR [innerRadius]
+?inner radius for alignment, pixels?
+
+RR [alignRadius]
+?outer alignment radius, pixels?
+
+RR [searchRange]
+?translation search range, pixels?
+
+RR [stepSize]
+?translation step size?
+
+RR [allowRotateYN]
+?allow rotation (0 == NO)?
+
+RR [saveOutputsYN]
+?save outputs (1 == YES)?
+
+RR [verbosityLevel]
+?verbosity level?
+
+; --------------- Input files ---------------
+FR
+?particle list?[selection_list]
+FR
+?particle template?[unaligned_image]
+
+; --------------- Output files ---------------
+FR
+?toplevel output directory?[output_dir]
+FR
+?reference-free average?[reffree_avg]
+
+; ------------ END BATCH HEADER ------------
+
+; Temporary files
+FR L
+[pair_doc][output_dir]/pairdoc*****              ; pair-document template
+FR L
+[pair_align_doc][output_dir]/docaligndepth*****  ; intermediate, reference-free alignment doc
+FR L
+[intermed_avg_stack][output_dir]/pairavg*****    ; intermediate-average stack, in DEPTH_DIR
+FR L
+[temp_unmirrored7]_71
+FR L
+[temp_aligned7]_72
+FR L
+[temp_unmirrored5]_51
+FR L
+[temp_aligned5]_52
+
+[one] = 1  ; dummy register
+
+IF ( [verbosityLevel] .EQ. 1 ) THEN
+    SYS
+    echo "Preparing pairing docs"; date
+ENDIF
+
+SYS
+mkdir [output_dir]
+
+; get #particles
+UD N [numParts]
+[selection_list]
+
+[maxPairs]  = INT(([numParts]+1)/2)
+[dummy]     = 0
+[pairDepth] = 1
+
+DE
+[pair_doc][pairDepth]
+SD /   FIRST_PARTICLE SECOND_PARTICLE
+[pair_doc][pairDepth]
+
+; loop through pairs
+DO LB1 [pairKey1] = 1,[maxPairs]
+    [firstKey] = [pairKey1]*2 - 1
+
+    ; get first-particle#
+    UD IC [firstKey], [firstPart]
+    [selection_list]
+
+    ; get second-particle# in pair
+    [secondKey] = [firstKey] + 1
+
+    ; if there are particles left, then read next one
+    IF ( [secondKey] .LE. [numParts] ) THEN
+        UD IC [secondKey], [secondPart]
+        [selection_list]
+
+        ; save to pairing doc
+        SD [pairKey1], [firstPart],[secondPart]
+        [pair_doc][pairDepth]
+
+    ; else if there is an unpaired particle, pair it with particle "0"
+    ELSE
+        ; save to pairing doc
+        SD [pairKey1], [firstPart],[dummy]
+        [pair_doc][pairDepth]
+    ENDIF
+
+    ; increment particle counter
+    [firstKey] = [secondKey] + 1
+LB1
+; end pair-loop
+
+; close docs
+UD ICE
+[selection_list]
+SD E
+[pair_doc][pairDepth]
+
+
+; ALIGNMENT
+
+; loop through pair-depths
+DO LB4 [pairDepth] = 1,999
+    ; get number of pairs
+    UD N [oldPairs]
+    [pair_doc][pairDepth]
+
+    ; exit loop if there is a single pair
+    IF ( [oldPairs] .EQ. 1 ) GOTO LB16
+
+    [newPairs]  = INT(([oldPairs]+1)/2)
+    [fullPairs] = INT([oldPairs]/2)
+    [nextDepth] = [pairDepth] + 1
+
+    DE
+    [pair_doc][nextDepth]
+    SD /     FIRST_PAIR  SECOND_PAIR
+    [pair_doc][nextDepth]
+
+    ; loop through pairs of pairs
+    DO LB6 [pairKey6] = 1,[fullPairs]
+        [firstPair]  = 2*[pairKey6] - 1
+        [secondPair] = 2*[pairKey6]
+
+        ; get particle #s
+        UD IC [firstPair],[firstPart]
+        [selection_list]
+        UD IC [secondPair],[secondPart]
+        [selection_list]
+
+        ; save to pair-of-pair doc
+        SD [pairKey6], [firstPair],[secondPair]
+        [pair_doc][nextDepth]
+    LB6
+    ; exit pair-of-pair loop
+
+    ; if there is an unpaired pair, pair it with zero
+    IF ( [newPairs] .NE. [fullPairs] ) THEN
+        ; get first particle#
+        UD IC [firstPair], [firstPart]
+        [selection_list]
+
+        SD [newPairs], [oldPairs],[dummy]
+        [pair_doc][nextDepth]
+    ENDIF
+
+    UD ICE
+    [selection_list]
+    SD E
+    [pair_doc][nextDepth]
+LB4
+; end pair-depth loop
+
+; jump here if there is a single pair
+LB16
+
+[lastDepth] = [nextDepth] - 1
+
+
+IF ( [verbosityLevel] .EQ. 1 ) THEN
+    SYS
+    echo ; echo "Aligning particles pairwise"; date
+ENDIF
+
+[pairDepth] = 1
+
+DE
+[pair_align_doc][pairDepth]
+SD /    PAIR_DEPTH   FIRST_PAIR   SECOND_PAIR    CCROT       IN_PLANE     X_SHIFT      Y_SHIFT       MIRROR
+[pair_align_doc][pairDepth]
+
+
+; the alignment for the first pairing file is done 
+; separately, because the input images are not yet 
+; the intermediate images.
+
+IF ( [verbosityLevel] .EQ. 1 ) THEN
+    SYS
+    echo "Depth=001"
+ENDIF
+
+DE
+[intermed_avg_stack][pairDepth]@
+
+; loop through pairs
+DO LB7 [pairKey7] = 1,[maxPairs]
+    ; get particle #s from pair doc
+    UD IC [pairKey7], [firstPart],[secondPart]
+    [pair_doc][pairDepth]
+
+    ; if particle is paired then...
+    IF ( [secondPart] .NE. 0 ) THEN
+        ; align ("reference" is first particle in pair)
+        OR SH [inplaneAngle7],[xshift7],[yshift7],[mirrorFlag7],[ccrot7]
+        [unaligned_image][firstPart]   ; INPUT: reference 
+        [searchRange],[stepSize]
+        [innerRadius],[alignRadius]
+        [unaligned_image][secondPart]  ; INPUT: image to be aligned
+        N                              ; check mirrored positions?
+
+        ; Check if rotations are allowed
+        IF ( [allowRotateYN] .EQ. 0 ) [inplaneAngle7] = 0
+        
+        ; if necessary, mirror after shift+rotate
+        ; (Should never be necessary if using 'N' in OR SH above)
+        IF ( [mirrorFlag7] .EQ. 1 ) THEN
+            SYS
+            echo "WARNING:" ; echo "Mirroring is necessary for some reason"
+            
+            EN
+            
+;            RT SQ
+;            [unaligned_image][secondPart]
+;            [temp_unmirrored7]   ; OUTPUT
+;            [inplaneAngle7]
+;            [xshift7],[yshift7]
+; 
+;            MR
+;            [temp_unmirrored7]  ; INPUT: rotated+shifted, unmirrored image
+;            [temp_aligned7]     ; OUTPUT
+;            Y                   ; mirror around y-axis
+        ENDIF
+
+        IF ( [mirrorFlag7] .EQ. 0 ) THEN
+            RT SQ
+            [unaligned_image][secondPart]
+            [temp_aligned7]   ; OUTPUT
+            [inplaneAngle7]
+            [xshift7],[yshift7]
+        ENDIF
+ 
+        ; add pair together
+        AD
+        [temp_aligned7]
+        [unaligned_image][firstPart]
+        [intermed_avg_stack][pairDepth]@{*****[pairKey7]}
+        *  ; no more images to add
+
+        ; save to alignment doc
+        SD [pairKey7], [pairDepth],[firstPart],[secondPart],[ccrot7],[inplaneAngle7],[xshift7],[yshift7],[mirrorFlag7]
+        [pair_align_doc][pairDepth]
+        
+    ; else if unpaired
+    ELSE
+        ; copy
+        CP
+        [unaligned_image][firstPart]
+        [intermed_avg_stack][pairDepth]@{*****[pairKey7]}
+
+        ; save zeroes to alignment doc
+        SD [pairKey7], [pairDepth],[firstPart],[dummy],[dummy],[dummy],[dummy],[dummy],[dummy]
+        [pair_align_doc][pairDepth]
+    ENDIF
+LB7
+; end pair-of-particles loop
+
+; close docs
+UD ICE
+[pair_doc][pairDepth]
+SD E
+[pair_align_doc][pairDepth]
+
+
+; loop through pairing docs
+DO LB8 [pairDepth] = 1,[lastDepth]
+    [nextDepth] = [pairDepth] + 1
+
+    IF ( [verbosityLevel] .EQ. 1 ) THEN
+        SYS
+        echo "Depth={***[nextDepth]}"
+    ENDIF
+    
+    DE
+    [intermed_avg_stack][nextDepth]@
+
+    ; get number of pairs
+    UD N [numPairs]
+    [pair_doc][nextDepth]
+
+    ; loop through pairs
+    DO LB5 [pairKey5] = 1,[numPairs]
+        ; get pair #s 
+        UD IC [pairKey5], [firstPair],[secondPair]
+        [pair_doc][nextDepth]
+
+        ; if pair is paired then...
+        IF ( [secondPair] .NE. 0 ) THEN
+            ; align
+            OR SH [inplaneAngle5],[xshift5],[yshift5],[mirrorFlag5],[ccrot5]
+            [intermed_avg_stack][pairDepth]@{*****[firstPair]}
+            [searchRange],[stepSize]
+            [innerRadius],[alignRadius]
+            [intermed_avg_stack][pairDepth]@{*****[secondPair]}
+            N  ; check mirrored positions?
+ 
+            ; Check if rotations are allowed
+            IF ( [allowRotateYN] .EQ. 0 ) [inplaneAngle5] = 0
+            
+            ; if necessary, mirror after shift+rotate
+            ; (Should never be necessary if using 'N' in OR SH above)
+            IF ( [mirrorFlag5] .EQ. 1 ) THEN
+                SYS
+                echo "WARNING:" ; echo "Mirroring is necessary for some reason"
+                
+                EN
+            
+;                RT SQ
+;                [intermed_avg_stack][pairDepth]@{*****[secondPair]}
+;                [temp_unmirrored5]   ; OUTPUT
+;                [inplaneAngle5]
+;                [xshift5],[yshift5]
+;
+;                MR
+;                [temp_unmirrored5]  ; INPUT: rotated+shifted, unmirrored image
+;                [temp_aligned5]     ; OUTPUT
+;                Y                   ; mirror around y-axis
+            ENDIF
+            
+            IF ( [mirrorFlag5] .EQ. 0 ) THEN
+                RT SQ
+                [intermed_avg_stack][pairDepth]@{*****[secondPair]}
+                [temp_aligned5]   ; OUTPUT
+                [inplaneAngle5]
+                [xshift5],[yshift5]
+            ENDIF
+ 
+            ; add pair together
+            AD
+            [temp_aligned5]  ; INPUT: aligned second pair
+            [intermed_avg_stack][pairDepth]@{*****[firstPair]}
+            [intermed_avg_stack][nextDepth]@{*****[pairKey5]}
+            *  ; no more images to add
+
+            ; save to alignment doc
+            SD [pairKey5], [nextDepth],[firstPair],[secondPair],[ccrot5],[inplaneAngle5],[xshift5],[yshift5],[mirrorFlag5]
+            [pair_align_doc][nextDepth]
+            
+        ; else if unpaired
+        ELSE
+            ; copy first pair
+            CP
+            [intermed_avg_stack][pairDepth]@{*****[firstPair]}
+            [intermed_avg_stack][nextDepth]@{*****[pairKey5]}
+
+            ; save zeroes to alignment doc
+            SD [pairKey5], [nextDepth],[firstPair],[dummy],[dummy],[dummy],[dummy],[dummy],[dummy]
+            [pair_align_doc][nextDepth]
+        ENDIF
+    LB5
+    ; end pair-of-pair loop
+
+    ; close docs    
+    UD ICE
+    [pair_doc][nextDepth]
+    SD E
+    [pair_align_doc][nextDepth]
+LB8
+; end pairing-doc loop
+
+SD E
+[pair_align_doc][nextDepth]
+
+; copy last average to output
+CP
+[intermed_avg_stack][nextDepth]@{*****[one]}
+[reffree_avg]
+
+; Unless desired, delete intermediate files
+IF ( [saveOutputsYN] .LT. 0.5 ) THEN
+    ; Loop through pairs
+    DO LB2 [pairKey2] = 1,[maxPairs]
+        DE
+        [pair_doc][pairKey2]
+        DE
+        [intermed_avg_stack][pairDepth]@
+        DE
+        [pair_align_doc]
+    LB2
+    ; End pair-loop
+ENDIF
+
+RE
+
+; Modified 2018-02-12
+;    2015-04-08 (trs) -- added option to disallow rotation
+;    2015-03-27 (trs) -- made into subroutine
+;    2015-03-24 (trs) -- all center-of-gravity options written for comparison
+;    2014-03-25 (trs) -- can override object diameter from PARAMS
+;    2014-03-05 (trs) -- making master copy of aligned stack
+;    2014-03-05 (trs) -- writing images in stacks
+;    2014-02-27 (trs) -- added centering options
+;    2014-02-06 (trs) -- added digit for more than 999 pairs of images
+;    2014-01-24 (trs) -- uses all processors
+;    2013-05-06 (trs) -- uses named registers
+;    2013-05-06 (trs & svd) -- gets image-dimension from first image
+;    2010-08-24 (trs) -- AP MQ and OR MQ replaced with AP SH and OR SH
+;    2010-02-08 (trs) -- fits outer alignment radius to image
+;    2009-06-12 (trs) -- centers penultimate average
+;    2008-11-25 (trs) -- computes variance
+;    2008-11-24 (trs) -- adapted from pairwise.spi

@@ -1,0 +1,194 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<HTML>
+<HEAD>
+    <META HTTP-EQUIV="CONTENT-TYPE" CONTENT="text/html; charset=utf-8">
+    <TITLE> Alignment parameters </TITLE>
+    <link rel='stylesheet' href='tapu.css' type='text/css' />
+</HEAD>
+
+<BODY LANG="en-US" DIR="LTR">
+<body link="#0000ee" vlink="#0000ee" alink="#ff0000" bgcolor="#cccccc">
+
+<CENTER><P>
+<FONT SIZE="5"><B>Alignment parameters</B></font>
+<BR>
+</P></CENTER>
+
+<HR>
+
+<P><B>[searchRange] and [stepSize]</B></P>
+
+    <P>
+    Finding the optimum <I>x</I> &amp; <I>y</I> translations, while 
+    simultaenously finding the optimum rotation angle, is a difficult problem.  
+    The problem arises because translational and orientational alignment are interdependent. 
+    That is, translational alignment works best when the images are rotationally aligned, 
+    while rotational alignment works best when the images are translationally aligned.  
+    So, what many of <a href="../../../align_overview.html">SPIDER's alignment algorithms</a> 
+    is to perform a brute-force search, 
+    attempting separation orientational alignments for various combinations of <I>x</I> &amp; <I>y</I> shifts. 
+    For example, using a <b><I>[searchRange]</I></b> of <I>1</I> would result in the following shift combinations:
+    </P>    
+    
+    <p><code class="snippet">{(-1,1),(0,1),(1,1),(-1,0),(0,0),(1,0),(-1,-1),(0,-1),(1,-1)}</code></p>
+    
+    <P>
+    As the allowed shift increases, the number of required orientational alignments increases quickly. 
+    Alignment is generally the slowest step in image-processing (except for 3D classification). 
+    One way to reduce the computational requirements for large shifts is to not re-align for <U>every</U> shift.  
+    This is specified by the parameter <b><I>[stepSize]</I></b>.  
+    For example, using a <b><I>[searchRange]</I></b> of <I>2</I> 
+    and a <b><I>[stepSize]</I></b> of <I>2</I> would result in the following shift combinations:
+    </P>
+    
+    <p><code class="snippet">{(-2,2),(0,2),(2,2),(-2,0),(0,0),(2,0),(-2,-2),(0,-2),(2,-2)}</code>
+    <BR>(notice that odd-numbered shifts are skipped)</p>
+    
+    <P>
+    If instead the <b><I>[searchRange]</I></b> remained <I>2</I>, 
+    while the <b><I>[stepSize]</I></b> was reduced to <I>1</I>, 
+    there would be 25 orientational searches (more than I want to list) instead of the 9 above.
+    </P>
+    
+    <P>There are other alignment strategies to try to cope with this interdependency, 
+    such as those that use rotationally-invariant autocorrelation functions, 
+    but in my experience, they don't work well.</P>
+    
+<HR>
+
+<P><B>[objDiameter] and [innerRad]</B></P>
+
+    <P>
+    How SPIDER performs orientational alignment is that it 
+    first converts the Cartesian image to polar (radius vs. angle) form, 
+    and then performs a series of 1D cross correlations (each of which is fast).  
+    A 1D cross-correlation in the polar representation is 
+    equivalent to a rotation in Cartesian space
+    </P>    
+    
+    <P>
+    The mamximum radius is specified, indirectly, by the parameter <b><I>[objDiam]</I></b>: object diameter. 
+    The simplest strategy would simply be to divide the object diameter by two to get the radius.  
+    If the chosen radius is too small, the outermost features 
+    (which are likely to provide the best "handles" for alignment) 
+    will not be included in the orientational alignment.  
+    If the chosen radius is too large, then noise outside the particle will be included in the alignment.  
+    (This isn't <U>so</U> bad, since features here are <U>generally</U> weaker than over the particle, 
+    and thus will not influence the alignment strongly.)
+    <P>
+    
+    <p>
+    How most of the procedures here are written, 
+    the chosen radius by default is 70% bigger than half the object diameter.  
+    Particles are (hopefully) not perfectly round, and they are generally not perfectly centered.  
+    So, the radius chosen in practice is padded a bit. 
+    </p>
+
+    <p>
+    Also, the maximum radius must allow for a shift of up to <b><I>[searchRange]</I></b> 
+    while remaining within the image window.  
+    For example, for a 100-pixel image and a search range of 8 pixels, a radius of 44 would be too big.  
+    That is, a circle at the image center and then shifted 8 pixels would go off the image.  
+    The procedures here generally trap for this before crashing the alignment commands.  
+    A message will be echoed to the screen of the form:
+    </p>
+    
+    <B><PRE>
+    Tested alignment radius of 53 from specified object diameter of 75 too big
+    Using outer alignment radius of 39 pixels
+    </PRE></B>
+    
+    <P>
+    It may be that you <U>need</U> a large <b><I>[searchRange]</I></b> and large outer radius, 
+    beyond what the SPIDER procedure will allow.  
+    It may be that your particle is windowed too tightly, and 
+    that you need to rewindow the particles into larger windows.
+    </P>
+    
+    <P>
+    The choice of inner radius <b><I>[innerRad]</I></b> is not so crucial. 
+    The reason is that, at low radius, few pixels are available to cover all 360 degrees. 
+    Thus, the polar plot of intensity versus angle will not change rapidly at low radius.  
+    </P>
+    
+    <P>
+    However, sometimes one sees in the final average a hole at the inner alignment radius, 
+    or that there is a halo at the outer alignment radius.  
+    For the former, I lately use a <b><I>[innerRad]</I></b> of <I>1</I>. 
+    For the latter, I play with the outer radius to try to minimize this sharp boundary.  
+    </P>
+    
+<HR>
+
+<a name="cgph">
+<P><B>[cgOption]</B></P>
+
+    <P>
+    In the 2D alignments, especially the reference-free variants, 
+    it is possible that the averages will be off-center.  
+    For the untilted images, it is helpful for the images to be centered. 
+    For the tilted images, it is <U>vital</U> that the particles are centered well.  
+    (The tilted images are the ones used in the 3D reconstruction, 
+    and are thus required to have a common origin.)
+    </P>
+    
+    <P>There are three strategies implemented to center the averages:</P>
+    
+    <OL start=0>
+      <LI>nothing -- sometimes doing nothing is better than doing something</LI>
+      <LI>center of gravity, SPIDER command <a href="../../..//man/cgph.html">'CG PH'</a></LI>
+      <LI><a href="../center1.rct">center1.rct</a>, which rotates the image by 180 degrees, 
+          translationally aligns the image to its rotated form, and shifts by half the best match</LI>
+    </OL>
+    
+    <P>
+    To help decide whether the centering work properly, two circles are overlain onto the intermediate averages, 
+    corresponding to the inner and outer radii.
+    For reference-free alignment, all three centering options are written, to the stacks
+    <font class="output">Zerodegr/Pairwise/stkcentavg</font> for <a href="../pairwise.rct">pairwise.rct</a>, and 
+    <font class="output">Tilted/Pairwise/stkcentavg</font> for <a href="../centertilt.rct">centertilt.rct</a>.    
+    If you don't like the option that was selected, you need to re-run the alignment.
+    For <a href="../multirefalign.rct">multirefalign.rct</a>, 
+    circles are currently not drawn onto the references <font class="output">Zerodegr/Multiref#/stkref</font>.
+    </P>
+</a>
+
+<!--    <table class="outs">
+    <tr valign="top"><td>&curren;</td>
+	<td><font class="output">OUTPUT</font>:</td>
+	<td>DESCRIPTION.</td></tr>
+    <tr valign="top"><td>&curren;</td>
+	<td><font class="output">OUTPUT</font>:</td>
+	<td>DESCRIPTION.</td></tr>
+    </table>-->
+    
+<!--    <table class="outs">
+	<tr valign="top"><td>&curren;                                   </td>
+	    <td><b><I>PARAMETER</I></b>:                      </td>
+	    <td>DESCRIPTION.</td></tr>
+	<tr valign="top"><td>&curren;                                   </td>
+	    <td><b><I>PARAMETER</I></b>:                      </td>
+	    <td>DESCRIPTION.</td></tr>
+    </table>-->
+
+</UL>
+
+<HR>
+
+<small>
+
+<p>
+Source: align.htm        &nbsp;&nbsp;&nbsp;
+Page updated: 2015/08/13 &nbsp;&nbsp;&nbsp;
+Tapu Shaikh
+</p>
+
+<p>
+<address>&copy; <a href="http://www.wadsworth.org/spider_doc/spider/docs/copyright.html">Copyright notice</a> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Enquiries: <a href= "mailto:spider@wadsworth.org">spider@wadsworth.org</a>
+</address>
+</p>
+</small>
+
+</BODY>
+</HTML>

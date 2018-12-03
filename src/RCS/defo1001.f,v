@@ -1,6 +1,7 @@
-head	1.15;
+head	1.16;
 access;
 symbols
+	healthdept_2018:1.16
 	pre_getangas:1.14
 	GPL2010:1.14
 	pre_GPL2010:1.13
@@ -21,6 +22,11 @@ symbols
 locks; strict;
 comment	@c @;
 
+
+1.16
+date	2018.10.03.14.34.04;	author leith;	state Exp;
+branches;
+next	1.15;
 
 1.15
 date	2013.01.07.15.21.32;	author leith;	state Exp;
@@ -103,9 +109,9 @@ desc
 @
 
 
-1.15
+1.16
 log
-@CS_zero
+@email_health_dept
 @
 text
 @C++*********************************************************************
@@ -118,7 +124,7 @@ C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
 C=* Copyright 1985-2010  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@@wadsworth.org                                        *
+C=* Email: spider@@health.ny.gov                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -133,14 +139,391 @@ C=* You should have received a copy of the GNU General Public License  *
 C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
 C **********************************************************************
-C   DEFO1001(NUM,NP,KP,NA,NSAM,SPMAX)
+C   DEFO1001(NUM,NP,KP,NA,NX,SPMAX)
 C
 C   USING LEAST SQUARE METHOD TO DETERMINE DEFOCUS, AMPLITUDE CONTRAST
+C   (WEIGHTED FIT; CONSTRAIN REQUIRE A2 IS THE SAME FOR DEFOCUS SERIES)
+C   X(K,A) = PI*(0.5*CS*LAMBDA**3*K**4-DZ*LAMBDA*K**2)-OFFSET
+C   X(K,A) = PI*(0.5*CS*LAMBDA**3*K**4-A1*LAMBDA*K**2)-A2
+C
+C   PARAMETERS:
+C	NUM      NUMBER OF IMAGES
+C       NP(I)    NUMBER OF MINIMUM IN EACH IMAGE
+C	KP(I,J)  ARRAY OF SP. FREQ. POINTS OF MINIMUM
+C	NA(I,J)  ARRAY OF ABBERATION
+C	NX       IMAGE X DIMENSION
+C	SPMAX    MAX OF SP. FREQ.
+C	NA       NUMBER OF ABBERATION IN UNIT OF PI
+C       
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C **********************************************************************
+
+	SUBROUTINE DEFO1001(NUM,NP,KP,NA,NX,SPMAX)
+
+        INCLUDE 'CMBLOCK.INC' 
+	INCLUDE 'CMLIMIT.INC' 
+	
+	DIMENSION NP(*)
+	REAL      KP(20,20),NA(20,20)
+
+        REAL      A1(20)
+	EQUIVALENCE (A0(1),A1(1))
+        COMMON  A0(20),B(20),C(20,20),DA1(10),DXA1(10),NM(30),
+     &          XA1(30,30),XA2(30),XM(30),Y1(20,10),Y2(20,10),
+     &          WEIGHT(20,10),F2(512)
+
+	REAL                   :: KM,KS,LAMBDA,KF
+	CHARACTER (LEN=1)      :: CHO1
+	CHARACTER (LEN=1)      :: NULL = CHAR(0)
+        CHARACTER (LEN=MAXNAM) :: OUTNAME
+
+	REAL, PARAMETER        :: PI = 3.141592654
+	INTEGER, PARAMETER     :: LUN2 = 20
+
+	AA0 = -100.0  
+ 
+	DO I=1,30
+           NM(I) = 0
+	ENDDO
+
+C       INPUT EM PARAMETERS
+
+	CALL RDPRM1S(LAMBDA,NOT_USED,'WAVELENGTH LAMBDA [A]',IRTFLG)
+
+	CALL RDPRM1S(CS,NOT_USED,'SPHERICAL ABERRATION CS [MM]',IRTFLG)
+
+        call flushresults
+
+        IF (CS < 0.0001) CS = 0.0001
+
+	CS = CS * 1.0E07
+	KM = SPMAX
+	KS = KM / FLOAT(NX)
+
+C       GET VALUE OF Y1  
+	DO  I=1,NUM
+	   DO  J=1,NP(I)
+	      Y1(I,J) = PI * NA(I,J)
+	   ENDDO
+	ENDDO
+
+C       CALCULATE  DEFOCUS (ROUGH)
+	DO I=1,20
+	   A0(I) = 0
+	   B(I)  = 0
+
+	   DO J=1,20
+	      C(I,J) = 0
+	   ENDDO
+	ENDDO
+
+	IF (NUM == 1 .AND. NP(1) == 1 ) THEN
+	   CALL RDPRM1S(A2,NOT_USED,'AMPLITUDE CONTRAST [RAD]',IRTFLG)
+
+	   KF = KP(1,1) * KS
+	   A0(1) = -(Y1(1,1) + A2 - 0.5 * CS * PI * LAMBDA**3 * KF**4) /
+     &              (PI * LAMBDA * KF**2)
+	   GOTO 130
+
+	ELSE
+	   DO  I=1,NUM
+	      DO  J=1,NP(I)
+	         KF             = KP(I,J) * KS
+	         C(I,I)         = C(I,I) - PI * (LAMBDA*KF**2)**2
+	         C(NUM+1,I)     = C(NUM+1,I) - PI*LAMBDA*KF**2
+	         C(I,NUM+1)     = C(I,NUM+1) - LAMBDA*KF**2
+	         C(NUM+1,NUM+1) = C(NUM+1,NUM+1) - 1.0
+	         B(I)           = B(I) - (PI*(0.5*CS*LAMBDA**3*KF**4)-
+     &                             Y1(I,J))*(LAMBDA*KF**2)
+	         B(NUM+1)       = B(NUM+1) -
+     &                            (PI*(0.5*CS*LAMBDA**3*KF**4)-Y1(I,J))
+	      ENDDO
+	   ENDDO
+
+	   CALL MATINV(C,NUM+1,DET)
+
+	   DO  I=1,NUM+1
+	      DO  J=1,NUM+1
+	         A0(I) = A0(I) + C(I,J) * B(J)
+	      ENDDO
+	   ENDDO
+	ENDIF
+
+	A2 = A0(NUM+1)
+
+	IF ( A2 > 0.3 .OR. A2 < 0) THEN
+C          USING DEEPEST GRADIENT METHOD TO CALCULATE AMPLITUDE
+
+C          CALCULATE THE WEIGHT OF EACH POINTS
+	   DO  I=1,NUM
+	      DO  J=1,NP(I)
+	         KF          = KP(I,J) * KS
+	         WEIGHT(I,J) = PI*SQRT((2. * CS * LAMBDA**3 * KF**3)**2 +
+     & 	                       (2. * A0(I)*LAMBDA * KF)**2) * 2. * KS
+C	         WRITE(NOUT,*) WEIGHT(I,J)
+	      ENDDO
+	   ENDDO
+
+	   DO  K=1,31
+
+	      DO I=1,NUM
+	         A1(I) = A0(I)
+	      ENDDO
+
+	      A2 = FLOAT(K) * 0.01
+	      IF (K == 31) THEN
+	         A2 = AM2
+	      ENDIF
+
+C             SET ITERATION STEP 
+	      NSTEP = 0
+
+C             CALCULATE VALUE OF Y2 
+	      DO  I=1,NUM
+	         DO  J=1,NP(I)
+	            KF      = KP(I,J) * KS
+	            Y2(I,J) = PI * (0.5 * CS * LAMBDA**3 * KF**4 -
+     &                        A1(I)*LAMBDA*KF**2) - A2
+	         ENDDO
+	      ENDDO
+
+C             SET INITIAL VALUE X**2(X,A)=SUM((Y1(I)-Y2(I))**2) */
+	      X1 = 0
+	      DO  I=1,NUM
+	         DO J=1,NP(I)
+                    X1 = X1+(Y1(I,J)-Y2(I,J))**2/WEIGHT(I,J)**2
+	         ENDDO
+	      ENDDO
+
+
+C             CALCULATE THE VALUE OF Y2(I) 
+999	      DO I=1,NUM
+	         DA1(I) = 0.001 * A1(I)
+	      ENDDO
+
+	      DA2 = 0.001 * A2
+	      DO  I=1,NUM
+	         DO  J=1,NP(I)
+	            KF      = KP(I,J)*KS
+ 	            Y2(I,J) = PI * (0.5*CS*LAMBDA**3*KF**4-
+     &                        A1(I)*LAMBDA*KF**2)-A2
+	         ENDDO
+	      ENDDO
+
+C             CALCULATE DX**2 / DA1 
+
+	      DO  L=1,NUM
+	         DO  I=1,NUM
+	            IF(L == I) THEN
+	               X = A1(L) + 0.1 * DA1(L)
+	            ELSE
+	               X = A1(I)
+	            ENDIF
+
+	            DO  J=1,NP(I)
+	               KF      = KP(I,J) * KS
+	               Y2(I,J) = PI * (0.5*CS*LAMBDA**3*KF**4 -
+     &                           X * LAMBDA*KF**2)-A2
+	            ENDDO
+	         ENDDO
+
+	         X2 = 0
+	         DO  I=1,NUM
+	            DO  J=1,NP(I)
+	               X2 = X2+(Y1(I,J)-Y2(I,J))**2/WEIGHT(I,J)**2
+	            ENDDO
+	         ENDDO
+
+	         DXA1(L) = (X2-X1)/(0.1*DA1(L))
+	      ENDDO
+
+C             CALCULATE DX**2 / DA2 
+ 	      DO  I=1,NUM
+	         X = A1(I)
+	         DO  J=1,NP(I)
+	            KF      = KP(I,J) * KS
+	            Y2(I,J) = PI * (0.5*CS*LAMBDA**3*KF**4 -
+     &                        X * LAMBDA*KF**2)-(A2+0.1*DA2)
+	         ENDDO
+	      ENDDO
+
+	      X2 = 0
+	      DO  I=1,NUM
+	         DO  J=1,NP(I)
+	            X2 = X2 + (Y1(I,J) - Y2(I,J))**2 / WEIGHT(I,J)**2
+	         ENDDO
+	      ENDDO
+
+	      DXA2 = (X2-X1) / (0.1*DA2)
+
+C             CALCULATE THE SUM = SUM((DX**2/DAI*DAI)**2) 
+	      SUM = 0
+
+	      DO I=1,NUM
+	         SUM = SUM + (DXA1(I)*DA1(I))**2
+	      ENDDO
+
+	      SUM = SQRT((DXA2*DA2)**2 + SUM)
+
+	      DO I=1,NUM
+                 A1(I) = A1(I) - DXA1(I) * DA1(I)**2 / SUM
+	      ENDDO
+
+           A2 = A2 - DXA2 * DA2**2 / SUM
+
+C          CRITERIA FOR ITERATION 
+	   DO  I=1,NUM
+	      X = A1(I)
+	      DO  J=1,NP(I)
+                 KF      = KP(I,J)*KS
+	         Y2(I,J) = PI*(0.5*CS*LAMBDA**3*KF**4 -
+     &                     X*LAMBDA*KF**2)-A2
+	      ENDDO
+	   ENDDO
+
+	   X2 = 0
+	   DO  I=1,NUM
+	      DO  J=1,NP(I)
+	         X2 = X2 + (Y1(I,J)-Y2(I,J))**2 / WEIGHT(I,J)**2
+	      ENDDO
+	   ENDDO
+
+	   IF ( (X1-X2) < 0) THEN
+
+	       DO I=1,NUM
+	          A1(I) = A1(I) + 0.5 * DXA1(I) * DA1(I)**2 / SUM
+	       ENDDO
+
+	       A2 = A2+0.5*DXA2*DA2**2 / SUM
+C	       WRITE(NOUT,*) 'INITIAL A2=',FLOAT(K)*0.01,'STEP',NSTEP
+C	       WRITE(NOUT,*) 'A1=',(A1(I),I=1,NUM),'OFFSET(RAD)=',A2,'X**2=',X1
+
+	       AM2      = A2/0.01
+	       NAM2     = INT(AM2+0.5)
+	       NM(NAM2) = NM(NAM2)+1
+	       XA2(K)   = A2
+
+	       DO I=1,NUM
+	          XA1(K,I) = A1(I)
+	       ENDDO
+
+	       XM(K) = X1
+
+	    ELSE
+C               SET PARAMETERS FOR NEXT STEP
+	        X1    = X2
+	        NSTEP = NSTEP + 1
+	        GOTO 999
+	   ENDIF
+	ENDDO
+
+C       FIND CONVERGE POINTS
+	NN = 0
+	DO I=1,30
+	   IF (NM(I) > 5) NN = NN + 1
+	ENDDO
+
+	IF (NN > 1) THEN
+C          THERE ARE TWO CONVERGE POINTS
+           X0 = 999999999.0
+           DO I=1,30
+              IF (NM(I) > 5 .AND. XM(I) < X0) THEN
+                 NN = I
+                 X0 = XM(I)	
+              ENDIF
+           ENDDO
+
+	   ELSE
+C             THERE IS ONLY ONE CONVERGE POINT
+              NN = 0
+	      DO I=1,30
+	        IF( NM(I) > NN .OR. (NM(I) == NN .AND.
+     $           XM(I) < XM(NN))) NN = I
+	      ENDDO
+           ENDIF
+
+	   A2 = XA2(NN)
+	   DO I=1,NUM
+	      A0(I) = XA1(NN,I)
+	      A1(I) = A0(I)
+	   ENDDO
+
+	   X1 = XM(NN)
+
+	ENDIF
+
+        WRITE(NOUT,*) ' '	
+130	WRITE(NOUT,*) ' DEFOCUS:', (A0(I), I=1,NUM)
+
+	WRITE(NOUT,140) A2
+140	FORMAT('  AMPLITUDE CONTRAST:',F10.6,/)
+	
+C       GENERATE A FILTER FILE FROM CTF W/O ENVELOPE FUNCTION
+C	GATE VALUE IS 0.08
+
+	GATE = 0.08
+
+	CALL RDPRMC(CHO1,NUMC,.TRUE.,
+     &     'DO YOU WANT TO GENERATE A FILTER? (Y/N)' ,NULL,IRTFLG)
+
+	IF (CHO1 == 'Y') THEN
+           WRITE(NOUT,*)'GENERATE FILTER IN THE INPUT FILE SEQUENCE'
+
+           DO  I=1,NUM
+              X = A0(I)
+              DO  J=1,NX
+                 KF = FLOAT(J)*KS
+                 X1 = PI*(0.5*CS*LAMBDA**3*KF**4-X*LAMBDA*KF**2)-A2
+                 F1 = SIN(X1)
+                 IF (F1 > 0) THEN
+                    F2(J) = -1.
+                 ELSE
+                    F2(J) = 1.
+                 ENDIF
+                 IF (F1 > GATE) THEN
+                    F2(J) = -1.
+                 ELSE
+                    IF (F1 < -1.*GATE) THEN
+                       F2(J) = 1.
+                    ELSEIF( ABS(X1) > PI/2.) THEN
+                       F2(J) = 0.
+                    ENDIF
+                 ENDIF
+              ENDDO
+
+              WRITE(NOUT,'(A,I0)')'  FILE #: ',I	
+        
+              IFORM = 1
+              MAXIM = 0
+              CALL OPFILEC(0,.TRUE.,OUTNAME,LUN2,'U',IFORM,NX,1,1,
+     &                    MAXIM,'OUTPUT',.FALSE.,IRTFLG)
+              CALL WRTLIN(LUN2,F2,NX,1)
+              CLOSE(LUN2)
+           ENDDO
+	ENDIF
+		
+	END
+@
+
+
+1.15
+log
+@CS_zero
+@
+text
+@d11 1
+a11 1
+C=* Email: spider@@wadsworth.org                                        *
+d26 1
+a26 1
+C   DEFO1001(NUM,NP,KP,NA,NSAM,SPMAX)
+d29 3
+a31 3
 C   (WEIGHTED FIT; CONSTRAIN REQUIRE A2 IS THE SAME FOR DEFOCUS SEARIES)
 C   X(K,A)=PI*(0.5*CS*LAMBDA**3*K**4-DZ*LAMBDA*K**2)-OFFSET
 C   X(K,A)=PI*(0.5*CS*LAMBDA**3*K**4-A1*LAMBDA*K**2)-A2
-C
-C   PARAMETERS:
+d34 7
+a40 7
 C	NUM: NUMBER OF IMAGES
 C       NP(I): NUMBER OF MINIMUM IN EACH IMAGES
 C	KP(I,J): ARRAY OF SP. FREQ. POINTS OF MINIMUM
@@ -148,42 +531,39 @@ C	NA(I,J): ARRAY OF ABBERATION
 C	NSAM: IMAGE DIMENSION
 C	SPMAX: MAX OF SP. FREQ.
 C	NA: NUMBER OF ABBERATION IN UNIT OF PI
-C       
-C23456789012345678901234567890123456789012345678901234567890123456789012
-C **********************************************************************
-
+d45 1
+a45 4
 	SUBROUTINE DEFO1001(NUM,NP,KP,NA,NSAM,SPMAX)
 
 C       I DO NOT KNOW IF SAVE IS NEEDED FEB 99 al
         SAVE
-
-        INCLUDE 'CMBLOCK.INC' 
-	INCLUDE 'CMLIMIT.INC' 
+a48 2
 
         CHARACTER (LEN=MAXNAM) ::  OUTNAME
-	
-	REAL      KP(20,20),NA(20,20)
+d50 1
+a51 1
 	DIMENSION NP(*)
-
+d53 1
+a53 1
         REAL   A1(20)
-	EQUIVALENCE (A0(1),A1(1))
-        COMMON  A0(20),B(20),C(20,20),DA1(10),DXA1(10),NM(30),
-     &          XA1(30,30),XA2(30),XM(30),Y1(20,10),Y2(20,10),
-     &          WEIGHT(20,10),F2(512)
-
+d59 4
+a62 2
 	REAL       KM,KS,LAMBDA,KF
 	CHARACTER  CHO1*1,NULL*1
-
+d64 2
+a65 3
 	DATA PI/3.141592654/
 	
 	NULL=CHAR(0)
-
+d67 2
+a68 2
 	LUN2=10
 	AA0= -100.0   
-	DO I=1,30
+d70 1
+a70 1
            NM(I)=0
-	ENDDO
-
+d73 3
+a75 8
 C....... INPUT EM PARAMETERS*/
 	WRITE(NOUT,*)' INPUT PARAMETERS OF  IMAGES'
 	CALL RDPRM(LAMBDA,NOT_USED,'WAVELENGTH LAMBDA [A]')
@@ -192,27 +572,33 @@ C....... INPUT EM PARAMETERS*/
 	CS=CS*1.0E07
 	KM=SPMAX
 	KS=KM/FLOAT(NSAM)
-
+d77 11
+a87 1
 C.......GET VALUE OF Y1  */
-	DO  I=1,NUM
+d89 3
+a91 2
 	DO  J=1,NP(I)
 	Y1(I,J)=PI*NA(I,J)
-	ENDDO
+d93 2
+a94 2
 	ENDDO
 C.......CALCULATE  DEFOCUS(ROUGH)
-	DO I=1,20
+d96 6
+a101 4
 	A0(I)=0
 	B(I)=0
 	DO J=1,20
 	C(I,J)=0
-	ENDDO
+d103 9
+a111 6
 	ENDDO
 	IF(NUM .EQ. 1 .AND. NP(1) .EQ.1) THEN
 	CALL RDPRM(A2, NOT_USED,' AMPLITUDE CONTRAST [RAD]$')
 	KF=KP(1,1)*KS
 	A0(1)=-(Y1(1,1)+A2-0.5*CS*PI*LAMBDA**3*KF**4)/(PI*LAMBDA*KF**2)
 	GOTO 130
-	ELSE
+d113 21
+a133 17
 	DO  I=1,NUM
 	DO  J=1,NP(I)
 	KF=KP(I,J)*KS
@@ -230,11 +616,12 @@ C.......CALCULATE  DEFOCUS(ROUGH)
 	A0(I)=A0(I)+C(I,J)*B(J)
 	ENDDO
 	ENDDO
-	ENDIF
+a134 3
 	A2=A0(NUM+1)
 	IF( A2 .GT. 0.3 .OR. A2 .LT. 0) THEN
 C   USING DEEPEST GRADIENT METHOD TO CALCULATE AMPLITUDE
-
+d136 153
+a288 9
 C......CALCULATE THE WEIGHT OF EACH POINTS
 	DO  I=1,NUM
 	DO  J=1,NP(I)
@@ -244,7 +631,8 @@ C......CALCULATE THE WEIGHT OF EACH POINTS
 C	WRITE(NOUT,*) WEIGHT(I,J)
 	ENDDO
 	ENDDO
-
+d290 3
+a292 36
 	DO  K=1,31
 	DO I=1,NUM
 	A1(I)=A0(I)
@@ -281,9 +669,11 @@ C........CALCULATE THE VALUE OF Y2(I)  */
  	Y2(I,J)=PI*(0.5*CS*LAMBDA**3*KF**4-A1(I)*LAMBDA*KF**2)-A2
 	ENDDO
 	ENDDO
-
+d294 1
+a294 1
 C........CALCULATE DX**2/DA1  */
-
+d296 6
+a301 19
 	DO  L=1,NUM
 	DO  I=1,NUM
 	IF(L .EQ. I) THEN
@@ -303,8 +693,8 @@ C........CALCULATE DX**2/DA1  */
 	ENDDO
 	ENDDO
 	DXA1(L)=(X2-X1)/(0.1*DA1(L))
-	ENDDO
-
+d304 2
+a305 64
 C........CALCULATE DX**2/DA2 */
  	DO  I=1,NUM
 	X=A1(I)
@@ -369,9 +759,11 @@ C........SET PARAMETERS FOR NEXT STEP */
 	ENDDO
 C      FIND CONVERGE POINTS
 	NN=0
-	DO I=1,30
+d307 1
+a307 1
 	IF(NM(I) .GT. 5) NN=NN+1
-	ENDDO
+d309 18
+a326 16
 	IF (NN .GT. 1) THEN
 C         THERE ARE TWO CONVERGE POINTS
           X0=999999999.0
@@ -388,27 +780,31 @@ C   THERE IS ONLY ONE CONVERGE POINT
 	     IF( NM(I) .GT. NN .OR. (NM(I) .EQ. NN .AND.
      $           XM(I) .LT. XM(NN))) NN=I
 	  ENDDO
-           ENDIF
+d328 2
+a329 1
 	   A2=XA2(NN)
-	   DO I=1,NUM
+d331 2
+a332 2
 	      A0(I)=XA1(NN,I)
 	      A1(I)=A0(I)
-	   ENDDO
+d334 8
+a341 3
 	   X1=XM(NN)
 	ENDIF	
 130	WRITE(NOUT,*) ' DEFOCUS=', (A0(I), I=1,NUM)
-	WRITE(NOUT,140) A2
+d343 1
+a343 1
 140	FORMAT(' AMPLITUDE CONTRAST=',F10.6)
-	
-C       GENERATE A FILTER FILE FROM CTF W/O ENVELOPE FUNCTION
-C	GATE VALUE IS 0.08
-
+d348 2
+a349 1
 	GATE=0.08
-	CALL RDPRMC(CHO1,NUMC,.TRUE.,
+d351 3
+a353 2
      &     'DO YOU WANT TO GENERATE A FILTER?(Y/N)' ,NULL,IRT)
 	IF (CHO1 .EQ. 'Y'  .OR. CHO1 .EQ. 'Y') THEN
-           WRITE(NOUT,*)'GENERATE FILTER IN THE INPUT FILE SEQUENCE'
-           DO  I=1,NUM
+d355 1
+d357 7
+a363 7
               X=A0(I)
               DO  J=1,NSAM
                  KF=FLOAT(J)*KS
@@ -416,32 +812,29 @@ C	GATE VALUE IS 0.08
                  F1=SIN(X1)
                  IF (F1 .GT. 0) THEN
                     F2(J)=-1.
-                 ELSE
+d365 1
+a365 1
                     F2(J)=1.
-                 ENDIF
+d367 2
+a368 2
                  IF (F1 .GT. GATE) THEN
                     F2(J)=-1.
-                 ELSE
+d370 4
+a373 4
                     IF (F1 .LT. -1.*GATE) THEN
                        F2(J)=1.
                     ELSEIF( ABS(X1) .GT. PI/2.) THEN
                        F2(J)=0.
-                    ENDIF
-                 ENDIF
-              ENDDO
-
+d378 2
+a379 1
               WRITE(NOUT,*)' FILE # ',I	        
-              IFORM = 1
-              MAXIM = 0
+d382 3
+a384 3
               CALL OPFILEC(0,.TRUE.,OUTNAME,LUN2,'U',IFORM,NSAM,1,1,
      &               MAXIM,'OUTPUT',.FALSE.,IRTFLG)
               CALL WRTLIN(LUN2,F2,NSAM,1)
-              CLOSE(LUN2)
-           ENDDO
-	ENDIF
-		
+a388 1
 	RETURN
-	END
 @
 
 

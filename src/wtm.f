@@ -1,8 +1,8 @@
 
 C ++********************************************************************
 C                                                                      *
-C WTM.F          ADDED ISELECT PARAMETER         SEP 03 ARDEAN LEITH                                                                *
-C                PARTITION BUG                   SEP 03 ARDEAN LEITH
+C WTM.F          ADDED ISELECT PARAMETER         SEP 03 ARDEAN LEITH   *
+C                PARTITION BUG                   SEP 03 ARDEAN LEITH   *
 C                                                                      *
 C **********************************************************************
 C=*                                                                    *
@@ -10,7 +10,7 @@ C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
 C=* Copyright 1985-2010  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
+C=* Email: spider@health.ny.gov                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -26,20 +26,19 @@ C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
 C **********************************************************************
 C                                                                      *
-C  WTM(ISELECT,PROJ,W,NNNN,NSAM,NROW,SS,NANG,DIAMETER,K)                            *
+C  WTM(ISELECT,PROJ,W,NNNN,NSAM,NROW,SS,NANG,DIAMETER,K)               *
 C                                                                      *
-C  PURPOSE:                                                            *
-C              WEIGHTING FUNCTION IN 2D ACCORDING TO MVH
+C  PURPOSE:     WEIGHTING FUNCTION IN 2D ACCORDING TO MVH              *
 C                                                                      *
-C   PARAMETERS:  ISELECT,    SELECTED PROJECTIONS LIST           (SENT)
-C                PROJ                                       (SENT/RET.)
-C                W                                               (WORK)
-C                NNNN                                            (SENT)
-C                NSAM,NROW                                       (SENT)
-C                SS                                              (SENT)
-C                NANG                                            (SENT)
-C                DIAMETER                                        (SENT)
-C                K         CURRENT PROJ/ANGLE NUMBER             (SENT)
+C  PARAMETERS:  ISELECT,    SELECTED PROJECTIONS LIST           (SENT) *
+C               PROJ                                       (SENT/RET.) *
+C               W                                               (WORK) *
+C               NNNN                                            (SENT) *
+C               NSAM,NROW                                       (SENT) *
+C               SS                                              (SENT) *
+C               NANG                                            (SENT) *
+C               DIAMETER                                        (SENT) *
+C               K         CURRENT PROJ/ANGLE NUMBER             (SENT) *
 C                                                                      *
 C23456789012345678901234567890123456789012345678901234567890123456789012
 C***********************************************************************

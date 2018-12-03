@@ -51,13 +51,14 @@ C                   DENOISE, ROTFIRST=FBS         SEP 12 ARDEAN LEITH
 C                   RING LIMIT TRAP               FEB 13 ARDEAN LEITH
 C                   REMOVED CUDA SUPPORT          APR 15 ARDEAN LEITH
 C                   REMOVED 'FOU' PATM SUPPORT    APR 15 ARDEAN LEITH
+C                   APRINGS_FILL_NEW CALL  BUG    AUG 18 ARDEAN LEITH
 C 
 C **********************************************************************
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* Authors: J. Frank & A. Leith                                       *
-C=* Copyright 1985-2016  Health Research Inc.,                         *
+C=* Copyright 1985-2018  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
+C=* Email: spider@health.ny.gov                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -457,7 +458,7 @@ C          INITIALIZE FFTW3 PLANS FOR USE WITHIN OMP || SECTIONS
      &                  NX,NY,NUMTH,
      &                  NRING,LCIRC,NUMR,MODE,FFTW_PLANS, 
      &                  REFPAT,LUNREF,
-     &                  CIRCREF,NUMTH,LUNRING,WEIGHT,.FALSE.,IRTFLG)
+     &                  CIRCREF,NUMTH,LUNRING,WEIGHT,IRTFLG)
 
            CLOSE(LUNRING)
            GOTO 9989

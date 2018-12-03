@@ -1,9 +1,15 @@
-head	1.1;
+head	1.2;
 access;
-symbols;
+symbols
+	healthdept_2018:1.2;
 locks; strict;
 comment	@c @;
 
+
+1.2
+date	2018.10.03.14.34.02;	author leith;	state Exp;
+branches;
+next	1.1;
 
 1.1
 date	2012.02.15.16.18.46;	author leith;	state Exp;
@@ -15,22 +21,22 @@ desc
 @@
 
 
-1.1
+1.2
 log
-@Initial revision
+@email_health_dept
 @
 text
 @C **********************************************************************
 C                                                                      *
 C CENT_ROD       NEW                      FEB 2012  GREGORY KISHCHENKO *
-C                                                                      *
+C                ROTATION BUG FIXED       AUG 2014  ARDEAN LEITH       *                                                               *
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2012  Health Research Inc.,                         *
+C=* Copyright 1985-2014  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NROW 12204.    *
-C=* Email: spider@@wadsworth.org                                        *
+C=* Email: spider@@health.ny.gov                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -53,10 +59,9 @@ C               SHX,SHY SHIFTS                                  OUTPUT *
 C               THETA   ROTATION                                OUTPUT *
 C               IRTFLG  ERROR FLAG                              OUTPUT *
 C                                                                      *
-C   PURPOSE: SHIFT AND ROTATE FILAMENTOUS/ROD OBJECT                       *
-C   IN ORDER TO MOVE FILAMENT TO CENTER OF IMAGE AND ALIGN IT PARALLEL *
-C   TO BOX  USES 2D FOURIER-BASED BICUBIC SPLINE INTERPOLATION         *
-C   BETWEEN PIXELS.                                                    *
+C   PURPOSE: SHIFT AND ROTATE FILAMENTOUS/ROD OBJECT                   *
+C   MOVES FILAMENT/ROD TO CENTER OF IMAGE AND ALIGN IT VERTICALLY.     *
+C   USES 2D FOURIER-BASED BICUBIC SPLINE INTERPOLATION BETWEEN PIXELS. *
 C                                                                      *
 C23456789012345678901234567890123456789012345678901234567890123456789012
 C***********************************************************************
@@ -80,6 +85,11 @@ C***********************************************************************
        INTEGER           :: ANG, NMAX
        INTEGER           :: NX25,NX75,NY25,NY75
 
+       INTEGER           :: ix,iy
+       real              :: fx,fy,xold,yold,ycod,ysid
+       real              :: fy0,fy1,fy2,fx0,fx1,fx2,shypny,shxpnx
+
+       real              :: f
        REAL              :: COSTH, SINTH
        REAL              :: X,Y, FICX,FJCY
        REAL              :: DX,DY
@@ -96,9 +106,10 @@ C***********************************************************************
        REAL, ALLOCATABLE :: Y1(:,:)
        REAL, ALLOCATABLE :: XY2(:,:)
 
-       REAL, PARAMETER   :: PI = 3.14159265358979323846 /720.0
+       REAL, PARAMETER   :: PI7 = 3.14159265358979323846 /720.0
 
 
+       ! ARRAY ALLOCATION
        ALLOCATE (F0 (0:NXLD-1,0:NY-1),
      &           F1 (0:NXLD-1,0:NY-1),
      &           X1 (0:NXLD-1,0:NY-1),
@@ -112,7 +123,7 @@ C***********************************************************************
           RETURN
        ENDIF
 
-       F0 = BUF1   !ARRAY ALLOCATION
+       F0 = BUF1   !ARRAY OPERATION
 
        CALL FBS2_PREP(F0, X1,Y1,XY2, NXLD, NX,NY, IRTFLG)
        IF (IRTFLG .NE. 0) RETURN
@@ -267,11 +278,185 @@ C      AND THEN REFLECTED ALONG VERTICAL AXIS
        COR  = 0.0
        ANG  = 0.0
 
-       NMAX = INT (ATAN(FLOAT(NX)/FLOAT(NY)) / PI)
+       NMAX = INT (ATAN(FLOAT(NX)/FLOAT(NY)) / PI7)
 
        F0 = BUF1   ! ARRAY ASSIGNMENT
 
        DO K=-NMAX, NMAX
+          THETA = K * PI7
+          COSTH = COS(THETA)
+          SINTH = SIN(THETA)
+
+          DO J=0, NY-1
+             J2   = J  + 1
+             FJCY =  J2 - CY + SHY
+             DO I=0, NX-1
+               I2   = I + 1
+               FICX = I2 - CX + SHX
+               X    = COSTH*FICX - SINTH*FJCY + CX
+               Y    = SINTH*FICX + COSTH*FJCY + CY
+               I3   = FLOOR(X)
+               J3   = FLOOR(Y)
+               DX   = X - I3
+               DY   = Y - J3
+               I4   = MODULO(I3-1, NX) + 1
+               J4   = MODULO(J3-1, NY) + 1
+               I5   = MODULO(I3, NX) + 1
+               J5   = MODULO(J3, NY) + 1
+               A    = BUF1(I4,J4)
+               B    = BUF1(I5,J4)-BUF1(I4,J4)
+               C    = BUF1(I4,J5)-BUF1(I4,J4)
+               D    = BUF1(I4,J4)-BUF1(I5,J4)
+     &               -BUF1(I4,J5)+BUF1(I5,J5)
+
+               BUF2(I2,J2) = A + B*DX + C*DY + D*DX*DY
+             ENDDO
+          ENDDO
+
+          TEMP = 0
+
+          DO J3=1, NY
+             DO I3=1, NX
+               TEMP = TEMP + BUF2(I3,J3) * BUF2(NX-I3+1,J3)
+             ENDDO
+          ENDDO
+          IF (TEMP > COR) THEN
+             COR = TEMP
+             ANG = K
+          ENDIF
+       ENDDO
+
+       THETA = ANG * PI7
+       COSTH = COS(THETA)
+       SINTH = SIN(THETA)
+
+      write(6,*), 'Optimal Angle =',THETA
+      write(6,*), 'SHX, SHY = ', SHX, SHY
+
+c$omp  parallel do private(j,j2,fjcy,i,i2,ficx,x,y)
+       DO J=0, NY-1
+          J2   = J  + 1
+          FJCY = J2 - CY + SHY2
+
+          DO I=0, NX-1
+             I2   = I + 1
+             FICX = I2 - CX + SHX2
+             X    = COSTH*FICX - SINTH*FJCY + CX
+             Y    = SINTH*FICX + COSTH*FJCY + CY
+
+             BUF2(I2,J2) = FBS2(X,Y, NXLD,NX,NY,F0,
+     &		                NXLD,X1,Y1,XY2, .TRUE.)
+
+          ENDDO
+       ENDDO
+
+
+       THETA = ANG * 180.0 / 720.0
+ 
+999    IF (ALLOCATED(F0))  DEALLOCATE(F0)
+       IF (ALLOCATED(F1))  DEALLOCATE(F1)
+       IF (ALLOCATED(X1))  DEALLOCATE(X1)
+       IF (ALLOCATED(Y1))  DEALLOCATE(Y1)
+       IF (ALLOCATED(XY2)) DEALLOCATE(XY2)
+
+      write(6,*), 'Optimal Angle =',THETA
+      write(6,*), 'SHX2, SHY2 = ', SHX2, SHY2
+ 
+       END
+
+#ifdef NEVER
+c$omp  parallel do private(j,j2,fjcy,i,i2,ficx,x,y)
+       DO J=0, NY-1
+          J2   = J  + 1
+          FJCY = J2 - CY + SHY
+
+          DO I=0, NX-1
+             I2   = I + 1
+             FICX = I2 - CX + SHX
+             X    = COSTH*FICX - SINTH*FJCY + CX
+             Y    = SINTH*FICX + COSTH*FJCY + CY
+
+             BUF2(I2,J2) = FBS2(X,Y, NXLD,NX,NY,F0,
+     &		                NXLD,X1,Y1,XY2, .TRUE.)
+
+          ENDDO
+       ENDDO
+#endif
+
+#ifdef NEVER
+
+C      GENERATION OF IMAGE WITH OBJECT CENTERED BY OPTIMAL
+C      SHIFT AND ROTATION
+
+       FY0    = - SHY - CY
+       FY1    = - SHY + NY - CY
+       FY2    = - SHY - NY - CY
+
+       FX0    = - SHX - CX
+       FX1    = - SHX + NX - CX
+       FX2    = - SHX - NX - CX
+
+       SHYPNY = SHY + NY
+       SHXPNX = SHX + NX
+
+c$omp  parallel do private(iy,fy,ycod,ysid, ix,fx, xold,yold)
+       DO IY=1, NY
+          FY = IY + FY0 
+          IF ((IY-1) <  SHY)    FY = IY + FY1 
+          IF ((IY-1) >= SHYPNY) FY = IY + FY2 
+
+          YCOD =  COSTH * FY + CY
+          YSID = -SINTH * FY + CX
+
+          DO IX=1, NX
+            FX = IX + FX0 
+            IF ((IX-1) <  SHX)    FX = IX + FX1
+            IF ((IX-1) >= SHXPNX) FX = IX + FX2
+
+            XOLD    = COSTH * FX + YSID
+            YOLD    = SINTH * FX + YCOD
+
+            BUF2(IX,IY) = FBS2(XOLD,YOLD, NXLD,NX,NY, F0,NXLD,
+     &                         X1,Y1,XY2, .TRUE.)
+          ENDDO
+       ENDDO
+#endif
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d4 1
+a4 1
+C                                                                      *
+d9 1
+a9 1
+C=* Copyright 1985-2012  Health Research Inc.,                         *
+d11 1
+a11 1
+C=* Email: spider@@wadsworth.org                                        *
+d34 3
+a36 4
+C   PURPOSE: SHIFT AND ROTATE FILAMENTOUS/ROD OBJECT                       *
+C   IN ORDER TO MOVE FILAMENT TO CENTER OF IMAGE AND ALIGN IT PARALLEL *
+C   TO BOX  USES 2D FOURIER-BASED BICUBIC SPLINE INTERPOLATION         *
+C   BETWEEN PIXELS.                                                    *
+d60 5
+d81 1
+a81 1
+       REAL, PARAMETER   :: PI = 3.14159265358979323846 /720.0
+d84 1
+d98 1
+a98 1
+       F0 = BUF1   !ARRAY ALLOCATION
+d253 1
+a253 1
+       NMAX = INT (ATAN(FLOAT(NX)/FLOAT(NY)) / PI)
+d258 41
+a298 41
             THETA = K * PI
             COSTH = COS(THETA)
             SINTH = SIN(THETA)
@@ -313,42 +498,25 @@ C      AND THEN REFLECTED ALONG VERTICAL AXIS
                COR = TEMP
                ANG = K
             ENDIF
-       ENDDO
-
+d301 1
+a301 1
        THETA = ANG * PI
-       COSTH = COS(THETA)
-       SINTH = SIN(THETA)
-
+d305 2
+a306 2
 C      GENERATION OF IMAGE WITH OBJECT CENTERED BY OPTIMAL
 C      SHIFT AND ROTATION
-
-c$omp  parallel do private(j,j2,fjcy,i,i2,ficx,x,y)
-       DO J=0, NY-1
-          J2   = J  + 1
+d311 1
+a311 1
           FJCY = J2 - CY + SHY
-
-          DO I=0, NX-1
-             I2   = I + 1
+d315 1
+a315 1
              FICX = I2 - CX + SHX
-             X    = COSTH*FICX - SINTH*FJCY + CX
-             Y    = SINTH*FICX + COSTH*FJCY + CY
-
-             BUF2(I2,J2) = FBS2(X,Y, NXLD,NX,NY,F0,
-     &		                NXLD,X1,Y1,XY2, .TRUE.)
-
-          ENDDO
-       ENDDO
-
+d325 2
+a326 1
        THETA = ANG * 180.0/720.0
- 
-999    IF (ALLOCATED(F0))  DEALLOCATE(F0)
-       IF (ALLOCATED(F1))  DEALLOCATE(F1)
-       IF (ALLOCATED(X1))  DEALLOCATE(X1)
-       IF (ALLOCATED(Y1))  DEALLOCATE(Y1)
-       IF (ALLOCATED(XY2)) DEALLOCATE(XY2)
-
+d334 2
+a335 2
 C      write(6,*), 'Optimal Angle =',THETA
 C      write(6,*), 'SHX, SHY = ', SHX2, SHY2
- 
-       END
+d338 58
 @

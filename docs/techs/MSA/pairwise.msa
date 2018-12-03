@@ -1,0 +1,411 @@
+; PAIRWISE REFERENCE-FREE ALIGNMENT
+;
+; Requires p_pairwise.rct, drawcircles.rct, center1.rct
+; 
+; Adapted from Michael Radermacher's rfreeprepdoc.rec and rfreeal2001.rec
+;
+; Described in Marco S, Chagoyen M, de la Fraga LG, Carazo JM, Carrascosa JL (1996)
+; "A variant to the Random Approximation of the reference-free algorithm."
+; Ultramicroscopy. Vol 66: pg. 5-10.
+
+; --------------- Parameters ---------------
+
+[filteredImgsYN]      = 0      ; use low-pass filtered images? (1==YES, 0==NO, -1==If_Available)
+[cgOption]            = 2      ; center-of-gravity option (1==None, 2==CG PH, 3=RT180)
+[alignRadius]         = -1     ; outer radius for alignment, (<0 == get from PARAMS object diameter)
+[radiusPaddingFactor] = 1.7    ; if alignment radius is automatic, will multiply particle radius by this number
+[innerRad]            = 1      ; inner radius for alignment, pixels
+[searchRange]         = 8      ; translation search range, for AP SH (for alignment to final average)
+[stepSize]            = 2      ; translation step size, for AP SH
+[saveIntermeds]       = 1      ; save intermediate pairwise files (1==YES)
+[numProcs]            = 0      ; number of CPUs to use (0= ALL)
+
+; -------------- Input files ----------------
+fr l
+[parameter_doc]params             ; parameter doc file (optional if alignment radius specified)
+fr l 
+[selection_list]listparticles     ; particle list
+
+; unaligned images (will set [unaligned_images])
+fr l 
+[fullsized_stack]stk2-unaligned   ; unfiltered-particle stack (w/o "@", see option [filteredImgsYN])
+fr l 
+[filtered_stack]stkfiltered       ; filtered-particle stack (w/o "@", see option [filteredImgsYN])
+
+; --------------- Output files ---------------
+fr l
+[pair_dir]Pairwise                           ; toplevel output directory
+fr l
+[pair_doc][pair_dir]/pairdoc*****            ; pair-document template
+fr l
+[depth_dir][pair_dir]/Depth                  ; directory prefix for each depth of binary tree
+fr l
+[pair_align_doc][pair_dir]/alignpair         ; intermediate, reference-free alignment doc
+fr l
+[centered_stack][pair_dir]/stkcentavg        ; centered-average stack (slice 1: No centering, 2: CG PH, 3: RT180) 
+fr l
+[final_avg][pair_dir]/rfreeavg001            ; reference-free alignment average
+fr l
+[final_var][pair_dir]/rfreevar001            ; reference-free alignment variance
+fr l
+[final_align_doc][pair_dir]/docalign         ; final reference-based alignment doc
+fr l
+[final_align_copy][pair_dir]/docalign-copy   ; final reference-based alignment doc
+fr l
+[aligned_stack][pair_dir]/stkaligned         ; aligned-image stack (w/o "@")
+fr l
+[aligned_images][aligned_stack]@*****        ; aligned-image template (check number of digits)
+fr l
+[master_aligned]stk3-aligned                 ; master aligned-image stack (w/o "@")
+
+; ------------- END BATCH HEADER -------------
+
+; Temporary files
+fr l
+[temp_reference]tmpref***
+;fr l
+;[temp_unmirrored7]_71
+;fr l
+;[temp_aligned7]_72
+;fr l
+;[temp_unmirrored5]_51
+;fr l
+;[temp_aligned5]_52
+fr l
+[temp_unmirrored3]_31
+;FR L
+;[temp_uncentered]_81
+
+md
+set mp
+[numProcs]
+md
+vb off
+
+IF ([filteredImgsYN] .EQ. -1) THEN
+    ; See if filtered images exist
+    IQ FI [filteredExist]
+    [filtered_stack]
+
+    IF ([filteredExist] .EQ. 1) [filteredImgsYN]=1
+ENDIF
+
+IF ([filteredImgsYN] .EQ. 1) THEN
+    VM
+    echo "Aligning filtered/shrunken images [filtered_stack].$DATEXT" ; echo
+    FR L
+    [unaligned_images][filtered_stack]@*****
+ELSE
+    VM
+    echo "Aligning fullsize images [fullsized_stack].$DATEXT" ; echo
+    FR L
+    [unaligned_images][fullsized_stack]@*****
+ENDIF
+
+
+; GET IMAGE DIMENSION
+
+[one] = 1  ; dummy register
+
+; get first-particle#
+ud ic [one],[first-particle]
+[selection_list]
+
+; get image-dimension from first particle
+fs
+[unaligned_images][first-particle]
+FI H [xdimFirst],[ydimFirst]
+[unaligned_images][first-particle]
+NX,NY
+
+; check if PARAMS exists
+IQ FI [paramsExists]
+[parameter_doc]
+
+; if PARAMS does exist...
+IF ([paramsExists] .EQ. 1) THEN
+    ; get parameters
+    ud 17,[idimParams]    ; window dimension
+    [parameter_doc]
+    ud e  ; close params
+ELSE
+    [idimParams] = [xdimFirst]
+ENDIF
+
+
+; compare image-dimensions from params and header, make sure not downsampled
+IF ([idimParams] .NE. [ydimFirst]) THEN
+    ; if images are square, then proceed
+    if([xdimFirst] .EQ. [ydimFirst]) then
+        ; compute ratio
+        [ratio] = [idimParams]/[ydimFirst]
+        
+        ; use shrunken image-dimension
+        [img-dim] = [ydimFirst]
+
+        vm
+        echo "Image dimension from parameter doc, {***[idimParams]} px, {%f3.1%[ratio]} times that from [unaligned_images][first-particle]"
+        
+        ; if automatic, then reduce object diameter
+        IF ([alignRadius] .LE. 0) THEN
+            IF ([paramsExists] .EQ. 1) THEN
+                ud 18,[objDiam]   ; particle diameter
+                [parameter_doc]
+                ud e
+            
+            ; use default of 1/2 image-dimension
+            ELSE
+                [objDiam] = int([idimParams]/2 - 1)
+            ENDIF
+            
+            [objDiam] = int([objDiam]/[ratio])
+            ; (If the user specifies a huge diameter, hopefully later error-checking will find it.)
+
+            ; calculate alignment radius
+            [alignRadius] = [radiusPaddingFactor]*([objDiam] - 1)/2
+    
+            vm
+            echo "Reducing object diameter by a factor of {%f3.1%[ratio]} also, to {***[objDiam]} px" ; echo
+        ENDIF
+        
+    ; if images are not square
+    else
+        ; don't know what to do
+        vm
+        echo ; echo "ERROR"
+        vm
+        echo "Images not square"
+        vm
+        echo "Fix and re-start"
+
+        en
+    endif
+
+; if PARAMS and image dimensions are the same...
+else
+    [img-dim] = [idimParams]
+    
+    ; if diameter automatically set, then get from PARAMS
+    IF ([alignRadius] .LE. 0) THEN
+        IF ([paramsExists] .EQ. 1) THEN
+            ud 18,[objDiam]   ; particle diameter
+            [parameter_doc]
+            ud e
+        
+        ; use default of 1/2 image-dimension
+        ELSE
+            [objDiam] = int([idimParams]/2 - 1)
+        ENDIF
+
+        ; calculate alignment radius
+        [alignRadius] = [radiusPaddingFactor]*([objDiam] - 1)/2
+    ENDIF
+endif
+
+; check outer alignment radius
+[check-radius] = int([img-dim]/2) - [alignRadius] - [searchRange]
+
+; fix outer alignment radius, if necessary
+if([check-radius].lt.2) then
+    IF ([paramsExists] .EQ. 1) THEN
+        vm
+        echo "WARNING:"
+        vm
+        echo "Tested alignment radius of {***[alignRadius]} from specified object diameter of {***[objDiam]} too big"
+    ENDIF
+    
+    ; re-set alignment radius
+    [alignRadius] = int([img-dim]/2) - [searchRange] - 3
+    
+    vm
+    echo "Using automatic outer alignment radius of {***[alignRadius]} pixels" ; echo
+ELSE
+    vm
+    echo "Using user-specified outer alignment radius of {***[alignRadius]} pixels" ; echo
+endif
+
+
+DE
+[centered_stack]@
+
+; Perform pairwise alignment
+@p_pairwise
+[innerRad]          ; PARAMETER: inner radius for alignment, pixels
+[alignRadius]       ; PARAMETER: outer alignment radius, pixels
+[searchRange]       ; PARAMETER: translation search range, pixels
+[stepSize]         ; PARAMETER: translation step size
+(1)                 ; PARAMETER: allow rotation?
+[saveIntermeds]     ; PARAMETER: save outputs?
+(1)                 ; PARAMETER: verbosity level
+[selection_list]    ; INPUT: particle list
+[unaligned_images]  ; INPUT: particle template
+[pair_dir]          ; OUTPUT: toplevel output directory
+[centered_stack]@1  ; OUTPUT: reference-free average
+
+
+; CENTER AVERAGES USING A FEW DIFFERENT STRATEGIES
+
+; Search the center of gravity of the global average map AVSTX71
+cg ph X21,X22,[xshift-cg],[yshift-cg]
+[centered_stack]@1
+
+sh
+[centered_stack]@1
+[centered_stack]@2
+-[xshift-cg],-[yshift-cg]  ; x,y-shifts
+
+
+@center1([xshift-cg],[yshift-cg])
+[centered_stack]@1  ; INPUT
+[centered_stack]@3  ; OUTPUT
+
+
+if([cgOption].eq.1) then
+    vm
+    echo ; echo "Will not use re-centered intermediate average"
+elseif([cgOption].eq.2) then
+    vm
+    echo ; echo "Will use average centered using CG PH"
+else
+    vm
+    echo ; echo "Will use average centered by rotating 180 degrees and self-aligning"
+endif
+
+CP
+[centered_stack]@{*[cgOption]}
+[temp_reference][cgOption]
+
+
+; DRAW CIRCLES ON AVERAGES
+
+@drawcircles
+[centered_stack]@1   ; INPUT: overwritten
+[innerRad]           ; PARAMETER: radius1
+[alignRadius]        ; PARAMETER: radius2
+
+@drawcircles
+[centered_stack]@2   ; INPUT: overwritten
+[innerRad]           ; PARAMETER: radius1
+[alignRadius]        ; PARAMETER: radius2
+
+@drawcircles
+[centered_stack]@3   ; INPUT: overwritten
+[innerRad]           ; PARAMETER: radius1
+[alignRadius]        ; PARAMETER: radius2
+
+
+vm
+echo ; echo "Aligning to final average"; date
+
+; clean up pre-existing file
+de
+[final_align_doc]
+
+; align to centered average
+ap sh
+[temp_reference]   ; WAS [centered_stack]@*  ; INPUT: reference template
+[cgOption]          ; reference image# (center-of-gravity option)
+[searchRange],[stepSize]
+[innerRad],[alignRadius]
+*                   ; INPUT: reference angles
+[unaligned_images]  ; INPUT: experimental-image template
+[selection_list]    ; INPUT: selection doc
+*                   ; INPUT: previous alignment doc
+(0)                 ; no angular restriction
+(1)                 ; check mirrored positions
+[final_align_doc]   ; OUTPUT: alignment doc
+
+DE
+[temp_reference][cgOption]
+
+
+; APPLY ALIGNMENTS
+
+VM
+echo "Applying alignments" ; date
+
+de
+[aligned_stack]@
+
+; get #particles
+ud n [num-particles]
+[selection_list]
+
+; loop through particles
+do lb3 [part-key3] = 1,[num-particles]
+    ud ic [part-key3], [part-num]
+    [selection_list]
+
+    ; read alignment parameters
+    ud ic [part-num], x81,x82,x83,x84,x85,[inplane-angle3],[xshift3],[yshift3],x89,x90,x91,x92,x93,x94,[mirror-flag3]
+    [final_align_doc]
+
+    ; if necessary, mirror after shift+rotate
+    if([mirror-flag3].lt.0) then
+        rt sq
+        [unaligned_images][part-num]
+        [temp_unmirrored3]   ; OUTPUT
+        [inplane-angle3]
+        [xshift3],[yshift3]
+
+        mr
+        [temp_unmirrored3]   ; INPUT: rotated, shifted image
+        [aligned_images][part-num]
+        Y                    ; mirror around y-axis
+    else
+        rt sq
+        [unaligned_images][part-num]
+        [aligned_images][part-num]
+        [inplane-angle3]
+        [xshift3],[yshift3]
+    endif
+lb3
+; end particle-loop
+
+; close docs
+ud ice
+[final_align_doc]
+ud ice
+[selection_list]
+
+; Computation of the average and variance maps of the last cycle
+as dc
+[aligned_images]  ; INPUT: aligned-image template
+[selection_list]  ; INPUT: selection file
+A                 ; average _A_ll images
+[final_avg]       ; OUTPUT: average
+[final_var]       ; OUTPUT: variance
+
+; copy aligned images to central location (will be overwritten by subsequent alignments)
+VM
+cp -af [final_align_doc].$DATEXT [final_align_copy].$DATEXT
+cp
+[aligned_stack]@
+[master_aligned]@
+
+vm
+echo "Done"; date
+
+en d
+
+; Modified 2015-10-02
+;    2015-08-26 (trs) -- added digit for more than 9999 pairs of images
+;    2015-07-29 (trs) -- draws circles on intermediate averages
+;    2015-07-29 (trs) -- makes backup copy of alignment doc
+;    2015-07-29 (trs) -- bug fix: didn't read object diameter from PARAMS unless downsampled
+;    2015-04-01 (trs) -- added option to use filtershrink images
+;    2015-03-27 (trs) -- split off reference-free alignment into subroutine, p_pairwise
+;    2015-03-24 (trs) -- all center-of-gravity options written for comparison
+;    2014-03-25 (trs) -- can override object diameter from PARAMS
+;    2014-03-05 (trs) -- making master copy of aligned stack
+;    2014-03-05 (trs) -- writing images in stacks
+;    2014-02-27 (trs) -- added centering options
+;    2014-02-06 (trs) -- added digit for more than 999 pairs of images
+;    2014-01-24 (trs) -- uses all processors
+;    2013-05-06 (trs) -- uses named registers
+;    2013-05-06 (trs & svd) -- gets image-dimension from first image
+;    2010-08-24 (trs) -- AP MQ and OR MQ replaced with AP SH and OR SH
+;    2010-02-08 (trs) -- fits outer alignment radius to image
+;    2009-06-12 (trs) -- centers penultimate average
+;    2008-11-25 (trs) -- computes variance
+;    2008-11-24 (trs) -- adapted from pairwise.spi

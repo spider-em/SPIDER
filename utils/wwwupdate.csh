@@ -113,6 +113,7 @@ echo " Copied SPIDER source files " >> $LOGFILE
 # Copy SPIDER python tools files ------------------------------------------
 echo " Copying  $toolsdir   xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" 
 ssh  $wwwhost mkdir -p $wwwhostdir/tools
+$sendit    $toolsdir/readme   $toolsdir/install.sh $wwwhostdir/tools
 $sendit    $toolsdir/*.html   $toolsdir/*.py $wwwhostdir/tools
 $sendit    $toolsdir/bin/*py                 $wwwhostdir/tools/bin
 senditr    $toolsdir/docs                    $wwwhostdir/tools
@@ -165,7 +166,7 @@ echo "  "
 echo "  "
 echo "  "
 echo " You may need to check: spider/download/spider! "
-echo " Use: ssh spider-stage"
+echo " Use: ssh spider-stage  cd /export/apache/vhosts/spider.wadsworth.org/htdocs/spider_doc/spider"
 exit 1
 
 

@@ -1,0 +1,190 @@
+; Adapted from makefaces.fac
+
+; PURPOSE:  Create face images, using face.msa
+;           Add noise: ten copies of each head with a SNR (0.2<S/N<0.3)
+
+; -- Parameters --
+
+[imgDim]      = 64    ; Image size
+[snr]         = .15   ; SNR
+[imgsPerHead] = 100   ; Number of images per face type
+
+; -- OUTPUT FILES --
+
+[dir]        = 'data'                   ; Directory
+
+[template]   = '[dir]/stktemplates@'    ; Face templates
+
+[noisy]      = 'stk3-aligned@'          ; Faces + noise
+
+[classavg]   = '[dir]/stknoisyavgs@'    ; Average of noisy images
+
+[var]        = '[dir]/stknoisyvar@'     ; Variance maps of noisy images
+
+[allavg]     = 'overall-avg'            ; Overall average
+
+[list]       = 'listparticles'          ; Doc file listing particles
+
+; ----- END BATCH HEADER -----
+
+; Temporary file
+[temp_scaled_face] = '[dir]/jnkINT001'       ; Temp. file
+
+VM
+mkdir -p [dir]
+
+; Clean up pre-existing files
+DE
+[template]
+DE
+[noisy]
+DE
+[classavg]
+DE
+[var]
+
+MD
+SET SEED
+457   ; Random number seed for noise
+
+[totImgs] = [imgsPerHead]*8
+
+VM
+echo " Making {****[totImgs]} sample faces xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+DOC CREATE
+[list]
+(1)   ; Column# to fill
+1-[totImgs]
+
+;----- CREATE A ROUND HEAD : EYES LEFT : LARGE MOUTH : [template]011
+x20 = 0 ; Head
+x21 = 0 ; Eyes
+x22 = 1 ; Mouth
+
+@face([imgDim],[imgDim],x20,x21,x22)
+[template]001
+
+;----- CREATE A ROUND HEAD : EYES RIGHT : LARGE MOUTH : [template]021
+x20 = 0 ; Head
+x21 = 1 ; Eyes
+x22 = 1 ; Mouth
+
+@face([imgDim],[imgDim],x20,x21,x22)
+[template]002
+
+;----- CREATE A ROUND HEAD : EYES LEFT : [noisy]LL MOUTH : [template]031
+x20 = 0 ; Head
+x21 = 0 ; Eyes
+x22 = 0 ; Mouth
+
+@face([imgDim],[imgDim],x20,x21,x22)
+[template]003
+
+;----- CREATE A ROUND HEAD : EYES RIGHT : [noisy]LL MOUTH : [template]041
+x20 = 0 ; Head
+x21 = 1 ; Eyes
+x22 = 0 ; Mouth
+
+@face([imgDim],[imgDim],x20,x21,x22)
+[template]004
+
+;----- CREATE AN OVAL HEAD : EYES LEFT : LARGE MOUTH : [template]051
+x20 = 1 ; Head
+x21 = 0 ; Eyes
+x22 = 1 ; Mouth
+
+@face([imgDim],[imgDim],x20,x21,x22)
+[template]005
+
+;-----( CREATES AN OVAL HEAD : EYES RIGHT : LARGE MOUTH : [template]061
+x20 = 1 ; Head
+x21 = 1 ; Eyes
+x22 = 1 ; Mouth
+
+@face([imgDim],[imgDim],x20,x21,x22)
+[template]006
+
+;----- CREATE AN OVAL HEAD : EYES LEFT : [noisy]LL MOUTH : [template]071
+x20 = 1 ; Head
+x21 = 0 ; Eyes
+x22 = 0 ; Mouth
+
+@face([imgDim],[imgDim],x20,x21,x22)
+[template]007
+
+;----- CREATE AN OVAL HEAD : EYES RIGHT : [noisy]LL MOUTH  : [template]081
+x20 = 1 ; Head
+x21 = 1 ; Eyes
+x22 = 0 ; Mouth
+
+@face([imgDim],[imgDim],x20,x21,x22)
+[template]008
+
+
+;===============================================================================
+; CREATE TEN COPIES OF EACH HEAD WITH A SNR (0.2<S/N<0.3) or greater
+;===============================================================================
+
+VM
+echo " Adding noise (SNR: {%f3.2%[snr]}) to sample faces xxxxxxxxxxxxxxx"
+
+[imgCounter] = 0
+
+DO LB1 [headType] = 1,8             ; Loop over head types
+    AR
+    [template]{***[headType]}   ; Face template    (input)
+    [temp_scaled_face]          ; Scaled face      (output)
+    ((P1*[snr])+0.0)            ; Scale intensity of face by SNR
+
+    ; Make ten random noise images for each type of head
+    DO LB2 [headImgNum] = 1,[imgsPerHead]        ; Loop over noise sets
+        MO
+        _1                    ; File    (output)
+        ([imgDim],[imgDim])   ; Size         
+        R                     ; Random noise
+        N                     ; Uniform distribution 0...1
+
+        [imgCounter] = [imgCounter] + 1
+
+        AD                          ; Add images
+        _1                          ; Noise file
+        [temp_scaled_face]          ; head  file      (input)
+        [noisy]{****[imgCounter]}   ; Noisy head      (output)
+        *
+    LB2
+
+    ; Creates average and variance maps of each group of ten
+    [firstHeadImg] = ([headType] - 1)*[imgsPerHead] + 1
+    [lastHeadImg]  = [headType]*[imgsPerHead]
+
+    AS R
+    [noisy]****
+    [firstHeadImg]-[lastHeadImg]
+    A
+    [classavg]{***[headType]}
+    [var]{***[headType]}
+LB1
+
+VM
+echo " Creating average/variance maps of sets of faces xxxxxxx"
+
+DE
+[allavg]
+
+AS R
+[noisy]****
+1-[lastHeadImg]
+A
+[allavg]@1
+[allavg]@2
+
+DE
+[temp_scaled_face]           ; Temp. file
+
+VM
+echo " "
+
+EN D
+
+; Modified 2016-05-10

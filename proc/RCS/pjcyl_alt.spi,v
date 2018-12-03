@@ -1,0 +1,115 @@
+head	1.1;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+1.1
+date	2018.05.23.13.08.42;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@; GENERATES CYLINDRICAL PROJECTION
+;
+; NOTE 1: Assumes filament axis along y
+; NOTE 2: SPIDER's PJ CYL command yields blank images in many cases
+
+; ----------- Parameters -----------
+[innerRad] = 1    ; inner radius
+[outerRad] = 100  ; outer radius, pixels (see output volume if this is reasonable)
+
+; -------------- Input --------------
+[input_vol] = 'Christos/wall-rot'  ; input volume (cylindrical axis along y)
+
+; ------------- Outputs -------------
+[cyl_stack]   = '[input_vol]-stack'  ; stack of cylindrical sections (useful for estimating the radius)
+[cyl_section] = '[input_vol]-prj'    ; cylindrical projection
+
+; --------- END BATCH HEADER ---------
+
+; Temporary files
+[temp_input_vol]  = '_1'
+[temp_slice]      = '_2'
+[temp_polar]      = '_3'
+[temp_output_vol] = '_4'
+
+; Copy into memory
+CP
+[input_vol]
+[temp_input_vol]
+
+; Get volume dimensions
+FI H [volx],[voly],[volz]
+[temp_input_vol]
+NX,NY,NZ
+
+; Loop through y
+DO [ycoord] = 1,[voly]
+    ; Pick slice
+    PS
+    [temp_input_vol]
+    [temp_slice]
+    [ycoord]  ; slice#
+
+    ; Convert to polar representation
+    PO
+    [temp_slice]
+    [temp_polar]  ; WAS [output]@@{%i0%[ycoord]}
+    [innerRad],[outerRad]
+    F  ; _F_ull circle
+
+    ; If first slice, create empty volume
+    IF ( [ycoord] .EQ. 1 ) THEN
+        ; Get image dimensions
+        FI H [prjx],[prjy]
+        [temp_polar]
+        NX,NY
+
+        ; Initialize empty volume
+        BL
+        [temp_output_vol]
+        [prjx],[prjy],[voly]
+        N  ; use background from another file?
+        0  ; background value
+    ENDIF
+    ; End volume-creation
+
+    ; Copy image into volume
+    IN
+    [temp_polar]
+    [temp_output_vol]
+    1,1,[ycoord]
+ENDDO
+; End y-loop
+
+; Rotate around x-axis
+RT 90
+[temp_output_vol]
+[cyl_stack]
+1,[prjx]
+1,[prjy]
+1,[voly]
+X    ; rotation axis
+270  ; angle
+
+; Project to 2D
+PJ 3
+[cyl_stack]
+[prjx],[voly]
+[cyl_section]
+0,0,0  ; phi, theta, psi
+
+EN 
+
+@

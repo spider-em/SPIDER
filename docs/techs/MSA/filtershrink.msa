@@ -1,0 +1,200 @@
+; APPLIES LOW-PASS FILTER TO AND SHRINKS A SET OF PARTICLE IMAGES
+;
+; Adapted from PFILT.BAT 
+
+; -------------- Parameters ---------------
+[pixelSize]        = -1                    ; pixel size, Angstroms (-1 == from PARAMS)
+[shrinkFactor]     = 2                     ; reduction/decimation factor (integer)
+[filterType]       = 7                     ; filter type (7==Butterworth, 5==Fermi, 3==Gaussian, 0==none)
+[filtParam1]       = 30                    ; filter parameter 1, Angstroms (pass-band if Butterworth, else filter radius)
+[filtParam2]       = 20                    ; filter parameter 2, Angstroms
+                                           ; stop band for Butterworth, temperature for Fermi, else not required
+[displayPlotYN]    = 0                     ; display filter profile (1 == Yes)
+[numCPUs]          = 0                     ; number of CPUs to use (0 == all)
+[progressInterval] = 100                   ; progress interval -- message written to screen every Nth particle
+
+; ---------------- Inputs ----------------
+fr l
+[parameter_doc]params                      ; parameter doc file (optional, used if pixel size not specified)
+fr l
+[group_particles]listparticles             ; slice-to-particle lookup-table, for each group
+fr l
+[unfiltered]stk3-aligned@*****             ; unfiltered-image template (unstacked or stacked)
+fr l
+[postscript_viewer]evince                  ; PostScript viewer (optional, if [displayPlotYN] set)
+
+; ---------------- Output ----------------
+fr l
+[filtered_stack]stkfiltered                ; filtered-image stack (w/o "@")
+fr l
+[filtered_images][filtered_stack]@*****    ; filtered-image template (check number of digits)
+FR L
+[1d_profile_doc]docfilter                  ; 1D filter profile
+FR L
+[gnuplot_script]plotfilter.gnu             ; Gnuplot script
+fr l
+[ps_filter_plot]pslowpass.ps               ; filter plot, encapsulated PostScript format
+
+; ----------- END BATCH HEADER -----------
+
+; Temporary file
+FR L
+[temp_unshrunken_image]_4
+FR L
+[temp_unfiltered_pws]_51
+FR L
+[temp_filtered_pws]_52
+FR L
+[temp_2d_quotient]_53
+FR L
+[temp_2d_rot_avg]_54
+
+; get pixel-size
+IF ([pixelSize] .LE. 0) THEN
+    ud 5, [pixelSize]
+    [parameter_doc]
+    ud e
+ENDIF
+
+VM
+echo "Using starting pixel size of {%f5.3%[pixelSize]} Angstroms" ; echo
+
+VM
+echo "Shrinking by a factor of {%i2%[shrinkFactor]}" ; echo
+
+IF ([filterType] .EQ. 7) THEN
+    VM
+    echo "Using Butterworth filter with pass-band {%f5.1%[filtParam1]} and stop-band {%f5.1%[filtParam2]} Angstroms" ; echo
+ELSEIF ([filterType] .EQ. 5) THEN
+    VM
+    echo "Using Fermi filter with radius {%f5.1%[filtParam1]} and temperature factor {%f5.1%[filtParam2]} Angstroms" ; echo
+ELSEIF ([filterType] .EQ. 3) THEN
+    VM
+    echo "Using Gaussian filter at {%f5.1%[filtParam1]} Angstroms" ; echo
+ELSE
+    VM
+    echo "Not filtering" ; echo
+ENDIF
+
+; change filter radii to reciprocal pixels
+[filtParam1] = [pixelSize]/[filtParam1]  ; pass-band
+[filtParam2] = [pixelSize]/[filtParam2]  ; stop-band
+
+; set #CPUs
+md
+set mp
+[numCPUs]
+
+de
+[filtered_stack]@
+
+ud n, [numParts]
+[group_particles]
+
+; loop through particles
+do lb1 [partKey]=1, [numParts]
+    ; get particle#
+    ud ic [partKey],[partNum]
+    [group_particles]
+
+    if (int([partKey]/[progressInterval]).eq.[partKey]/[progressInterval]) then
+        vm
+        echo "Working on {******[partKey]}th particle out of {******[numParts]}"
+    endif
+
+    ; if Butterworth filter
+    IF ([filterType].eq.7) THEN
+        FQ np
+        [unfiltered][partNum]      ; INPUT
+        [temp_unshrunken_image]    ; OUTPUT
+        [filterType]
+        [filtParam1],[filtParam2]  ; passband, stopband
+
+    ; if Fermi filter
+    ELSEIF ([filterType].eq.5) THEN
+        FQ np
+        [unfiltered][partNum]    ; INPUT
+        [temp_unshrunken_image]  ; OUTPUT
+        [filterType]
+        [filtParam1]             ; filter radius
+        [filtParam2]             ; temperature cutoff
+
+    ; if Gaussian or top-hat filter
+    ELSEIF ([filterType].eq.3) THEN
+        FQ np
+        [unfiltered][partNum]    ; INPUT
+        [temp_unshrunken_image]  ; OUTPUT
+        [filterType]
+        [filtParam1]             ; filter radius
+
+    ; if no filter
+    ELSE
+        CP
+        [unfiltered][partNum]    ; INPUT
+        [temp_unshrunken_image]  ; OUTPUT
+    ENDIF
+
+    ; Shrink image
+    dc s
+    [temp_unshrunken_image]
+    [filtered_images][partNum]
+    [shrinkFactor],[shrinkFactor]
+lb1
+; end particle-loop
+
+; close doc
+ud ice
+[group_particles]
+
+
+VM
+echo ; echo "Writing filter profile to PostScript" 
+
+PW
+[unfiltered][partNum]
+[temp_unfiltered_pws]
+PW
+[temp_unshrunken_image]
+[temp_filtered_pws]
+DIV
+[temp_filtered_pws]
+[temp_unfiltered_pws]
+[temp_2d_quotient]
+*  ; no more files to divide
+; (TO DO: trap for zeros)
+
+; Write 1D profile
+DE
+[1d_profile_doc]
+RO SD
+[temp_2d_quotient]
+[temp_2d_rot_avg]
+[1d_profile_doc]
+
+VM M
+rm -f [gnuplot_script] ;
+echo ' 'set terminal postscript eps enhanced color \"Times-Roman\" 24 > [gnuplot_script] ;
+echo ' 'set encoding iso_8859_1 >> [gnuplot_script] ;
+echo ' 'set xlabel \"Spatial frequency \(1/A\)\"   >> [gnuplot_script] ; 
+echo ' 'set ylabel \"Transfer\" >> [gnuplot_script] ; 
+echo ' 'set output \'[ps_filter_plot]\' >> [gnuplot_script] ;
+echo -n ' 'plot [][0:1.15] \'[1d_profile_doc].$DATEXT\' using \(column\(5\)/{%f5.3%[pixelSize]}\):3 title \'filter\' with lines >> [gnuplot_script] ;
+gnuplot [gnuplot_script]
+.
+IF ([displayPlotYN] .GT. 0.5) THEN
+    VM
+    [postscript_viewer] [ps_filter_plot] &
+ENDIF
+
+
+vm
+echo "Done"; date
+
+EN D
+
+; Modified 2015-08-25
+;    2015-04-10 (trs) -- can optionally specify pixel size w/o PARAMS file
+;    2015-04-10 (trs & dn) -- writes PostScript filter profile
+;    2015-03-30 (trs) -- added option for no filtration (shrinking only)
+;    2014-03-06 (trs) -- writing images in stacks
+;    2008-04-06 (trs) -- adapted from filtershrink.spi

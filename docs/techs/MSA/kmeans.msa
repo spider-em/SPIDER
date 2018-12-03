@@ -1,0 +1,217 @@
+; RUNS K-MEANS CLASSIFICATION
+
+; -------------- Parameters --------------
+[numClasses]   = 4   ; desired number of classes
+[numFactors]   = 9   ; number of eigenfactors to use
+[shrinkFactor] = 1   ; decimation factor applied to input images
+[numProcs]     = 0   ; number of CPUs to use (0= ALL)
+[progressInt]  = 3   ; progress message printed every Nth class
+
+; ---------------- Inputs ----------------
+FR L
+[parameter_doc]params                     ; parameter doc file
+FR L
+[cas_prefix]CAPCA/cas                     ; correspondence-analysis output prefix
+FR L
+[particles]stk3-aligned@*****             ; particle file-pattern
+
+; ---------------- Outputs ---------------- 
+FR L
+[class_dir]KMeans                         ; output directory
+FR L
+[dendrogram_doc][class_dir]/docassign     ; particle-assignment doc
+FR L
+[class_doc][class_dir]/docclass****       ; class-membership doc prefix, for each class
+FR L
+[class_avg][class_dir]/classavg****       ; class-average prefix, for each class
+FR L
+[class_var][class_dir]/classvar****       ; class-variance prefix, for each class
+FR L
+[class_stats_doc][class_dir]/listclasses  ; class-size document
+
+; ----------- END BATCH HEADER -----------
+
+; set temporary filenames
+FR L
+[circular_mask_incore]_6
+FR L
+[class_doc_unsorted_incore]tmpdocclass_incore
+
+
+; GENERATE CIRCULAR MASK
+
+; get window dimension
+UD 17, [idim]
+[parameter_doc]
+UD E
+
+; divide by decimation-factor
+[idim] = [idim]/[shrinkFactor]
+
+; mask radius
+[radius] = ([idim]-1)/2
+
+; make circular mask
+MO
+[circular_mask_incore]
+[idim],[idim]
+C         ; _C_ircle
+[radius]  ; radius
+
+SYS
+mkdir -p [class_dir]
+
+MD
+SET MP
+[numProcs]
+
+SYS
+echo "Running k-means classification"; date
+
+; run k-means classification
+CL KM x21,x22,x23,x24,x25
+[cas_prefix]_IMC
+[numClasses]       ; number of classes
+1-[numFactors]     ; factors to use
+0                  ; no factor weighting
+0                  ; no random seed
+[class_doc]_noccc  ; OUTPUT (temp): class-list doc
+[dendrogram_doc]
+
+
+; GENERATE CLASS AVERAGES
+SYS
+echo "Generating class averages"; date
+
+; initialize maximum class-size
+[maxClassSize] = -1
+
+; loop through classes
+DO LB2 [classNum] = 1,[numClasses]
+    IF ( INT([classNum]/[progressInt]) .EQ. [classNum]/[progressInt] ) THEN
+        SYS
+        echo "Working on {***[classNum]}th class out of {***[numClasses]}"
+    ENDIF
+
+    ; calculate average
+    AS R
+    [particles]
+    [class_doc][classNum]_noccc  ; INPUT: class list
+    A                            ; _A_ll images
+    [class_avg][classNum]        ; OUTPUT: class average
+    [class_var][classNum]        ; OUTPUT: class variance
+
+    ; get standard deviation of the variance
+    FS M x41,x42,x43,[sdvar]
+    [class_var][classNum]
+    [circular_mask_incore]
+
+
+    ; CALCULATE CCC OF PARTICLES AGAINST CLASS AVERAGE
+
+    DE
+    [class_doc][classNum]_unsort
+
+    ; initialize CCC-sum
+    [cccSum] = 0
+
+    ; get class size
+    UD N [classSize]
+    [class_doc][classNum]_noccc
+
+    ; update maximum
+    IF ( [classSize] .GT. [maxClassSize] ) [maxClassSize]=[classSize]
+
+    ; initialize in-core doc file
+    SD IC NEW
+    [class_doc_unsorted_incore]
+    2,[classSize]  ; #columns, #keys
+
+    ; loop through particles
+    DO LB6 [partKey] = 1,[classSize]
+        ; read particle#
+        UD IC [partKey], [partNum]
+        [class_doc][classNum]_noccc
+
+        ; calculate CCC
+        CC C [ccc]
+        [particles][partNum]
+        [class_avg][classNum]
+        [circular_mask_incore]
+
+        ; update CCC-sum
+        [cccSum] = [cccSum] + [ccc]
+
+        ; write to unsorted doc
+        SD IC [partKey], [partNum],[ccc]
+        [class_doc_unsorted_incore]
+    LB6
+    ; end particle-loop
+
+    ; clean up
+    UD ICE
+    [class_doc][classNum]_noccc
+    DE
+    [class_doc][classNum]_noccc
+    SD IC COPY
+    [class_doc_unsorted_incore]
+    [class_doc][classNum]_unsort
+    SD ICE
+    [class_doc_unsorted_incore]
+
+    ; sort by CCC
+    DOC SORT
+    [class_doc][classNum]_unsort
+    [class_doc][classNum]
+    2  ; column for CCC
+    Y  ; renumber?
+
+    ; label and clean up
+    SD /      PART_NUM    CCC_VS_AVG
+    [class_doc][classNum]
+    SD E
+    [class_doc][classNum]
+    DE
+    [class_doc][classNum]_unsort
+
+    ; average CCC-sum
+    [cccSum] = [cccSum]/[classSize]
+
+    ; write to doc file
+    SD [classNum],[classNum],[cccSum],[sdvar],[classSize]
+    [class_stats_doc]_unsort
+LB2
+; end class-loop
+
+; sort class-list
+DOC SORT
+[class_stats_doc]_unsort
+[class_stats_doc]
+2  ; column for CCC
+Y  ; renumber?
+
+; label+close doc
+SD /      CLASSNUM       CCC        VARIANCE_SD  NUMPARTS
+[class_stats_doc]
+SD E
+[class_stats_doc]
+DE
+[class_stats_doc]_unsort
+
+SYS M
+echo ;
+echo "Done" ;
+echo "Maximum class size: {****[maxClassSize]}" ;
+date
+.
+
+EN D
+
+; Modified 2018-02-12
+;    2015-07-16 (trs) -- number of CPUs now user-defined
+;    2014-03-06 (trs) -- reading images from stacks
+;    2009-07-27 (trs) -- prints largest class
+;    2009-07-27 (trs) -- sorted list classes
+;    2009-07-27 (trs) -- sorted particles by CCC against average
+;    2008-04-06 (trs) -- added doc file with class size
+;    2005-08-24 (trs) -- adapted from classify.spi

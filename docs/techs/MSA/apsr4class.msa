@@ -1,0 +1,165 @@
+; RUN REFERENCE-FREE ALIGNMENT
+;
+; Using SPIDER command AP SR
+
+; ---------------- Parameters ----------------
+[innerRadius] = 1    ; first ring radius for alignment, pixels
+[diameter]    = 88   ; expected object diameter, pixels
+[numProcs]    = 0    ; number of CPUs to use (0==ALL)
+
+; ---------------- Input files ----------------
+FR G
+[particle_list]listparticles    ; group-particle list
+FR G
+[unaligned]stk2-unaligned@*****   ; unaligned images
+
+; --------------- Output files ---------------
+FR G
+[apsr_dir]APSR                          ; output AP SR directory
+FR G
+[apsr_avg][apsr_dir]/iteravg***         ; reference-free average template
+FR G
+[apsr_doc][apsr_dir]/docapsr***         ; reference-free alignment doc template
+FR L
+[aligned_stack][apsr_dir]/stkaligned    ; aligned-image stack (w/o "@")
+FR L
+[aligned_images][aligned_stack]@*****   ; aligned-image template (check number of digits)
+FR L
+[master_aligned]stk3-aligned            ; master aligned-image stack (w/o "@")
+
+; ------------- END BATCH HEADER -------------
+
+FR L
+[temp_disc]_1
+FR L
+[temp_blob]_2
+
+SYS
+echo "Performing reference-free alignment"; date
+
+SYS
+mkdir -p [apsr_dir]
+
+; GET IMAGE DIMENSION
+
+; get 1st particle#
+UD 1, [firstPart]
+[particle_list]
+UD E  ; close doc
+
+; get image dimension
+FI [imgDim]
+[unaligned][firstPart]
+12  ; header position for x-dim
+
+; calculate center coordinate
+[centerCoord] = ([imgDim]+1)/2
+
+; calculate radius for last alignment ring
+[outerRadius] = ([diameter]-1)/2
+
+
+; GENERATE BLOB FOR CENTRATION
+
+; generate disc
+PT
+[temp_disc]    ; OUTPUT
+[imgDim],[imgDim]
+C              ; _C_ircle
+[centerCoord],[centerCoord]
+[outerRadius]  ; object radius
+N              ; continue?
+
+; low-pass filter disc
+FQ NP
+[temp_disc]  ; INPUT
+[temp_blob]  ; OUTPUT
+3            ; Gaussian low-pass
+0.02         ; filter radius
+
+MD
+SET MP
+[numProcs]
+
+; run reference-free alignment
+AP SR
+[unaligned]        ; particles to be aligned
+[particle_list]  ; selection file
+[diameter]         ; expected size of the object
+[innerRadius],[outerRadius]
+[temp_blob]        ; centering image
+[apsr_avg]
+[apsr_doc]
+ 
+
+; COUNT #ITERATIONS
+
+[maxIter] = 100  ; max #iterations
+
+; loop through iterations
+DO LB1 [iter] = 1,[maxIter]
+    ; check if file exists
+    IQ FI [exists]
+    [apsr_doc][iter]
+ 
+    ; if file doesn't exist, then exit loop
+    IF ( [exists] .LT. 1 ) GOTO LB7
+LB1
+; end iteration-loop
+ 
+LB7  ; jump here when iteration file not found
+
+[lastIter] = [iter] - 1  ; previous iteration's file exists
+
+
+SYS
+echo "Aligning particles"; date
+
+DE
+[aligned_stack]@
+
+; get #particles
+UD N [numParts]
+[particle_list]
+
+; loop through particles
+DO LB2 [key] = 1,[numParts]
+    ; get particle#
+    UD IC [key], [firstPart]
+    [particle_list]
+
+    ; get alignment parameters
+    UD IC [key], [angle],[xshift],[yshift]
+    [apsr_doc][lastIter]
+ 
+    RT SQ
+    [unaligned][firstPart]
+    [aligned_images][firstPart]
+    [angle],1  ; angle, scale
+    [xshift],[yshift]
+LB2
+; end particle-loop
+ 
+UD ICE
+[particle_list]
+UD ICE
+[apsr_doc][lastIter]
+
+; copy aligned images to central location (will be overwritten by subsequent alignments)
+CP
+[aligned_stack]@
+[master_aligned]@
+
+SYS
+echo "Done"; date
+
+EN D
+
+; Modified 2018-02-07
+;    TO DO: trap for outer-alignment radius
+;    2015-08-21 (trs) -- using stacks
+;    2008-11-12 (trs & th) -- generates centration reference
+;    2008-04-10 (trs) -- seems to dump core if all processors used
+;    2008-04-02 (trs & th) -- bug fix for AP SR iteration-counter
+;    2007-11-20 (trs & djt) -- bug fix for non-consecutive selection file
+;    2007-11-01 (trs) -- adapted from common-lines tutorial

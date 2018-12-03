@@ -1,0 +1,78 @@
+; COMBINES A SERIES OF STACKS (e.g., one per micrograph)
+; INTO A SINGLE STACK
+
+; REQUIRES backup.msa
+
+; ---------------- Parameter -----------------
+
+[lastMic] = 816                               ; last stack number (there can be gaps)
+
+; ------------------- Input -------------------
+FR L
+[input_stack]Particles/winser_*****           ; SPIDER-format stacks (w/o "@")
+
+; ------------------ Outputs ------------------
+FR L
+[combined_stack]stk2-unaligned                ; combined stack (w/o "@")
+FR L
+[stack_copy]stk1-unaligned_backup             ; backup stack (w/o "@")
+FR L
+[particle_list]listparticles                  ; list of particles
+
+; ------------- END BATCH HEADER -------------
+
+DE 
+[combined_stack]@
+@backup   ; DE 
+[particle_list]
+
+[partNum] = 0
+
+DO LB1 [micNum] = 1,[lastMic]
+    ; Check if file exists
+    IQ FI [stackExists]
+    [input_stack][micNum]@
+
+    IF ([stackExists] .EQ. 0) THEN
+        VM
+        echo "[input_stack][micNum].$DATEXT doesn't exist"
+
+        GOTO LB1
+    ENDIF
+
+    VM
+    echo "Working on micrograph {%i4%[micNum]} out of {%i4%[lastMic]}"
+
+    ; get #slices
+    FI H [numSlices]
+    [input_stack][micNum]@
+    MAXIM
+
+    ; loop through slices
+    DO LB2 [sliceNum] = 1,[numSlices]
+        [partNum] = [partNum] + 1
+
+        CP
+        [input_stack][micNum]@{****[sliceNum]}
+        [combined_stack]@{*****[partNum]}
+
+        SD [partNum], [partNum],[sliceNum],[micNum]
+        [particle_list]
+    LB2
+    ; End slice-loop
+LB1
+; End micrograph-loop
+
+; make backup copy of stack (for high-pass filtering, etc.)
+CP
+[combined_stack]@
+[stack_copy]@
+
+SD /      SLICE_NUM     MIC_SLICE      MIC_NUM
+[particle_list]
+SD E
+[particle_list]
+
+EN D
+
+; Modified 2015-08-20

@@ -1,0 +1,194 @@
+; AVERAGE IMAGES BY VIEW
+;
+; Requires viewaverage1.rct, backup.rct
+;
+; Adapted from viewaverage.spi, filterbyview.spi
+
+; ----------------------- Parameters -----------------------
+[multiref-iter]    = -1     ; iteration of multireference alignment to use as input (<0 == last)
+[progress-interval] = 1     ; progress message written to screen every Nth view
+
+; ------------------------- Inputs -------------------------
+fr l
+[parameter_doc]params                        ; parameter doc file
+fr l
+[class_dir]Multiref{*[iter]}                 ; list of projection views
+fr l
+[multiref_tracking_doc]docmultiref           ; list of multireference alignment iterations
+fr l
+[view_list][class_dir]/listviews             ; list of views
+fr l
+[selection_doc][class_dir]/goodsel{***x80}   ; selection-doc template
+fr l
+[aligned_images]stk3-aligned@*****           ; aligned-image template
+
+; ------------------------ Outputs ------------------------
+fr l
+[good_view_list][class_dir]/goodviews            ; copy of list of views (editable)
+fr l
+[good_view_avg][class_dir]/stkgoodavg               ; average stack (w/o "@")
+;;[good_view_avg][class_dir]/goodavg{***x80}       ; average template
+fr l
+[good_view_var][class_dir]/stkgoodvar               ; variance stack (w/o "@")
+;;[good_view_var][class_dir]/goodvar{***x80}       ; variance template (saved)
+fr l
+[by_view_doc][class_dir]/summary-viewaverage     ; particles-per-view doc 
+fr l
+[sorted_view_doc][class_dir]/sorted-viewaverage  ; particles-per-view doc 
+
+; -------------------- END BATCH HEADER --------------------
+
+; SET ITERATION NUMBER
+
+; if input iteration-specified
+if([multiref-iter].gt.0) then
+    [iter] = [multiref-iter]
+
+; if input iteration not specified
+else
+    ; look for last iteration number
+    ud n [last-iter-key]
+    [multiref_tracking_doc]
+    
+    ; get iteration number
+    ud [last-iter-key], [iter]
+    [multiref_tracking_doc]
+    ud e  ; close doc
+endif
+
+vm
+echo "Averaging good particles from [class_dir]"; date
+
+
+de
+[by_view_doc]
+SD /       VIEWNUM      PARTICLES     UNFLIPPED      FLIPPED
+[by_view_doc]
+
+; get image-dimension
+ud ic 17,[img-dim]
+[parameter_doc]
+
+; initialize counter
+[tot-particles] = 0
+
+vm
+echo "Averaging images"; date
+
+de
+[good_view_avg]@
+de
+[good_view_var]@
+de
+[good_view_avg]-flip@
+de
+[good_view_var]-flip@
+de
+[good_view_avg]-noflip@
+de
+[good_view_var]-noflip@
+
+; get #views
+ud n [num-views]
+[view_list]
+
+; check if GOOD_VIEW_LIST exists
+iq fi [goodviews-exists]
+[good_view_list]
+[one] = 1  ; dummy variable
+
+; loop through views
+do lb8 x48 = 1,[num-views]
+    ; get reference-view# (x80)
+    ud ic,x48,x80
+    [view_list]
+
+    @viewaverage1([view-parts])
+    [img-dim]                 ; PARAMETER: image dimension
+    [selection_doc]           ; INPUT: selection doc
+    [aligned_images]          ; INPUT: aligned-image template
+    [good_view_avg]@{***x80}  ; OUTPUT: average
+    [good_view_var]@{***x80}  ; OUTPUT: variance
+    
+    [tot-particles] = [tot-particles] + [view-parts]
+    
+    ; check if flip selection doc exists
+    iq fi [flip-exists]
+    [selection_doc]-flip
+    
+    ; if it exists, make average for both flip and noflip versions
+    if([flip-exists].eq.1) then
+        @viewaverage1([flip-parts])
+        [img-dim]                      ; PARAMETER: image dimension
+        [selection_doc]-flip           ; INPUT: selection doc
+        [aligned_images]               ; INPUT: aligned-image template
+        [good_view_avg]@{***x80}-flip  ; OUTPUT: average
+        [good_view_var]@{***x80}-flip  ; OUTPUT: variance
+    
+        @viewaverage1([noflip-parts])
+        [img-dim]                         ; PARAMETER: image dimension
+        [selection_doc]@{***x80}-noflip   ; INPUT: selection doc
+        [aligned_images]                  ; INPUT: aligned-image template
+        [good_view_avg]@{***x80}-noflip   ; OUTPUT: average
+        [good_view_var]@{***x80}-noflip   ; OUTPUT: variance
+    else
+        [noflip-parts] = [view-parts]
+        [flip-parts]   = 0
+    endif
+
+    ; write info to document
+    sd x48, x80,[view-parts],[noflip-parts],[flip-parts]   ; ,[sd-var]
+    [by_view_doc]
+    
+    ; write to good-view list if it doesn't exist
+    if([goodviews-exists].eq.0) then
+        sd x48, x80,[one]
+        [good_view_list]
+    endif
+lb8
+; end view-loop
+
+; finish summary
+[dummy] = -x48
+SD /           TOT_PARTS
+[by_view_doc]
+sd [dummy], [tot-particles]
+[by_view_doc]
+
+; close docs
+ud ice
+[view_list]
+sd e
+[by_view_doc]
+
+; sort by #particles
+doc sort
+[by_view_doc]
+[sorted_view_doc]
+(-2)  ; column to sort: #particles, in reverse order
+Y
+
+SD /       VIEWNUM      PARTICLES     UNFLIPPED      FLIPPED
+[sorted_view_doc]
+sd [dummy], [tot-particles]
+[sorted_view_doc]
+SD /           TOT_PARTS
+[sorted_view_doc]
+sd e
+[sorted_view_doc]
+
+vm
+echo ; echo "Done -- Averaged {******[tot-particles]} particles"; date ; echo
+
+en d
+
+; Modified 2014-03-28
+;    2014-03-28 (trs) -- copies LISTVIEWS to GOODVIEWS, after backing up the latter
+;    2014-03-28 (trs) -- sorted views by #particles in output doc
+;    2014-03-06 (trs) -- using stacks
+;    2014-03-04 (trs) -- looks for last iteration of multireference alignment
+;    2012-09-11 (trs) -- split off subroutine viewaverage1.spi
+;    2012-08-31 (trs) -- gets image dimension from PARAMS
+;    2009-06-05 (trs) -- can operate on non-consecutive views from list
+;    2009-05-05 (trs) -- bug fix: had used first N images from stkfilt
+;    2009-03-13 (trs) -- checks for existence of selection doc first

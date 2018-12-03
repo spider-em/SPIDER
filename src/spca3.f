@@ -1,14 +1,15 @@
 
 C **********************************************************************
 C
-C   SPCA3     USED ALLOCATE                  JAN 2001 ARDEAN LEITH
-C             ENLARGED MADAR                 MAR 2002 ARDEAN LEITH
-C             TSIZE BUG                      AUG 2002 ARDEAN LEITH
-C             REWRITTEN                      SEP 2003 ARDEAN LEITH
-C             REWRITTEN                      MAR 2006 ARDEAN LEITH
-C             LUNE HEADER SPACE              MAR 2009 ARDEAN LEITH
-C             PIXEL FILE FDUM                JUN 2009 ARDEAN LEITH
-C             PCASCOOR: WEIGHTP/NUMIM        FEB 2010 ARDEAN LEITH
+C   SPCA3     USED ALLOCATE                  JAN 2001 ArDean Leith
+C             ENLARGED MADAR                 MAR 2002 ArDean Leith
+C             TSIZE BUG                      AUG 2002 ArDean Leith
+C             REWRITTEN                      SEP 2003 ArDean Leith
+C             REWRITTEN                      MAR 2006 ArDean Leith
+C             LUNE HEADER SPACE              MAR 2009 ArDean Leith
+C             PIXEL FILE FDUM                JUN 2009 ArDean Leith
+C             PCASCOOR: WEIGHTP/NUMIM        FEB 2010 ArDean Leith
+C             PCA_GSMOD X-->S BUG            NOV 2018 ArDean Leith
 C
 C **********************************************************************
 C=*                                                                    *
@@ -16,7 +17,7 @@ C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
 C=* Copyright 1985-2010  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
+C=* Email: spider@health.ny.gov                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -617,7 +618,8 @@ C--*********************************************************************
         ENDDO
 
         IF (V(1)) THEN
-           CALL PCA_GSMOD(IDIM, IDIM, JBASE, X, KRANG, V)
+           CALL PCA_GSMOD(IDIM, IDIM, JBASE, S, KRANG, V)
+           !CALL PCA_GSMOD(IDIM, IDIM, JBASE, X, KRANG, V) al 2018
            RETURN
         ENDIF
 

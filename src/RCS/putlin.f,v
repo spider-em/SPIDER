@@ -1,6 +1,7 @@
-head	1.21;
+head	1.22;
 access;
 symbols
+	healthdept_2018:1.22
 	pre_getangas:1.20
 	GPL2010:1.20
 	pre_GPL2010:1.19
@@ -21,6 +22,11 @@ symbols
 locks; strict;
 comment	@c @;
 
+
+1.22
+date	2018.10.03.14.34.13;	author leith;	state Exp;
+branches;
+next	1.21;
 
 1.21
 date	2018.06.13.16.18.16;	author leith;	state Exp;
@@ -133,9 +139,9 @@ desc
 @
 
 
-1.21
+1.22
 log
-@no common buf usage now
+@email_health_dept
 @
 text
 @
@@ -151,7 +157,7 @@ C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
 C=* Copyright 1985-2018  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@@wadsworth.org                                        *
+C=* Email: spider@@health.ny.gov                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -181,7 +187,8 @@ C--*********************************************************************
  
 	SUBROUTINE PUTLIN(LUN,LUNDOC)
 
-	INCLUDE 'CMBLOCK.INC' 
+	IMPLICIT NONE
+        INCLUDE 'CMBLOCK.INC' 
         INCLUDE 'CMLIMIT.INC'
 
         INTEGER               :: LUN,LUNDOC
@@ -190,8 +197,9 @@ C--*********************************************************************
         CHARACTER(LEN=1)      :: NULL = CHAR(0)
         REAL, ALLOCATABLE     :: BUF(:)
 
-        PARAMETER (MAXKEY=9999) 
-        PARAMETER (MAXREG=7)    
+        INTEGER, PARAMETER    :: MAXKEY=9999 
+        INTEGER, PARAMETER    :: MAXREG=7
+        REAL                  :: DBUF    
         COMMON /DOC_BUF/ DBUF(MAXREG,MAXKEY*2)
 
 	REAL                  :: PLIST(MAXREG+1)
@@ -200,9 +208,17 @@ C--*********************************************************************
         LOGICAL               :: EX,NEWCNT
         INTEGER               :: CNTNUM
         INTEGER               :: ICALL,LER,IRTFLG,NKEY,MAXIM
+        INTEGER               :: nlet,nx,ny,nz,ne,mwant,icolx,icoly
+        integer               :: not_used,icoli,ndum,icolcnt,idum,iy
+        real                  :: foregr,foregr2,backgr,xfact,yfact
+        real                  :: xoff,yoff,fact,fcon
+        integer               :: igox,iendx,ihalf,ixt,ixl,iyt,iyl,iy1
+        integer               :: iyend,ixj,ivox,lastcnt,i,ix2,iy2,ix1
+        integer               :: ione,icon,igo,j,iend,ix
 
 C       OPEN DOC FILE THAT CONTAINS COORDINATES, ~9 ALLOWS EXTENSION
-12      CALL FILERD(DOCNAM,NLET,DATEXC,'COORDINATE DOCUMENT~9',IRTFLG)
+        CALL FILERD(DOCNAM,NLET,DATEXC,'COORDINATE DOCUMENT~9',IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 999
 
         ICALL = 0
         CALL UNSDAL(DOCNAM,ICALL,LUNDOC,1,PLIST,1,DBUF,
@@ -210,7 +226,7 @@ C       OPEN DOC FILE THAT CONTAINS COORDINATES, ~9 ALLOWS EXTENSION
         IF (LER > 0) GOTO 999
 
 C       GET NAME FOR EXISTING OR NEW IMAGE FILE
-10      CALL FILERD(FILNAM,NLET,NULL,'OUTPUT IMAGE',IRTFLG)
+        CALL FILERD(FILNAM,NLET,NULL,'OUTPUT IMAGE',IRTFLG)
         IF (IRTFLG .NE. 0) GOTO 999
 
 C       APPEND EXTENSION
@@ -230,7 +246,7 @@ C       OPEN IMAGE FILE
         MAXIM = 0
         CALL OPFILEC(0,.FALSE.,FILNAM,LUN,DISP,IFORM,NX,NY,NZ,
      &              MAXIM,'IMAGE',.FALSE.,IRTFLG)
-        IF (IRTFLG .NE. 0) GOTO 10
+        IF (IRTFLG .NE. 0) GOTO 999
 
         ALLOCATE(BUF(NX*NY), STAT=IRTFLG)
         IF (IRTFLG .NE. 0) THEN
@@ -239,30 +255,29 @@ C       OPEN IMAGE FILE
            GOTO 999
         ENDIF
 
-
-14      ICOLX = 1
+        ICOLX = 1
         ICOLY = 2 
         CALL RDPRIS(ICOLX,ICOLY,NOT_USED,'X-COL., Y-COL.',IRTFLG)
-        IF (IRTFLG == -1) GOTO 12
+        IF (IRTFLG .NE. 0) GOTO 999
+
         ICOLX = ICOLX + 1
         ICOLY = ICOLY + 1
         IF ((ICOLX < 0      .OR. ICOLY < 0) .OR.
      &      (ICOLX > MAXREG .OR. ICOLY > MAXREG)) THEN
            CALL ERRT(101,'COLUMN OUT OF REGISTER RANGE',NE)
-           GOTO 10
+           GOTO 999
         ENDIF
 
 
 C       ICOLI IS COLUMN OF DOC FILE CONTAINING INTENSITY
-16      ICOLI = -55
-        IF (IRTFLG == -1) GOTO 12
+        ICOLI = -55
         CALL RDPRI1S(ICOLI,NOT_USED,
      &     'LINE INTENSITY COL. (< 0 ASKS FOR INTENSITY INPUT)',IRTFLG)
-        IF (IRTFLG == -1) GOTO 14
+        IF (IRTFLG .NE. 0) GOTO 999
 
-17      IF (ICOLI < 0) THEN
+        IF (ICOLI < 0) THEN
           CALL RDPRM1S(FOREGR,NOT_USED,'LINE INTENSITY',IRTFLG)
-           IF (IRTFLG == -1) GOTO 16
+          IF (IRTFLG .NE. 0) GOTO 999
 
            FOREGR2 = FOREGR
            ICOLI   = -1
@@ -270,36 +285,34 @@ C       ICOLI IS COLUMN OF DOC FILE CONTAINING INTENSITY
            ICOLI = ICOLI + 1
            IF (ICOLI < 0 .OR. ICOLI > MAXREG) THEN
               CALL ERRT(101,'COLUMN OUT OF MAX. REGISTER RANGE',NE)
-              GOTO 16
+              GOTO 999
            ENDIF
         ENDIF
 
-18      IF (.NOT. EX) THEN
+       IF (.NOT. EX) THEN
            BACKGR = 0.0
            CALL RDPRM2S(BACKGR,NDUM,NOT_USED,'BACKGROUND INTENSITY',
      &                  IRTFLG)
-          IF (IRTFLG == -1 .AND. ICOLI == -1) GOTO 17
-          IF (IRTFLG == -1 ) GOTO 16
+          IF (IRTFLG .NE. 0) GOTO 999 
         ENDIF
 
 C       ICOLCNT IS COLUMN OF DOC FILE CONTAINING CONTOUR NUMBER
-181     ICOLCNT = 0
+        ICOLCNT = 0
         CALL RDPRIS(ICOLCNT,IDUM,NOT_USED,
      &       'CONTOUR NO. COL. (= 0 FOR NONE)',IRTFLG)
-        IF (IRTFLG == -1 .AND. .NOT. EX)      GOTO 18
-        IF (IRTFLG == -1 .AND. ICOLI == -1) GOTO 17
-        IF (IRTFLG == -1) GOTO 16
+        IF (IRTFLG .NE. 0) GOTO 999
+
         ICOLCNT = ICOLCNT + 1
       
-19      XFACT = 1.0
+        XFACT = 1.0
         YFACT = 1.0
-        CALL RDPRM2S(XFACT,YFACT,NOT_USED,'X-FACTOR, Y-FACTOR',IRT)
-        IF (IRT == -1) GOTO 181
+        CALL RDPRM2S(XFACT,YFACT,NOT_USED,'X-FACTOR, Y-FACTOR',IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 999
 
-20      XOFF = 0.0
+        XOFF = 0.0
         YOFF = 0.0
-	CALL RDPRM2S(XOFF,YOFF,NOT_USED,'X-OFFSET, Y-OFFSET',IRT)
-        IF (IRT == -1) GOTO 19
+	CALL RDPRM2S(XOFF,YOFF,NOT_USED,'X-OFFSET, Y-OFFSET',IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 999
 
         IF (EX) THEN
 C          FILL BUFFER WITH EXISTING IMAGE
@@ -312,6 +325,8 @@ C          FILL BUFFER WITH BACKGROUND VALUE
            DO IVOX = 1, NX*NY
               BUF(IVOX) = BACKGR
            ENDDO
+           buf = backgr
+
         ENDIF
 
         LASTCNT = -1
@@ -324,6 +339,8 @@ C          GET COORDS FROM DOCUMENT FILE
            IY2 = DBUF(ICOLY,I) * YFACT + YOFF
            IF (IY2   < 0) IY2     = NY + IY2 + 1
            IF (ICOLI > 0) FOREGR2 = DBUF(ICOLI,I)
+
+           !write(6,*) ' foregr:',foregr,foregr2
 
            IF (ICOLCNT > 1) THEN
 C             READ CONTOUR NUMBER FROM DOC FILE
@@ -343,8 +360,8 @@ C             START A NEW CONTOUR
 
               IX1 = IX2
               IY1 = IY2
-              IF (IY1 < 0) IY1 = NY - IY1 + 1
-              IF (ICOLI > 0) FOREGR = DBUF(ICOLI,11)
+              IF (IY1 < 0)   IY1    = NY - IY1 + 1
+              IF (ICOLI > 0) FOREGR = DBUF(ICOLI,I)
 
               IF ((IX1 > NX .OR. IX1 <= 0) .OR.
      &            (IY1 > NY .OR. IY1 <= 0)) THEN
@@ -361,6 +378,7 @@ C             START A NEW CONTOUR
 
            ELSE
 C             POINT IS WITHIN IMAGE
+              
               IF (IY1 == IY2) THEN
 C                HORIZONTAL LINE WOULD CAUSE DIVISION BY ZERO
                  ICON = (IY1 -1) * NX
@@ -368,6 +386,7 @@ C                HORIZONTAL LINE WOULD CAUSE DIVISION BY ZERO
                  IEND = MAX(IX1,IX2)
                  DO IX = IGO,IEND
                     BUF(ICON + IX) = FOREGR
+                    !write(6,*) ' flat:',ix,iy1,foregr,backgr
                  ENDDO
 
               ELSE
@@ -386,6 +405,7 @@ C                  FIND X VALUE FOR THIS Y COORDINATE
 
 C                  SET BUFFER AT THIS LOCATION TO FOREGROUND
                    BUF((IY -1) * NX + IX) = FOREGR
+                   !write(6,*) ' buf:',ix,iy,foregr,backgr
 
                    IF (IABS(IX - IXL) > 1) THEN
 C                    MUST ADD IN INTERPOLATED X VALUES 
@@ -402,7 +422,8 @@ C                    MUST ADD IN INTERPOLATED X VALUES
 
                      DO IXT = IGOX,IENDX
                          BUF((IYT -1) * NX + IXT) = FOREGR
-                        IF (IXT == IHALF) IYT = IYEND                       
+                         !write(6,*) ' buf:',ixt,iyt,foregr,backgr
+                         IF (IXT == IHALF) IYT = IYEND                       
                      ENDDO
                    ENDIF
                    IXL = IX
@@ -421,17 +442,119 @@ C          SET NEW STARTING POINT
            FOREGR = FOREGR2
         ENDDO
 
+        !call chkmaxloc('bufval  ', buf,  nx*ny)
+
+
 C       PLACE BUFFER BACK IN IMAGE FILE
-        DO IREC = 1, NY
-           J = (IREC - 1) * NX
-           CALL WRTLIN(LUN,BUF(J),NX,IREC)
-        ENDDO
+       CALL WRTVOL(LUN,NX,NY,1,1,BUF,IRTFLG)
 
         CALL SETPRM(LUN,NX,NY,0.,0.,0.,'U') 
           
 999	CLOSE(LUN)
 	
 	END
+@
+
+
+1.21
+log
+@no common buf usage now
+@
+text
+@d14 1
+a14 1
+C=* Email: spider@@wadsworth.org                                        *
+d44 2
+a45 1
+	INCLUDE 'CMBLOCK.INC' 
+d54 3
+a56 2
+        PARAMETER (MAXKEY=9999) 
+        PARAMETER (MAXREG=7)    
+d65 7
+d74 2
+a75 1
+12      CALL FILERD(DOCNAM,NLET,DATEXC,'COORDINATE DOCUMENT~9',IRTFLG)
+d83 1
+a83 1
+10      CALL FILERD(FILNAM,NLET,NULL,'OUTPUT IMAGE',IRTFLG)
+d103 1
+a103 1
+        IF (IRTFLG .NE. 0) GOTO 10
+d112 1
+a112 2
+
+14      ICOLX = 1
+d115 2
+a116 1
+        IF (IRTFLG == -1) GOTO 12
+d122 1
+a122 1
+           GOTO 10
+d127 1
+a127 2
+16      ICOLI = -55
+        IF (IRTFLG == -1) GOTO 12
+d130 1
+a130 1
+        IF (IRTFLG == -1) GOTO 14
+d132 1
+a132 1
+17      IF (ICOLI < 0) THEN
+d134 1
+a134 1
+           IF (IRTFLG == -1) GOTO 16
+d142 1
+a142 1
+              GOTO 16
+d146 1
+a146 1
+18      IF (.NOT. EX) THEN
+d150 1
+a150 2
+          IF (IRTFLG == -1 .AND. ICOLI == -1) GOTO 17
+          IF (IRTFLG == -1 ) GOTO 16
+d154 1
+a154 1
+181     ICOLCNT = 0
+d157 2
+a158 3
+        IF (IRTFLG == -1 .AND. .NOT. EX)      GOTO 18
+        IF (IRTFLG == -1 .AND. ICOLI == -1) GOTO 17
+        IF (IRTFLG == -1) GOTO 16
+d161 1
+a161 1
+19      XFACT = 1.0
+d163 2
+a164 2
+        CALL RDPRM2S(XFACT,YFACT,NOT_USED,'X-FACTOR, Y-FACTOR',IRT)
+        IF (IRT == -1) GOTO 181
+d166 1
+a166 1
+20      XOFF = 0.0
+d168 2
+a169 2
+	CALL RDPRM2S(XOFF,YOFF,NOT_USED,'X-OFFSET, Y-OFFSET',IRT)
+        IF (IRT == -1) GOTO 19
+d182 2
+d197 2
+d217 2
+a218 2
+              IF (IY1 < 0) IY1 = NY - IY1 + 1
+              IF (ICOLI > 0) FOREGR = DBUF(ICOLI,11)
+d235 1
+d243 1
+d262 1
+d279 2
+a280 1
+                        IF (IXT == IHALF) IYT = IYEND                       
+d299 3
+d303 1
+a303 4
+        DO IREC = 1, NY
+           J = (IREC - 1) * NX
+           CALL WRTLIN(LUN,BUF(J),NX,IREC)
+        ENDDO
 @
 
 
