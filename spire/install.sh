@@ -1,53 +1,74 @@
 #!/bin/sh
 #
-# SOURCE:   /usr8/spider/spire/spire_linux-1.5.5/install.sh
+# SOURCE:   spider/spire/install.sh
 #
-# PURPOSE:  Create an executable script, python, that runs our 
-#           newly installed version of python
+# PURPOSE:  This script must be run before first use of Spire or 
+#           SPIDER's python tools.  It ensures that the spire tar archive
+#           has been extracted, then it compiles all the '*.py' scripts.
+#           It then runs '$SPIRE_BIN_DIR/setup.py' to set some Spire variables. 
+#           It also intializes  XML configuration files, 
+#           Spire LocalVars fire , and user's '.spire' files
+#         
+# NOTE:     The old PIL and Blt libraries which are used in Spire and 
+#           some of SPIDER's tools are no longer compatible with recent 
+#           Linux distributions. I have updated to Python2.7 and Tcl8.6 
+#           to overcome the PIL incompatibility but have been unable to 
+#           get the Blt forks to work with these updates.  
+#           I have  been forced (a kludge) to distribute a old Python2.5 
+#           with old Tcl and Blt libraries to support Spire and the five 
+#           tools which need Blt widgets but do not use the PIL library.
 #
-# REQUIRES: The stub files, python.sh, spire.sh to be in the 
-#           scripts directory
+# NOTE:     No spaces in bash env. variables!! (al)
 
-SPIRE_DIR=$PWD
+# Ensure that user has set environment variable for "SPIDER_DIR"
+if [ -z ${SPIDER_DIR} ]; 
+   then echo "set ENVIRONMENT VARIABLE: SPIDER_DIR to location of your SPIDER distribution"; exit ;
+else echo " SPIDER_DIR is:  $SPIDER_DIR";  fi
 
-BIN_DIR=$SPIRE_DIR/bin
-LIB_DIR=$SPIRE_DIR/lib
-SCRIPT_DIR=$SPIRE_DIR/scripts
+SPIRE_DIR=$SPIDER_DIR/spire-dist
 
-# Set up the python script -----------------------
-PYTHON=$BIN_DIR/python
+#SPIRE_DIR=`pwd`
+SPIRE_BIN_DIR=$SPIRE_DIR/bin
+SPIRE_LIB_DIR=$SPIRE_DIR/lib
+#echo " SPIRE_BIN_DIR is:  $SPIRE_BIN_DIR";  
 
-# Put the Spire installation directory into the python script
-replace=__SPIRE_INSTALLATION_DIRECTORY__
-rm -rf $PYTHON
-sed "s:$replace:${SPIRE_DIR}:" $SCRIPT_DIR/python.sh > $PYTHON
+# Ensure that user has extracted the spire.tar archive"
+if [ -a ${SPIRE_DIR}/spire.tar ] 
+   then  echo " Already unpacked: spire.tar " 
+else
+   echo " Unpacking: spire.tar.gz  please wait" 
+   gunzip spire.tar.gz 
+   tar xf spire.tar 
+   echo " Unpacked: spire.tar " 
+fi
+ 
+# \rm *.pyc */*.pyc */*/*.pyc */*/*/*.pyc */*/*/*/*.pyc */*/*/*/*/*.pyc */*/*/*/*/*/*.pyc */*/*/*/*/*/*/*.pyc */*/*/*/*/*/*/*/*.pyc
 
-chmod 775 $PYTHON
+# Compile Python library & site packages using SPIDER's Python 2.5 --------
 
-cd lib/python2.5
-$PYTHON compileall.py
-$PYTHON compileall.py site-packages
-cd ../..
+PYTHON_VERSION=python2.5 
+PYTHON=$SPIRE_BIN_DIR/$PYTHON_VERSION
+PYTHON_LIB=$SPIRE_LIB_DIR/$PYTHON_VERSION 
 
-# Install Spire and the spire script --------------
-"$PYTHON" "setup.py"
+echo ' Compiling:      '$PYTHON_LIB library
+$PYTHON $PYTHON_LIB/compileall.py -f $PYTHON_LIB
 
-# setup.py renames bin/spire.py to bin/spire
-# But we want 'spire' to be a shell script that calls spire.py
-mv $BIN_DIR/spire $BIN_DIR/spire.py 
+# Compile Python library & site packages using SPIDER's Python 2.7 --------
 
-# Put the Spire installation directory into the spire script
-replace=__SPIRE_INSTALLATION_DIRECTORY__
-sed "s:$replace:${SPIRE_DIR}:" $SCRIPT_DIR/spire.sh > $BIN_DIR/spire
+PYTHON_VERSION=python2.7 
+PYTHON=$SPIRE_BIN_DIR/$PYTHON_VERSION
+PYTHON_LIB=$SPIRE_LIB_DIR/$PYTHON_VERSION
+ 
+echo ' Compiling:      '$PYTHON_LIB library
+$PYTHON $PYTHON_LIB/compileall.py -f $PYTHON_LIB
 
-chmod 775 $BIN_DIR/spire
+echo ' ' ; echo ' '
 
-#echo " " ; echo " Making: $mkapps.py" "$BIN_DIR"
+# Initialize some Spire variables 
+# Set spire  and tools executables directory in users PATH --------------
 
-# Make scripts for the application programs in bin/
-"$PYTHON" "mkapps.py" "$BIN_DIR"
+$PYTHON $SPIRE_DIR/setup.py
 
-# Add alternative name for montage to avoid Imagemagick command
-ln -sf "$BIN_DIR"/montage "$BIN_DIR"/montage-spi
+echo ' ' 
 
-echo " " ; echo " Installation finished"
+exit

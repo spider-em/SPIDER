@@ -1,0 +1,327 @@
+<html>
+<head> <title>SpiderImagePlugin.py</title></head>
+<body bgcolor="#ffffff">
+<pre><font face="Lucida,Courier New"><font color="#FF0000">#
+</font><font color="#FF0000"># The Python Imaging Library.
+</font><font color="#FF0000">#
+</font><font color="#FF0000"># SPIDER image file handling
+</font><font color="#FF0000">#
+</font><font color="#FF0000"># History:
+</font><font color="#FF0000"># 2004-08-02    Created BB
+</font><font color="#FF0000"># 2006-03-02    Added save method
+</font><font color="#FF0000"># 2006-03-13    Added support for stack images
+</font><font color="#FF0000">#
+</font><font color="#FF0000"># Copyright (c) 2004 by Health Research Inc. (HRI) Menands, NY 12204.
+</font><font color="#FF0000"># Copyright (c) 2004 by William Baxter.
+</font><font color="#FF0000"># Copyright (c) 2004 by Secret Labs AB.
+</font><font color="#FF0000"># Copyright (c) 2004 by Fredrik Lundh.
+</font><font color="#FF0000">#
+</font>
+<font color="#FF0000">##
+</font><font color="#FF0000"># Image plugin for the Spider image format.  This format is is used
+</font><font color="#FF0000"># by the SPIDER software, in processing image data from electron
+</font><font color="#FF0000"># microscopy and tomography.
+</font><font color="#FF0000">##
+</font>
+<font color="#FF0000">#
+</font><font color="#FF0000"># SpiderImagePlugin.py
+</font><font color="#FF0000">#
+</font><font color="#FF0000"># The Spider image format is used by SPIDER software, in processing
+</font><font color="#FF0000"># image data from electron microscopy and tomography.
+</font><font color="#FF0000">#
+</font><font color="#FF0000"># Spider home page:
+</font><font color="#FF0000"># http://www.wadsworth.org/spider_doc/spider/docs/spider.html
+</font><font color="#FF0000">#
+</font><font color="#FF0000"># Details about the Spider image format:
+</font><font color="#FF0000"># http://www.wadsworth.org/spider_doc/spider/docs/image_doc.html
+</font><font color="#FF0000">#
+</font>
+<font color="#EB5E00">import</font> <font color="#000000">Image</font><font color="#000000">,</font> <font color="#000000">ImageFile</font>
+<font color="#EB5E00">import</font> <font color="#000000">os</font><font color="#000000">,</font> <font color="#000000">string</font><font color="#000000">,</font> <font color="#000000">struct</font><font color="#000000">,</font> <font color="#000000">sys</font>
+
+<font color="#EB5E00">def</font> <font color="#0000FF">isInt</font><font color="#000000">(</font><font color="#000000">f</font><font color="#000000">)</font><font color="#000000">:</font>
+    <font color="#EB5E00">try</font><font color="#000000">:</font>
+        <font color="#000000">i</font> <font color="#000000">=</font> <font color="#000000">int</font><font color="#000000">(</font><font color="#000000">f</font><font color="#000000">)</font>
+        <font color="#EB5E00">if</font> <font color="#000000">f</font><font color="#000000">-</font><font color="#000000">i</font> <font color="#000000">==</font> <font color="#000000">0</font><font color="#000000">:</font> <font color="#EB5E00">return</font> <font color="#000000">1</font>
+        <font color="#EB5E00">else</font><font color="#000000">:</font>        <font color="#EB5E00">return</font> <font color="#000000">0</font>
+    <font color="#EB5E00">except</font><font color="#000000">:</font>
+        <font color="#EB5E00">return</font> <font color="#000000">0</font>
+
+<font color="#000000">iforms</font> <font color="#000000">=</font> <font color="#000000">[</font><font color="#000000">1</font><font color="#000000">,</font><font color="#000000">3</font><font color="#000000">,</font><font color="#000000">-</font><font color="#000000">11</font><font color="#000000">,</font><font color="#000000">-</font><font color="#000000">12</font><font color="#000000">,</font><font color="#000000">-</font><font color="#000000">21</font><font color="#000000">,</font><font color="#000000">-</font><font color="#000000">22</font><font color="#000000">]</font>
+
+<font color="#FF0000"># There is no magic number to identify Spider files, so just check a
+</font><font color="#FF0000"># series of header locations to see if they have reasonable values.
+</font><font color="#FF0000"># Returns number of bytes in the header, if it is a valid Spider header,
+</font><font color="#FF0000"># otherwise returns 0
+</font>
+<font color="#EB5E00">def</font> <font color="#0000FF">isSpiderHeader</font><font color="#000000">(</font><font color="#000000">t</font><font color="#000000">)</font><font color="#000000">:</font>
+    <font color="#008800">" returns number of bytes in the header, or zero if not valid "</font>
+    <font color="#000000">h</font> <font color="#000000">=</font> <font color="#000000">(</font><font color="#000000">99</font><font color="#000000">,</font><font color="#000000">)</font> <font color="#000000">+</font> <font color="#000000">t</font>   <font color="#FF0000"># add 1 value so can use spider header index start=1</font>
+    <font color="#FF0000"># header values 1,2,5,12,13,22,23 should be integers
+</font>    <font color="#EB5E00">for</font> <font color="#000000">i</font> <font color="#EB5E00">in</font> <font color="#000000">[</font><font color="#000000">1</font><font color="#000000">,</font><font color="#000000">2</font><font color="#000000">,</font><font color="#000000">5</font><font color="#000000">,</font><font color="#000000">12</font><font color="#000000">,</font><font color="#000000">13</font><font color="#000000">,</font><font color="#000000">22</font><font color="#000000">,</font><font color="#000000">23</font><font color="#000000">]</font><font color="#000000">:</font>
+        <font color="#EB5E00">if</font> <font color="#EB5E00">not</font> <font color="#000000">isInt</font><font color="#000000">(</font><font color="#000000">h</font><font color="#000000">[</font><font color="#000000">i</font><font color="#000000">]</font><font color="#000000">)</font><font color="#000000">:</font> <font color="#EB5E00">return</font> <font color="#000000">0</font>
+    <font color="#FF0000"># check iform
+</font>    <font color="#000000">iform</font> <font color="#000000">=</font> <font color="#000000">int</font><font color="#000000">(</font><font color="#000000">h</font><font color="#000000">[</font><font color="#000000">5</font><font color="#000000">]</font><font color="#000000">)</font>
+    <font color="#EB5E00">if</font> <font color="#EB5E00">not</font> <font color="#000000">iform</font> <font color="#EB5E00">in</font> <font color="#000000">iforms</font><font color="#000000">:</font> <font color="#EB5E00">return</font> <font color="#000000">0</font>
+    <font color="#FF0000"># check other header values
+</font>    <font color="#000000">labrec</font> <font color="#000000">=</font> <font color="#000000">int</font><font color="#000000">(</font><font color="#000000">h</font><font color="#000000">[</font><font color="#000000">13</font><font color="#000000">]</font><font color="#000000">)</font>   <font color="#FF0000"># no. records in file header</font>
+    <font color="#000000">labbyt</font> <font color="#000000">=</font> <font color="#000000">int</font><font color="#000000">(</font><font color="#000000">h</font><font color="#000000">[</font><font color="#000000">22</font><font color="#000000">]</font><font color="#000000">)</font>   <font color="#FF0000"># total no. of bytes in header</font>
+    <font color="#000000">lenbyt</font> <font color="#000000">=</font> <font color="#000000">int</font><font color="#000000">(</font><font color="#000000">h</font><font color="#000000">[</font><font color="#000000">23</font><font color="#000000">]</font><font color="#000000">)</font>   <font color="#FF0000"># record length in bytes</font>
+    <font color="#FF0000">#print "labrec = %d, labbyt = %d, lenbyt = %d" % (labrec,labbyt,lenbyt)
+</font>    <font color="#EB5E00">if</font> <font color="#000000">labbyt</font> <font color="#000000">!=</font> <font color="#000000">(</font><font color="#000000">labrec</font> <font color="#000000">*</font> <font color="#000000">lenbyt</font><font color="#000000">)</font><font color="#000000">:</font> <font color="#EB5E00">return</font> <font color="#000000">0</font>
+    <font color="#FF0000"># looks like a valid header
+</font>    <font color="#EB5E00">return</font> <font color="#000000">labbyt</font>
+
+<font color="#EB5E00">def</font> <font color="#0000FF">isSpiderImage</font><font color="#000000">(</font><font color="#000000">filename</font><font color="#000000">)</font><font color="#000000">:</font>
+    <font color="#008800">" return 1 or 0 "</font>
+    <font color="#000000">bytes_to_read</font> <font color="#000000">=</font> <font color="#000000">23</font> <font color="#000000">*</font> <font color="#000000">4</font>  <font color="#FF0000"># number of (floating point) header values</font>
+    <font color="#EB5E00">try</font><font color="#000000">:</font>
+        <font color="#000000">fp</font> <font color="#000000">=</font> <font color="#000000">open</font><font color="#000000">(</font><font color="#000000">filename</font><font color="#000000">,</font><font color="#008800">'rb'</font><font color="#000000">)</font>
+        <font color="#000000">f</font> <font color="#000000">=</font> <font color="#000000">fp</font><font color="#000000">.</font><font color="#000000">read</font><font color="#000000">(</font><font color="#000000">bytes_to_read</font><font color="#000000">)</font>   <font color="#FF0000"># read 23 * 4 bytes</font>
+        <font color="#000000">fp</font><font color="#000000">.</font><font color="#000000">close</font><font color="#000000">(</font><font color="#000000">)</font>
+    <font color="#EB5E00">except</font><font color="#000000">:</font>
+        <font color="#EB5E00">print</font> <font color="#008800">"SpiderImagePlugin.isSpiderImage: unable to read %s"</font> <font color="#000000">%</font> <font color="#000000">filename</font>
+        <font color="#EB5E00">return</font> <font color="#000000">0</font>
+    <font color="#EB5E00">if</font> <font color="#000000">len</font><font color="#000000">(</font><font color="#000000">f</font><font color="#000000">)</font> <font color="#000000">&lt;</font> <font color="#000000">bytes_to_read</font><font color="#000000">:</font>
+        <font color="#EB5E00">return</font> <font color="#000000">0</font>
+
+    <font color="#000000">bigendian</font> <font color="#000000">=</font> <font color="#000000">1</font>
+    <font color="#000000">t</font> <font color="#000000">=</font> <font color="#000000">struct</font><font color="#000000">.</font><font color="#000000">unpack</font><font color="#000000">(</font><font color="#008800">'&gt;23f'</font><font color="#000000">,</font><font color="#000000">f</font><font color="#000000">)</font>    <font color="#FF0000"># try big-endian first</font>
+    <font color="#000000">hdrlen</font> <font color="#000000">=</font> <font color="#000000">isSpiderHeader</font><font color="#000000">(</font><font color="#000000">t</font><font color="#000000">)</font>
+    <font color="#EB5E00">if</font> <font color="#000000">hdrlen</font> <font color="#000000">==</font> <font color="#000000">0</font><font color="#000000">:</font>
+        <font color="#000000">bigendian</font> <font color="#000000">=</font> <font color="#000000">0</font>
+        <font color="#000000">t</font> <font color="#000000">=</font> <font color="#000000">struct</font><font color="#000000">.</font><font color="#000000">unpack</font><font color="#000000">(</font><font color="#008800">'&lt;23f'</font><font color="#000000">,</font><font color="#000000">f</font><font color="#000000">)</font>  <font color="#FF0000"># little-endian</font>
+        <font color="#000000">hdrlen</font> <font color="#000000">=</font> <font color="#000000">isSpiderHeader</font><font color="#000000">(</font><font color="#000000">t</font><font color="#000000">)</font>
+    <font color="#EB5E00">return</font> <font color="#000000">hdrlen</font>
+
+
+<font color="#EB5E00">class</font> <font color="#000000">SpiderImageFile</font><font color="#000000">(</font><font color="#000000">ImageFile</font><font color="#000000">.</font><font color="#000000">ImageFile</font><font color="#000000">)</font><font color="#000000">:</font>
+
+    <font color="#000000">format</font> <font color="#000000">=</font> <font color="#008800">"SPIDER"</font>
+    <font color="#000000">format_description</font> <font color="#000000">=</font> <font color="#008800">"Spider 2D image"</font>
+
+    <font color="#EB5E00">def</font> <font color="#0000FF">_open</font><font color="#000000">(</font><font color="#000000">self</font><font color="#000000">)</font><font color="#000000">:</font>
+        <font color="#FF0000"># check header
+</font>        <font color="#000000">n</font> <font color="#000000">=</font> <font color="#000000">27</font> <font color="#000000">*</font> <font color="#000000">4</font>  <font color="#FF0000"># read 27 float values</font>
+        <font color="#000000">f</font> <font color="#000000">=</font> <font color="#000000">self</font><font color="#000000">.</font><font color="#000000">fp</font><font color="#000000">.</font><font color="#000000">read</font><font color="#000000">(</font><font color="#000000">n</font><font color="#000000">)</font>
+
+        <font color="#EB5E00">try</font><font color="#000000">:</font>
+            <font color="#000000">self</font><font color="#000000">.</font><font color="#000000">bigendian</font> <font color="#000000">=</font> <font color="#000000">1</font>
+            <font color="#000000">t</font> <font color="#000000">=</font> <font color="#000000">struct</font><font color="#000000">.</font><font color="#000000">unpack</font><font color="#000000">(</font><font color="#008800">'&gt;27f'</font><font color="#000000">,</font><font color="#000000">f</font><font color="#000000">)</font>    <font color="#FF0000"># try big-endian first</font>
+            <font color="#000000">hdrlen</font> <font color="#000000">=</font> <font color="#000000">isSpiderHeader</font><font color="#000000">(</font><font color="#000000">t</font><font color="#000000">)</font>
+            <font color="#EB5E00">if</font> <font color="#000000">hdrlen</font> <font color="#000000">==</font> <font color="#000000">0</font><font color="#000000">:</font>
+                <font color="#000000">self</font><font color="#000000">.</font><font color="#000000">bigendian</font> <font color="#000000">=</font> <font color="#000000">0</font>
+                <font color="#000000">t</font> <font color="#000000">=</font> <font color="#000000">struct</font><font color="#000000">.</font><font color="#000000">unpack</font><font color="#000000">(</font><font color="#008800">'&lt;27f'</font><font color="#000000">,</font><font color="#000000">f</font><font color="#000000">)</font>  <font color="#FF0000"># little-endian</font>
+                <font color="#000000">hdrlen</font> <font color="#000000">=</font> <font color="#000000">isSpiderHeader</font><font color="#000000">(</font><font color="#000000">t</font><font color="#000000">)</font>
+            <font color="#EB5E00">if</font> <font color="#000000">hdrlen</font> <font color="#000000">==</font> <font color="#000000">0</font><font color="#000000">:</font>
+                <font color="#EB5E00">raise</font> <font color="#000000">SyntaxError</font><font color="#000000">,</font> <font color="#008800">"not a valid Spider file"</font>
+        <font color="#EB5E00">except</font> <font color="#000000">struct</font><font color="#000000">.</font><font color="#000000">error</font><font color="#000000">:</font>
+            <font color="#EB5E00">raise</font> <font color="#000000">SyntaxError</font><font color="#000000">,</font> <font color="#008800">"not a valid Spider file"</font>
+
+        <font color="#000000">h</font> <font color="#000000">=</font> <font color="#000000">(</font><font color="#000000">99</font><font color="#000000">,</font><font color="#000000">)</font> <font color="#000000">+</font> <font color="#000000">t</font>   <font color="#FF0000"># add 1 value : spider header index starts at 1</font>
+        <font color="#000000">iform</font> <font color="#000000">=</font> <font color="#000000">int</font><font color="#000000">(</font><font color="#000000">h</font><font color="#000000">[</font><font color="#000000">5</font><font color="#000000">]</font><font color="#000000">)</font>
+        <font color="#EB5E00">if</font> <font color="#000000">iform</font> <font color="#000000">!=</font> <font color="#000000">1</font><font color="#000000">:</font>
+            <font color="#EB5E00">raise</font> <font color="#000000">SyntaxError</font><font color="#000000">,</font> <font color="#008800">"not a Spider 2D image"</font>
+
+        <font color="#000000">self</font><font color="#000000">.</font><font color="#000000">size</font> <font color="#000000">=</font> <font color="#000000">int</font><font color="#000000">(</font><font color="#000000">h</font><font color="#000000">[</font><font color="#000000">12</font><font color="#000000">]</font><font color="#000000">)</font><font color="#000000">,</font> <font color="#000000">int</font><font color="#000000">(</font><font color="#000000">h</font><font color="#000000">[</font><font color="#000000">2</font><font color="#000000">]</font><font color="#000000">)</font> <font color="#FF0000"># size in pixels (width, height)</font>
+        <font color="#000000">self</font><font color="#000000">.</font><font color="#000000">istack</font> <font color="#000000">=</font> <font color="#000000">int</font><font color="#000000">(</font><font color="#000000">h</font><font color="#000000">[</font><font color="#000000">24</font><font color="#000000">]</font><font color="#000000">)</font>
+        <font color="#000000">self</font><font color="#000000">.</font><font color="#000000">imgnumber</font> <font color="#000000">=</font> <font color="#000000">int</font><font color="#000000">(</font><font color="#000000">h</font><font color="#000000">[</font><font color="#000000">27</font><font color="#000000">]</font><font color="#000000">)</font>
+
+        <font color="#EB5E00">if</font> <font color="#000000">self</font><font color="#000000">.</font><font color="#000000">istack</font> <font color="#000000">==</font> <font color="#000000">0</font> <font color="#EB5E00">and</font> <font color="#000000">self</font><font color="#000000">.</font><font color="#000000">imgnumber</font> <font color="#000000">==</font> <font color="#000000">0</font><font color="#000000">:</font>
+            <font color="#FF0000"># stk=0, img=0: a regular 2D image
+</font>            <font color="#000000">offset</font> <font color="#000000">=</font> <font color="#000000">hdrlen</font>
+            <font color="#000000">self</font><font color="#000000">.</font><font color="#000000">nimages</font> <font color="#000000">=</font> <font color="#000000">1</font>
+        <font color="#EB5E00">elif</font> <font color="#000000">self</font><font color="#000000">.</font><font color="#000000">istack</font> <font color="#000000">&gt;</font> <font color="#000000">0</font> <font color="#EB5E00">and</font> <font color="#000000">self</font><font color="#000000">.</font><font color="#000000">imgnumber</font> <font color="#000000">==</font> <font color="#000000">0</font><font color="#000000">:</font>
+            <font color="#FF0000"># stk&gt;0, img=0: Opening the stack for the first time
+</font>            <font color="#000000">self</font><font color="#000000">.</font><font color="#000000">imgbytes</font> <font color="#000000">=</font> <font color="#000000">int</font><font color="#000000">(</font><font color="#000000">h</font><font color="#000000">[</font><font color="#000000">12</font><font color="#000000">]</font><font color="#000000">)</font> <font color="#000000">*</font> <font color="#000000">int</font><font color="#000000">(</font><font color="#000000">h</font><font color="#000000">[</font><font color="#000000">2</font><font color="#000000">]</font><font color="#000000">)</font> <font color="#000000">*</font> <font color="#000000">4</font>
+            <font color="#000000">self</font><font color="#000000">.</font><font color="#000000">hdrlen</font> <font color="#000000">=</font> <font color="#000000">hdrlen</font>
+            <font color="#000000">self</font><font color="#000000">.</font><font color="#000000">nimages</font> <font color="#000000">=</font> <font color="#000000">int</font><font color="#000000">(</font><font color="#000000">h</font><font color="#000000">[</font><font color="#000000">26</font><font color="#000000">]</font><font color="#000000">)</font>
+            <font color="#FF0000"># Point to the first image in the stack
+</font>            <font color="#000000">offset</font> <font color="#000000">=</font> <font color="#000000">hdrlen</font> <font color="#000000">*</font> <font color="#000000">2</font>
+            <font color="#000000">self</font><font color="#000000">.</font><font color="#000000">imgnumber</font> <font color="#000000">=</font> <font color="#000000">1</font>
+        <font color="#EB5E00">elif</font> <font color="#000000">self</font><font color="#000000">.</font><font color="#000000">istack</font> <font color="#000000">==</font> <font color="#000000">0</font> <font color="#EB5E00">and</font> <font color="#000000">self</font><font color="#000000">.</font><font color="#000000">imgnumber</font> <font color="#000000">&gt;</font> <font color="#000000">0</font><font color="#000000">:</font>
+            <font color="#FF0000"># stk=0, img&gt;0: an image within the stack
+</font>            <font color="#000000">offset</font> <font color="#000000">=</font> <font color="#000000">hdrlen</font> <font color="#000000">+</font> <font color="#000000">self</font><font color="#000000">.</font><font color="#000000">stkoffset</font>
+            <font color="#000000">self</font><font color="#000000">.</font><font color="#000000">istack</font> <font color="#000000">=</font> <font color="#000000">2</font>  <font color="#FF0000"># So Image knows it's still a stack</font>
+        <font color="#EB5E00">else</font><font color="#000000">:</font>
+            <font color="#EB5E00">raise</font> <font color="#000000">SyntaxError</font><font color="#000000">,</font> <font color="#008800">"inconsistent stack header values"</font>
+
+        <font color="#EB5E00">if</font> <font color="#000000">self</font><font color="#000000">.</font><font color="#000000">bigendian</font><font color="#000000">:</font>
+            <font color="#000000">self</font><font color="#000000">.</font><font color="#000000">rawmode</font> <font color="#000000">=</font> <font color="#008800">"F;32BF"</font>
+        <font color="#EB5E00">else</font><font color="#000000">:</font>
+            <font color="#000000">self</font><font color="#000000">.</font><font color="#000000">rawmode</font> <font color="#000000">=</font> <font color="#008800">"F;32F"</font>
+        <font color="#000000">self</font><font color="#000000">.</font><font color="#000000">mode</font> <font color="#000000">=</font> <font color="#008800">"F"</font>
+
+        <font color="#000000">self</font><font color="#000000">.</font><font color="#000000">tile</font> <font color="#000000">=</font> <font color="#000000">[</font><font color="#000000">(</font><font color="#008800">"raw"</font><font color="#000000">,</font> <font color="#000000">(</font><font color="#000000">0</font><font color="#000000">,</font> <font color="#000000">0</font><font color="#000000">)</font> <font color="#000000">+</font> <font color="#000000">self</font><font color="#000000">.</font><font color="#000000">size</font><font color="#000000">,</font> <font color="#000000">offset</font><font color="#000000">,</font>
+                    <font color="#000000">(</font><font color="#000000">self</font><font color="#000000">.</font><font color="#000000">rawmode</font><font color="#000000">,</font> <font color="#000000">0</font><font color="#000000">,</font> <font color="#000000">1</font><font color="#000000">)</font><font color="#000000">)</font><font color="#000000">]</font>
+        <font color="#000000">self</font><font color="#000000">.</font><font color="#000000">__fp</font> <font color="#000000">=</font> <font color="#000000">self</font><font color="#000000">.</font><font color="#000000">fp</font> <font color="#FF0000"># FIXME: hack</font>
+
+    <font color="#FF0000"># 1st image index is zero (although SPIDER imgnumber starts at 1)
+</font>    <font color="#EB5E00">def</font> <font color="#0000FF">tell</font><font color="#000000">(</font><font color="#000000">self</font><font color="#000000">)</font><font color="#000000">:</font>
+        <font color="#EB5E00">if</font> <font color="#000000">self</font><font color="#000000">.</font><font color="#000000">imgnumber</font> <font color="#000000">&lt;</font> <font color="#000000">1</font><font color="#000000">:</font>
+            <font color="#EB5E00">return</font> <font color="#000000">0</font>
+        <font color="#EB5E00">else</font><font color="#000000">:</font>
+            <font color="#EB5E00">return</font> <font color="#000000">self</font><font color="#000000">.</font><font color="#000000">imgnumber</font> <font color="#000000">-</font> <font color="#000000">1</font>
+
+    <font color="#EB5E00">def</font> <font color="#0000FF">seek</font><font color="#000000">(</font><font color="#000000">self</font><font color="#000000">,</font> <font color="#000000">frame</font><font color="#000000">)</font><font color="#000000">:</font>
+        <font color="#EB5E00">if</font> <font color="#000000">self</font><font color="#000000">.</font><font color="#000000">istack</font> <font color="#000000">==</font> <font color="#000000">0</font><font color="#000000">:</font>
+            <font color="#EB5E00">return</font>
+        <font color="#EB5E00">if</font> <font color="#000000">frame</font> <font color="#000000">&gt;=</font> <font color="#000000">self</font><font color="#000000">.</font><font color="#000000">nimages</font><font color="#000000">:</font>
+            <font color="#EB5E00">raise</font> <font color="#000000">EOFError</font><font color="#000000">,</font> <font color="#008800">"attempt to seek past end of file"</font>
+        <font color="#000000">self</font><font color="#000000">.</font><font color="#000000">stkoffset</font> <font color="#000000">=</font> <font color="#000000">self</font><font color="#000000">.</font><font color="#000000">hdrlen</font> <font color="#000000">+</font> <font color="#000000">frame</font> <font color="#000000">*</font> <font color="#000000">(</font><font color="#000000">self</font><font color="#000000">.</font><font color="#000000">hdrlen</font> <font color="#000000">+</font> <font color="#000000">self</font><font color="#000000">.</font><font color="#000000">imgbytes</font><font color="#000000">)</font>
+        <font color="#000000">self</font><font color="#000000">.</font><font color="#000000">fp</font> <font color="#000000">=</font> <font color="#000000">self</font><font color="#000000">.</font><font color="#000000">__fp</font>
+        <font color="#000000">self</font><font color="#000000">.</font><font color="#000000">fp</font><font color="#000000">.</font><font color="#000000">seek</font><font color="#000000">(</font><font color="#000000">self</font><font color="#000000">.</font><font color="#000000">stkoffset</font><font color="#000000">)</font>
+        <font color="#000000">self</font><font color="#000000">.</font><font color="#000000">_open</font><font color="#000000">(</font><font color="#000000">)</font>
+
+    <font color="#FF0000"># returns a byte image after rescaling to 0..255
+</font>    <font color="#EB5E00">def</font> <font color="#0000FF">convert2byte</font><font color="#000000">(</font><font color="#000000">self</font><font color="#000000">,</font> <font color="#000000">depth</font><font color="#000000">=</font><font color="#000000">255</font><font color="#000000">)</font><font color="#000000">:</font>
+        <font color="#000000">(</font><font color="#000000">min</font><font color="#000000">,</font> <font color="#000000">max</font><font color="#000000">)</font> <font color="#000000">=</font> <font color="#000000">self</font><font color="#000000">.</font><font color="#000000">getextrema</font><font color="#000000">(</font><font color="#000000">)</font>
+        <font color="#000000">m</font> <font color="#000000">=</font> <font color="#000000">1</font>
+        <font color="#EB5E00">if</font> <font color="#000000">max</font> <font color="#000000">!=</font> <font color="#000000">min</font><font color="#000000">:</font>
+            <font color="#000000">m</font> <font color="#000000">=</font> <font color="#000000">depth</font> <font color="#000000">/</font> <font color="#000000">(</font><font color="#000000">max</font><font color="#000000">-</font><font color="#000000">min</font><font color="#000000">)</font>
+        <font color="#000000">b</font> <font color="#000000">=</font> <font color="#000000">-</font><font color="#000000">m</font> <font color="#000000">*</font> <font color="#000000">min</font>
+        <font color="#EB5E00">return</font> <font color="#000000">self</font><font color="#000000">.</font><font color="#000000">point</font><font color="#000000">(</font><font color="#EB5E00">lambda</font> <font color="#000000">i</font><font color="#000000">,</font> <font color="#000000">m</font><font color="#000000">=</font><font color="#000000">m</font><font color="#000000">,</font> <font color="#000000">b</font><font color="#000000">=</font><font color="#000000">b</font><font color="#000000">:</font> <font color="#000000">i</font> <font color="#000000">*</font> <font color="#000000">m</font> <font color="#000000">+</font> <font color="#000000">b</font><font color="#000000">)</font><font color="#000000">.</font><font color="#000000">convert</font><font color="#000000">(</font><font color="#008800">"L"</font><font color="#000000">)</font>
+
+    <font color="#FF0000"># returns a ImageTk.PhotoImage object, after rescaling to 0..255
+</font>    <font color="#EB5E00">def</font> <font color="#0000FF">tkPhotoImage</font><font color="#000000">(</font><font color="#000000">self</font><font color="#000000">)</font><font color="#000000">:</font>
+        <font color="#EB5E00">import</font> <font color="#000000">ImageTk</font>
+        <font color="#EB5E00">return</font> <font color="#000000">ImageTk</font><font color="#000000">.</font><font color="#000000">PhotoImage</font><font color="#000000">(</font><font color="#000000">self</font><font color="#000000">.</font><font color="#000000">convert2byte</font><font color="#000000">(</font><font color="#000000">)</font><font color="#000000">,</font> <font color="#000000">palette</font><font color="#000000">=</font><font color="#000000">256</font><font color="#000000">)</font>
+
+<font color="#FF0000"># --------------------------------------------------------------------
+</font><font color="#FF0000"># Image series
+</font>
+<font color="#FF0000"># Given a list of filenames, return a list of PIL images.
+</font><font color="#FF0000"># If byte == 1, run convert2byte on Spider files .
+</font><font color="#EB5E00">def</font> <font color="#0000FF">loadImageSeries</font><font color="#000000">(</font><font color="#000000">filelist</font><font color="#000000">=</font><font color="#000000">None</font><font color="#000000">,</font> <font color="#000000">byte</font><font color="#000000">=</font><font color="#000000">1</font><font color="#000000">,</font> <font color="#000000">verbose</font><font color="#000000">=</font><font color="#000000">1</font><font color="#000000">)</font><font color="#000000">:</font>
+    <font color="#008800">" create a list of Image.images for use in montage "</font>
+    <font color="#EB5E00">if</font> <font color="#000000">filelist</font> <font color="#000000">==</font> <font color="#000000">None</font> <font color="#EB5E00">or</font> <font color="#000000">len</font><font color="#000000">(</font><font color="#000000">filelist</font><font color="#000000">)</font> <font color="#000000">&lt;</font> <font color="#000000">1</font><font color="#000000">:</font>
+        <font color="#EB5E00">return</font>
+
+    <font color="#000000">imglist</font> <font color="#000000">=</font> <font color="#000000">[</font><font color="#000000">]</font>
+    <font color="#EB5E00">for</font> <font color="#000000">file</font> <font color="#EB5E00">in</font> <font color="#000000">filelist</font><font color="#000000">:</font>
+        <font color="#EB5E00">if</font> <font color="#EB5E00">not</font> <font color="#000000">os</font><font color="#000000">.</font><font color="#000000">path</font><font color="#000000">.</font><font color="#000000">exists</font><font color="#000000">(</font><font color="#000000">file</font><font color="#000000">)</font><font color="#000000">:</font>
+            <font color="#EB5E00">print</font> <font color="#008800">"unable to find %s"</font> <font color="#000000">%</font> <font color="#000000">file</font>
+            <font color="#EB5E00">continue</font>
+        <font color="#EB5E00">try</font><font color="#000000">:</font>
+            <font color="#000000">im</font> <font color="#000000">=</font> <font color="#000000">Image</font><font color="#000000">.</font><font color="#000000">open</font><font color="#000000">(</font><font color="#000000">file</font><font color="#000000">)</font>
+            <font color="#EB5E00">if</font> <font color="#000000">im</font><font color="#000000">.</font><font color="#000000">format</font> <font color="#000000">==</font> <font color="#008800">"SPIDER"</font><font color="#000000">:</font>
+                <font color="#EB5E00">if</font> <font color="#000000">im</font><font color="#000000">.</font><font color="#000000">istack</font><font color="#000000">:</font>
+                    <font color="#000000">ni</font> <font color="#000000">=</font> <font color="#000000">im</font><font color="#000000">.</font><font color="#000000">nimages</font>
+                    <font color="#EB5E00">for</font> <font color="#000000">i</font> <font color="#EB5E00">in</font> <font color="#000000">range</font><font color="#000000">(</font><font color="#000000">ni</font><font color="#000000">)</font><font color="#000000">:</font>
+                        <font color="#000000">im</font><font color="#000000">.</font><font color="#000000">seek</font><font color="#000000">(</font><font color="#000000">i</font><font color="#000000">)</font>
+                        <font color="#000000">im</font><font color="#000000">.</font><font color="#000000">info</font><font color="#000000">[</font><font color="#008800">'filename'</font><font color="#000000">]</font> <font color="#000000">=</font> <font color="#008800">"%s@%d"</font> <font color="#000000">%</font> <font color="#000000">(</font><font color="#000000">os</font><font color="#000000">.</font><font color="#000000">path</font><font color="#000000">.</font><font color="#000000">basename</font><font color="#000000">(</font><font color="#000000">file</font><font color="#000000">)</font><font color="#000000">,</font> <font color="#000000">i</font><font color="#000000">+</font><font color="#000000">1</font><font color="#000000">)</font>
+                        <font color="#FF0000">#im.info['filename'] = str(i+1)
+</font>                        <font color="#EB5E00">if</font> <font color="#000000">byte</font><font color="#000000">:</font>
+                            <font color="#000000">imglist</font><font color="#000000">.</font><font color="#000000">append</font><font color="#000000">(</font><font color="#000000">im</font><font color="#000000">.</font><font color="#000000">convert2byte</font><font color="#000000">(</font><font color="#000000">)</font><font color="#000000">)</font>
+                        <font color="#EB5E00">else</font><font color="#000000">:</font>
+                            <font color="#000000">imglist</font><font color="#000000">.</font><font color="#000000">append</font><font color="#000000">(</font><font color="#000000">im</font><font color="#000000">)</font>
+                <font color="#EB5E00">else</font><font color="#000000">:</font> <font color="#FF0000"># not a stack</font>
+                    <font color="#000000">im</font><font color="#000000">.</font><font color="#000000">info</font><font color="#000000">[</font><font color="#008800">'filename'</font><font color="#000000">]</font> <font color="#000000">=</font> <font color="#000000">os</font><font color="#000000">.</font><font color="#000000">path</font><font color="#000000">.</font><font color="#000000">basename</font><font color="#000000">(</font><font color="#000000">file</font><font color="#000000">)</font>
+                    <font color="#EB5E00">if</font> <font color="#000000">byte</font><font color="#000000">:</font>
+                        <font color="#000000">im</font> <font color="#000000">=</font> <font color="#000000">im</font><font color="#000000">.</font><font color="#000000">convert2byte</font><font color="#000000">(</font><font color="#000000">)</font>
+                    <font color="#000000">imglist</font><font color="#000000">.</font><font color="#000000">append</font><font color="#000000">(</font><font color="#000000">im</font><font color="#000000">)</font>
+            <font color="#EB5E00">else</font><font color="#000000">:</font> <font color="#FF0000"># not SPIDER</font>
+                <font color="#000000">im</font><font color="#000000">.</font><font color="#000000">info</font><font color="#000000">[</font><font color="#008800">'filename'</font><font color="#000000">]</font> <font color="#000000">=</font> <font color="#000000">file</font>
+                <font color="#000000">imglist</font><font color="#000000">.</font><font color="#000000">append</font><font color="#000000">(</font><font color="#000000">im</font><font color="#000000">)</font>
+        <font color="#EB5E00">except</font><font color="#000000">:</font>
+            <font color="#EB5E00">if</font> <font color="#EB5E00">not</font> <font color="#000000">isSpiderImage</font><font color="#000000">(</font><font color="#000000">file</font><font color="#000000">)</font><font color="#000000">:</font>
+                <font color="#EB5E00">print</font> <font color="#000000">file</font> <font color="#000000">+</font> <font color="#008800">" is not a Spider image file"</font>
+            <font color="#EB5E00">continue</font>
+
+    <font color="#EB5E00">return</font> <font color="#000000">imglist</font>
+
+<font color="#FF0000"># --------------------------------------------------------------------
+</font><font color="#FF0000"># For saving images in Spider format
+</font>
+<font color="#EB5E00">def</font> <font color="#0000FF">makeSpiderHeader</font><font color="#000000">(</font><font color="#000000">im</font><font color="#000000">)</font><font color="#000000">:</font>
+    <font color="#000000">nsam</font><font color="#000000">,</font><font color="#000000">nrow</font> <font color="#000000">=</font> <font color="#000000">im</font><font color="#000000">.</font><font color="#000000">size</font>
+    <font color="#000000">lenbyt</font> <font color="#000000">=</font> <font color="#000000">nsam</font> <font color="#000000">*</font> <font color="#000000">4</font>  <font color="#FF0000"># There are labrec records in the header</font>
+    <font color="#000000">labrec</font> <font color="#000000">=</font> <font color="#000000">1024</font> <font color="#000000">/</font> <font color="#000000">lenbyt</font>
+    <font color="#EB5E00">if</font> <font color="#000000">1024</font><font color="#000000">%</font><font color="#000000">lenbyt</font> <font color="#000000">!=</font> <font color="#000000">0</font><font color="#000000">:</font> <font color="#000000">labrec</font> <font color="#000000">+=</font> <font color="#000000">1</font>
+    <font color="#000000">labbyt</font> <font color="#000000">=</font> <font color="#000000">labrec</font> <font color="#000000">*</font> <font color="#000000">lenbyt</font>
+    <font color="#000000">hdr</font> <font color="#000000">=</font> <font color="#000000">[</font><font color="#000000">]</font>
+    <font color="#000000">nvalues</font> <font color="#000000">=</font> <font color="#000000">labbyt</font> <font color="#000000">/</font> <font color="#000000">4</font>
+    <font color="#EB5E00">for</font> <font color="#000000">i</font> <font color="#EB5E00">in</font> <font color="#000000">range</font><font color="#000000">(</font><font color="#000000">nvalues</font><font color="#000000">)</font><font color="#000000">:</font>
+        <font color="#000000">hdr</font><font color="#000000">.</font><font color="#000000">append</font><font color="#000000">(</font><font color="#000000">0.0</font><font color="#000000">)</font>
+
+    <font color="#EB5E00">if</font> <font color="#000000">len</font><font color="#000000">(</font><font color="#000000">hdr</font><font color="#000000">)</font> <font color="#000000">&lt;</font> <font color="#000000">23</font><font color="#000000">:</font>
+        <font color="#EB5E00">return</font> <font color="#000000">[</font><font color="#000000">]</font>
+
+    <font color="#FF0000"># NB these are Fortran indices
+</font>    <font color="#000000">hdr</font><font color="#000000">[</font><font color="#000000">1</font><font color="#000000">]</font>  <font color="#000000">=</font> <font color="#000000">1.0</font>           <font color="#FF0000"># nslice (=1 for an image) </font>
+    <font color="#000000">hdr</font><font color="#000000">[</font><font color="#000000">2</font><font color="#000000">]</font>  <font color="#000000">=</font> <font color="#000000">float</font><font color="#000000">(</font><font color="#000000">nrow</font><font color="#000000">)</font>   <font color="#FF0000"># number of rows per slice</font>
+    <font color="#000000">hdr</font><font color="#000000">[</font><font color="#000000">5</font><font color="#000000">]</font>  <font color="#000000">=</font> <font color="#000000">1.0</font>           <font color="#FF0000"># iform for 2D image</font>
+    <font color="#000000">hdr</font><font color="#000000">[</font><font color="#000000">12</font><font color="#000000">]</font> <font color="#000000">=</font> <font color="#000000">float</font><font color="#000000">(</font><font color="#000000">nsam</font><font color="#000000">)</font>   <font color="#FF0000"># number of pixels per line</font>
+    <font color="#000000">hdr</font><font color="#000000">[</font><font color="#000000">13</font><font color="#000000">]</font> <font color="#000000">=</font> <font color="#000000">float</font><font color="#000000">(</font><font color="#000000">labrec</font><font color="#000000">)</font> <font color="#FF0000"># number of records in file header</font>
+    <font color="#000000">hdr</font><font color="#000000">[</font><font color="#000000">22</font><font color="#000000">]</font> <font color="#000000">=</font> <font color="#000000">float</font><font color="#000000">(</font><font color="#000000">labbyt</font><font color="#000000">)</font> <font color="#FF0000"># total number of bytes in header</font>
+    <font color="#000000">hdr</font><font color="#000000">[</font><font color="#000000">23</font><font color="#000000">]</font> <font color="#000000">=</font> <font color="#000000">float</font><font color="#000000">(</font><font color="#000000">lenbyt</font><font color="#000000">)</font> <font color="#FF0000"># record length in bytes</font>
+
+    <font color="#FF0000"># adjust for Fortran indexing
+</font>    <font color="#000000">hdr</font> <font color="#000000">=</font> <font color="#000000">hdr</font><font color="#000000">[</font><font color="#000000">1</font><font color="#000000">:</font><font color="#000000">]</font>
+    <font color="#000000">hdr</font><font color="#000000">.</font><font color="#000000">append</font><font color="#000000">(</font><font color="#000000">0.0</font><font color="#000000">)</font>
+    <font color="#FF0000"># pack binary data into a string
+</font>    <font color="#000000">hdrstr</font> <font color="#000000">=</font> <font color="#000000">[</font><font color="#000000">]</font>
+    <font color="#EB5E00">for</font> <font color="#000000">v</font> <font color="#EB5E00">in</font> <font color="#000000">hdr</font><font color="#000000">:</font>
+        <font color="#000000">hdrstr</font><font color="#000000">.</font><font color="#000000">append</font><font color="#000000">(</font><font color="#000000">struct</font><font color="#000000">.</font><font color="#000000">pack</font><font color="#000000">(</font><font color="#008800">'f'</font><font color="#000000">,</font><font color="#000000">v</font><font color="#000000">)</font><font color="#000000">)</font>
+    <font color="#EB5E00">return</font> <font color="#000000">hdrstr</font>
+
+<font color="#EB5E00">def</font> <font color="#0000FF">_save</font><font color="#000000">(</font><font color="#000000">im</font><font color="#000000">,</font> <font color="#000000">fp</font><font color="#000000">,</font> <font color="#000000">filename</font><font color="#000000">)</font><font color="#000000">:</font>
+    <font color="#EB5E00">if</font> <font color="#000000">im</font><font color="#000000">.</font><font color="#000000">mode</font><font color="#000000">[</font><font color="#000000">0</font><font color="#000000">]</font> <font color="#000000">!=</font> <font color="#008800">"F"</font><font color="#000000">:</font>
+        <font color="#000000">im</font> <font color="#000000">=</font> <font color="#000000">im</font><font color="#000000">.</font><font color="#000000">convert</font><font color="#000000">(</font><font color="#008800">'F'</font><font color="#000000">)</font>
+
+    <font color="#000000">hdr</font> <font color="#000000">=</font> <font color="#000000">makeSpiderHeader</font><font color="#000000">(</font><font color="#000000">im</font><font color="#000000">)</font>
+    <font color="#EB5E00">if</font> <font color="#000000">len</font><font color="#000000">(</font><font color="#000000">hdr</font><font color="#000000">)</font> <font color="#000000">&lt;</font> <font color="#000000">256</font><font color="#000000">:</font>
+        <font color="#EB5E00">raise</font> <font color="#000000">IOError</font><font color="#000000">,</font> <font color="#008800">"Error creating Spider header"</font>
+
+    <font color="#FF0000"># write the SPIDER header
+</font>    <font color="#EB5E00">try</font><font color="#000000">:</font>
+        <font color="#000000">fp</font> <font color="#000000">=</font> <font color="#000000">open</font><font color="#000000">(</font><font color="#000000">filename</font><font color="#000000">,</font> <font color="#008800">'wb'</font><font color="#000000">)</font>
+    <font color="#EB5E00">except</font><font color="#000000">:</font>
+        <font color="#EB5E00">raise</font> <font color="#000000">IOError</font><font color="#000000">,</font> <font color="#008800">"Unable to open %s for writing"</font> <font color="#000000">%</font> <font color="#000000">filename</font>
+    <font color="#000000">fp</font><font color="#000000">.</font><font color="#000000">writelines</font><font color="#000000">(</font><font color="#000000">hdr</font><font color="#000000">)</font>
+
+    <font color="#000000">rawmode</font> <font color="#000000">=</font> <font color="#008800">"F;32NF"</font>  <font color="#FF0000">#32-bit native floating point</font>
+    <font color="#000000">ImageFile</font><font color="#000000">.</font><font color="#000000">_save</font><font color="#000000">(</font><font color="#000000">im</font><font color="#000000">,</font> <font color="#000000">fp</font><font color="#000000">,</font> <font color="#000000">[</font><font color="#000000">(</font><font color="#008800">"raw"</font><font color="#000000">,</font> <font color="#000000">(</font><font color="#000000">0</font><font color="#000000">,</font><font color="#000000">0</font><font color="#000000">)</font><font color="#000000">+</font><font color="#000000">im</font><font color="#000000">.</font><font color="#000000">size</font><font color="#000000">,</font> <font color="#000000">0</font><font color="#000000">,</font> <font color="#000000">(</font><font color="#000000">rawmode</font><font color="#000000">,</font><font color="#000000">0</font><font color="#000000">,</font><font color="#000000">1</font><font color="#000000">)</font><font color="#000000">)</font><font color="#000000">]</font><font color="#000000">)</font>
+
+    <font color="#000000">fp</font><font color="#000000">.</font><font color="#000000">close</font><font color="#000000">(</font><font color="#000000">)</font>
+
+<font color="#EB5E00">def</font> <font color="#0000FF">_save_spider</font><font color="#000000">(</font><font color="#000000">im</font><font color="#000000">,</font> <font color="#000000">fp</font><font color="#000000">,</font> <font color="#000000">filename</font><font color="#000000">)</font><font color="#000000">:</font>
+    <font color="#FF0000"># get the filename extension and register it with Image
+</font>    <font color="#000000">fn</font><font color="#000000">,</font> <font color="#000000">ext</font> <font color="#000000">=</font> <font color="#000000">os</font><font color="#000000">.</font><font color="#000000">path</font><font color="#000000">.</font><font color="#000000">splitext</font><font color="#000000">(</font><font color="#000000">filename</font><font color="#000000">)</font>
+    <font color="#000000">Image</font><font color="#000000">.</font><font color="#000000">register_extension</font><font color="#000000">(</font><font color="#008800">"SPIDER"</font><font color="#000000">,</font> <font color="#000000">ext</font><font color="#000000">)</font>
+    <font color="#000000">_save</font><font color="#000000">(</font><font color="#000000">im</font><font color="#000000">,</font> <font color="#000000">fp</font><font color="#000000">,</font> <font color="#000000">filename</font><font color="#000000">)</font>
+
+<font color="#FF0000"># --------------------------------------------------------------------
+</font>
+<font color="#000000">Image</font><font color="#000000">.</font><font color="#000000">register_open</font><font color="#000000">(</font><font color="#008800">"SPIDER"</font><font color="#000000">,</font> <font color="#000000">SpiderImageFile</font><font color="#000000">)</font>
+<font color="#FF0000">#Image.register_extension("SPIDER", ".spi")
+</font><font color="#000000">Image</font><font color="#000000">.</font><font color="#000000">register_save</font><font color="#000000">(</font><font color="#008800">"SPIDER"</font><font color="#000000">,</font> <font color="#000000">_save_spider</font><font color="#000000">)</font>
+
+<font color="#EB5E00">if</font> <font color="#000000">__name__</font> <font color="#000000">==</font> <font color="#008800">"__main__"</font><font color="#000000">:</font>
+
+    <font color="#EB5E00">if</font> <font color="#EB5E00">not</font> <font color="#000000">sys</font><font color="#000000">.</font><font color="#000000">argv</font><font color="#000000">[</font><font color="#000000">1</font><font color="#000000">:</font><font color="#000000">]</font><font color="#000000">:</font>
+        <font color="#EB5E00">print</font> <font color="#008800">"Syntax: python SpiderImagePlugin.py Spiderimage [outfile]"</font>
+        <font color="#000000">sys</font><font color="#000000">.</font><font color="#000000">exit</font><font color="#000000">(</font><font color="#000000">)</font>
+
+    <font color="#000000">filename</font> <font color="#000000">=</font> <font color="#000000">sys</font><font color="#000000">.</font><font color="#000000">argv</font><font color="#000000">[</font><font color="#000000">1</font><font color="#000000">]</font>
+    <font color="#EB5E00">if</font> <font color="#EB5E00">not</font> <font color="#000000">isSpiderImage</font><font color="#000000">(</font><font color="#000000">filename</font><font color="#000000">)</font><font color="#000000">:</font>
+        <font color="#EB5E00">print</font> <font color="#008800">"input image must be in Spider format"</font>
+        <font color="#000000">sys</font><font color="#000000">.</font><font color="#000000">exit</font><font color="#000000">(</font><font color="#000000">)</font>
+
+    <font color="#000000">outfile</font> <font color="#000000">=</font> <font color="#008800">""</font>
+    <font color="#EB5E00">if</font> <font color="#000000">len</font><font color="#000000">(</font><font color="#000000">sys</font><font color="#000000">.</font><font color="#000000">argv</font><font color="#000000">[</font><font color="#000000">1</font><font color="#000000">:</font><font color="#000000">]</font><font color="#000000">)</font> <font color="#000000">&gt;</font> <font color="#000000">1</font><font color="#000000">:</font>
+        <font color="#000000">outfile</font> <font color="#000000">=</font> <font color="#000000">sys</font><font color="#000000">.</font><font color="#000000">argv</font><font color="#000000">[</font><font color="#000000">2</font><font color="#000000">]</font>
+
+    <font color="#000000">im</font> <font color="#000000">=</font> <font color="#000000">Image</font><font color="#000000">.</font><font color="#000000">open</font><font color="#000000">(</font><font color="#000000">filename</font><font color="#000000">)</font>
+    <font color="#EB5E00">print</font> <font color="#008800">"image: "</font> <font color="#000000">+</font> <font color="#000000">str</font><font color="#000000">(</font><font color="#000000">im</font><font color="#000000">)</font>
+    <font color="#EB5E00">print</font> <font color="#008800">"format: "</font> <font color="#000000">+</font> <font color="#000000">str</font><font color="#000000">(</font><font color="#000000">im</font><font color="#000000">.</font><font color="#000000">format</font><font color="#000000">)</font>
+    <font color="#EB5E00">print</font> <font color="#008800">"size: "</font> <font color="#000000">+</font> <font color="#000000">str</font><font color="#000000">(</font><font color="#000000">im</font><font color="#000000">.</font><font color="#000000">size</font><font color="#000000">)</font>
+    <font color="#EB5E00">print</font> <font color="#008800">"mode: "</font> <font color="#000000">+</font> <font color="#000000">str</font><font color="#000000">(</font><font color="#000000">im</font><font color="#000000">.</font><font color="#000000">mode</font><font color="#000000">)</font>
+    <font color="#EB5E00">print</font> <font color="#008800">"max, min: "</font><font color="#000000">,</font>
+    <font color="#EB5E00">print</font> <font color="#000000">im</font><font color="#000000">.</font><font color="#000000">getextrema</font><font color="#000000">(</font><font color="#000000">)</font>
+
+    <font color="#EB5E00">if</font> <font color="#000000">outfile</font> <font color="#000000">!=</font> <font color="#008800">""</font><font color="#000000">:</font>
+        <font color="#FF0000"># perform some image operation
+</font>        <font color="#000000">im</font> <font color="#000000">=</font> <font color="#000000">im</font><font color="#000000">.</font><font color="#000000">transpose</font><font color="#000000">(</font><font color="#000000">Image</font><font color="#000000">.</font><font color="#000000">FLIP_LEFT_RIGHT</font><font color="#000000">)</font>
+        <font color="#EB5E00">print</font> <font color="#008800">"saving a flipped version of %s as %s "</font> <font color="#000000">%</font> <font color="#000000">(</font><font color="#000000">os</font><font color="#000000">.</font><font color="#000000">path</font><font color="#000000">.</font><font color="#000000">basename</font><font color="#000000">(</font><font color="#000000">filename</font><font color="#000000">)</font><font color="#000000">,</font> <font color="#000000">outfile</font><font color="#000000">)</font>
+        <font color="#000000">im</font><font color="#000000">.</font><font color="#000000">save</font><font color="#000000">(</font><font color="#000000">outfile</font><font color="#000000">,</font> <font color="#008800">"SPIDER"</font><font color="#000000">)</font><font color="#000000"></font></font></pre></body></html>

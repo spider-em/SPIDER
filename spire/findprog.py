@@ -24,24 +24,24 @@ def testSpider(spiderpath):
     return success
 
 
-def substituteVars(pathstring):
-    " replaces $PATTERN with os.environ[PATTERN] "
-    s = pathstring.split('/')
-    if pathstring[0] == "/":
-        new = "/"
-    else:
-        new = ""
+#def substituteVars(pathstring):
+    #" replaces $PATTERN with os.environ[PATTERN] "
+    #s = pathstring.split('/')
+    #if pathstring[0] == "/":
+        #new = "/"
+    #else:
+        #new = ""
         
-    for d in s:       
-        a = d.find("$")
-        if a > -1:
-            var = d[a+1:]
-            if var in os.environ:
-                value = os.environ[var]
-                d = d.replace("$"+var,value)
-        new += d + "/"
+    #for d in s:       
+        #a = d.find("$")
+        #if a > -1:
+            #var = d[a+1:]
+            #if var in os.environ:
+                #value = os.environ[var]
+                #d = d.replace("$"+var,value)
+        #new += d + "/"
         
-    return new[:-1]
+    #return new[:-1]
 
 
 
