@@ -8,7 +8,7 @@ C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2018  Health Research Inc.,                         *
+C=* Copyright 1985-2019  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@health.ny.gov                                        *
 C=*                                                                    *
@@ -159,7 +159,7 @@ C       @@@@@@@@@@@@@@@@@@@@@@@@@@ DATA STATEMENTS @@@@@@@@@@@@@@@@@@@@
 C       @@@@@@@@@@@@@@@@@@@@@@ VERSION INITIALIZATION @@@@@@@@@@@@@@@@@
 
 CHERE               123456789 123456789 123456789 1234567890 
-        DATA CVERS/'VERSION:  UNIX 25.00  ISSUED: 10/26/2018'/
+        DATA CVERS/'VERSION:  UNIX 25.02  ISSUED: 02/14/2019'/
 
         DATA RESULM/'results'/
         DATA LOGM/'LOG'/

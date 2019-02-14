@@ -67,13 +67,16 @@ gzip -cf $ROOTDIR/"spiproject.`date +%y%m%d`.tar" > $ROOTDIR/"spiproject.`date +
 \rm -rf $PROJDIR
 
 # Link the zipped file for access from the WEB page
+echo ; echo " Link the zipped files for easy access ---------------------"
+\rm     $ROOTDIR/spiproject.tar 
 \rm     $ROOTDIR/spiproject.tar.gz
 ln -s  "$ROOTDIR/spiproject.`date +%y%m%d`.tar.gz" $ROOTDIR/spiproject.tar.gz
-ln -s  "$ROOTDIR/spiproject.`date +%y%m%d`.tar" $ROOTDIR/spiproject.tar
+ln -s  "$ROOTDIR/spiproject.`date +%y%m%d`.tar"    $ROOTDIR/spiproject.tar
 
-echo ; echo " List final tar archive location -------------------------"
-ls -l "$ROOTDIR/spiproject.`date +%y%m%d`.tar.gz"
+echo ; echo " List final tar archive locations -------------------------"
+ls -l  $ROOTDIR/spiproject.tar
 ls -l  $ROOTDIR/spiproject.tar.gz
 ls -l "$ROOTDIR/spiproject.`date +%y%m%d`.tar"
+ls -l "$ROOTDIR/spiproject.`date +%y%m%d`.tar.gz"
 
 echo " "

@@ -1,0 +1,302 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2//EN">
+<html>
+
+<head> 
+  <title>Supervised Classification</title> 
+</head>
+
+<body>
+
+<h2 align="center"><i>Supervised Classification </i></h2>
+
+<hr />
+
+<h3 align="left"><b><a name="top">Outline</a></b> </h3>
+
+<ul>
+    <li><a href="#start"> Getting started</a>         </li>
+    <li><a href="#batch"> Procedure files </a>        </li>
+    <li><a href="#3refs"> More than two references</a></li>
+    <li><a href="#pubsub">Parallel usage </a>         </li>
+    <li><a href="#papers">References </a>             </li>
+    <li><a href="#mods">  Modifications</a>           </li>
+</ul>
+
+
+<a name="start"><hr /></a>
+
+<p><font size="4"><b>Getting started</b></font></p>
+
+<ol>
+    <li>Download and unpackage a tarball from the <a href="tar_archive/archive.html">archive</a>. 
+         The files will be extracted to the current directory. 
+         (The alternative would be to create a new directory, but people may run classifications 
+         more than once on the same data set, and I didn't want to risk overwriting files.)</li>
+    <li>You will need the following inputs (change labels in procedure file if necessary) </li>
+    <ul>
+        <li><b>params</b> -- parameter doc file, only needed if last ring for AP SH is unspecified </li>
+        <li><b>sel_group_cclim</b> -- any document file whose length is the number of defocus groups </li>
+        <li><b>sel_particles_***</b> -- selection file for each defocus group </li>
+        <li><b>refangles</b>                                                  </li>
+            <ul>
+                <li>Euler angles of the reference-projections                 </li>
+                <li>should be the same for both references                    </li>
+            </ul>
+        <li><b>data***@</b>                                                   </li>
+            <ul>
+                <li>unaligned particle stacks for each defocus group          </li>
+                <li>should be the same for both references                    </li>
+            </ul>
+        <li><b>align_01_***</b> -- alignment document files for each reference + defocus group </li>
+        <li><b>prj_***@</b> -- projections for each reference + defocus group </li>
+    </ul>
+</ol>
+
+<a name="batch"><hr /></a>
+
+<p><font size="4"><b>Procedure files</b></font></p>
+
+<ul>
+    <li>(Slow) Force alignment, when necessary, to same projection in both references 
+         (in order to calculate deltaCC) </li>
+    <ul>
+        <li>PROCEDURE FILE: <a href="realign-orsh.spi">realign-orsh.spi</a> or 
+                            <a href="realign-apsh.spi">realign-apsh.spi</a> </li>
+        <li>PARAMETERS: various alignment parameters </li>
+        <li>INPUTS:  <b>align_01_***</b> (for both references), <b>prj_***@</b> (for both references) </li>
+        <li>OUTPUTS: <b>align_01_***_realigned</b> (for both references) </li>
+        <li><a href="href="../../man/orsh.html">OR SH</a>
+             uses fewer resources than AP SH when aligning only two images, 
+             and in my preliminary tests, is about three times faster.</li>
+        <li>The PubSub version under "Parallel usage" below appears to work, 
+            so I'll probably stop updating these two procedure files.  
+            There is a non-PubSub version, realign-inseries.spi, which should be equivalent. </li>
+    </ul>
+
+
+    <li>Calculate deltaCC</li>
+    <ul>
+        <li>PROCEDURE FILE: <a href="sc-compare.spi">sc-compare.spi</a> </li>
+        <li>INPUTS:  <b>align_01_***_realigned</b> (for both references) </li>
+        <li>OUTPUTS: <b>norm_delta_ccrot</b> (combined and for each defocus group), 
+             <b>hist_delta_ccrot_norm</b>, <b>plothist.gnu</b> (a Gnuplot script) </li>
+        <li><i>NOTE: deltaCCROT = CC(ref2) - CC(ref1) </i> <br />
+             Normalized, the range for each defocus group will be 0 to 1. <br />
+             For the time being, normalized and unnormalized versions are written out. </li>
+    </ul>
+
+    <li>Check deltaCC histogram using plothist.gnu</li>
+    <ul>
+        <li>To run this script, type:
+        <pre>gnuplot -persist plothist.gnu</pre>
+        The <i>-persist</i> flag keeps the display window open in the background.</li>
+        <li>Ideally, you will get a nice, bimodal distribution.
+             If not, that means that the CC values against the two references are statistically indistinguishable, 
+             and there is a possibility that you may simply have reproduced the references.</li>
+    </ul>
+
+    <center><p><table border="1">
+        <tr><td valign="top"><center><p align="center">
+        <img src="plothist1.gif"><br />
+        <b>A delta CC histogram</b> <br />
+        (from Bill Baxter)<br />
+        <i>NOTE:</i> In the current procedure files, <br />
+        the plotted value is <i>CC2-CC1</i></p>
+        </center></td>
+        <td><center><p align="center">
+        <a href="plotrot.gif"><img src="plotrot-small.gif"></a></p>
+        <b>A plot of CC2 vs. CC1</b>                                      <br />
+        <i>(click to enlarge)</i>                                         <br />
+        The histogram is a projection along the line <i>y=x</i>.          <br />
+        It's possible that the best projection is in some other direction,<br />
+        which is equalivent to weighting <i>n*CC2 - CC1</i>.              <br />
+        This plot can be generated from <b>doc_delta_ccrot_total</b>.     <br />
+        (from Bill Baxter)</p>
+        </center></td></TR>
+    </table></p></center>
+
+
+    <li>Split histogram </li>
+    <ul>
+        <li>PROCEDURE FILE: <a href="split-by-df.spi">split-by-df.spi</a>         </li>
+        <li>PARAMETERS:     Minimum, maximum deltaCC                              </li>
+        <li>INPUTS:  <b>norm_delta_ccrot_***</b> (or <b>doc_delta_ccrot_***</b>)  </li>
+        <li>OUTPUTS: <b>sel_particles_***</b>                                     </li>
+        <li>These outputs are suitable for reconstruction procedure files, such as
+        <a href="../recon/newprogs/deffsc.spi">deffsc.spi</a>. 
+            Remember to change the names of the now-split selection files in the procedure files accordingly.</li>
+    </ul>
+
+<!--   <li> </li>
+    <ul>
+        <li><a href=".spi">.spi</a> </li>
+        <li>PARAMETERS:  </li>
+        <li>INPUTS: <b></b> </li>
+        <li>OUTPUTS: <b></b> </li>
+    </ul>-->
+</ul>
+
+<p></p>
+
+<a name="3refs"><hr /></a>
+
+<p><font size="4"><b>More than two references</b></font></p>
+
+<p>
+The above procedure files are helpful for discerning between two references, 
+but when there are more than two references, 
+it would be impractical to try all combinations of pairs of references 
+in order to calculate the deltaCC.  Instead, I wrote the following PROCEDURE FILE:
+</p>
+
+<ul>
+    <li>PROCEDURE FILE: <a href="compare3plus.spi">compare3plus.spi</a></li>
+    <li>PARAMETER: Number of references</li>
+    <li>INPUTS: <b>align_01_***</b> <i>(for each reference + defocus group)</i>,
+                <b>../Reconstruction/stack2particle***</b> <i>(optional)</i></li>
+    <li>OUTPUTS: <b>align-compared3plus_01_***</b> <i>(for each defocus group)</i>,
+                 <b>Reconstruction/df***/comparedparticles</b> <i>(for each reference + defocus group)</i></li>
+    <li>This procedure file is a bit inelegant.
+		In order to be able to loop through directories, 
+		I create symbolic links of the form <b>Align***/</b>.
+		These links are create immediately after the <i>Inputs</i> section of the procedure file header.
+		Someday I plan to add the use of <a href="href="../../man/frn.html">FR N</a>.
+		<br /> Change the directory names (and number of references, above) accordingly:</li>
+<pre>
+VM M
+ln -sf ../Alignment       [align_dir]001 ;
+ln -sf ../30S/Alignment   [align_dir]002 ;
+ln -sf ../70S/Alignment   [align_dir]003 ;
+ln -sf ../50S/Alignment   [align_dir]004 ;
+ln -sf ../Dimer/Alignment [align_dir]005
+</pre>
+
+     <li>The procedure file assumes that, for each referece,
+          there are <b>Alignment/</b> and <b>Reconstruction/</b> directories.
+          In other words, for the example above, I would have directories:
+          <ul>
+               <li><b>Reconstruction/</b>      </li>
+               <li><b>30S/Reconstruction/</b>  </li>
+               <li><b>70S/Reconstruction/</b>  </li>
+               <li><b>50S/Reconstruction/</b>  </li>
+               <li><b>Dimer/Reconstruction/</b></li>
+          </ul>
+</li> 
+     <li>This procedure file does not calculate deltaCCs.
+          Rather, it simply picks the reference that gives the highest CC.      </li> 
+     <li>The optional input <b>../Reconstruction/stack2particle***</b> originates from my 
+          <a href="../verify/Docs/instr-apsh.htm">
+          classification-based particle-verification procedure files</a>.
+          The format of the output selection file will depend on these files.   </li> 
+     <li>I think the maximum number of references is 9 (related to the limit for in-core 
+         doc files).</li> 
+<!-- <li></li> -->
+</ul>
+
+<hr />
+
+<a name="pubsub"></a>
+
+<p><font size="4"><b>Parallel usage</b></font></p>
+
+<p>
+I have an experimental set of procedure files based on realign-orsh.spi that I recently started to use. 
+Specifically, it tries to prevent all nodes trying to read the image-stacks at the same time 
+by giving the previous defocus group a head-start.  
+By default, I have this parameter set to 600 seconds (10 minutes).
+The flow is as follows:
+</p>
+
+<ul>
+    <li>For parallel usage:</li>
+    <ul>
+        <li>You may need to copy the SPIDER executable locally.</li>
+        <li><a href="realign-settings.spi">realign-settings.spi</a> -- All filenames and parameters will be set here
+            and subsequent procedure files will all refer to this file. </li>
+        <li><a href="realign-pubsub.spi">realign-pubsub.spi</a> -- The toplevel procedure file <br />
+             This procedure file distributes the SPIDER jobs and waits for them to finish. 
+             To run it, type:
+             <pre>./spider spi/dat @realign-pubsub 1 > log1.txt &amp;</pre>
+             where:
+             <ul>
+                 <li> <i>1</i> -- is the number of the master results file, and</li>
+                 <li><b>log1.txt</b> -- is a file that contains the screen output, 
+                       so that you can easily monitor the progress remotely. 
+                       Some handy terms to grep in this file are <i>Group</i> and <i>done</i>. 
+                       To monitor the log file in real time, type:</li>
+                       <pre>tail -f log1.txt</pre>
+             </ul>
+        <li><a href="realign-check.spi">realign-check.spi</a> -- checks input files before publishing jobs to nodes. 
+             It's a hassle to kill a job on the cluster once the toplevel job is submitted.</li>
+        <li><a href="realign-distribute.spi">realign-distribute.spi</a> -- 
+             run by realign-pubsub.spi and runs realign-main.spi for each defocus group 
+             and creates a dummy file when it finishes </li>
+        <li><a href="realign-main.spi">realign-main.spi</a> -- does the actual realignment -- is based on realign-orsh.spi</li>
+        <li><a href="realign-wait.spi">realign-wait.spi</a> -- run by realign-main.spi 
+             -- waits up to, by default, 10 minutes for the previous stack to finish being read</li>
+    </ul>
+    <li>For serial usage:</li>
+    <ul>
+        <li>Serial usage is conceptually trivial, 
+         but to run the same copy of realign-main.spi as above,
+         there is a wrapping procedure file called 
+         <a href="realign-inseries.spi">realign-inseries.spi</a>.
+         I'll probably stop updating the realign-**sh.spi procedure files above.</li>
+    </ul>
+</ul>
+
+<a name="papers"><hr /></a>
+
+<p><font size="4"><b>References</b></font></p>
+
+<ol>
+    <li>Valle M, Sengupta J, Swami NK, Grassucci RA, Burkhardt N, Nierhaus KH, Agrawal RK, Frank J. (2002)
+         Cryo-EM reveals an active role for aminoacyl-tRNA in the accommodation process.
+         <i>EMBO J.</i> <b>21</b>: 3557-67.</li>
+    <li>Gao H, Valle M, Ehrenberg M, Frank J. (2004)
+         Dynamics of EF-G interaction with the ribosome explored by classification of a heterogeneous cryo-EM dataset. 
+         <i>J Struct Biol.</i> <b>147</b>: 283-90</li>
+    <li>Shaikh TR, Gao H, Baxter WT, Asturias FJ, Boisset N, Leith A, Frank J. (2008)
+         SPIDER image processing for single-particle reconstruction of biological macromolecules from electron micrographs.
+         <i>Nat Protoc.</i> <b>3</b>: 1941-74.</li>
+</ol>
+<p />
+<hr />
+
+<a name="mods"><hr /></a>
+
+<p><font size="4"><b>Recent modifications</b></font></p>
+<ul>
+<!--     <li></li> -->
+    <li>2012-12-10 -- realign*spi -- reduced maximum outer radius for alignment</li> 
+    <li>2011-01-05 -- sc-compare.spi -- incorporated Chuan-Chao Lu's CC normalization</li>
+    <li>2010-02-08 -- realign-orsh.spi -- overrides outer alignment radius if too big</li>
+    <li>2009-09-11 -- added compare3plus.spi for more than two references</li>
+    <li>2009-08-20 -- split-by-df.spi has option to remove lowest-CCC particles</li>
+    <li>2009-05-20 -- added PubSub version of realign-orsh.spi
+    <li>2009-04-17 -- renamed sc-dfsel.spi to split-by-df.spi and sc-realign.spi to realign-**sh.spi </li>
+    <li>2009-04-17 -- realign-orsh.spi -- implemented alignment using 
+         <a href="href="../../man/orsh.html">OR SH</a>
+         instead of AP SH -- 2-3X faster in preliminary test </li>
+    <li>2009-04-17 -- sc-compare.spi -- added Gnuplot script as output </li>
+    <li>2009-01-16 -- renamed and reorganized procedure files </li>
+    <li>2009-01-15 -- no longer uses a global particle number </li>
+    <li>2007-12-03 -- split-by-df.spi now writes <b>sel_particles***</b> in core, is much faster </li>
+    <li>2007-11-28 -- group-selection files now <b>sel_particles_***</b> instead of <b>df***/seltotal</b> </li>
+    <li>2007-05-25 -- input unaligned images are now stacks </li>
+    <li>2007-03-20 -- started <a href="tar_archive/archive.html">archive of tarballs</a>  </li>
+    <li>2007-03-20 -- renamed extension from .bat to .spi, other slight renaming </li>
+    <li>2006-08-29 -- realign-**sh.spi -- reference projections are stacks now  </li>
+    <li>2005-05-05 -- sc-compare.spi -- particles not aligning to same projection saved  </li>
+</ul>
+
+<hr />
+
+<p><small>
+   Source: techs/supclass/supclass.htm &nbsp;&nbsp;&nbsp; 
+   Page updated: 2012/12/11            &nbsp;&nbsp;&nbsp; 
+   Tapu Shaikh
+</small></p>
+
+</body>
+</html>
