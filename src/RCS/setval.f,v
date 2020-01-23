@@ -1,6 +1,7 @@
-head	1.19;
+head	1.23;
 access;
 symbols
+	pre_mrcs:1.19
 	healthdept_2018:1.19
 	pre_getangas:1.16
 	GPL2010:1.16
@@ -22,6 +23,26 @@ symbols
 locks; strict;
 comment	@c @;
 
+
+1.23
+date	2019.12.03.19.41.57;	author leith;	state Exp;
+branches;
+next	1.22;
+
+1.22
+date	2019.11.21.18.15.25;	author leith;	state Exp;
+branches;
+next	1.21;
+
+1.21
+date	2019.11.15.18.47.47;	author leith;	state Exp;
+branches;
+next	1.20;
+
+1.20
+date	2019.11.04.17.36.11;	author leith;	state Exp;
+branches;
+next	1.19;
 
 1.19
 date	2018.10.03.14.34.16;	author leith;	state Exp;
@@ -124,25 +145,29 @@ desc
 @
 
 
-1.19
+1.23
 log
-@email_health_dept
+@> 10      IF (IS_MRC) THEN
+>           CALL RDPRMC(SET,NCHAR,.TRUE.,
 @
 text
 @
-C++*********************************************************************
+C***********************************************************************
 C
-C SETVAL.F           REMOVED FROM UTIL1           OCT  88 ARDEAN LEITH
-C                    LONG FILE NAMES              FEB  89 ARDEAN LEITH
-C                    CAN OPEN STACK WITHOUT @@ NOW SEPT 98 ARDEAN LEITH
-C                    OPFILEC                      FEB  03 ARDEAN LEITH
-C                    RDPRAF REMOVED               DEC  05 ARDEAN LEITH 
-C                    RDPRM3S                      AUG  13 ARDEAN LEITH 
+C SETVAL.F           REMOVED FROM UTIL1           OCT  88 ArDean Leith
+C                    LONG FILE NAMES              FEB  89 ArDean Leith
+C                    CAN OPEN STACK WITHOUT @@ NOW SEPT 98 ArDean Leith
+C                    OPFILEC                      FEB  03 ArDean Leith
+C                    RDPRAF REMOVED               DEC  05 ArDean Leith 
+C                    RDPRM3S                      AUG  13 ArDean Leith 
+C                    MRC SUPPORT                  OCT  19 ArDean Leith 
+C                    CORIGIN                      NOV  19 ArDean Leith 
+C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2013  Health Research Inc.,                         *
+C=* Copyright 1985-2019  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@@health.ny.gov                                        *
 C=*                                                                    *
@@ -160,17 +185,32 @@ C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
 C **********************************************************************
 C
-C  SETVAL(LUN1)
+C  SETVAL(LUN1,NX1,NY1,NZ1)
 C
-C  PURPOSE:   SET PARTICULAR LABEL LOCATIONS TO SPECIFIED VALUES
+C  PURPOSE:    SET PARTICULAR HEADER LABEL  LOCATIONS 
+C
+C  CALL TREE:  UTIL1 --> SETVAL --> SETLAB_R 
+C                               --> SETLAB_R_MRC
+C                               --> LUNSETHAND_MRC
+C  FOR MRC FILES:
+C     14-16 CELLB           CELL ANGLES IN DEGREES                          
+C     20    DMIN            MINIMUM DENSITY VALUE
+C     21    DMAX            MAXIMUM DENSITY VALUE  
+C     22    DMEAN           MEAN    DENSITY VALUE  
+C     25-26 EXTRA           EXTRA, USER DEFINED STORAGE SPACE
+C     29-49 EXTRA           EXTRA, USER DEFINED STORAGE SPACE
 C
 C23456789 123456789 123456789 123456789 123456789 123456789 123456789 12
 C--*********************************************************************
 
         SUBROUTINE SETVAL(LUN1,NX1,NY1,NZ1)
 
+        IMPLICIT NONE
+
         INCLUDE 'CMBLOCK.INC' 
         INCLUDE 'CMLIMIT.INC' 
+
+        INTEGER               :: LUN1,NX1,NY1,NZ1
 
         CHARACTER(LEN=MAXNAM) :: FILNAM
         CHARACTER(LEN=1)      :: SET,ANS
@@ -178,19 +218,42 @@ C--*********************************************************************
         INTEGER, PARAMETER    :: NMAX = 200
         INTEGER               :: ILIST(NMAX) 
         REAL                  :: FLIST(NMAX) 
-        REAL                  :: FARRAY(4)
+        REAL                  :: FARRAY(7)
+        LOGICAL               :: IS_MRC,IS_MRC2
+        INTEGER               :: ILPOS,I,LENREC,NVAL2,NMAX2
+        INTEGER               :: MAXIM,ITYPE,NVAL1,NANG,IDUM,IRTFLG
+        INTEGER               :: NOT_USED,NCHAR,IGO
+
+        REAL                  :: PHI,THETA,PSI
+        INTEGER               :: NX2,NY2,NZ2
 
         REAL, PARAMETER       :: PI   = 3.14159
+        CHARACTER(LEN=2)      :: CORIG
+        CHARACTER(LEN=1)      :: CHANDED
+        CHARACTER(LEN=4)      :: CAXIS
         CHARACTER(LEN=1)      :: NULL = CHAR(0)
         INTEGER, PARAMETER    :: LUN2 = 21
 
+        CALL LUNGETIS_MRC(LUN1,IS_MRC,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
 
-10      CALL RDPRMC(SET,NCHAR,.TRUE.,
-     &    '(A)NGLES, (BUF), (P)COPY, (C)LEAR, OR (F)IX',NULL,IRTFLG)
+10      IF (IS_MRC) THEN
+          CALL RDPRMC(SET,NCHAR,.TRUE.,
+     &    '(A)NGLES, (L)OCS, (D)ATA-ORIGIN, (P)COPY, (C)LEAR, OR (F)IX',
+     &     NULL,IRTFLG)
+        ELSE
+
+          CALL RDPRMC(SET,NCHAR,.TRUE.,
+     &      '(A)NGLES, (L)OCS, (P)COPY, (C)LEAR, OR (F)IX',NULL,IRTFLG)
+        ENDIF
+
+        IF (IRTFLG .NE. 0) RETURN
+
 
         IF (SET == 'A') THEN
 C          CHANGE THE TILT ANGLES ---------------------------------- A
 
+           ILPOS = 1
            CALL RDPRI1S(ILPOS,NOT_USED,
      &                  'ANGLE SET 1, 2, OR 3',IRTFLG)
            IF (IRTFLG .NE. 0) RETURN
@@ -210,11 +273,313 @@ C          GET EULER ANGLES
               IF (IRTFLG .NE. 0) RETURN
            ENDIF
 
-           FARRAY(1) = 1.0
+           FARRAY(1) = 3.0
            FARRAY(2) = PHI
            FARRAY(3) = THETA
            FARRAY(4) = PSI
 
+           IF (IS_MRC) THEN
+C             MRC FILE
+              IF (ILPOS == 1) THEN
+                IGO = 42
+
+                CALL SETLAB_R_MRC(LUN1,IGO,4,FARRAY,.FALSE.,IRTFLG)
+
+              ELSEIF (ILPOS == 2) THEN 
+                IGO       = 46
+                FARRAY(1) = 6.0
+                CALL SETLAB_R_MRC(LUN1,42, 1,FARRAY,   .FALSE.,IRTFLG)
+                CALL SETLAB_R_MRC(LUN1,IGO,3,FARRAY(2),.FALSE.,IRTFLG)
+
+              ELSE  
+                CALL ERRT(101,'ONLY 2 ANGLE SETS IN MRC FILES',IDUM)
+                IRTFLG = 1
+              ENDIF
+              GOTO 9000
+
+           ELSE
+C            SPIDER FILE
+             IF (ILPOS == 1) THEN
+                IGO       = 14
+                NANG      = 4
+                CALL SETLAB_R(LUN1,IGO,NANG,FARRAY,.FALSE.,IRTFLG)
+
+             ELSEIF (ILPOS == 2) THEN
+                IGO       = 30
+                NANG      = 4
+                CALL SETLAB_R(LUN1,IGO,NANG,FARRAY,.FALSE.,IRTFLG)
+
+             ELSEIF (ILPOS == 3)THEN
+                FARRAY(1) = 2
+                IGO       = 30
+                NANG      = 1
+                CALL SETLAB_R(LUN1,IGO,NANG,FARRAY,.FALSE.,IRTFLG)
+                IGO       = 34
+                NANG      = 3
+                CALL SETLAB_R(LUN1,IGO,NANG,FARRAY(2),.FALSE.,IRTFLG)
+
+             ELSE
+           
+                CALL ERRT(102,'INCORRECT NUMBER FOR ANGLE SET',ILPOS)
+                IRTFLG =1
+             ENDIF
+             GOTO 9000
+          ENDIF
+
+        ELSEIF (SET == 'D') THEN
+C          CHANGE DATA ORIGIN & HANDEDNESS  ------------------------ D
+
+           IF (.NOT. IS_MRC) THEN
+              CALL ERRT(101,'OPERATION ONLY FOR MRC FILES',IDUM)
+              IRTFLG = 1
+              GOTO 9000
+           ENDIF
+ 
+           CORIG = 'LL'
+           CALL RDPRMC(CORIG,NCHAR,.TRUE.,
+     &      'ORIGIN  AT UPPER LEFT (UL) or LOWER LEFT(LL)', NULL,IRTFLG)
+           IF (IRTFLG .NE. 0) GOTO 9000
+
+           CHANDED = 'L'
+           CALL RDPRMC(CHANDED,NCHAR,.TRUE., 
+     &       'HANDEDNESS (L or R)', NULL,IRTFLG)
+           IF (IRTFLG .NE. 0) GOTO 9000
+
+C          SETS  AXIS ORIGIN LOCATION & VOLUME HANDEDNESS (CHARACTERS)
+C          THIS IS NOT A STANDARD MRC DEFINED HEADER POSITION!!
+
+           CAXIS = CORIG // ' ' // CHANDED
+           CALL LUNSETHAND_MRC(LUN1,CAXIS,IRTFLG)
+           !write(3,*) 'in setval - caxis:',caxis
+
+C          WRITE ALTERED HEADER BACK IN THE MRC FILE
+           CALL LUNWRTHED_MRC(LUN1,IRTFLG)
+           GOTO 9000
+
+
+        ELSEIF (SET == 'B' .OR. SET == 'L') THEN
+C          CHANGE A PARTICULAR BUFFER LOCATION IN THE FILE LABEL ---- B
+
+1601       NVAL1 = NMAX
+           CALL RDPRAI(ILIST,NMAX,NVAL1,1,1024,
+     &          'NUMBER(S) OF HEADER LOCATION TO BE CHANGED',
+     &          NULL,IRTFLG)
+           IF (IRTFLG == -1) GOTO 10
+
+           NMAX2 = NVAL1
+           CALL RDPRA('NEW VALUE FOR EACH HEADER LOCATION CHANGED',
+     &               NMAX2,0,.FALSE.,FLIST,NVAL2,IRTFLG)
+           IF (IRTFLG == -1) GOTO 1601
+
+           IF (NVAL2 .NE. NVAL1) THEN
+               CALL ERRT(102,'INCORRECT NUMBER OF VALUES',NVAL2)
+               GOTO 9000
+           ENDIF
+              
+           IF (IFORM == 8 .OR. IFORM == 11) THEN
+C             FOR 8 BIT FILES
+              LENREC = NX1 / 4
+              IF ((LENREC * 4) < NX1) LENREC = LENREC + 1
+           ELSE
+C             FOR NORMAL 32 BIT SPIDER FILES
+              LENREC = NX1
+           ENDIF
+
+           DO I = 1,NVAL1            ! MRC OK
+             CALL SETLAB_R(LUN1,ILIST(I),1,FLIST(I),.FALSE.,IRTFLG)
+           ENDDO
+
+
+       ELSEIF (SET == 'P') THEN
+C         COPY ANGLES FROM HEADER OF INPUT FILE TO  OUTPUT FILE ----- P
+C         OUTPUT FILE MUST EXIST, IT IS NOT CREATED HERE.
+
+          MAXIM = 0
+          CALL OPFILEC(0,.TRUE.,FILNAM,LUN2,'O',ITYPE,
+     &            NX2,NY2,NZ2,MAXIM,'OUTPUT',.TRUE.,IRTFLG)
+          IF (IRTFLG .NE. 0) GOTO 9000
+
+          CALL LUNGETIS_MRC(LUN2,IS_MRC2,IRTFLG)
+          IF (IRTFLG .NE. 0) GOTO 9000
+
+          IF (IS_MRC .NE. IS_MRC2) THEN
+             CALL ERRT(101,'INPUT/OUTPUT MUST BE SAME MRC/SPIDER',IDUM)
+             IRTFLG =1
+             GOTO 9000
+          ENDIF
+
+          IF (IS_MRC) THEN
+C            MRC FILE
+             IGO = 43      ! SET ONE
+             CALL GETLAB_R_MRC(LUN1,IGO,3,FARRAY,IRTFLG)
+             CALL SETLAB_R_MRC(LUN2,IGO,3,FARRAY,.FALSE.,IRTFLG)
+             IF (IRTFLG .NE. 0) GOTO 9000
+              
+             IGO = 46      ! SET TWOO
+             CALL GETLAB_R_MRC(LUN1,IGO,3,FARRAY,IRTFLG)
+             CALL SETLAB_R_MRC(LUN2,IGO,3,FARRAY,.FALSE.,IRTFLG)
+             IF (IRTFLG .NE. 0) GOTO 9000 
+ 
+             FARRAY(1) = 6
+             CALL SETLAB_R_MRC(LUN2,42,1,FARRAY,.FALSE.,IRTFLG)
+
+         ELSE
+C            SPIDER FILE
+             IGO = 14     ! SET ONE
+             CALL GETLAB(  LUN1,IGO,4,FARRAY,IRTFLG)
+             CALL SETLAB_R(LUN2,IGO,4,FARRAY,.FALSE.,IRTFLG)
+       
+             IGO = 30     ! SET TWO & THREE
+             CALL GETLAB(  LUN1,IGO,7,FARRAY,IRTFLG)
+             CALL SETLAB_R(LUN2,IGO,7,FARRAY,.FALSE.,IRTFLG)
+          
+             IGO = 51     ! SET FOUR & FIVE
+             CALL GETLAB(LUN1,  IGO,6,FARRAY,IRTFLG)
+             CALL SETLAB_R(LUN2,IGO,6,FARRAY,.FALSE.,IRTFLG)
+          ENDIF
+
+
+        ELSEIF (SET == 'C') THEN
+C          CLEAR FMIN... STATISTICS  ------------------------------- C
+
+           SIG   = -1.0
+           CALL SETPRMB(LUN1, 0.0,0.0, 0.0,SIG)    ! MRC OK
+
+
+        ELSEIF (SET == 'F') THEN
+C          SET FMIN, FMAX, AV, AND S.D. ---------------------------- F
+
+           CALL RDPRM1S(FMAX,NOT_USED,'IMAGE MAXIMUM',IRTFLG)
+           IF (IRTFLG .NE. 0) GOTO 9000
+
+           CALL RDPRM1S(FMIN,NOT_USED,'IMAGE MINIMUM',IRTFLG)
+           IF (IRTFLG .NE. 0) GOTO 9000
+
+           CALL RDPRMC(ANS,NCHAR,.TRUE.,
+     &           'AVERAGE AND STANDARD DEVIATION AVAILABLE (Y/N)',
+     &           NULL,IRTFLG)
+           IF (IRTFLG .NE. 0) GOTO 9000
+
+           IF (ANS == 'N') THEN
+               CALL ERRT(101,'MUST PROVIDE AVERAGE AND S.D. NOW',IDUM)
+               GOTO 9000
+           ENDIF
+
+           CALL RDPRM2S(AV,SIG,NOT_USED,
+     &                  'AVERAGE & STANDARD DEVIATION',IRTFLG)
+           IF (IRTFLG .NE. 0) GOTO 9000
+
+           IF (IFORM < 0) THEN
+C             FOURIER
+              FMAX = FMAX * PI / 180.0
+              FMIN = FMIN * PI / 180.0
+           ENDIF
+
+           CALL SETPRMB(LUN1, FMAX,FMIN, AV,SIG)    ! MRC OK
+
+        ELSE
+C          UNKNOWN OPTION ------------------------------------------- ?
+           CALL ERRT(101,'UNKNOWN OPTION',IDUM)
+           GOTO 9000
+        ENDIF
+
+9000    CONTINUE
+        CLOSE(LUN1)
+        CLOSE(LUN2)
+
+        END
+@
+
+
+1.22
+log
+@mrc
+@
+text
+@d87 2
+a88 1
+10      CALL RDPRMC(SET,NCHAR,.TRUE.,
+d91 6
+d99 1
+d169 1
+@
+
+
+1.21
+log
+@lunsethand check
+@
+text
+@d40 2
+a41 1
+C
+a49 1
+C
+d80 1
+d168 1
+a168 1
+C          CHANGE DATA ORIGIN & HANDEDNESS  ------------------------ C
+d189 3
+a191 3
+           !write(3,*) 'in setval - corig,chanded:',corig,chanded
+
+           CALL LUNSETHAND_MRC(LUN1,CORIG,CHANDED,IRTFLG)
+@
+
+
+1.20
+log
+@mrc_support
+@
+text
+@d11 2
+d78 2
+d87 3
+a89 1
+     &    '(A)NGLES, (L)OCS, (P)COPY, (C)LEAR, OR (F)IX',NULL,IRTFLG)
+d165 30
+@
+
+
+1.19
+log
+@email_health_dept
+@
+text
+@d2 1
+a2 1
+C++*********************************************************************
+d4 7
+a10 6
+C SETVAL.F           REMOVED FROM UTIL1           OCT  88 ARDEAN LEITH
+C                    LONG FILE NAMES              FEB  89 ARDEAN LEITH
+C                    CAN OPEN STACK WITHOUT @@ NOW SEPT 98 ARDEAN LEITH
+C                    OPFILEC                      FEB  03 ARDEAN LEITH
+C                    RDPRAF REMOVED               DEC  05 ARDEAN LEITH 
+C                    RDPRM3S                      AUG  13 ARDEAN LEITH 
+d15 1
+a15 1
+C=* Copyright 1985-2013  Health Research Inc.,                         *
+d33 13
+a45 1
+C  SETVAL(LUN1)
+a46 1
+C  PURPOSE:   SET PARTICULAR LABEL LOCATIONS TO SPECIFIED VALUES
+d53 2
+d58 2
+d66 8
+a73 1
+        REAL                  :: FARRAY(4)
+d79 2
+d83 1
+a83 1
+     &    '(A)NGLES, (BUF), (P)COPY, (C)LEAR, OR (F)IX',NULL,IRTFLG)
+d88 1
+d108 1
+a108 1
+           FARRAY(1) = 1.0
+d113 19
+a131 19
            IF (ILPOS == 1) THEN
              LOCATION = 14
              NANG     = 4
@@ -234,99 +599,65 @@ C          GET EULER ANGLES
              NANG      = 3
              CALL SETLAB(LUN1,NX1,DUM,LOCATION,NANG,
      &                   FARRAY(2),'U',IRTFLG)
-           ELSE
+d133 27
+a159 3
               CALL ERRT(102,'INCORRECT NUMBER FOR ANGLE SET',ILPOS)
               GOTO 9000
            ENDIF
-
+d161 1
+a161 1
         ELSEIF (SET == 'B') THEN
-C          CHANGE A PARTICULAR BUFFER LOCATION IN THE FILE LABEL ---- B
-
-1601       NVAL1 = NMAX
-           CALL RDPRAI(ILIST,NMAX,NVAL1,1,1024,
-     &          'NUMBER(S) OF HEADER LOCATION TO BE CHANGED',
-     &          NULL,IRTFLG)
-           IF (IRTFLG == -1) GOTO 10
-
-           NMAX2 = NVAL1
+d171 1
+a171 2
            CALL RDPRA(
      &              'NEW VALUE FOR EACH HEADER LOCATION CHANGED',
-     &               NMAX2,0,.FALSE.,FLIST,NVAL2,IRTFLG)
-           IF (IRTFLG == -1) GOTO 1601
-
-           IF (NVAL2 .NE. NVAL1) THEN
-               CALL ERRT(102,'INCORRECT NUMBER OF VALUES',NVAL2)
-               GOTO 9000
-           ENDIF
-              
-           IF (IFORM == 8 .OR. IFORM == 11) THEN
-C             FOR 8 BIT FILES
-              LENREC = NX1 / 4
+d183 1
+a183 1
               IF ((LENREC * 4) .LT. NX1) LENREC = LENREC + 1
-           ELSE
-C             FOR NORMAL 32 BIT SPIDER FILES
-              LENREC = NX1
-           ENDIF
-
+d189 2
+a190 2
            DO I = 1,NVAL1
              CALL SETLAB(LUN1,LENREC,DUM,ILIST(I),1,FLIST(I),'U',IRTFLG)
-           ENDDO
-
-       ELSEIF (SET == 'P') THEN
-C         COPY ANGLES FROM HEADER OF INPUT FILE TO  OUTPUT FILE ----- P
+d193 1
+d196 1
+a196 1
 C         OUTPUT FILE PREEXISTS, IT IS NOT CREATED HERE.
-
-          MAXIM = 0
-          CALL OPFILEC(0,.TRUE.,FILNAM,LUN2,'O',ITYPE,
-     &            NX2,NY2,NZ2,MAXIM,'OUTPUT',.TRUE.,IRTFLG)
+d201 41
+a241 1
           IF (IRTFLG .NE. 0) RETURN
-
+a242 2
           CALL COPYANGLES(LUN1,LUN2,NX1,NX2) 
                  
-        ELSEIF (SET == 'C') THEN
+d244 1
+a244 1
 C          CLEAR ---------------------------------------------------- C
-
-           SIG   = -1.0
+d247 2
+a248 1
            CALL SETPRM(LUN1,NX1,NY1,0.0,0.0,0.0,'U')
-
-        ELSEIF (SET == 'F') THEN
+d251 1
+a251 1
 C          SET FMIN, FMAX, AV, AND S.D.
-
+d253 2
+a254 2
 C          INPUT PHI AND THETA  TO BE STORED IN FMAX AND FMIN
            CALL RDPRM(FMAX,NOT_USED,'IMAGE MAXIMUM')
-
+d256 2
+a257 1
            CALL RDPRM(FMIN,NOT_USED,'IMAGE MINIMUM')
-
-           CALL RDPRMC(ANS,NCHAR,.TRUE.,
-     &           'AVERAGE AND STANDARD DEVIATION AVAILABLE (Y/N)',
-     &           NULL,IRTFLG)
-
-           IF (ANS == 'N') THEN
+d262 1
+d265 1
+a265 1
                CALL ERRT(101,'MUST PROVIDE AVERAGE AND S.D. NOW',NE)
-               GOTO 9000
-           ENDIF
-
+d269 3
+a271 2
            CALL RDPRM2(AV,SIG,NOT_USED, 
      &               'AVERAGE & STANDARD DEVIATION')
-
-           IF (IFORM < 0) THEN
-C             FOURIER
-              FMAX = FMAX * PI / 180.0
-              FMIN = FMIN * PI / 180.0
-           ENDIF
+d278 2
+a279 1
            CALL SETPRM(LUN1,NX1,NY1,FMAX,FMIN,AV,'U')
-
-        ELSE
-C          UNKNOWN OPTION ------------------------------------------- ?
+d283 1
+a283 1
            CALL ERRT(101,'UNKNOWN OPTION',NE)
-           GOTO 9000
-        ENDIF
-
-9000    CONTINUE
-        CLOSE(LUN1)
-        CLOSE(LUN2)
-
-        END
 @
 
 

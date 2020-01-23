@@ -1,25 +1,27 @@
 
 C++*********************************************************************
 C
-C FILERD.F   ADAPTED FROM FILRD AND SPFILE         OCT 88 ARDEAN LEITH
-C            REWRITTEN FOR NEW SUBSTITUTION        JUN 97 ARDEAN LEITH
-C            ADDS EXTEN NOW IF SENT                FEB 99 ARDEAN LEITH
-C            CAN USE PROMPT FOR INPUT --           AUG 99 ARDEAN LEITH
-C            REMOVED AVGX11 & AVG0I RULES --       SEP 99 ARDEAN LEITH
-C            TRAILING ~ ON PROMPT OMITS "FILE"     NOV 00 ARDEAN LEITH
-C            $ EFFECTIVE NOW IF ONLY 1 CHAR.       JAN 01 ARDEAN LEITH
-C            ALTERED COMMENT HANDLING              JAN 01 ARDEAN LEITH
-C            ALTERED COMMENT HANDLING              MAR 02 ARDEAN LEITH
-C            NLOG                                  NOV 03 ARDEAN LEITH
-C            REMOVED IRTFLG INPUT                  APR 04 ARDEAN LEITH
-C            TEMPLATTING CAPABILITY                DEC 04 ARDEAN LEITH
-C            RDPR PARAMETERS                     04/14/05 ARDEAN LEITH
-C            RDPR IRTFLG FOR LEGACY REGS         06/24/09 ARDEAN LEITH
-C            PROMPT(LENP-2:LENP) .EQ. '~9~'      12/07/10 ARDEAN LEITH
-C            ACCEPT EXTENSION BUG                  JUN 11 ARDEAN LEITH 
-C            ! COMMENT DELIMITER                   DEC 11 ARDEAN LEITH
-C            NECHO                                 SEP 12 ARDEAN LEITH
-C            FILENAME ECHO FORMATTING 2 BLANKS     DEC 15 ARDEAN LEITH
+C FILERD.F   ADAPTED FROM FILRD AND SPFILE         OCT 88 ArDean Leith
+C            REWRITTEN FOR NEW SUBSTITUTION        JUN 97 ArDean Leith
+C            ADDS EXTEN NOW IF SENT                FEB 99 ArDean Leith
+C            CAN USE PROMPT FOR INPUT --           AUG 99 ArDean Leith
+C            REMOVED AVGX11 & AVG0I RULES --       SEP 99 ArDean Leith
+C            TRAILING ~ ON PROMPT OMITS "FILE"     NOV 00 ArDean Leith
+C            $ EFFECTIVE NOW IF ONLY 1 CHAR.       JAN 01 ArDean Leith
+C            ALTERED COMMENT HANDLING              JAN 01 ArDean Leith
+C            ALTERED COMMENT HANDLING              MAR 02 ArDean Leith
+C            NLOG                                  NOV 03 ArDean Leith
+C            REMOVED IRTFLG INPUT                  APR 04 ArDean Leith
+C            TEMPLATTING CAPABILITY                DEC 04 ArDean Leith
+C            RDPR PARAMETERS                     04/14/05 ArDean Leith
+C            RDPR IRTFLG FOR LEGACY REGS         06/24/09 ArDean Leith
+C            PROMPT(LENP-2:LENP) .EQ. '~9~'      12/07/10 ArDean Leith
+C            ACCEPT EXTENSION BUG                  JUN 11 ArDean Leith 
+C            ! COMMENT DELIMITER                   DEC 11 ArDean Leith
+C            NECHO                                 SEP 12 ArDean Leith
+C            FILENAME ECHO FORMATTING 2 BLANKS     DEC 15 ArDean Leith
+C            INITIAL * FOR MRC STACK BUG           AUG 19 ArDean Leith
+C            MRC EXTENSION ALWAYS OK               AUG 19 ArDean Leith
 C
 C **********************************************************************
 C=*                                                                    *
@@ -27,7 +29,7 @@ C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
 C=* Copyright 1985-2015  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
+C=* Email: spider@health.ny.gov                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -86,6 +88,8 @@ C--*********************************************************************
 
         SUBROUTINE FILERD(FILN,NLET,EXTENT,PROMPT,IRTFLG)
 
+        IMPLICIT NONE
+
         INCLUDE 'CMBLOCK.INC'
         INCLUDE 'CMLIMIT.INC'
 
@@ -102,12 +106,18 @@ C--*********************************************************************
  
         CHARACTER(LEN=1)      :: NULL = CHAR(0)
         INTEGER               :: ICOMM,MYPID,MPIERR,LENP
+        INTEGER               :: IRTFLGT,LENU,ITAB,ISEMI,NLETC
+        LOGICAL               :: IS_MRC
+        INTEGER               :: J,IEXT,NE,ILEN,LENET,LENE
+
+        LOGICAL               :: ISMRCFILE    ! FUNCTION
+        INTEGER               :: lnblnkn      ! FUNCTION
 
         CALL SET_MPI(ICOMM,MYPID,MPIERR)
 
         LEGACYREGS = (IRTFLG == -999)  ! CONVERT x**
-  
-        LENP = LNBLNKN(PROMPT)
+
+        LENP       = LNBLNKN(PROMPT)
 
 C       '~9' IN LAST 3 CHAR. OF PROMPT INDICATES THAT EXTENSION CAN 
 C       BE READ IN ON NAME (USED TO BE IRTFLG == 9)
@@ -182,11 +192,19 @@ C       SAVE ANY TRAILING COMMENT FROM THE INPUT LINE
             NLET    = LNBLNKN(FILNAM)
         ENDIF
 
+
         IF (FILNAM(:1) == '?') THEN
 C          ?PROMPT? [var] LINE RETURNED, READ RESPONSE FROM CALLER
 C          SUBSTITUTE FOR SYMBOLS & REG. FROM CALLING PROCEDURE
            CALL FRSYMPAR(FILNAM(1:NLET),FILNAM,NLET,IRTFLG)
            IF (IRTFLG .NE. 0) RETURN
+        ENDIF
+
+        !write(3,*)' In filerd, filnam 1: ',filnam
+
+        IS_MRC = ISMRCFILE(FILNAM)   ! AUG 2019
+        IF (IS_MRC) THEN
+           EXTENOK = .TRUE.
         ENDIF
 
         IF (FILNAM(1:NLET) == '$') THEN
@@ -195,7 +213,8 @@ C          DO NOT ALTER FILN  IF INPUT IS "$"
            IRTFLG = 0
            RETURN 
    
-        ELSEIF (FILNAM(1:1) == '^' .OR. FILNAM(1:1) == '*') THEN
+        ELSEIF (FILNAM(1:1) == '^' .OR. 
+     &         (FILNAM(1:1) == '*' .AND. .NOT. IS_MRC) ) THEN
 C          RETURN IF  INPUT IS "^" OR "*"
            FILN(1:) = FILNAM(1:1)
            CALL ECHONAME(FILN,NLET,COMMENT,NLETC,MYPID)
@@ -203,6 +222,7 @@ C          RETURN IF  INPUT IS "^" OR "*"
            RETURN
 
         ENDIF
+
 
 C       REMOVE ANY EXTENSION FROM THE FILENAME (UNLESS IT IS WANTED)
         J      = NLET
@@ -292,6 +312,7 @@ C       SET NORMAL ERROR RETURN
         END
 
 
+C     ------------------- ECHONAME ---------------------------------
 
         SUBROUTINE ECHONAME(FILN,NLET,COMMENT,NLETC,MYPID)
 

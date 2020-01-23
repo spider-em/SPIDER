@@ -159,7 +159,7 @@ C       @@@@@@@@@@@@@@@@@@@@@@@@@@ DATA STATEMENTS @@@@@@@@@@@@@@@@@@@@
 C       @@@@@@@@@@@@@@@@@@@@@@ VERSION INITIALIZATION @@@@@@@@@@@@@@@@@
 
 CHERE               123456789 123456789 123456789 1234567890 
-        DATA CVERS/'VERSION:  UNIX 25.02  ISSUED: 02/14/2019'/
+        DATA CVERS/'VERSION:  UNIX 26.03  ISSUED:  1/20/2020'/
 
         DATA RESULM/'results'/
         DATA LOGM/'LOG'/
@@ -243,6 +243,7 @@ C       INITIALIZE SOME COMMON BLOCK DATA ELEMENTS (SEE: setmode.f)
         NUMFFTWTH      = 0       ! NUMBER OF FFTW3 THREADS
         NULL           = CHAR(0)
         NQ12           = CHAR(34) // CHAR(39)   ! QUOTES
+        MRC_AXIS       = 'UL L'
 
 C       SET ISEED  TO INITIAL "RANDOM" VALUE USING CLOCK
 #if defined (SP_GFORTRAN)  || defined(__GFORTRAN__)
@@ -1039,7 +1040,7 @@ C            123456789 123456789 123456789 1234567890
 
 
 C     SET OPTIONS ------------------------------------------------- MD
-8500  CALL SETMODE(RES_TO_TERM)
+8500  CALL SETMODE(RES_TO_TERM)    ! HANDLES 'MD MRC' ALSO
       GOTO 5000
 
 

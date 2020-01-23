@@ -1,18 +1,20 @@
 
 C++*********************************************************************
 C
-C MODEL.F   REWRITTEN                            APR 97 ARDEAN LEITH
-C           RDPRAF REMOVED                       DEC 05 ARDEAN LEITH 
-C           G2..                                 JAN 12 ARDEAN LEITH 
-C           C RADIUS BUG                         JAN 12 ARDEAN LEITH 
+C MODEL.F   REWRITTEN                              APR 97 ArDean Leith
+C           RDPRAF REMOVED                         DEC 05 ArDean Leith 
+C           G2..                                   JAN 12 ArDean Leith 
+C           C RADIUS BUG                           JAN 12 ArDean Leith 
+C           ANS(1:1) TEST BUG                      AUG 19 ArDean Leith
+C           BLOCK PATTERN                          SEP 19 ArDean Leith
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2014  Health Research Inc.,                         *
+C=* Copyright 1985-2019  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
+C=* Email: spider@health.ny.gov                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -41,6 +43,8 @@ C***********************************************************************
 
 	SUBROUTINE MODEL(LUN1,NX,NY)
 
+        IMPLICIT NONE
+
 	INCLUDE 'CMBLOCK.INC'
 
         INTEGER            :: LUN1,NX,NY,NZ
@@ -50,9 +54,13 @@ C***********************************************************************
 	REAL               :: CX(MAXSIN)
 	REAL               :: PH(MAXSIN),FWA(4)
 	REAL               :: A0(NX)
-	REAL               :: SCF, FI
+	REAL               :: SCF, FI,RAD2,ANX,ANY,PHASE,RAD,VAL
+        
+        REAL               :: BACK,NOT_USED,FI2,DX,DY,SX,SY
+        REAL               :: RANN,SD,EEE,SYSQ,SXSQ,GNM,TNM,XM
 
-	INTEGER            :: IRTFLG,NVAL
+        INTEGER            :: NC,J,I,K,IXCEN,IYCEN,NS,NORDER,NE
+	INTEGER            :: IRTFLG,NVAL,NXD2,NYD2
 	CHARACTER(LEN=1)   :: GA
 	CHARACTER(LEN=2)   :: ANS
 	CHARACTER(LEN=1)   :: NULL = CHAR(0)
@@ -68,6 +76,7 @@ C***********************************************************************
      &      '        G1  -- 1ST ORDER GAUSSIAN CIRCLE/ELLIPSE (0...1)'/
      &      '        G2  -- 2ND ORDER GAUSSIAN CIRCLE/ELLIPSE (0...1)'/
      &      '        G3  -- 3RD ORDER GAUSSIAN CIRCLE/ELLIPSE (0...1)'/
+     &      '        P   -- BLOCK PATTERN'/
      &      '        R   -- RANDOM DENSITY PATTERN'/
      &      '        S   -- SINE WAVES'/
      &      '        T   -- TWO SINE WAVES'/
@@ -86,6 +95,27 @@ C       BLANK IMAGE --------------------------------------------- BLANK
 
         CALL BLANK(LUN1,NX,NY,1,BACK)
 
+      ELSEIF (ANS == 'P') THEN
+C       BLOCKS -----------------------------------------  BLOCK PATTERN
+
+        NXD2 = NX / 2
+        NYD2 = NY / 2
+
+        DO J = 1,NY
+           DO I = 1,NX
+	     IF     (I <= NXD2 .AND. J <= NYD2) THEN
+                A0(I) = 1.0
+	     ELSEIF (I  > NXD2 .AND. J <= NYD2) THEN
+                A0(I) = 2.0
+	     ELSEIF (I <= NXD2 .AND. J  > NYD2) THEN
+                A0(I) = 4.0
+	     ELSEIF (I  > NXD2 .AND. J  > NYD2) THEN
+                A0(I) = 3.0
+	     ENDIF
+           ENDDO
+           CALL WRTLIN(LUN1,A0,NX,J)
+        ENDDO
+C
 
       ELSEIF (ANS(1:1)  ==  'C' ) THEN
 C       CIRCLE ------------------------------------------------- CIRCLE 
@@ -108,11 +138,10 @@ C       CIRCLE ------------------------------------------------- CIRCLE
            DO J=1,NX
              A0(J) = 0.0
              IF (FI2 + FLOAT(J-IXCEN)**2 <= RAD2) A0(J) = VAL
-          ENDDO 
+           ENDDO 
 
-          CALL WRTLIN(LUN1,A0,NX,I)
+           CALL WRTLIN(LUN1,A0,NX,I)
         ENDDO
-
 
       ELSEIF (ANS(1:1) == 'W') THEN
 C       WEDGE --------------------------------------------------- WEDGE
@@ -151,7 +180,7 @@ C       GAUSSIAN   ------------------------------------------- GAUSSIAN
 	ENDIF
 
         WRITE(NOUT,90) DX,DY, SX,SY
-90      FORMAT('  CENTER: (',G8.2,',',G8.2,')    STD:',G8.2,',',G8.2) 
+90      FORMAT('  CENTER: (',G9.2,',',G9.2,')    STD:',G9.2,',',G9.2) 
 
 C       SET THE ORDER OF SUPERGAUSSIAN 
         NORDER = 1
@@ -205,7 +234,7 @@ C       PUT RANDOM NUMBERS IN THE IMAGE ---------------------- RANDOM
            CALL WRTLIN(LUN1,A0,NX,I)
         ENDDO
 
-      ELSEIF (ANS == 'S' .OR. ANS  ==  'T') THEN
+      ELSEIF (ANS(1:1) == 'S' .OR. ANS(1:1)  ==  'T') THEN
 
 C       PUT SINE WAVES OF INTENSITY IN THE IMAGE ----------------- SINE
         IF (ANS(1:1) == 'T') THEN

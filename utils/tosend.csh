@@ -139,25 +139,28 @@ $sendit -rL  $excludes --exclude="tips"                       \
            --exclude="tar_archive/rct2*"                      \
            --exclude="spiproject.1*"                          \
            --exclude="spiproject.tar.gz"                      \
-           --exclude="techs/lgstr/tomo/data"                  \
-           --exclude="techs/lgstr/tomo/output"                \
+           --exclude="techs/lgstr/data"                  \
+           --exclude="techs/lgstr/output"                \
            --exclude="exa/images/bp3fpart*dat"                \
            --exclude="techs/recon1a/natproc_data_mics.tar.gz" \
            $docdir/*   $docdest
+
+# \rm -rf /usr16/software/send/spider/docs/techs/lgstr/data/*
+# \rm -rf /usr16/software/send/spider/docs/techs/lgstr/output/*
 
 # ------------------------------------------------------------------
 
 echo ' '
 echo 'SPIDER successfully copied to: distribution dir '
 echo ' '
-echo 'Check for extra  tar archives '
+echo 'Check for extra  tar archives with du -a | grep '\.tar' '
 echo 'Update FFTW files with: send-fftw.sh '
-echo 'Update executables with makeall in src dir (on gyan & valcour)'
+echo 'Update executables with makeall in src dir (on gyan)'
 echo 'Update Web  with:       /usr16/software/web/utils/tosend.sh '
-echo 'touch /usr16/software/send/spider/bin/CONTAINS_SPIDER_RELEASE_25.01 '
+echo 'touch /usr16/software/send/spider/bin/CONTAINS_SPIDER_RELEASE_26.03 '
 echo 'Archive and compress the distribution in: /usr16/software/send '
 echo 'set wwwdir = spider-stage:/export/apache/vhosts/spider.wadsworth.org/htdocs/spider_doc/spider '
-echo 'scp -p /usr16/software/send/spiderweb.25.01.tar.gz  $wwwdir/download '
+echo 'scp -p /usr16/software/send/spiderweb.25.02.tar.gz  $wwwdir/download '
 echo 'Edit:  /usr16/software/spider/docs/spi-download.html '
 echo 'scp -p /usr16/software/spider/docs/spi-download.html  $wwwdir/docs '
 echo 'Update external web pages using: /usr16/software/spider/utils/wwwupdate.csh '

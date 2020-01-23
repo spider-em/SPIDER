@@ -1,17 +1,18 @@
 
 C++********************************************************************
 C
-C SETPRMB.F      MODIFIED                       4/22/96 ARDEAN LEITH
-C                LUNRED                         FEB 03  ARDEAN LEITH
-C                REMOVED UNUSED, ADDED SIGD     MAY 09  ARDEAN LEITH
+C SETPRMB.F      MODIFIED                       4/22/96  ArDean Leith
+C                LUNRED                         FEB 03   ArDean Leith
+C                REMOVED UNUSED, ADDED SIGD     MAY 09   ArDean Leith
+C                MRC FRIENDLY                   AUG 19   ArDean Leith
 C               
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Copyright 1985-20190  Health Research Inc.,                        *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
+C=* Email: spider@health.ny.gov                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -30,7 +31,7 @@ C
 C SETPRMB(LUN, FMAXD,FMIND, AVD,SIGD)
 C
 C PURPOSE:
-C    WILL SET HEADER PARAMETERS FOR  NORMALIZATION STATUS OF FILE, AND 
+C    SET HEADER PARAMETERS FOR  NORMALIZATION STATUS OF FILE, AND 
 C    WRITE HEADER LABEL INTO FILE.
 C
 C    SETPRMB(LUN, FMAXD,FMIND, AVD,SIGD)
@@ -51,40 +52,61 @@ C                       8  FMIND = IMAGE MINIMUM
 C                       9  AVD   = IMAGE AVERAGE
 C                      10  SIG   = STANDARD DEVIATION (SQ. ROOT OF VARIANCE)
 C
-C       NOTE: THIS ROUTINE REPLACES SETPRM.  SETPRM SHOULD NO LONGER
-C             BE USED!
+C       NOTE: ROUTINE REPLACES SETPRM WHICH SHOULD NO LONGER BE USED!
 C
 C--*******************************************************************
 
       SUBROUTINE SETPRMB(LUN, FMAXD,FMIND, AVD,SIGD)
 
+      IMPLICIT NONE
+
       INCLUDE 'CMBLOCK.INC'
  
-      CHARACTER(LEN=2) :: TYPE
+      INTEGER          :: LUN
+      REAL             :: FMAXD,FMIND, AVD,SIGD
 
-C     UPDATE THE HEADER VALUES
+      CHARACTER(LEN=2) :: TYPE
+      INTEGER          :: IRTFLG
+
+C     UPDATE THE HEADER VALUES (?? THIS ALSO SETS COMMON: IMAMI !!)
       IMAMI = 1
-      IF (FMAXD .EQ. FMIND) THEN
+      IF (FMAXD <= FMIND) THEN
 C        SET IMAMI TO UNDETERMINED (ZERO)
-         IMAMI  = 0
+         IMAMI = 0
       ENDIF
 
-C     UPDATE THE INCORE HEADER STATISTICS 
+      !write(6,*) ' In setprmb - imami,fmin:',imami,fmind
+
+C     UPDATE THE INCORE HEADER STATISTICS    (MRC OK)
       CALL LUNSETSTAT(LUN,IMAMI, FMIND,FMAXD, AVD,SIGD,IRTFLG)
 
-C     WRITE UPDATED HEADER BACK IN THE FILE
-      CALL LUNWRTCURHED(LUN,IRTFLG) 
+C     WRITE UPDATED HEADER BACK IN THE FILE  (MRC OK)
+      CALL LUNWRTCURHED(LUN,IRTFLG)  
       
-      RETURN
       END
                            
+C----------------------------- SETPRMS --------------------
 
       SUBROUTINE SETPRMS(LUN, SCALE,IRTFLG)
 
-C     UPDATE THE INCORE HEADER VALUE AND FILE HEADER FOR PIXSIZ
-      CALL LUNGETVALS(LUN,38,1,PIXSIZOLD,IRTFLG)
+C     PURPOSE: RESET PIXSIZ HEADER PARAMETERS FOR SCALING
+      IMPLICIT NONE
+
+      INTEGER          :: LUN,IRTFLG
+      REAL             :: SCALE
+
+      REAL             :: PIXSIZ,PIXSIZOLD
+
+C     GET CURRENT FILE HEADER VALUE FOR PIXSIZ  (MRC OK)
+      CALL LUNGETPIXSIZ(LUN,PIXSIZOLD,IRTFLG)
+
+C     RESCALE PIXSIZ
       PIXSIZ = PIXSIZOLD * SCALE
-      CALL LUNSETVALS(LUN,38,1,PIXSIZ,IRTFLG)
+
+C     SET CURRENT FILE HEADER VALUE FOR PIXSIZ  (MRC OK)
+      CALL LUNSETPIXSIZ(LUN,PIXSIZ,IRTFLG)
+
+C     WRITE UPDATED HEADER BACK IN THE FILE     (MRC OK)
+      CALL LUNWRTCURHED(LUN,IRTFLG)  
       
-      RETURN
       END

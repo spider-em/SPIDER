@@ -1,0 +1,757 @@
+head	1.14;
+access;
+symbols
+	pre_mrcs:1.11
+	healthdept_2018:1.11;
+locks; strict;
+comment	@c @;
+
+
+1.14
+date	2020.01.13.19.20.24;	author leith;	state Exp;
+branches;
+next	1.13;
+
+1.13
+date	2020.01.08.19.32.43;	author leith;	state Exp;
+branches;
+next	1.12;
+
+1.12
+date	2019.12.11.18.34.36;	author leith;	state Exp;
+branches;
+next	1.11;
+
+1.11
+date	2018.10.03.14.34.03;	author leith;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2018.01.23.17.38.05;	author leith;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2018.01.18.19.25.59;	author leith;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2016.04.27.16.09.03;	author leith;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2016.04.05.14.51.30;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2015.01.05.19.22.53;	author leith;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2013.08.30.14.35.16;	author leith;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2013.08.30.13.29.45;	author leith;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2013.05.01.15.21.52;	author leith;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2013.04.09.11.58.44;	author leith;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2013.04.08.19.29.52;	author leith;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.14
+log
+@relion_display --i blank needed
+@
+text
+@
+C++*********************************************************************
+C
+C  DISP.F  -- EXTRACTED FROM COPYTOJPED            Jan 20 ArDean Leith
+C
+C **********************************************************************
+C=* AUTHOR: A. LEITH                                                   *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2020  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@@health.ny.gov                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the      *
+C=* GNU General Public License (www.gnu.org/licenses) for details.     *
+C=*                                                                    *
+C **********************************************************************
+C
+C  DISP()
+C  DISP_RELION()
+C
+C  DISP:         COPIES SPIDER IMAGE TO JPEG USING IMAGEMAGICK 
+C                THEN USES  SYSTEM COMMAND TO DISPLAY IMAGE. 
+C
+C  DISP_RELION:  INVOKES RELION_DIPLAY USING A SYSTEM COMMAND TO 
+C                DISPLAY IMAGE(S). 
+C
+C  CALLED BY:    UTIL2
+C
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C--*********************************************************************
+
+        SUBROUTINE DISP()
+
+        IMPLICIT NONE
+
+        INCLUDE 'CMBLOCK.INC'
+        INCLUDE 'CMLIMIT.INC'
+
+        CHARACTER(LEN=MAXNAM) :: FILOLD,FILNEW
+        CHARACTER(LEN=MAXNAM) :: OPTIONS
+        CHARACTER(LEN=160)    :: COMLIN
+ 
+        CHARACTER(LEN=1)      :: NULL = CHAR(0)
+        LOGICAL               :: VERBOSET,WANTOUT
+        INTEGER               :: NX,NY,NZ,MAXIM,ITYPE,IRTFLG,NLET,NLETC
+        INTEGER               :: lnblnkn,NLETO
+
+        INTEGER, PARAMETER    :: LUN1   = 14 
+        INTEGER, PARAMETER    :: LUN2   = 15 
+        INTEGER, PARAMETER    :: IDELAY = 3
+          
+        IF (FCHAR(4:4) == 'R') THEN
+           CALL DISP_RELION()
+           RETURN
+        ENDIF
+
+
+C       OPEN INPUT FILE, WHOLE STACK NOT ALLOWED
+        MAXIM = 0
+        CALL OPFILEC(0,.TRUE.,FILOLD,LUN1,'O',ITYPE,
+     &               NX,NY,NZ,MAXIM,'SPIDER OR MRC INPUT',
+     &               .FALSE.,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+        IF (IMAMI .NE. 1) 
+     &      CALL NORM3(LUN1,NX,NY,NZ,FMAX,FMIN,AV)
+
+C       IF MRC AND ORIGIN IS 'LL' FLIP ORIGIN FOR DISPLAY
+        CALL LUNFLIPORG_MRC(LUN1,NX,NY,NZ,.FALSE.,IRTFLG)
+
+C       JPEG OUTPUT FILE NAME
+        NLET   = lnblnkn(FILOLD)
+        FILNEW = FILOLD(:NLET) // '.jpg'
+        NLET   = NLET + 4
+
+C       CONVERT IMAGE FILE INTO JPG FILE
+        VERBOSET = .FALSE.
+        CALL COPYTOJPG(LUN1,LUN2,FILNEW,NX,NY,NZ, VERBOSET,IDELAY)
+
+        IRTFLG = -999   ! KEEP LOWERCASE
+        CALL RDPRMC(OPTIONS,NLETO,.TRUE.,
+     &          'IMAGEMAGICK DISPLAY OPTIONS (or <CR>)',NULL,IRTFLG)
+
+        WRITE(COMLIN,90) OPTIONS(1:NLETO),FILNEW(1:NLET)
+90      FORMAT( ' display ', A,' ',A, ' &' )
+
+C       DO NOT ECHO COMLIN
+        CALL CSVMS(COMLIN,.FALSE.,IRTFLG)
+
+        END
+
+
+C       ----------------- DISP_RELION ---------------------------------
+
+        SUBROUTINE DISP_RELION()
+
+        IMPLICIT NONE
+
+        INCLUDE 'CMBLOCK.INC'
+        INCLUDE 'CMLIMIT.INC'
+
+        CHARACTER(LEN=MAXNAM) :: FILELINE
+        CHARACTER(LEN=MAXNAM) :: OPTIONS
+        CHARACTER(LEN=160)    :: COMLIN
+ 
+        CHARACTER(LEN=1)      :: NULL = CHAR(0)
+        INTEGER               :: IRTFLG
+        INTEGER               :: NLET1,NLET2
+        INTEGER               :: lnblnkn
+
+        INTEGER, PARAMETER    :: IDELAY = 3
+          
+        IRTFLG = -999   ! KEEP LOWERCASE
+        CALL RDPRMC(FILELINE,NLET1,.FALSE.,
+     &              'SPIDER OR MRC IMAGE OR STACK',
+     &              NULL,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+        IRTFLG = -999   ! KEEP LOWERCASE
+        CALL RDPRMC(OPTIONS,NLET2,.FALSE.,
+     &              'RELION DISPLAY OPTIONS (or <CR>)',
+     &              NULL,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+        WRITE(COMLIN,90) ,FILELINE(1:NLET1), OPTIONS(1:NLET2)
+90      FORMAT( ' relion_display --i ', A,' ',A, ' &' )
+
+C       DO NOT ECHO COMLIN
+        CALL CSVMS(COMLIN,.FALSE.,IRTFLG)
+
+        END
+
+
+
+
+
+#ifdef NEVER
+gyan 877% relion_display -h
++++ RELION: command line arguments (with defaults for optional ones between parantheses) +++
+====== General options ===== 
+                             --i () : Input STAR file, image or stack
+                      --gui (false) : Use this to provide all other parameters through a GUI
+           --display (rlnImageName) : Metadata label to display
+                         --table () : Name of the table to read from in the input STAR file
+                        --scale (1) : Relative scale
+                        --black (0) : Pixel value for black (default is auto-contrast)
+                        --white (0) : Pixel value for white (default is auto-contrast)
+               --sigma_contrast (0) : Set white and black pixel values this many times the 
+                                      image stddev from the mean
+         --read_whole_stack (false) : Read entire stacks at once (to speed up when many 
+                                      images of each stack are displayed)
+  --show_fourier_amplitudes (false) : Show amplitudes of 2D Fourier transform?
+  --show_fourier_phase_angles (false) : Show phase angles of 2D Fourier transforms?
+====== Multiviewer options ===== 
+                          --col (5) : Number of columns
+             --apply_orient (false) : Apply the orientation as stored in the input STAR file angles 
+                                       and offsets
+                    --ori_scale (1) : Relative scale for viewing individual images in multiviewer
+            --sort (EMDL_UNDEFINED) : Metadata label to sort images on
+              --random_sort (false) : Use random order in the sorting
+                  --reverse (false) : Use reverse order (from high to low) in the sorting
+                    --class (false) : Use this to analyse classes in input model.star file
+                     --regroup (-1) : Number of groups to regroup saved particles from 
+                                      selected classes in (default is no regrouping)
+               --allow_save (false) : Allow saving of selected particles or class averages
+                       --fn_imgs () : Name of the STAR file in which to save selected images.
+                      --fn_parts () : Name of the STAR file in which to save particles from 
+                                      selected classes.
+      --max_nr_parts_per_class (-1) : Select maximum this number of particles from each selected classes.
+                 --recenter (false) : Recenter the selected images to the center-of-mass of 
+                                      all positive pixel values. 
+               --max_nr_images (-1) : Only show this many images (default is show all)
+====== Picking options ===== 
+                     --pick (false) : Pick coordinates in input image
+           --pick_start_end (false) : Pick start-end coordinates in input image
+                        --coords () : STAR file with picked particle coordinates
+            --particle_radius (100) : Particle radius in pixels
+                      --lowpass (0) : Lowpass filter (in A) to filter micrograph before displaying
+                     --highpass (0) : Highpass filter (in A) to filter micrograph before displaying
+                      --angpix (-1) : Pixel size (in A) to calculate lowpass filter
+                    --color_star () : STAR file with a column for red-blue coloring (a subset of) 
+                                      the particles
+                   --color_label () : MetaDataLabel to color particles on (e.g. rlnParticleSelectZScore)
+                        --blue (1.) : Value of the blue color
+                         --red (0.) : Value of the red color
+                         --verb (1) : Verbosity
+                          --version : Print RELION version and exit
+#endif
+
+@
+
+
+1.13
+log
+@removed from copytojpg.f
+@
+text
+@d4 1
+a4 1
+C  DISP.F  -- EXTRACTED FROM COPYTOJPED             Jan 20 ArDean Leith
+d10 1
+a10 1
+C=* Copyright 1985-2019  Health Research Inc.,                         *
+d134 1
+a134 1
+90      FORMAT( ' relion_display --i', A,' ',A, ' &' )
+@
+
+
+1.12
+log
+@LUNFLIPORG_MRC added
+@
+text
+@d4 2
+a5 4
+C  COPYTOJPG.F  -- NEW                             APR 13 ArDean Leith
+C                  ECHO                            APR 16 ArDean Leith
+C                  WORKS ON VOLUME SLICES NOW      JAN 18 ArDean Leith
+C                  WORKS ON MRC IMAGES NOW         DEC 19 ArDean Leith
+d26 5
+a30 2
+C   COPYTOJPG(LUNO,FILOLD,LUNT,NX,NY,NZ,VERBOSET,IDELAY))
+C   DISP()
+d32 2
+a33 2
+C   PURPOSE:      CONVERT SPIDER IMAGE FILE TO JPEG FORMAT USING
+C                 IMAGEMAGICK,  CAN ALSO DISPLAY IMAGE
+d35 1
+a35 1
+C   CALLED BY:    COPY1, UTIL1
+d37 1
+a39 132
+        SUBROUTINE COPYTOJPG(LUNO,LUNT,FILNEW,NX,NY,NZ,VERBOSET,IDELAY)
+
+        IMPLICIT NONE
+
+        INCLUDE 'CMBLOCK.INC'
+        INCLUDE 'CMLIMIT.INC'
+
+        INTEGER               :: LUNO,LUNT,NX,NY,NZ
+        LOGICAL               :: VERBOSET
+        CHARACTER(LEN=MAXNAM) :: FILNEW
+        INTEGER               :: IDELAY
+
+        INTEGER               :: NRECS,ISLICE,NOT_USED,ISKIP
+        INTEGER               :: IRTFLG
+
+        REAL                  :: BUF(NX)
+        CHARACTER *240        :: COMLIN
+        CHARACTER *16         :: STRNX, STRNY
+        INTEGER               :: NC2, NC3
+        INTEGER               :: NDUM,LENREC,IERR,NLETN
+        INTEGER               :: IROW,IDUM
+        REAL                  :: FLOW,FHI,RANGENEW
+        REAL                  :: RANGEOLD,CON,CON2
+        CHARACTER * 1         :: NULL     = CHAR(0)
+        LOGICAL               :: ASKNAM   = .FALSE.
+        LOGICAL               :: CALLERRT = .TRUE.
+        LOGICAL               :: erri2
+
+        CHARACTER(LEN=17)     :: FILTMP = 'JUNK_FOR_JPG.gray' 
+ 
+        INTEGER               :: lnblnkn
+
+        ISLICE = 1
+        IF (NZ > 1) THEN
+C          THIS IS A VOLUME
+           CALL RDPRI1S(ISLICE,NOT_USED,'SLICE',IRTFLG)
+           IF (IRTFLG .NE. 0) RETURN
+           IF (ERRI2(ISLICE,IDUM, 1, 1,NZ, IDUM,IDUM)) RETURN
+
+        ENDIF
+
+C       OPEN TEMP FILE FOR NORMALIZED DATA
+C       I DO NOT SEE ANY WAY THAT IMAGEMAGICK CAN HANDLE FLOATING DATA
+C       THAT HAS NEGATIVE VALUES WITH ANY OPTION I HAVE TRIED!!
+       
+        LENREC = NX * 4
+        CALL OPAUXFILE(ASKNAM,FILTMP,NULL,LUNT,LENREC,'U',
+     &                 ' ',CALLERRT,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+        IF (IMAMI == 0) THEN
+C          GET INPUT IMAGE STATISTICS FIRST
+           CALL NORM3(LUNO,NX,NY,NZ,FMAX,FMIN,AV)
+        ENDIF
+        IF (FMAX == FMIN) THEN
+           CALL ERRT(101,'BLANK FILE SKIPPED',NDUM)
+           RETURN
+        ENDIF
+  
+        FLOW      = 0.0   ! RANGE NEEDED BY IMAGEMAGICK
+        FHI       = 1.0
+
+        RANGENEW  = FHI  - FLOW
+        RANGEOLD  = FMAX - FMIN
+        CON       = RANGENEW / RANGEOLD
+        CON2      = FLOW - CON * FMIN
+
+        ISKIP    = NY * (ISLICE - 1)
+        DO  IROW = 1,NY
+           CALL REDLIN(LUNO,BUF,NX,IROW + ISKIP)
+
+           BUF = CON2 + CON * BUF    ! ARRAY OP
+
+C          WRITE TO TEMP FILE AS POSITIVE FLOATING POINT
+           WRITE(LUNT,REC=IROW,IOSTAT=IERR) BUF
+        ENDDO
+        CLOSE(LUNO)
+        CLOSE(LUNT)
+
+        IF (FILNEW == NULL) THEN
+C          GET NAME FOR JPEG FILE
+        
+           CALL FILERD(FILNEW,NLETN,'jpg','JPEG OUTPUT~9',IRTFLG)
+           IF (IRTFLG .NE. 0) RETURN
+        ELSE
+           NLETN = lnblnkn(FILNEW)
+        ENDIF
+         
+        CALL INTTOCHAR(NX, STRNX, NC2,1)
+        CALL INTTOCHAR(NY, STRNY, NC3,1)
+
+        IF (VERBOSET) THEN
+           WRITE(COMLIN,8005) STRNX(:NC2),STRNY(:NC3),
+     &                        FILTMP,FILNEW(1:NLETN)
+8005       FORMAT( 
+     &     ' convert -verbose -depth 32 -size ',A,'x',A, 
+     &     ' -define quantum:format=floating-point ',
+     &     '-define quantum:scale=65536.0 -endian msb ',
+     &     A,' ',A )
+        ELSE
+           WRITE(COMLIN,8006) STRNX(:NC2),STRNY(:NC3),
+     &                        FILTMP,FILNEW(1:NLETN)
+8006       FORMAT( 
+     &     ' convert -depth 32 -size ',A,'x',A, 
+     &     ' -define quantum:format=floating-point ',
+     &     '-define quantum:scale=65536.0 -endian msb ',
+     &     A,' ',A, ' >& /dev/null' )
+
+        ENDIF
+
+        !write(6,*) COMLIN
+ 
+C       ECHO COMLIN
+        CALL CSVMS(COMLIN,.TRUE.,IRTFLG)
+
+C       A DELAY HERE. (KLUDGY)
+        CALL sleep(IDELAY)
+
+        CLOSE(LUNT,STATUS='DELETE',IOSTAT=IRTFLG)
+
+        END
+
+
+C **********************************************************************
+C
+C  DISP
+C
+C  PURPOSE:  COPIES SPIDER IMAGE TO JPEG USING IMAGEMAGICK THEN USES  
+C            SYSTEM COMMAND TO DISPLAY IMAGE. 
+C
+C--*******************************************************************
+
+d54 1
+a54 1
+        INTEGER               :: ICOMM,MYPID,MPIERR, lnblnkn,NLETO
+d60 5
+a64 1
+        CALL SET_MPI(ICOMM,MYPID,MPIERR) ! SETS ICOMM AND MYPID
+d90 1
+a90 1
+     &          'IMAGEMAGICK DISPLAY OPTIONS (or <CR>) ',NULL,IRTFLG)
+d99 99
+@
+
+
+1.11
+log
+@email_health_dept
+@
+text
+@d7 1
+d12 1
+a12 1
+C=* Copyright 1985-2018  Health Research Inc.,                         *
+d29 1
+d32 1
+a32 1
+C                 IMAGEMAGICK
+d34 1
+a34 1
+C   CALLED BY:    COPY1
+d195 1
+a195 1
+     &               NX,NY,NZ,MAXIM,'SPIDER INPUT',
+d202 3
+d210 1
+a210 1
+C       CONVERT SPIDER IMAGE FILE INTO JPG FILE
+@
+
+
+1.10
+log
+@added error trap for slice number
+@
+text
+@d13 1
+a13 1
+C=* Email: spider@@wadsworth.org                                        *
+@
+
+
+1.9
+log
+@works on slices of volumes
+@
+text
+@d56 1
+a56 1
+        INTEGER               :: IROW
+d62 1
+d69 2
+a70 1
+        IF (NZ .NE. 1) THEN
+d73 2
+d79 1
+a79 1
+C       THAT HAS NEGATIVE VALUES WITH ANY OPTION I HAVE TRIED
+@
+
+
+1.8
+log
+@*** empty log message ***
+@
+text
+@d4 1
+a4 1
+C  COPYTOJPG.F  -- NEW                             APR 13 ArDean Leith                    ARDEAN LEITH
+d6 1
+d11 1
+a11 1
+C=* Copyright 1985-2016  Health Research Inc.,                         *
+d27 1
+a27 1
+C   COPYTOJPG(LUNO,FILOLD,LUNT,NX,NY,NZ)
+d48 1
+a48 1
+        INTEGER               :: NRECS
+d67 1
+d69 2
+a70 2
+           CALL ERRT(101,'DOES NOT WORK ON VOLUMES',NDUM)
+           RETURN
+d99 1
+d101 1
+a101 1
+           CALL REDLIN(LUNO,BUF,NX,IROW)
+d105 1
+d110 1
+a110 1
+ 
+d143 1
+a143 1
+
+@
+
+
+1.7
+log
+@DO NOT ECHO COMLIN in DISP
+@
+text
+@d81 1
+a81 1
+C          NORMALIZE INPUT IMAGE FIRST
+d116 2
+a117 2
+        CALL INTTOCHAR(NX,    STRNX, NC2,1)
+        CALL INTTOCHAR(NY,    STRNY, NC3,1)
+d174 1
+a174 1
+        INTEGER               :: ICOMM,MYPID,MPIERR, lnblnkn,nleto
+d178 1
+a178 1
+        INTEGER,PARAMETER     :: IDELAY = 2
+d202 2
+a203 1
+        CALL RDPRMC(OPTIONS,NLETO,.TRUE.,'OPTIONS',NULL,IRTFLG)
+@
+
+
+1.6
+log
+@disp added
+@
+text
+@d4 2
+a5 2
+C  COPYTOJPG.F  -- NEW                            APR 13 ARDEAN LEITH                    ARDEAN LEITH
+C
+d8 1
+a8 1
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.                    *
+d10 3
+a12 4
+C=* Copyright (C) 1985-2013                                            *
+C=* HEALTH RESEARCH INCORPORATED (HRI),                                *   
+C=* ONE UNIVERSITY PLACE, RENSSELAER, NY 12144-3455.                   *
+C=* Email:  spider@@wadsworth.org                                       *
+d14 1
+a14 1
+C=* This program is free software; you can redistribute it and/or      *
+d19 1
+a19 1
+C=* This program is distributed in the hope that it will be useful,    *
+d21 2
+a22 5
+C=* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  *
+C=* General Public License for more details.                           *
+C=*                                                                    *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+d140 1
+d207 2
+a208 1
+        CALL CSVMS(COMLIN,.TRUE.,IRTFLG)
+@
+
+
+1.5
+log
+@formatting of echo
+@
+text
+@d39 1
+a39 1
+        SUBROUTINE COPYTOJPG(LUNO,LUNT,NX,NY,NZ)
+d47 3
+a57 1
+        CHARACTER(LEN=MAXNAM) :: FILNEW
+d62 1
+a62 1
+        CHARACTER * 1         :: NULL    = CHAR(0)
+d67 2
+a68 1
+        INTEGER,PARAMETER     :: IDELAY = 3
+d76 1
+a76 1
+C       I DO NOT SEE ANYWAY THAT IMAGEMAGICK CAN HANDLE FLOATING DATA
+d111 9
+a119 4
+C       GET NAME FOR JPEG FILE
+        CALL FILERD(FILNEW,NLETN,'jpg','JPEG OUTPUT~9',IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+d123 1
+a123 1
+        IF (VERBOSE) THEN
+d150 61
+@
+
+
+1.4
+log
+@verbose
+@
+text
+@d119 1
+a119 1
+     &     'convert -verbose -depth 32 -size ',A,'x',A, 
+d122 1
+a122 1
+     &     A,' ',A)
+d127 1
+a127 1
+     &     'convert -depth 32 -size ',A,'x',A, 
+d130 2
+a131 1
+     &     A,' ',A)
+d136 1
+a136 1
+        CALL CSVMS(COMLIN,IRTFLG)
+d142 1
+@
+
+
+1.3
+log
+@unused filod, tabs
+@
+text
+@d7 4
+a10 4
+C *  AUTHOR: A. LEITH                                                      *
+C=* FROM: SPIDER - MODULAR IMAGE PROCESSING SYSTEM.   AUTHOR: J.FRANK  *
+C=* Copyright (C) 1985-2013  Health Research Inc.                      *
+C=*                                                                    *
+a12 1
+C=*                                                                    *
+d26 1
+a26 3
+C=* along with this program; if not, write to the                      *
+C=* Free Software Foundation, Inc.,                                    *
+C=* 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
+a40 1
+
+d115 4
+a118 3
+        WRITE(COMLIN,8005) STRNX(:NC2),STRNY(:NC3),
+     &                     FILTMP,FILNEW(1:NLETN)
+8005    FORMAT( 
+d123 9
+@
+
+
+1.2
+log
+@delete temp file
+@
+text
+@d42 1
+a42 1
+	SUBROUTINE COPYTOJPG(LUNO,FILOLD,LUNT,NX,NY,NZ)
+a50 1
+        CHARACTER(LEN=*)      :: FILOLD
+d52 1
+a52 1
+        INTEGER               :: LABREC,INDXREC,NRECS,LABBYT,LENBYT
+d56 1
+a56 1
+        CHARACTER *240        :: COMLIN,FMTLIN
+d58 1
+a58 1
+        INTEGER               :: NC1,NC2, NC3
+d60 1
+a60 2
+        REAL                  :: FN,FNCON
+        INTEGER               :: NDUM,LENREC,NE,K,I,IERR,NLETN
+d62 1
+a62 1
+        REAL                  :: FMINT,FMAXT,FLOW,FHI,RANGENEW
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@a132 1
+C       IMAGEMAGICK FORKS PROCESSES WITHOUT WAITING SO ADD
+d134 3
+a136 2
+        !CALL sleep(IDELAY)
+        
+@

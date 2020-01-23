@@ -1,6 +1,7 @@
-head	1.13;
+head	1.15;
 access;
 symbols
+	pre_mrcs:1.13
 	healthdept_2018:1.13
 	pre_getangas:1.12
 	GPL2010:1.11
@@ -22,6 +23,16 @@ symbols
 locks; strict;
 comment	@c @;
 
+
+1.15
+date	2020.01.10.18.19.05;	author leith;	state Exp;
+branches;
+next	1.14;
+
+1.14
+date	2019.11.04.17.36.06;	author leith;	state Exp;
+branches;
+next	1.13;
 
 1.13
 date	2018.10.03.14.34.07;	author leith;	state Exp;
@@ -93,25 +104,27 @@ desc
 @@
 
 
-1.13
+1.15
 log
-@email_health_dept
+@locat mrc bug
 @
 text
 @
 C++*********************************************************************
 C
-C GETNEWSTACK.F  NEW                            7 JAN 99   ARDEAN LEITH
-C                SET INUSE                        OCT 99   ARDEAN LEITH
-C                INDEXED STACK                    JAN 03   ARDEAN LEITH
-C                HEADER COPY                      FEB 03   ARDEAN LEITH
-C                COPYSTAT PARAM                   OCT 2010 ARDEAN LEITH
+C GETNEWSTACK.F  NEW                         7 JAN   99   ArDean Leith
+C                SET INUSE                     OCT   99   ArDean Leith
+C                INDEXED STACK                 JAN 2003   ArDean Leith
+C                HEADER COPY                   FEB 2003   ArDean Leith
+C                COPYSTAT PARAM                OCT 2010   ArDean Leith
+C                MRC SUPPORT                   SEP 2019   ArDean Leith
+C                LOCAT BUG IN MRC              JAN 2020   ArDean Leith
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Copyright 1985-2020  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@@health.ny.gov                                        *
 C=*                                                                    *
@@ -129,45 +142,80 @@ C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
 C **********************************************************************
 C
-C    GETNEWSTACK(LUNIN,LUNOUT,COPYSTAT,IMGNUM,IRTFLG)
+C  GETNEWSTACK(LUN_CP,LUNOUT,COPYSTAT,NX,IMGNUM,IRTFLG)
 C
-C    PURPOSE:       TO OPEN A NEW IMAGE WITHIN STACK AND TIE TO LUNOUT
+C  PURPOSE:       OPEN A NEW IMAGE WITHIN STACK AND TIE TO LUNOUT
 C
-C    PARAMETERS:
-C        LUNIN      UNIT TO COPY HEADER VALUES FROM               (SENT)
-C        LUNOUT     LOGICAL UNIT NUMBER FOR FILE.                 (SENT)
-C        COPYSTAT   COPY FMIN.. FROM INPUT FILE                   (SENT)
-C        IMGNUM     IMAGE NUMBER WANTED                           (SENT) 
-C        IRTFLG     ERROR RETURN FLAG.                            (RET.)
-C                   IRTFLG =  1    ERROR, REDHED FAILED
-C                   IRTFLG =  0    NORMAL RETURN, IMAGE IS STACKED
-C                   IRTFLG = -1    OK, BUT FILE REQUESTED IS NOT STACK
+C  PARAMETERS:
+C      LUN_CP     UNIT TO COPY HEADER VALUES FROM               (SENT)
+C      LUNOUT     LOGICAL UNIT NUMBER FOR FILE.                 (SENT)
+C      COPYSTAT   COPY FMIN.. FROM INPUT FILE                   (SENT)
+C      NX         IMAGE X DIMENSION                             (SENT) 
+C      IMGNUM     IMAGE NUMBER WANTED                           (SENT) 
+C      IRTFLG     ERROR RETURN FLAG.                            (RET.)
+C                 IRTFLG =  1    ERROR, REDHED FAILED
+C                 IRTFLG =  0    NORMAL RETURN, IMAGE IS STACKED
+C                 IRTFLG = -1    OK, BUT FILE REQUESTED IS NOT STACK
+C
+C  NOTE:      THE THREE SUBROUTINES: GETSTACK, GETOLDSTACK, AND
+C             GETNEWSTACK WERE WRITTEN TO HANDLE WHOLE BARE 
+D             STACK (@@STACK) OPERATIONS. THEY ARE ONLY USED IN 
+D              THE OPERATIONS:
+C             'AF' (NO DOCS), 'CP TO STK','DE','CE AD','AR SCA', 
+C             'CE' (MANY?),
+C             'AD D2', 'AD DF', 'AD DR', 'AD F', 'AD R', 'DIV 2', 
+C             'MUL 2', 'MUL O', 'MU O', & 'SU B2'.
+C             I DECIDED THAT BARE WHOLE STACK OPERATION SUPPORT 
+C             WAS LESS IMPORTANT THAN SUPPORTING OPERATIONS ON 
+C             SELECTED STACKED IMAGES SO I STOPPED CONVERTING 
+C             OPERATIONS TO HANDLING WHOLE STACKS WITHOUT SELECTED 
+C             STACK SUPPORT. THE NEW PARADIGM USES OPFILES AND 
+C             NEXTFILE WHICH HANDLES BOTH SELECTED AND WHOLE STACKS 
+C             BUT I HAVE NOT IMPLEMENTED IT YET IN MOST OPERATIONS AND
+C             AM RUNNING OUT OF TIME TO EVER FINISH IMPLEMENTING 
+C             ANYTHING MORE 
 C
 C23456789 123456789 123456789 123456789 123456789 123456789 123456789 12
 C--*********************************************************************
 
-	SUBROUTINE GETNEWSTACK(LUNIN,LUNOUT,COPYSTAT,NSAM,IMGNUM,IRTFLG)
+	SUBROUTINE GETNEWSTACK(LUN_CP,LUNOUT,COPYSTAT,NX,IMGNUM,IRTFLG)
 
-        INTEGER            :: LUNIN,LUNOUT,NSAM,IMGNUM,IRTFLG
-        LOGICAL            :: COPYSTAT
+        IMPLICIT NONE
+        INCLUDE 'CMLIMIT.INC'     ! FOR: MAXNAM
+       
+        INTEGER                :: LUN_CP,LUNOUT,NX,IMGNUM,IRTFLG
+        LOGICAL                :: COPYSTAT
 
-        CHARACTER (LEN=71) :: FILNAM
-        CHARACTER (LEN=1)  :: DSP
+        CHARACTER (LEN=MAXNAM) :: FILNAM
+        CHARACTER (LEN=1)      :: DSP
 
-        LOGICAL            :: ISBARET
+        INTEGER                :: NY,NZ,ITYPE,ISTACK,MAXIM,LENAT,NLET
+        INTEGER                :: IMAMI
+        REAL                   :: FMIN,FMAX,AV,SIG
+        INTEGER                :: IRTFLGT
+        LOGICAL                :: ISBARET,IS_MRC
 
-        CALL LUNGETISBARE(LUNOUT,ISBARET,IRTFLG)
+C       SE IF WHOLE STACK OPERATION
+        CALL LUNGETISBARE(LUNOUT,ISBARET,IRTFLG)    ! MRC OK
         IF (.NOT. ISBARET) THEN
 C          INPUT IMAGE IS SIMPLE OR A SPECIFIC STACKED IMAGE
            IRTFLG = -1
            RETURN
         ENDIF
 
-C       ONLY FOR INLINE OR REGULAR IMAGE STACK NOW -------------V
-C       MAKE A NEW IMAGE WITHIN EXISTING STACK 
+C       DETERMINE IF MRC OR SPIDER STACK FILE
+        CALL LUNGETIS_MRC(LUNOUT,IS_MRC,IRTFLG)
+
+        IF (IS_MRC) THEN
+C          MRC STACK
+	   CALL GETNEWSTACK_MRC(LUNOUT,COPYSTAT,IMGNUM,IRTFLG)
+           RETURN
+        ENDIF
+
+C       MAKE A NEW IMAGE WITHIN EXISTING INLINE OR REGULAR STACK 
 
 C       GET OVERALL HEADER FROM THE STACK FILE
-        CALL LUNREDHED(LUNOUT,NSAM,0,.TRUE.,IRTFLG)
+        CALL LUNREDHED(LUNOUT,NX,0,.TRUE.,IRTFLG)
         IF (IRTFLG .NE. 0) THEN
            IRTFLG = 1
            RETURN
@@ -176,26 +224,26 @@ C       GET OVERALL HEADER FROM THE STACK FILE
 C       RETRIEVE CURRENT MAXIMUM IMAGE NUMBER FROM OVERALL HEADER
         CALL LUNGETMAXIM(LUNOUT,MAXIM,IRTFLG)
 
-        IF (IMGNUM .GT. MAXIM) THEN
+        IF (IMGNUM > MAXIM) THEN
 C          MUST UPDATE OVERALL HEADER WITH MAXIMUM IMAGE NUMBER
-           CALL LUNSETMAXIM(LUNOUT,IMGNUM,IRTFLG)
+           CALL LUNSETMAXIM(LUNOUT, IMGNUM,IRTFLG)
            CALL LUNSETMAXALL(LUNOUT,IMGNUM,IRTFLG)
         ENDIF
 
 C       NEED SOME VALUES TO PUT IN STACKED IMAGE HEADER OBJECT
-        CALL LUNGETSIZE(LUNOUT,NSAM,NROW,NSLICE,IRTFLG)
+        CALL LUNGETSIZE(LUNOUT,NX,NY,NZ,IRTFLG)
         CALL LUNGETTYPE(LUNOUT,ITYPE,IRTFLGT)
         CALL LUNCOPYSTK(LUNOUT,ISTACK,IRTFLGT)
 
-        IF (ISTACK .LT. 0) THEN
+        IF (ISTACK < 0) THEN
 C          MAKING A NEW INDEXED STACKED FILE, UPDATE INDX LOCATION
-           CALL LUNWRTINDX(LUNOUT,IMGNUM,NSAM,IRTFLGT)
+           CALL LUNWRTINDX(LUNOUT,IMGNUM,NX,IRTFLGT)
            IF (IRTFLGT .NE. 0) RETURN
         ENDIF
 
-        IF (IMGNUM .GT. MAXIM .OR. ISTACK .GT. 2) THEN
+        IF (IMGNUM > MAXIM .OR. ISTACK > 2) THEN
 C          SAVE OVERALL HEADER NOW TO PRESERVE MAXIM & LASTINDX
-           CALL LUNWRTHED(LUNOUT,NSAM,0,IRTFLGT)
+           CALL LUNWRTHED(LUNOUT,NX,0,IRTFLGT)
         ENDIF
 
 C       GET FILENAM FROM CURRENT HEADER OBJECT
@@ -207,14 +255,14 @@ C       (INTTOCHAR ALSO RETURNS NEW VALUE FOR NLET)
         CALL INTTOCHAR(IMGNUM,FILNAM(LENAT+1:),NLET,0)
         NLET = NLET + LENAT
 
-C       INITIALIZE HEADER OBJECT FOR NEW STACKED IMAGE FROM LUNIN
+C       INITIALIZE HEADER OBJECT FOR NEW STACKED IMAGE FROM LUN_CP
 C         (I THINK THIS COULD BE MOSTLY SKIPPED??)
-        CALL LUNSETHDR(LUNIN,LUNOUT,NSAM,NROW,NSLICE,
+        CALL LUNSETHDR(LUN_CP,LUNOUT,NX,NY,NZ,
      &                 ITYPE,ISTACK,IRTFLG)
 
         IF (COPYSTAT) THEN
 C          COPY STATISTICS FROM INPUT FILE
-           CALL LUNGETSTAT(LUNIN, IMAMI,FMIN,FMAX,AV,SIG,IRTFLG)
+           CALL LUNGETSTAT(LUN_CP,IMAMI,FMIN,FMAX,AV,SIG,IRTFLG)
            CALL LUNSETSTAT(LUNOUT,IMAMI,FMIN,FMAX,AV,SIG,IRTFLG)
         ENDIF
 
@@ -226,21 +274,231 @@ C       PUT COMMON VALUES INTO COMMON AREA (NOT NEEDED IN FUTURE?)
         CALL LUNSETCOMMON(LUNOUT,IRTFLG)
 
 C       PUSH HEADER OBJECT INFO INTO NEW STACKED FILE
-        CALL LUNWRTHED(LUNOUT,NSAM,IMGNUM,IRTFLG)
+        CALL LUNWRTHED(LUNOUT,NX,IMGNUM,IRTFLG)
 
 C       SET OFFSETS FOR REDLIN/WRTLIN ON THIS LUN
-        CALL LUNSETIMGOFF(LUNOUT,IMGNUM,NSAM,IRTFLGT)
+        CALL LUNSETIMGOFF(LUNOUT,IMGNUM,NX,IRTFLGT)
 
 C       WRITE OUT FILE OPENING INFO TO SCREEN
         CALL LUNSAYINFO(LUNOUT,IRTFLG)
 
 C       SET FLAG FOR NORMAL RETURN	
         IRTFLG = 0
+ 	END
+
+
+C       ---------------------- GETNEWSTACK_MRC ------------------------  
+
+	SUBROUTINE GETNEWSTACK_MRC(LUN,COPYSTAT,IMGNUM,IRTFLG)
+
+        IMPLICIT NONE
+        INCLUDE 'CMLIMIT.INC'    ! NEED: MAXNAM
+       
+        INTEGER                :: LUN,IMGNUM,IRTFLG
+        LOGICAL                :: COPYSTAT     !   UNUSED
+
+        CHARACTER (LEN=MAXNAM) :: FILNAM,FIL_AT
+        CHARACTER (LEN=1)      :: DSP
+        CHARACTER (LEN=10)     :: CNUM
+
+        INTEGER                :: NX,NY,NZ,ITYPE,ISTACK,NLET,IDUM
+        INTEGER                :: MZ,NSTACK,LOCAT,LOCSLASH,IGO,LENU
+
+        INTEGER                :: lnblnkn ! function
+
+C       MAKE A NEW IMAGE WITHIN EXISTING MRC STACK 
+
+C       RETRIEVE CURRENT MAXIMUM IMAGE NUMBER FROM MRC HEADER
+        CALL LUNGETNSTACK_MRC(LUN, NX,NY,NZ,MZ,NSTACK,IRTFLG)
+
+        !write(6,*) 'In getnewstack_mrc- nz,mz,nstack:',nz,mz,nstack
+
+        IF (IMGNUM > NSTACK) THEN
+C          MUST UPDATE OVERALL HEADER WITH MAXIMUM IMAGE NUMBER
+           NSTACK = IMGNUM
+           CALL LUNSETNSTACK_MRC(LUN, NZ,NSTACK,IRTFLG)
+        ENDIF
+
+C       GET FILENAM FROM HEADER OBJECT FOR EARLIER FILE IN SERIES
+        CALL LUNGETFILE_MRC(LUN,FILNAM,NLET,DSP,IRTFLG)
+
+        !write(6,*) 'In getnewstack_mrc - filnam1:',filnam(:nlet)
+
+C       SUBSTITUTE @@ IN NAME WITH  CURRENT STACKED IMAGE NUMBER AND @@
+C       TO STACK FILE NAME
+
+C       CONVERT IMGNUM TO CHARACTER STRING
+        CALL INTTOCHAR(IMGNUM,CNUM,NLET,1)
+
+        LOCAT  = INDEX(FILNAM,'@@')
+        FIL_AT = CNUM(1:NLET) // '@@' // FILNAM(LOCAT+1:)
+        FILNAM = FIL_AT
+
+        LOCAT  = INDEX(FILNAM,'@@')
+        !write(6,*)' In getnewstack_mrc - imgnum,locat:',imgnum,locat
+
+        IF (LOCAT == 0) THEN
+C          HANDLES: 'stk'
+           CALL ERRT(101,'NO @@ IN FILENAME',IDUM)
+           IRTFLG = 1
+           RETURN
+
+        ELSEIF (LOCAT == 1)  THEN
+C          HANDLES: '@@stk'
+           FILNAM = FIL_AT
+
+        ELSEIF (FILNAM(LOCAT-1:LOCAT-1) == '/')  THEN
+C          HANDLES: '/@@stk'
+           FILNAM = FILNAM(:LOCAT-1) // FIL_AT
+
+        ELSE 
+C          HANDLES: 'nnn@@stk' AND '/nnn@@stk'
+           LOCSLASH = INDEX(FIL_AT(1:LOCAT),'/',BACK=.TRUE.)
+           IF (LOCSLASH == 0) THEN
+              FILNAM = FIL_AT
+           ELSE
+              FILNAM = FILNAM(:LOCSLASH-1) // FIL_AT
+           ENDIF
+        ENDIF
+        NLET = LNBLNKN(FILNAM)
+
+        !call subchar(cnum(1:nlet+1),filnam,locslash,lenu,irtflg)
+        !write(6,*)' In getnewstack_mrc - nlet,cnum:',nlet,cnum
+
+C       SET FILENAME IN HEADER OBJECT
+        CALL LUNSETFILE_MRC(LUN,FILNAM(1:NLET),'N',IRTFLG)  
+        
+C       SET OFFSETS FOR REDLIN/WRTLIN ON THIS LUN
+        CALL LUNSETPOS_MRC(LUN,IMGNUM,IRTFLG)
+
+C       PUSH HEADER OBJECT INFO INTO OVERALL STACK HEADER IN FILE
+        CALL LUNWRTHED_MRC(LUN,IRTFLG)
+
+C       WRITE OUT FILE OPENING INFO TO SCREEN
+        CALL LUNSAYINFO_MRC(LUN,.TRUE.,IRTFLG)
+
+C       PUT COMMON VALUES INTO COMMON AREA (NOT NEEDED IN FUTURE?)
+        CALL LUNSETCOMMON_MRC(LUN,IRTFLG)
+
+C       SET FLAG FOR NORMAL RETURN	
+        IRTFLG = 0
+ 	END
+
+
+
+
+
+@
+
+
+1.14
+log
+@mrc_support
+@
+text
+@d10 1
+d16 1
+a16 1
+C=* Copyright 1985-2019  Health Research Inc.,                         *
+d224 3
+@
+
+
+1.13
+log
+@email_health_dept
+@
+text
+@d4 6
+a9 5
+C GETNEWSTACK.F  NEW                            7 JAN 99   ARDEAN LEITH
+C                SET INUSE                        OCT 99   ARDEAN LEITH
+C                INDEXED STACK                    JAN 03   ARDEAN LEITH
+C                HEADER COPY                      FEB 03   ARDEAN LEITH
+C                COPYSTAT PARAM                   OCT 2010 ARDEAN LEITH
+d15 1
+a15 1
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+d33 1
+a33 1
+C    GETNEWSTACK(LUNIN,LUNOUT,COPYSTAT,IMGNUM,IRTFLG)
+d35 1
+a35 1
+C    PURPOSE:       TO OPEN A NEW IMAGE WITHIN STACK AND TIE TO LUNOUT
+d37 28
+a64 9
+C    PARAMETERS:
+C        LUNIN      UNIT TO COPY HEADER VALUES FROM               (SENT)
+C        LUNOUT     LOGICAL UNIT NUMBER FOR FILE.                 (SENT)
+C        COPYSTAT   COPY FMIN.. FROM INPUT FILE                   (SENT)
+C        IMGNUM     IMAGE NUMBER WANTED                           (SENT) 
+C        IRTFLG     ERROR RETURN FLAG.                            (RET.)
+C                   IRTFLG =  1    ERROR, REDHED FAILED
+C                   IRTFLG =  0    NORMAL RETURN, IMAGE IS STACKED
+C                   IRTFLG = -1    OK, BUT FILE REQUESTED IS NOT STACK
+d69 1
+a69 7
+	SUBROUTINE GETNEWSTACK(LUNIN,LUNOUT,COPYSTAT,NSAM,IMGNUM,IRTFLG)
+
+        INTEGER            :: LUNIN,LUNOUT,NSAM,IMGNUM,IRTFLG
+        LOGICAL            :: COPYSTAT
+
+        CHARACTER (LEN=71) :: FILNAM
+        CHARACTER (LEN=1)  :: DSP
+d71 14
+a84 1
+        LOGICAL            :: ISBARET
+d86 2
+a87 1
+        CALL LUNGETISBARE(LUNOUT,ISBARET,IRTFLG)
+d94 10
+a103 2
+C       ONLY FOR INLINE OR REGULAR IMAGE STACK NOW -------------V
+C       MAKE A NEW IMAGE WITHIN EXISTING STACK 
+d106 1
+a106 1
+        CALL LUNREDHED(LUNOUT,NSAM,0,.TRUE.,IRTFLG)
+d115 1
+a115 1
+        IF (IMGNUM .GT. MAXIM) THEN
+d117 1
+a117 1
+           CALL LUNSETMAXIM(LUNOUT,IMGNUM,IRTFLG)
+d122 1
+a122 1
+        CALL LUNGETSIZE(LUNOUT,NSAM,NROW,NSLICE,IRTFLG)
+d126 1
+a126 1
+        IF (ISTACK .LT. 0) THEN
+d128 1
+a128 1
+           CALL LUNWRTINDX(LUNOUT,IMGNUM,NSAM,IRTFLGT)
+d132 1
+a132 1
+        IF (IMGNUM .GT. MAXIM .OR. ISTACK .GT. 2) THEN
+d134 1
+a134 1
+           CALL LUNWRTHED(LUNOUT,NSAM,0,IRTFLGT)
+d146 1
+a146 1
+C       INITIALIZE HEADER OBJECT FOR NEW STACKED IMAGE FROM LUNIN
+d148 1
+a148 1
+        CALL LUNSETHDR(LUNIN,LUNOUT,NSAM,NROW,NSLICE,
+d153 1
+a153 1
+           CALL LUNGETSTAT(LUNIN, IMAMI,FMIN,FMAX,AV,SIG,IRTFLG)
+d165 1
+a165 1
+        CALL LUNWRTHED(LUNOUT,NSAM,IMGNUM,IRTFLG)
+d168 1
+a168 1
+        CALL LUNSETIMGOFF(LUNOUT,IMGNUM,NSAM,IRTFLGT)
+d175 99
+a273 3
  
         RETURN
 	END
-
-
 @
 
 

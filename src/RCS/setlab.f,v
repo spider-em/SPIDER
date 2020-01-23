@@ -1,6 +1,7 @@
-head	1.19;
+head	1.20;
 access;
 symbols
+	pre_mrcs:1.19
 	healthdept_2018:1.19
 	pre_getangas:1.17
 	GPL2010:1.16
@@ -22,6 +23,11 @@ symbols
 locks; strict;
 comment	@c @;
 
+
+1.20
+date	2019.11.04.17.36.11;	author leith;	state Exp;
+branches;
+next	1.19;
 
 1.19
 date	2018.10.03.14.34.16;	author leith;	state Exp;
@@ -124,24 +130,25 @@ desc
 @
 
 
-1.19
+1.20
 log
-@email_health_dept
+@mrc_support
 @
 text
 @
 C++*********************************************************************
 C
 C SETLAB.F      CREATED                           NOV 87  ArDean Leith
-C               LUNRED                            FEB 03  ARDEAN LEITH
-C               1PG FORMAT                        NOV 10  ARDEAN LEITH
-C               LINE FORMAT, MPISET               NOV 13  ARDEAN LEITH
+C               LUNRED                            FEB 03  ArDean Leith
+C               1PG FORMAT                        NOV 10  ArDean Leith
+C               LINE FORMAT, MPISET               NOV 13  ArDean Leith
+C               MRC                               JUL 19  ArDean Leith
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2013  Health Research Inc.,                         *
+C=* Copyright 1985-2019  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@@health.ny.gov                                        *
 C=*                                                                    *
@@ -159,12 +166,152 @@ C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
 C **********************************************************************
 C
-C    SETLAB(LUN,BUF,IGO,NBUF,VALUE,TYPE,IRTFLG)
+C    SETLAB_R    (LUN,IGO,NBUF,VALUES,PRNT,IRTFLG)
+C    SETLAB_R_MRC(LUN,IGO,NBUF,VALUES,PRNT,IRTFLG)
 C
-C    PURPOSE:    THIS SUBROUTINE SETS HEADER PARAMETERS BY BUFFER NUMBER
-C                WRITES THE HEADER INTO THE FILE.
+C    PURPOSE: SETS HEADER PARAMETERS BY BUFFER NUMBER
+C             WRITES THE HEADER INTO THE FILE.
 C
 C    PARAMETERS:
+C           LUN          LOGICAL UNIT NUMBER OF FILE 
+C           IGO          FIRST BUFFER POSITION TO BE SET
+C           NBUF         NUMBER OF BUFFER POSITIONS TO BE SET
+C           VALUES       ARRAY FOR BUFFER VALUES TO BE SET
+C           PRNT         PRINT-OUT WANTED
+C           IRTFLG       ERROR FLAG (-1 ON ENTRY SUPRESSES PRINT-OUT)
+C
+C--*********************************************************************
+  
+        SUBROUTINE SETLAB_R(LUN,IGO,NBUF,VALUES,PRNT,IRTFLG)
+  
+        IMPLICIT   NONE
+
+        INCLUDE 'CMBLOCK.INC' 
+
+        INTEGER           :: LUN,IGO,NBUF,IRTFLG
+        REAL              :: VALUES(*)
+        LOGICAL           :: PRNT
+
+C       AUTOMATIC ARRAYS    
+        REAL              :: OLDVALUES(NBUF)
+
+        INTEGER           :: ISTOP,NVAL,J,I
+        INTEGER           :: ICOMM,MYPID,MPIERR
+
+        CALL SET_MPI(ICOMM,MYPID,MPIERR) ! SETS ICOMM AND MYPID
+                
+C       UPDATE THE HEADER BUFFER
+
+        ISTOP = MIN(256,IGO+NBUF-1)
+        NVAL  = ISTOP - IGO + 1
+
+        IF (PRNT .AND. VERBOSE) THEN
+C          GET RELEVANT CURRENT  HEADER VALUES (ONLY USED FOR PRNT)
+           CALL LUNGETVALS(LUN,IGO,NVAL,OLDVALUES,IRTFLG)
+           IF (IRTFLG .NE. 0) RETURN
+        ENDIF
+
+C       ALTER RELEVANT  HEADER VALUES
+        CALL LUNSETVALS(LUN,IGO,NVAL,VALUES,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+        IF (PRNT .AND. VERBOSE) THEN
+           J = 0
+           DO I = IGO,ISTOP
+              J = J + 1
+              IF (MYPID <= 0) THEN
+                 WRITE(NOUT,9999) I,OLDVALUES(J),VALUES(J)
+9999             FORMAT('  HEADER LOCATION: ',I3,' CHANGED FROM: ',
+     &                     1PG10.3,' TO: ',1PG10.3)
+              ENDIF
+           ENDDO
+        ENDIF
+
+C       WRITE ALTERED HEADER BACK IN THE FILE
+        CALL LUNWRTCURHED(LUN,IRTFLG) 
+
+        END
+
+
+C       ----------- SETLAB_R_MRC -------------------------------------
+
+        SUBROUTINE SETLAB_R_MRC(LUN,IGO,NBUF,VALUES,PRNT,IRTFLG)
+  
+        IMPLICIT   NONE
+
+        INCLUDE 'CMBLOCK.INC' 
+
+        INTEGER         :: LUN,IGO,NBUF,IRTFLG
+        REAL            :: VALUES(*)
+
+C       AUTOMATIC ARRAYS    
+        REAL            :: OLDVALUES(NBUF)
+        REAL            :: VALUES_ASI(NBUF)
+
+        LOGICAL         :: PRNT
+        INTEGER         :: ISTOP,NVAL,J,I
+        INTEGER         :: ICOMM,MYPID,MPIERR
+
+        CALL SET_MPI(ICOMM,MYPID,MPIERR) ! SETS ICOMM AND MYPID
+
+C       UPDATE THE HEADER BUFFER
+
+        ISTOP = MIN(256,IGO+NBUF-1)
+        NVAL  = ISTOP - IGO + 1
+
+        IF (PRNT .AND. VERBOSE) THEN
+C          GET RELEVANT CURRENT  HEADER VALUES (NEEDED ONLY FOR PRNT)
+           CALL LUNGETVALS_R_MRC(LUN,IGO,NVAL,OLDVALUES,IRTFLG)
+           IF (IRTFLG .NE. 0) RETURN
+        ENDIF
+
+C       ALTER RELEVANT  HEADER VALUES
+        CALL LUNSETVALS_R_MRC(LUN,IGO,NVAL,VALUES,IRTFLG)
+        IF (IRTFLG .NE. 0) RETURN
+
+        IF (PRNT .AND. VERBOSE) THEN
+           J = 0
+           DO I = IGO,ISTOP
+              J = J + 1
+              IF (MYPID <= 0) THEN
+                 WRITE(NOUT,9999) I,OLDVALUES(J),VALUES(J)
+9999             FORMAT('  HEADER LOCATION: ',I3,' CHANGED FROM: ',
+     &                     1PG10.3,' TO: ',1PG10.3)
+              ENDIF
+           ENDDO
+        ENDIF
+
+C       PUSH ALTERED HEADER BACK IN THE FILE
+        CALL LUNWRTHED_MRC(LUN,IRTFLG) 
+
+        END
+
+
+@
+
+
+1.19
+log
+@email_health_dept
+@
+text
+@d5 4
+a8 3
+C               LUNRED                            FEB 03  ARDEAN LEITH
+C               1PG FORMAT                        NOV 10  ARDEAN LEITH
+C               LINE FORMAT, MPISET               NOV 13  ARDEAN LEITH
+d14 1
+a14 1
+C=* Copyright 1985-2013  Health Research Inc.,                         *
+d32 2
+a33 1
+C    SETLAB(LUN,BUF,IGO,NBUF,VALUE,TYPE,IRTFLG)
+d35 2
+a36 2
+C    PURPOSE:    THIS SUBROUTINE SETS HEADER PARAMETERS BY BUFFER NUMBER
+C                WRITES THE HEADER INTO THE FILE.
+d39 6
+a44 49
 C         
 C             LUN          LOGICAL UNIT NUMBER OF FILE 
 C             BUF          WORK SPACE FOR READ/WRITE BUFFER
@@ -214,29 +361,29 @@ C                         17  PSI   = TILT ANGLE
 C                         18  XOFF  = X TRANSLATION
 C                         19  YOFF  = Y TRANSLATION
 C                         20  ZOFF  = Z TRANSLATION
-C
-C--*********************************************************************
-  
+d48 1
+a48 1
         SUBROUTINE SETLAB(LUN,NSAM,UNUSED,IGO,NBUF,VALUES,TYPE,IRTFLG)
-  
-        INCLUDE 'CMBLOCK.INC' 
-
+d50 2
+d54 3
+a56 3
         REAL             ::  UNUSED(*),VALUES(*)
         CHARACTER   *(*) ::  TYPE
         LOGICAL          ::  PRNT
-
-C       AUTOMATIC ARRAYS    
+d59 4
+a62 1
         REAL             :: OLDVALUES(NBUF)
-
+a63 1
         INTEGER          :: ICOMM,MYPID,MPIERR
-        CALL SET_MPI(ICOMM,MYPID,MPIERR) ! SETS ICOMM AND MYPID
+d65 1
+a65 6
 
         PRNT = .TRUE.
         IF (IRTFLG == -1) PRNT = .FALSE.
         IRTFLG = 1
 
                  
-C       UPDATE THE HEADER BUFFER
+a66 26
         IF (TYPE(1:1) .NE. 'U') THEN
            LENC = LEN(TYPE)
            IF     (LENC == 2 .AND. TYPE(1:2) == 'R3') THEN 
@@ -263,33 +410,15 @@ C       UPDATE THE HEADER BUFFER
 9993          FORMAT('  NEW IFORM:',I5,' TYPE:',A2)
            ENDIF
         ENDIF
-
-        ISTOP = MIN(256,IGO+NBUF-1)
-        NVAL  = ISTOP - IGO + 1
-
+d71 5
+a75 2
         CALL LUNGETVALS(LUN,IGO,NVAL,OLDVALUES,IRTFLG)
         IF (IRTFLG .NE. 0) RETURN
-
-        CALL LUNSETVALS(LUN,IGO,NVAL,VALUES,IRTFLG)
-        IF (IRTFLG .NE. 0) RETURN
-
-        IF (PRNT .AND. VERBOSE) THEN
-           J = 0
-           DO I = IGO,ISTOP
-              J = J + 1
-              IF (MYPID <= 0) THEN
-                 WRITE(NOUT,9999) I,OLDVALUES(J),VALUES(J)
-9999             FORMAT('  HEADER LOCATION: ',I3,' CHANGED FROM: ',
+d77 1
+d88 1
+a88 1
      &                    1PG10.3,' TO: ',1PG10.3)
-              ENDIF
-           ENDDO
-        ENDIF
-
-C       WRITE ALTERED HEADER BACK IN THE FILE
-        CALL LUNWRTCURHED(LUN,IRTFLG) 
-
-        END
-
+d97 55
 @
 
 

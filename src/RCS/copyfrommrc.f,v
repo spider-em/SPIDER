@@ -1,6 +1,7 @@
-head	1.38;
+head	1.48;
 access;
 symbols
+	pre_mrcs:1.38
 	healthdept_2018:1.38
 	pre_getangas:1.20
 	GPL2010:1.20
@@ -19,6 +20,56 @@ symbols
 locks; strict;
 comment	@c @;
 
+
+1.48
+date	2020.01.13.19.18.47;	author leith;	state Exp;
+branches;
+next	1.47;
+
+1.47
+date	2020.01.09.19.42.20;	author leith;	state Exp;
+branches;
+next	1.46;
+
+1.46
+date	2020.01.08.18.27.48;	author leith;	state Exp;
+branches;
+next	1.45;
+
+1.45
+date	2020.01.07.19.42.35;	author leith;	state Exp;
+branches;
+next	1.44;
+
+1.44
+date	2020.01.06.18.59.59;	author leith;	state Exp;
+branches;
+next	1.43;
+
+1.43
+date	2020.01.02.19.44.06;	author leith;	state Exp;
+branches;
+next	1.42;
+
+1.42
+date	2020.01.02.19.07.34;	author leith;	state Exp;
+branches;
+next	1.41;
+
+1.41
+date	2019.12.31.20.08.20;	author leith;	state Exp;
+branches;
+next	1.40;
+
+1.40
+date	2019.12.31.20.00.22;	author leith;	state Exp;
+branches;
+next	1.39;
+
+1.39
+date	2019.11.04.17.35.58;	author leith;	state Exp;
+branches;
+next	1.38;
 
 1.38
 date	2018.10.03.14.34.03;	author leith;	state Exp;
@@ -215,9 +266,9 @@ desc
 @@
 
 
-1.38
+1.48
 log
-@email_health_dept
+@cosmetic
 @
 text
 @
@@ -240,12 +291,12 @@ C               BOTLEFT DEFAULT                   JUL 15 ArDean Leith
 C               2015 STACK SUPPORT                JUL 15 ArDean Leith
 C               STACK END BUG                     OCT 15 ArDean Leith
 C               'MRCV'                            DEC 15 ArDean Leith
-C
+C               REWRITE FOR NATIVE MRC SUPPORT    JAN 20 ArDean Leith
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2018  Health Research Inc.,                         *
+C=* Copyright 1985-2020 Health Research Inc.,                          *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@@health.ny.gov                                        *
 C=*                                                                    *
@@ -263,36 +314,415 @@ C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
 C **********************************************************************
 C 
-C COPYFROMMRC(LUNSPI,LUNMRC,NX,NY,NZ)
+C COPYFROMMRC(LUN1,LUN2, LUNDOC,LUNXM1,LUNXM2)
 C                                                                      
 C PURPOSE: CONVERTS MRC IMAGES TO SPIDER IMAGES, CRUDELY WRITTEN!!!
 C
 C NOTES: DATA IN MRC FILE
 C        MODE   TYPES OF PIXEL IN IMAGE
-C               0 : INTEGER*1 (UNSIGNED BYTES) 
-C               1 : INTEGER*2 (SIGNED) 
-C               2 : REALS
-C               6 : INTEGER*2 (UNSIGNED)
+C               0 : INTEGER*1 BYTES (UNSIGNED) 
+C               1 : INTEGER*2       (SIGNED) 
+C               2 : 32 BIT REALS
+C               6 : INTEGER*2       (UNSIGNED)
 C
 C23456789012345678901234567890123456789012345678901234567890123456789012
 C***********************************************************************
 
-        SUBROUTINE COPYFROMMRC(LUNSPI,LUNMRC,NX,NY,NZ)
-
-C       COPY FROM MRC TO SPIDER FILE FORMAT --------------- FROM MRC
+        SUBROUTINE COPYFROMMRC(LUN1,LUN2, LUNDOC,LUNXM1,LUNXM2)
 
         IMPLICIT NONE
 
         INCLUDE 'CMBLOCK.INC'
         INCLUDE 'CMLIMIT.INC'
+
+        REAL        :: BUF
+        COMMON /IOBUF/ BUF(NBUFSIZ)
+
+        INTEGER                  :: LUN1,LUN2,LUNDOC,LUNXM1,LUNXM2
+
+        LOGICAL                  :: VERBOSE_SAVE,ASKNAM
+        LOGICAL                  :: IS_MRC,IS_ACTUALLY_A_VOL,IS_BARE
+        LOGICAL                  :: FOUROK = .FALSE.
+
+        CHARACTER (LEN=MAXNAM)   :: PROMPT 
+        CHARACTER (LEN=MAXNAM)   :: FILNAM1,FILNAM2
+        CHARACTER (LEN=1)        :: NULL = CHAR(0)
+        CHARACTER (LEN=1)        :: DISP
+        CHARACTER (LEN=4)        :: CAXIS
+        CHARACTER (LEN=12)       :: CSTR
+        INTEGER                  :: NC,NCC,NE,NOT_USED
+        INTEGER                  :: NILMAX,IRTFLG,NSTACK1,NLET1,NINDX1
+        INTEGER                  :: IFORM1,NX1,NY1,NZ1,NDUM,NGOT1,NGOT2
+        INTEGER                  :: IMG1,NSTACK2,NLET2,IDUM,NINDX2,IMG2
+        INTEGER,ALLOCATABLE      :: ILIST1(:),ILIST2(:)
+
+        VERBOSE_SAVE = VERBOSE       ! SAVE CURRENT VERBOSITY
+
+        NILMAX  = NIMAX              ! FROM CMLIMIT
+        ALLOCATE(ILIST1(NIMAX),
+     &           ILIST2(NIMAX),
+     &           STAT=IRTFLG)
+        IF (IRTFLG .NE. 0) THEN
+           CALL ERRT(46,'COPYFROMMRC; ILIST...',2*NIMAX)
+           RETURN
+        ENDIF
+
+C       OPEN FIRST INPUT MRC FILE 
+
+        PROMPT  = 'MRC INPUT FILE OR TEMPLATE (E.G. STK@@****)~~9'
+        CALL FILERD(FILNAM1,NLET1,NULL, PROMPT,IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 999
+
+C       APPEND .mrc IF NEEDED
+        IF (INDEX(FILNAM1,'.mrc') <= 0 .AND.
+     &      INDEX(FILNAM1,'.MRC') <= 0 .AND.
+     &      INDEX(FILNAM1,'.map') <= 0 .AND.
+     &      INDEX(FILNAM1,'.MAP') <= 0) THEN
+            FILNAM1 = FILNAM1(1:NLET1) // '.mrc'
+            NLET1   = NLET1 + 4
+        ENDIF
+
+        NSTACK1 =  1   ! PARAMETER UNUSED ON INPUT
+        DISP    = 'E'  ! DISP = 'E' DOES NOT STOP ON ERROR
+        ASKNAM  = .FALSE.  
+        CALL OPFILES(0,LUN1,LUNDOC,LUNXM1,  
+     &               ASKNAM,FILNAM1,NLET1, DISP,
+     &               IFORM1,NX1,NY1,NZ1,NSTACK1,
+     &               FILNAM1,
+     &               FOUROK, ILIST1,NILMAX, 
+     &               NDUM,NGOT1,IMG1, IRTFLG) 
+        IF (IRTFLG .NE. 0) RETURN
+
+C       NSTACK1 RET:  -2   IS NON-STACK IMAGE,  -1 IS STACKED IMG,                  
+C                    >= 0 IS CURRENT MAX. IMG # FOR STACK             
+
+        !write(3,'(a,5i5)')' In copyfrommrc, nstack1,ngot1,img1:',
+        !&                                      nstack1,ngot1,img1
+ 
+C       BE SURE INPUT IS MRC
+        CALL LUNGETIS_MRC(LUN1,IS_MRC,IRTFLG)
+        IF (.NOT. IS_MRC) THEN    
+           CALL ERRT(101,'INPUT IS NOT MRC FILE',NE)
+           GOTO 999
+        ENDIF
+
+C	OPEN FIRST SPIDER OUTPUT FILE
+        NSTACK2 =  1   ! PARAMETER NOT USED ON INPUT
+        DISP    = 'U'          
+        IMG2    = IMG1
+
+        IF (NSTACK1 >= 0) THEN
+           PROMPT = 'SPIDER OUTPUT FILE OR TEMPLATE (E.G. STK@@****)~~9'
+        ELSE
+           PROMPT = 'SPIDER OUTPUT FILE~'
+        ENDIF
+        CALL FILERD(FILNAM2,NLET2,NULL, PROMPT,IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 999
+
+        CALL LUNGETISBARE_MRC(LUN1,IS_BARE,IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 999
+
+C       TREAT THIS IMAGE AS A STACK NOT A VOLUME (WHERE RELEVENT)
+        IS_ACTUALLY_A_VOL = .FALSE.
+
+        IF (NSTACK1 >= 0) THEN
+C           MAY HAVE ABERRENT MRC HEADER
+            IF  (FCHAR(9:12) == 'MRCV') THEN
+               IS_ACTUALLY_A_VOL = .TRUE.
+
+            ELSEIF (IS_BARE) THEN
+               IMG2   = 1
+               CALL RDPRI1S(IMG2,NOT_USED,
+     &                  'FIRST IMAGE NUMBER IN SPIDER STACK',IRTFLG)
+               IF (IRTFLG .NE. 0) GOTO 999
+               IF (IMG2 <= 0) IS_ACTUALLY_A_VOL = .TRUE. 
+            ELSE
+               IMG2 = 1
+            ENDIF
+         ENDIF
+
+         IF (IS_ACTUALLY_A_VOL) THEN
+C           TREAT THIS IMAGE AS A VOLUME NOT A STACK
+            NZ1     = NSTACK1
+            NSTACK1 = -2
+            CALL LUNSETNSTACK_MRC(LUN1, NZ1,NSTACK1,IRTFLG)
+        ENDIF
+
+        ASKNAM = .FALSE.
+        CALL OPFILES(LUN1,LUN2,LUNDOC,LUNXM2, 
+     &             ASKNAM,FILNAM2,NLET2,DISP,
+     &             IFORM1,NX1,NY1,NZ1,NSTACK2,
+     &             FILNAM2,
+     &             FOUROK, ILIST2,NILMAX, 
+     &             NDUM,NGOT2,IMG2, IRTFLG)
+ 
+C       NSTACK2 RET:  -2   IS NON-STACK IMAGE,  -1 IS STACKED IMG,                  
+C                    >= 0 IS CURRENT MAX. IMG # FOR STACK             
+
+        !write(6,'(A,4i6)')' Out nstack2,ngot2,img2:',nstack2,ngot2,img2
+
+        CALL WHICH_HAND_MRC(LUN1,FILNAM1,CAXIS,IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 999
+
+        !write(3,*) ' Mrc data axis: ',caxis
+
+        IF (NZ1 <= 1) THEN       ! IMAGE(S) INPUT
+           CALL RDPRMC(CSTR,NC,.TRUE.,'DATA ORIGIN CORNER (UL/LL)', 
+     &              NULL,IRTFLG)
+        ELSE                     ! VOLUME(S) INPUT
+           CALL RDPRMC(CSTR,NC,.TRUE.,  
+     &              'DATA ORIGIN CORNER (UL/LL) & HANDEDNESS (L/R)',
+     &              NULL,IRTFLG)
+        ENDIF
+        IF (IRTFLG .NE. 0)  RETURN
+
+        NCC = INDEX(CSTR(1:NC),',')
+        IF (NCC > 0) NCC = NCC - 1
+        IF (INDEX(CSTR(1:NCC),'Y') > 0) THEN   ! LEGACY FLIP INPUT
+           CALL ERRT(101,
+     &         'DATA BYTE FLIP NO LONGER AVAILABLE HERE',IDUM)
+           GOTO 999
+        ENDIF
+
+        IF (INDEX(CSTR(1:NC),'LL') > 0) CAXIS(1:2) = 'LL'
+
+        IF (NZ1 > 1) THEN    
+C          VOLUME OUTPUT
+           CAXIS(4:4) = 'L'
+           IF (INDEX(CSTR(3:NC),'R')  > 0) CAXIS(4:4) = 'R'
+
+           !WRITE(NOUT,*)' DATA ORIGIN CORNER & HANDEDNESS: (',CAXIS,')'
+        ELSE
+           !WRITE(NOUT,*)' DATA ORIGIN CORNER: (',CAXIS(1:2),')'
+        ENDIF
+
+        CALL LUNSETHAND_MRC(LUN1,CAXIS,IRTFLG)
+        CALL LUNSETPOS_MRC (LUN1,NGOT1,IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 999
+
+        NINDX1 = 1
+        NINDX2 = 1
+        DO                ! LOOP OVER ALL IMAGES/STACKS
+
+C          DO NOT REPORT FILE INFO IF WHOLE STACK (VERBOSE IN COMMON)
+	   !!!IF (NSTACK1 > 0 .AND. NSTACK2 >= 0) VERBOSE = .FALSE. 
+
+C          COPY THE DESIRED NUMBER OF DATA RECORDS (MRC OK)
+           DO IREC = 1,NY1 * NZ1
+              CALL REDLIN(LUN1,BUF,NX1,IREC)
+              CALL WRTLIN(LUN2,BUF,NX1,IREC)
+           ENDDO
+           !write(3,*)' in copyfrommrc,ilist.:   ',ilist1(:3),ilist2(:3) 
+           !write(3,*)' in copyfrommrc,filnam1:  ',filnam1(1:20)
+           !write(3,*)' in copyfrommrc,filnam2:  ',filnam2(1:20)
+           !write(3,*)' in copyfrommrc,ngot1..2: ',ngot1,ngot2 
+           !write(3,*)' In copyfrommrc,nindx1..2:',nindx1,nindx2 
+           !write(3,*)' in copyfrommrc,img1..2:  ',img1,img2 
+
+C          OPEN NEXT SET OF I/O FILES, UPDATES NINDX1 & NINDX2 
+           CALL NEXTFILES(NINDX1,NINDX2,  ILIST1,ILIST2, 
+     &                    .FALSE., LUNXM1,LUNXM2,
+     &                    NGOT1,NGOT2,    NSTACK1,NSTACK2,  
+     &                    LUN1,LUN1,LUN2, FILNAM1,FILNAM2,
+     &                    IMG1,IMG2, IRTFLG)
+
+           !if (irtflg .ne. 0) then
+           !write(6,'(A,4i6)') 
+!     &        ' Nextfiles img1,img2,irtflg:',img1,img2,irtflg
+           !write(6,'(A,4i6)') 
+!     &        ' Nextfiles nindx1,nindx2:',nindx1,nindx2
+           !endif
+
+           IF (IRTFLG .NE. 0) EXIT      ! ERROR / END OF INPUT STACK
+       ENDDO
+
+       IRTFLG = 0
+   
+999    CLOSE(LUN1)
+       CLOSE(LUN2)
+
+       VERBOSE = VERBOSE_SAVE          ! RESTORE VERBOSITY 
+       IF (ALLOCATED(ILIST1)) DEALLOCATE(ILIST1)
+       IF (ALLOCATED(ILIST2)) DEALLOCATE(ILIST2)
+
+       END
+
+@
+
+
+1.47
+log
+@cosmetic
+@
+text
+@d167 1
+a167 2
+                IMG2   = 1
+                 
+d243 2
+a244 2
+           !write(3,*)' In copyfrommrc,filnam1:  ',filnam1(1:20)
+           !write(3,*)' In copyfrommrc,filnam2:  ',filnam2(1:20)
+@
+
+
+1.46
+log
+@commented out verbose
+@
+text
+@d126 2
+a127 2
+        !write(3,'(a,5i5)')'  In copyfrommrc, nstack1,ngot1,img1:',
+        !&                                    nstack1,ngot1,img1
+@
+
+
+1.45
+log
+@prompt changed
+@
+text
+@d236 1
+a236 1
+	   IF (NSTACK1 > 0 .AND. NSTACK2 >= 0) VERBOSE = .FALSE. 
+@
+
+
+1.44
+log
+@ELSEIF (IS_BARE) THEN
+@
+text
+@d93 1
+a93 1
+           CALL ERRT(46,'COPYFROMMRC; ILIST....',2*NIMAX)
+d99 1
+a99 1
+        PROMPT  = 'INPUT FILE NAME OR TEMPLATE (E.G. STK@@****)~~9'
+d243 6
+a250 1
+           !write(3,*)' In copyd, calling nextfiles:',nindx1,nindx2 
+a256 1
+           !write(3,*) ' In copyd, after nextfiles, irtflg',irtflg
+@
+
+
+1.43
+log
+@stacked image bug with .mrcs
+@
+text
+@d71 1
+a71 1
+        LOGICAL                  :: IS_MRC,IS_ACTUALLY_A_VOL
+d149 4
+d154 1
+d160 1
+a160 1
+            ELSEIF (IMG1 > 0) THEN
+@
+
+
+1.42
+log
+@trap for img1 for non-standard stacks
+@
+text
+@d154 1
+d160 4
+a163 1
+               IF (IMG2 <= 0) IS_ACTUALLY_A_VOL = .TRUE.                   
+d217 1
+a217 1
+           WRITE(NOUT,*)' DATA ORIGIN CORNER & HANDEDNESS: (',CAXIS,')'
+d219 1
+a219 1
+           WRITE(NOUT,*)' DATA ORIGIN CORNER: (',CAXIS(1:2),')'
+@
+
+
+1.41
+log
+@data origin msg removed
+@
+text
+@d21 1
+a21 1
+C               REWRITE FOR NATIVE MRC SUPPORT    DEC 19 ArDean Leith
+d71 1
+a71 1
+        LOGICAL                  :: IS_MRC,IS_VOL_NOT_STK
+d126 3
+a128 2
+        !write(6,'(a,8i5)')' In  nstack1,ngot1,img1:',nstack1,ngot1,img1
+
+d149 1
+a149 1
+        IS_VOL_NOT_STK = .FALSE.
+d153 2
+a154 2
+               IS_VOL_NOT_STK = .TRUE.
+            ELSE
+d159 1
+a159 1
+               IF (IMG2 <= 0) IS_VOL_NOT_STK = .TRUE.                   
+d163 1
+a163 1
+         IF (IS_VOL_NOT_STK) THEN
+@
+
+
+1.40
+log
+@rewrite
+@
+text
+@a212 1
+           WRITE(6,*)   ' DATA ORIGIN CORNER & HANDEDNESS: (',CAXIS,')'
+a214 1
+           WRITE(6,*)   ' DATA ORIGIN CORNER: (',CAXIS(1:2),')'
+@
+
+
+1.39
+log
+@mrc_support
+@
+text
+@d21 1
+a21 2
+C               'UL'                              SEP 19 ArDean Leith
+C
+d26 1
+a26 1
+C=* Copyright 1985-2019  Health Research Inc.,                         *
+d44 1
+a44 1
+C COPYFROMMRC(LUNSPI,LUNMRC,NX,NY,NZ)
+d50 4
+a53 4
+C               0 : INTEGER*1 (UNSIGNED BYTES) 
+C               1 : INTEGER*2 (SIGNED) 
+C               2 : REALS
+C               6 : INTEGER*2 (UNSIGNED)
+d58 1
+a58 3
+        SUBROUTINE COPYFROMMRC(LUNSPI,LUNMRC,NX,NY,NZ)
+
+C       COPY FROM MRC TO SPIDER FILE FORMAT --------------- FROM MRC
+a63 2
  
         COMMON /IOERR/  IERR       ! LEGACY REDLIN ERROR FLAG
-
+d65 2
+a66 2
         REAL                    :: BUFIN
         COMMON /IOBUF/  BUFIN(NBUFSIZ)
-
+d68 1
+a68 1
         INTEGER                 :: LUNSPI,LUNMRC, NXT,NYT,NZT
-
+d70 24
+a93 138
         INTEGER                 :: NX,NY,NZ
         REAL,       ALLOCATABLE :: STREAMBUF(:)
         INTEGER *1, ALLOCATABLE :: I1STREAMBUF(:)
@@ -305,7 +735,6 @@ C       COPY FROM MRC TO SPIDER FILE FORMAT --------------- FROM MRC
         CHARACTER(LEN=MAXNAM)   :: MRCFILE,FILOUT
         CHARACTER(LEN=8)        :: ANS
         LOGICAL                 :: FLIP,BOTLEFT
-        LOGICAL                 :: isswab
         INTEGER                 :: IVAL
         INTEGER *1              :: I1VAL
         INTEGER *2              :: I2VAL
@@ -341,12 +770,6 @@ C       COPY FROM MRC TO SPIDER FILE FORMAT --------------- FROM MRC
         integer   :: ixmax2 = 0, iymax2 = 0
         integer   :: imin   = 100000000, ixmin = 0,iymin = 0, imin2 = 0
         integer   :: ixmin2 = 0, iymin2 = 0
-
-        REAL    *4              :: R4STAMP 
-        INTEGER *1              :: I1STAMP(4)
-        INTEGER *4              :: I4STAMP(1)
-        EQUIVALENCE                (R4STAMP,I1STAMP)
-        EQUIVALENCE                (R4STAMP,I4STAMP)
      
         IERR = 0
 
@@ -367,13 +790,6 @@ C       CONVERT TO LITTLE ENDED
 C       READ MRC HEADER 
         CALL REDLIN(LUNMRC,FIXLENBUF,LENOPENF,1)
  
-        R4STAMP    = FIXLENBUF(54)
-C       write(6,*) 'i1stamp: ',i1stamp
-C       write(6,*) 'i4stamp: ',i4stamp
-        CALL FLIPBYTES(R4STAMP,I4STAMP,1,IRTFLG)
-C       write(6,*) 'i1stamp: ',i1stamp
-C       write(6,*) 'i4stamp: ',i4stamp
-
 C       PARSE MRC HEADER        
         CALL GETHEDCCP4(FIXLENBUF,NX,NY,NZ,MODE,FMIN,FMAX,
      &                  AV,RMS,NSYMBT,FLIP,MACHST,
@@ -445,16 +861,17 @@ C          POST 2015 FORMAT VOLUME STACK
         ELSE 
            CALL ERRT(102,'BAD STACK OR VOLUME PARAMETERS',ISPG)
            IRTFLG = 1
-           RETURN
-        ENDIF
-
-
+d97 1
+d99 23
+a121 2
         IF (NIMG > 1) THEN
 C          SPIDER IMAGE OR VOLUME STACK OUTPUT
-
+d123 2
+a124 2
            CALL FILERD(FILOUT,NLET,NULL,'SPIDER OUTPUT STACK~',IRTFLG)
            IF (IRTFLG .NE. 0) GOTO 9999
-
+d126 1
+a126 9
 C          HACK TO USE OPFILES
            LOCAT = INDEX(FILOUT(1:NLET),'@@')
            IF (LOCAT == 0) THEN
@@ -464,13 +881,15 @@ C          HACK TO USE OPFILES
               NLET = LOCAT
               FILOUT(NLET+1:) = ' ' 
            ENDIF
-
+d128 6
+a133 4
            IGO = 1
            CALL RDPRI1S(IGO,NOT_USED,
      &                  'FIRST IMAGE NUMBER IN SPIDER STACK',IRTFLG)
            IF (IRTFLG .NE. 0) GOTO 9999
-
-
+d135 4
+d140 4
+a143 25
            ALLOCATE(ILIST(NIMG),STAT=IRTFLG)
            IF (IRTFLG > 0) THEN
               CALL ERRT(46,'COPYFROMMRC; ILIST',NIMG)
@@ -496,8 +915,9 @@ C          OPEN SPIDER STACK OUTPUT FILE
      &            FOUROK, ILIST,NSTACKT, 
      &            NUNUSED,NSTACKOUT, IMGNUMOUT, IRTFLG)
 ccccccc           write(6,*) 'nstackout, imgnumout:', nstackout, imgnumout 
-        ENDIF
-
+d145 2
+d148 13
+a160 12
 C       EXTRACT DATA FROM MRC FILE AFTER HEADER & PUT IN SPIDER FILE
         IOFFSET = 1024 + NSYMBT
 
@@ -510,12 +930,13 @@ C       EXTRACT DATA FROM MRC FILE AFTER HEADER & PUT IN SPIDER FILE
         ELSE 
            CALL ERRT(102,'UNSUPPORTED MRC MODE',MODE)
         ENDIF 
-
+d162 5
+a166 3
         IF (IRTFLG .NE. 0) THEN
            CALL ERRT(46,'COPYFROMMRC; **STREAMBUF',NX)
            GOTO 9999
-        ENDIF
-
+d169 7
+a175 22
 C       OPEN MRC FILE FOR STREAM ACCESS
 C       CONVERT TO LITTLE ENDED 
         CALL OPSTREAMFILE(.FALSE.,MRCFILE,NULL,LUNMRC,
@@ -523,19 +944,23 @@ C       CONVERT TO LITTLE ENDED
         IF (IRTFLG .NE. 0) GOTO 9999
 
         CALL RDPRMC(ANS,NCHAR,.TRUE.,
-     &           'FLIP BYTE ORDERING? (Y/N)', NULL,IRTFLG)
+     &        'FLIP BYTE ORDERING? (Y/N), ORIGIN CORNER IF NOT (LL)', 
+     &         NULL,IRTFLG)
         IF (IRTFLG .NE. 0) GOTO 9999
 
         IF (ANS(1:1) == 'Y') FLIP = .NOT. FLIP
 
         ! BOTLEFT IS USUAL MRC BOTTOM IN CURRENT FORMAT !!!!!
         BOTLEFT = .TRUE.
-        IF (NCHAR > 1 .AND. (INDEX(ANS(2:NCHAR),'I')) > 0) THEN
+        IF (NCHAR > 1 .AND. (
+     &                       (INDEX(ANS(2:NCHAR),'I') ) > 0) .OR.
+     &                       (INDEX(ANS(2:NCHAR),'UL')) > 0) THEN
            BOTLEFT = .FALSE.
-           WRITE(NOUT,*) '  **** ERROR?? NON-STANDARD CORNER ACTIVE'
-           WRITE(6,*)    '  **** ERROR?? NON-STANDARD CORNER ACTIVE' 
+           WRITE(NOUT,*) ' MRC DATA ORIGIN CORNER: (UL)'
+           WRITE(6,*)    ' MRC DATA ORIGIN CORNER: (UL)' 
         ENDIF
- 
+d177 2
+a178 15
         NINDX  = 1
 
         DO  ! POSSIBLE LOOP OVER MRC STACK -------------------------
@@ -551,7 +976,8 @@ C           INVERT TOP & BOT OF EACH IMAGE OR EACH IMAGE WITHIN VOLUME
 
          IF (MODE == 0) THEN
 C          SIGNED 8 BIT INTEGER MRC INPUT FILE
-
+d180 1
+a180 109
            DO IZ = 1,NZ
              DO IY = 1,NY
                 IREC    = IRECSTK + (IZ  -1) * NY + IY
@@ -661,10 +1087,12 @@ C                  NO CONVERSION
 C               PUT OUT COMPLETED RECORD
                 IRECSPI = IRECSPI + IRECINC
                 CALL WRTLIN(LUNSPI,STREAMBUF,NX,IRECSPI)
-
+d182 2
+a183 2
               ENDDO
            ENDDO
-
+d185 1
+a185 44
 #ifdef NEVER
            write(6,*) 'maxs: ',ixmax,iymax,imax
            write(6,*) 'maxs2:',ixmax2,iymax2,imax2
@@ -709,14 +1137,16 @@ C                  INVERT BYTE ORDER
 C               PUT OUT COMPLETED RECORD
                 IRECSPI = IRECSPI + IRECINC
                 CALL WRTLIN(LUNSPI,STREAMBUF,NX,IRECSPI)
-
+d187 7
+a193 5
               ENDDO
            ENDDO
 
         ELSE
            CALL ERRT(102,'CAN NOT COPY MRC MODE',MODE)
-        ENDIF
-
+d195 1
+d197 6
+a202 16
         IF (.NOT. WANTSTACK) EXIT    ! FINISHED IF NOT A MRC STACK
         IF (NINDX >= NIMG)   EXIT    ! ALREADY FINISHED WITH STACK
 
@@ -733,34 +1163,41 @@ C       OPEN NEXT STACKED OUTPUT FILE
            EXIT         
         ELSEIF (IRTFLG .NE. 0) THEN
            EXIT                      ! ERROR
-        ENDIF
-
+d205 1
+a205 1
        ENDDO   ! END OF STACK LOOP --------------------------
-
+d207 4
+a210 6
       !iposmrc = iposmrc + nx  
       !write(6,*) ' Last iposmrc:',iposmrc, streambuf(1)
         
 9999   CLOSE(LUNSPI)
        CLOSE(LUNMRC)
        IF(ALLOCATED(STREAMBUF)) DEALLOCATE(STREAMBUF)
-
+d212 6
+a217 1
        END
-
-
+d219 3
+d223 3
+a225 1
 C       -------------- ISSWAB ----------------------------------------
-
+d227 2
+a228 1
         LOGICAL FUNCTION ISSWAB(LUN)
-
+d230 5
+a234 6
         INCLUDE 'CMBLOCK.INC'
         INCLUDE 'CMLIMIT.INC'
  
         INTEGER               :: IVAL(3)
         CHARACTER(LEN=12)     :: CVAL,CVALIN
         EQUIVALENCE(IVAL,CVAL)
-
+d236 27
+a262 2
         CHARACTER(LEN=MAXNAM) :: FILNAM
         LOGICAL               :: VERBOSE_SAVE
-
+d264 1
+a264 44
         CHARACTER(LEN=1)      :: NULL = CHAR(0)
 
 C       DO NOT ECHO FILE OPENING
@@ -805,7 +1242,45 @@ c       ENDIF
         VERBOSE = VERBOSE_SAVE
 
         END
+@
 
+
+1.38
+log
+@email_health_dept
+@
+text
+@d21 1
+d27 1
+a27 1
+C=* Copyright 1985-2018  Health Research Inc.,                         *
+a86 1
+        LOGICAL                 :: isswab
+a121 6
+
+        REAL    *4              :: R4STAMP 
+        INTEGER *1              :: I1STAMP(4)
+        INTEGER *4              :: I4STAMP(1)
+        EQUIVALENCE                (R4STAMP,I1STAMP)
+        EQUIVALENCE                (R4STAMP,I4STAMP)
+a141 7
+        R4STAMP    = FIXLENBUF(54)
+C       write(6,*) 'i1stamp: ',i1stamp
+C       write(6,*) 'i4stamp: ',i4stamp
+        CALL FLIPBYTES(R4STAMP,I4STAMP,1,IRTFLG)
+C       write(6,*) 'i1stamp: ',i1stamp
+C       write(6,*) 'i4stamp: ',i4stamp
+
+d291 2
+a292 1
+     &           'FLIP BYTE ORDERING? (Y/N)', NULL,IRTFLG)
+d299 3
+a301 1
+        IF (NCHAR > 1 .AND. (INDEX(ANS(2:NCHAR),'I')) > 0) THEN
+d303 2
+a304 2
+           WRITE(NOUT,*) '  **** ERROR?? NON-STANDARD CORNER ACTIVE'
+           WRITE(6,*)    '  **** ERROR?? NON-STANDARD CORNER ACTIVE' 
 @
 
 

@@ -1,16 +1,18 @@
 
-C++*******************************************************************
-C   WRTLIN.F                        IOSTAT ADDED             DEC 97 al
-C                                   FILE NAME FOR ERROR      SEP 02 al
-C                                   ENDEDNESS                FEB 03 al
-C                                   ONLYONE_WRT              NOV 08 al
+C++*********************************************************************
+C   WRTLIN.F             IOSTAT ADDED              DEC 97 ArDean Leith
+C                        FILE NAME FOR ERROR       SEP 02 ArDean Leith
+C                        ENDEDNESS                 FEB 03 ArDean Leith
+C                        ONLYONE_WRT               NOV 08 ArDean Leith
+C                        MRC SUPPORT               JUL 19 ArDean Leith
+C                        MORE MRC SUPPORT          DEC 19 ArDean Leith
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Copyright 1985-2019  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
+C=* Email: spider@health.ny.gov                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -39,7 +41,14 @@ C
 C        IERR   ERROR CODE 1 IS RETURNED IN CASE OF ERROR
 C               IERR IS DEFINED IN COMMON /IOERR/IERR
 C 
-C--*******************************************************************
+C     MRC_MODE  TYPE                           MY_NBYT
+C         0       : INTEGER*1 (UNSIGNED BYTES)   -1 
+C         1       : INTEGER*2 (SIGNED)            2 
+C         2       : REALS                         4
+C         6       : INTEGER*2 (UNSIGNED)         -2
+C
+C23456789 123456789 123456789 123456789 123456789 123456789 123456789 12
+C--*********************************************************************
 
       MODULE WRTLIN_PIPE_STUFF
          SAVE
@@ -48,70 +57,84 @@ C--*******************************************************************
       END MODULE WRTLIN_PIPE_STUFF
 
 
+C     ---------------------- WRTLIN -------------------------------------
 
-      SUBROUTINE WRTLIN(LUNT,BUF,NB,NREC)
+      SUBROUTINE WRTLIN(LUNT,BUF,NB,IREC)
 
 C     HAS  IMG PIPING INFO
       USE WRTLIN_PIPE_STUFF
 
 C     USE INLINE BUFFER COMMON AREA
       INCLUDE 'INLN_INFO.INC'
+      INCLUDE 'CMLIMIT.INC'
 
-      REAL            BUF(NB)
+      INTEGER         :: LUNT,NB,IREC
+      REAL            :: BUF(NB)
+
+      INTEGER         :: IERR,LUNC,NIN,NOUT,NECHO,IFOUND,NPROC,NDAT
+      INTEGER         :: LUNARA,LUNSTK,LUNARB,LUNFLIP
       COMMON /IOERR/  IERR
       COMMON /UNITS/  LUNC,NIN,NOUT,NECHO,IFOUND,NPROC,NDAT
       COMMON /LUNARA/ LUNARA(100),LUNSTK(100),LUNARB(100),LUNFLIP(100)
 
+      INTEGER *8      :: LUNMRCPOS
+      INTEGER         :: LUNMRCNBYT
+      COMMON /LUNMRC/    LUNMRCPOS(100),LUNMRCNBYT(100)
+
 C     AUTOMATIC ARRAY 
-      REAL,DIMENSION(NB) :: FLIPBUF(NB)
+      REAL                   :: FLIPBUF(NB)
 
-      CHARACTER(LEN=80)  :: FILOPEND
-      LOGICAL            :: ISOPEN
+      CHARACTER(LEN=MAXNAM)  :: FILOPEND
+      LOGICAL                :: ISOPEN
 
-#ifdef USE_MPI
-      LOGICAL            :: ONLYONE_RED,ONLYONE_WRT
-      COMMON /COMM_MPI/ONLYONE_RED,ONLYONE_WRT
-      include 'mpif.h'
-      ICOMM   = MPI_COMM_WORLD
-      CALL MPI_COMM_RANK(ICOMM, MYPID, MPIERR)
-      IF (.NOT. ONLYONE_WRT) MYPID = -1
-#else
-      MYPID = -1 
-#endif
+C     INCLUSION FOR OPTIONAL MPI INITIALIZATION.  
+      INTEGER            :: MYPID = -1
+#include "MPI_INIT.INC"
 
-      IF (ISINLINE(LUNT)) THEN
+
+      IF (ISINLINE(LUNT)) THEN    ! FROM: INLN_INFO.INC
 C        USE INLINED BUFFER FOR I/O (SEE OPENINLN.F)
-         CALL INLN_WRTLIN(LUNT,BUF,NB,NREC)
+         CALL INLN_WRTLIN(LUNT,BUF,NB,IREC)
          RETURN
 
       ELSEIF (IMGPIPE) THEN
 C        USE PIPE FOR OUTPUT
-         CALL WRTLIN_PIPE(BUF,NB,NREC,IRTFLG)
+         CALL WRTLIN_PIPE(BUF,NB,IREC,IRTFLG)
          RETURN
       ENDIF
 
       LUN = LUNARB(LUNT)
 
-C     ADD LUNARA(LUN) (FOR LABEL REC) AND LUNSTK (FOR STACK OFFSET)
-C     TO NREC TO GET THE CORRECT RECORD NUMBER
-      I = NREC + LUNARA(LUN) + LUNSTK(LUNT)
+      IF (LUNMRCPOS(LUN) == 0) THEN
+C       DIRECT ACCESS SPIDER FILE
 
-      IERR = 0
-      IF (MYPID .LE. 0) THEN
-         IF (LUNFLIP(LUN) .EQ. 0) THEN
-            WRITE(LUN,REC=I,IOSTAT=IERR) BUF
-         ELSE
-            CALL FLIPBYTES(BUF,FLIPBUF,NB,IRTFLG)
-            WRITE(LUN,REC=I,IOSTAT=IERR) FLIPBUF
-         ENDIF
+C       ADD LUNARA(LUN) (FOR LABEL REC) AND LUNSTK (FOR STACK OFFSET)
+C       TO IREC TO GET THE CORRECT RECORD NUMBER
+        I = IREC + LUNARA(LUN) + LUNSTK(LUNT)
 
-         IF (IERR .NE. 0) THEN
-            INQUIRE(UNIT=LUN,OPENED=ISOPEN,NAME=FILOPEND)
-            LENT = lnblnkn(FILOPEND)
-            WRITE(NOUT,99) IERR,I,NB,LUN,FILOPEND(:LENT)
-99          FORMAT( '  *** ERROR(',I4,') WRITING RECORD: ',I6,
-     &              ' LENGTH: ', I5,' ON UNIT: ',I3,' TO FILE: ',A)
-         ENDIF
+        IERR = 0
+        IF (MYPID <= 0) THEN
+           IF (LUNFLIP(LUN) == 0) THEN
+              WRITE(LUN,REC=I,IOSTAT=IERR) BUF
+           ELSE
+              CALL FLIPBYTES(BUF,FLIPBUF,NB,IRTFLG)
+              WRITE(LUN,REC=I,IOSTAT=IERR) FLIPBUF
+           ENDIF
+
+           IF (IERR .NE. 0) THEN
+              INQUIRE(UNIT=LUN,OPENED=ISOPEN,NAME=FILOPEND)
+              LENT = lnblnkn(FILOPEND)
+              WRITE(NOUT,99) IERR,I,NB,LUN,FILOPEND(:LENT)
+99            FORMAT( '  *** ERROR(',I4,') WRITING RECORD: ',I6,
+     &                ' LENGTH: ', I5,' ON UNIT: ',I3,' TO FILE: ',A)
+           ENDIF
+        ENDIF
+
+      ELSE
+
+C       STREAM ACCESS MRC FILE
+        CALL WRTLIN_MRC(LUN,BUF,NB,IREC, MYPID,IERR) 
+
       ENDIF
 
 #ifdef USE_MPI
@@ -123,13 +146,93 @@ C     TO NREC TO GET THE CORRECT RECORD NUMBER
 
       END
 
+C----------------------------- WRTLIN_MRC ----------------------------
 
+      SUBROUTINE WRTLIN_MRC(LUN,BUF,NB,IREC, MYPID,IERR)
+
+C     PURPOSE:  WRITE BUF TO STREAM ACCESS MRC IMAGE/VOLUME FILE
+
+      IMPLICIT NONE
+
+      INCLUDE 'CMLIMIT.INC'   ! NEED: NBUFSIZ
+
+      INTEGER         :: LUN,NB,IREC
+      REAL            :: BUF(NB)
+      INTEGER         :: MYPID,IERR
+
+      INTEGER *8      :: LUNMRCPOS
+      INTEGER         :: LUNMRCNBYT
+      COMMON /LUNMRC/    LUNMRCPOS(100),LUNMRCNBYT(100)
+      INTEGER         :: LUNARA,LUNSTK,LUNARB,LUNFLIP
+      COMMON /LUNARA/   LUNARA(100),LUNSTK(100),LUNARB(100),LUNFLIP(100)
+
+      INTEGER *1      :: I1BUF(NBUFSIZ)
+      INTEGER *2      :: I2BUF(NBUFSIZ)
+
+      INTEGER         :: I,IX,IRTFLG
+      INTEGER         :: NBYT_PER_VAL,NBYT_PER_REC,MRCMODE,NX,NE
+      INTEGER *8      :: IPOSMRC
+
+C     LUNARA CARRIES NX (PIXELS IN X)
+      NX = ABS(LUNARA(LUN))
+
+C     DIFFERENT MRC MODES DIFFER IN DATA LENGTHS
+      MRCMODE      = LUNMRCNBYT(LUN)   
+      NBYT_PER_VAL = ABS(MRCMODE)
+      NBYT_PER_REC = NBYT_PER_VAL * NX
+
+C     FILE POSITION TO BEGIN WRITING DEPENDS ON IREC AND ORIGIN
+
+C     LUNARA SIGN DENOTES IMAGE ORIGIN
+      IF (LUNARA(LUN) > 0) THEN
+C        ORIGIN IS LOWER LEFT
+         IPOSMRC = LUNMRCPOS(LUN) - IREC * NBYT_PER_REC
+
+      ELSEIF (LUNARA(LUN) < 0) THEN
+C        ORIGIN IS UPPER LEFT
+         IPOSMRC = LUNMRCPOS(LUN) + IREC * NBYT_PER_REC
+
+      ELSE
+         IRTFLG = 1
+         RETURN
+      ENDIF
+
+      IF (NBYT_PER_VAL == 4) THEN
+C        MRC FILE NEEDS 32 BIT REAL VALUES
+         IF (MYPID <= 0) WRITE(LUN, POS=IPOSMRC,IOSTAT=IERR) BUF(1:NB)
+
+      ELSEIF (NBYT_PER_VAL == 2) THEN      
+C        MRC FILE NEEDS  16 BIT, INTEGER*2 VALUES        
+
+         I2BUF(1:NB) = BUF(1:NB)   
+         IF (MYPID <= 0) WRITE(LUN, POS=IPOSMRC,IOSTAT=IERR) I2BUF(1:NB)
+
+      ELSEIF (NBYT_PER_VAL == 1) THEN         
+C        MRC FILE NEEDS   8 BIT INTEGER*1 VALUES 
+
+         I1BUF(1:NB) = BUF(1:NB)   
+         IF (MYPID <= 0) WRITE(LUN,POS=IPOSMRC,IOSTAT=IERR)I1BUF(1:NB)
+ 
+      ENDIF
+
+      !if (irec==1) write(3,'(A,2X,i9,f8.1)')
+      !&            '  In wrtlin, i1buf,buf:',i1buf(1),buf(1)
+      ! if (irec==1) write(3,*)' i1buf(1, 1),(1, nx):',i1buf(1),i1buf(nx) 
+      ! if (irec==64)write(3,*)' i1buf(64,1),(64,nx):',i1buf(1),i1buf(nx) 
+      ! if (irec==63)  write(3,*)'  irec,lunmrcpos,ipos: ',
+      ! &                          irec,lunmrcpos(lun),iposmrc
+      ! if (irec==63)  write(3,*)'  irec,lunmrcpos,ipos: ',
+      ! &                          irec,lunmrcpos(lun),iposmrc
+c     CALL ERRT(101, '16 BIT MRC FILE OUTPUT IS NOT SUPPORTED YET',NE)
+c     IERR = 1
+
+      END
 
 
 
 C++*********************************************************************
 C
-C WRTLIN_OPENPIPE                   NEW           JAN 2006 ARDEAN LEITH
+C WRTLIN_OPENPIPE                   NEW           JAN 2006 ArDean Leith
 C
 C **********************************************************************
 C
@@ -150,19 +253,6 @@ C--*******************************************************************
       CHARACTER(LEN=MAXNAM)    :: PIPENAME
       CHARACTER(LEN=MAXNAM+24) :: MSG
 
-#ifdef sgi
-C     SETS NAME FOR ASSIGN OBJECT FILE
-      CALL SETENV('FILENV','jnkASSIGN1',IRTFLG)
-C     CLEAR ANY EXISTING ASSIGN OBJECT FILE
-      CALL ASNRM(IRTFLG)
-C     INITIALIZE THE ASSIGN OBJECT FILE FOR WRITING
-      MSG = '-s u -a ' // PIPENAME
-      CALL ASNUNIT(LUNREGPIPE,MSG,IRTFLG)
-      IF (IRTFLG .NE. 0) THEN
-         CALL ERRT(102,'ASNUNIT TO SET PIPE, RETURNS:',IER)
-         RETURN
-      ENDIF
-#endif
 
       OPEN(UNIT=LUNIMGPIPE, 
      &    FILE=PIPENAME,
@@ -181,13 +271,12 @@ C     INITIALIZE THE ASSIGN OBJECT FILE FOR WRITING
       IMGPIPE = .TRUE.
       IRTFLG  = 0
 
-      RETURN
       END
 
 
 C++*********************************************************************
 C
-C WRTLIN_PIPE                         NEW           JAN 2006 ARDEAN LEITH
+C WRTLIN_PIPE                         NEW        JAN 2006 ArDean Leith
 C
 C **********************************************************************
 C
@@ -220,12 +309,11 @@ C        WRITE IMAGE/VOL. LINE TO NAMED PIPE
          IRTFLG = 1
       ENDIF
  
-      RETURN
       END
 
 C++*********************************************************************
 C
-C WRTLIN_PIPE_TOG                      NEW        JAN 2006 ARDEAN LEITH
+C WRTLIN_PIPE_TOG                     NEW        JAN 2006 ArDean Leith
 C
 C **********************************************************************
 C

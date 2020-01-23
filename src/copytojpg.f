@@ -4,13 +4,15 @@ C
 C  COPYTOJPG.F  -- NEW                             APR 13 ArDean Leith
 C                  ECHO                            APR 16 ArDean Leith
 C                  WORKS ON VOLUME SLICES NOW      JAN 18 ArDean Leith
+C                  WORKS ON MRC IMAGES NOW         DEC 19 ArDean Leith
+C                  EXTRACTED DISP()                JAN 20 ArDean Leith
 C **********************************************************************
 C=* AUTHOR: A. LEITH                                                   *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2018  Health Research Inc.,                         *
+C=* Copyright 1985-2020  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
+C=* Email: spider@health.ny.gov                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -27,9 +29,9 @@ C
 C   COPYTOJPG(LUNO,FILOLD,LUNT,NX,NY,NZ,VERBOSET,IDELAY))
 C
 C   PURPOSE:      CONVERT SPIDER IMAGE FILE TO JPEG FORMAT USING
-C                 IMAGEMAGICK
+C                 IMAGEMAGICK,  CAN ALSO DISPLAY IMAGE
 C
-C   CALLED BY:    COPY1
+C   CALLED BY:    COPY1, UTIL1
 C
 C--*********************************************************************
 
@@ -156,64 +158,3 @@ C       A DELAY HERE. (KLUDGY)
         END
 
 
-C **********************************************************************
-C
-C  DISP
-C
-C  PURPOSE:  COPIES SPIDER IMAGE TO JPEG USING IMAGEMAGICK THEN USES  
-C            SYSTEM COMMAND TO DISPLAY IMAGE. 
-C
-C--*******************************************************************
-
-        SUBROUTINE DISP()
-
-        IMPLICIT NONE
-
-        INCLUDE 'CMBLOCK.INC'
-        INCLUDE 'CMLIMIT.INC'
-
-        CHARACTER(LEN=MAXNAM) :: FILOLD,FILNEW
-        CHARACTER(LEN=MAXNAM) :: OPTIONS
-        CHARACTER(LEN=160)    :: COMLIN
- 
-        CHARACTER(LEN=1)      :: NULL = CHAR(0)
-        LOGICAL               :: VERBOSET,WANTOUT
-        INTEGER               :: NX,NY,NZ,MAXIM,ITYPE,IRTFLG,NLET,NLETC
-        INTEGER               :: ICOMM,MYPID,MPIERR, lnblnkn,NLETO
-
-        INTEGER, PARAMETER    :: LUN1   = 14 
-        INTEGER, PARAMETER    :: LUN2   = 15 
-        INTEGER, PARAMETER    :: IDELAY = 3
-          
-        CALL SET_MPI(ICOMM,MYPID,MPIERR) ! SETS ICOMM AND MYPID
-
-C       OPEN INPUT FILE, WHOLE STACK NOT ALLOWED
-        MAXIM = 0
-        CALL OPFILEC(0,.TRUE.,FILOLD,LUN1,'O',ITYPE,
-     &               NX,NY,NZ,MAXIM,'SPIDER INPUT',
-     &               .FALSE.,IRTFLG)
-        IF (IRTFLG .NE. 0) RETURN
-
-        IF (IMAMI .NE. 1) 
-     &      CALL NORM3(LUN1,NX,NY,NZ,FMAX,FMIN,AV)
-
-C       JPEG OUTPUT FILE NAME
-        NLET   = lnblnkn(FILOLD)
-        FILNEW = FILOLD(:NLET) // '.jpg'
-        NLET   = NLET + 4
-
-C       CONVERT SPIDER IMAGE FILE INTO JPG FILE
-        VERBOSET = .FALSE.
-        CALL COPYTOJPG(LUN1,LUN2,FILNEW,NX,NY,NZ, VERBOSET,IDELAY)
-
-        IRTFLG = -999   ! KEEP LOWERCASE
-        CALL RDPRMC(OPTIONS,NLETO,.TRUE.,
-     &          'IMAGEMAGICK DISPLAY OPTIONS (or <CR>) ',NULL,IRTFLG)
-
-        WRITE(COMLIN,90) OPTIONS(1:NLETO),FILNEW(1:NLET)
-90      FORMAT( ' display ', A,' ',A, ' &' )
-
-C       DO NOT ECHO COMLIN
-        CALL CSVMS(COMLIN,.FALSE.,IRTFLG)
-
-        END

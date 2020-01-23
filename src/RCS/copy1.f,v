@@ -1,6 +1,7 @@
-head	1.70;
+head	1.74;
 access;
 symbols
+	pre_mrcs:1.70
 	healthdept_2018:1.70
 	pre_getangas:1.54
 	GPL2010:1.51
@@ -22,6 +23,26 @@ symbols
 locks; strict;
 comment	@c @;
 
+
+1.74
+date	2020.01.09.18.07.17;	author leith;	state Exp;
+branches;
+next	1.73;
+
+1.73
+date	2020.01.02.19.09.54;	author leith;	state Exp;
+branches;
+next	1.72;
+
+1.72
+date	2019.12.31.20.01.36;	author leith;	state Exp;
+branches;
+next	1.71;
+
+1.71
+date	2019.11.04.17.38.14;	author leith;	state Exp;
+branches;
+next	1.70;
 
 1.70
 date	2018.10.03.14.34.03;	author leith;	state Exp;
@@ -379,9 +400,9 @@ desc
 @
 
 
-1.70
+1.74
 log
-@email_health_dept
+@cpfrommrc
 @
 text
 @C++*********************************************************************
@@ -410,11 +431,12 @@ C               'CP TO VOL'                         MAY 13 ArDean Leith
 C               'CP FROM TIF'                       MAR 14 ArDean Leith
 C               'CP TO MRC' STACKS                  JUN 15 ArDean Leith
 C               REMOVED XPLO OPS                    JAN 18 ArDean Leith
+C               'CP TO STK' NOT FOR MRC             OCT 19 ArDean Leith
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2018  Health Research Inc.,                         *
+C=* Copyright 1985-2019  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@@health.ny.gov                                        *
 C=*                                                                    *
@@ -432,21 +454,21 @@ C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
 C **********************************************************************
 C
-C  COPY1(MAXDIM)
+C  COPY1(INT_UNUSED)
 C
-C  PARAMETERS:      MAXDIM         MAX LENGTH FOR UNLABELED COMMON
+C  PARAMETERS:      INT_UNUSED         UNUSED
 C
 C23456789012345678901234567890123456789012345678901234567890123456789012
 C--*********************************************************************
 
-        SUBROUTINE COPY1(MAXDIM)
+        SUBROUTINE COPY1(INT_UNUSED)
 
         IMPLICIT NONE
 
         INCLUDE 'CMBLOCK.INC'
         INCLUDE 'CMLIMIT.INC'
 
-        INTEGER               :: MAXDIM
+        INTEGER               :: INT_UNUSED
         INTEGER               :: ICOMM,MYPID,MPIERR
         INTEGER               :: NILMAX,IRTFLG,NLET,ITYPE,NX,NY,NZ,NE
         INTEGER               :: MAXIM,NDUM,NIMG,IMGNUM,LOCAT,LOCAST
@@ -457,7 +479,9 @@ C--*********************************************************************
 
         CHARACTER(LEN=1)      :: NULL = CHAR(0)
         LOGICAL               :: INDXD,FLIPOUT,ASKNAM,FOUROK,BARE
-        LOGICAL               :: ISSTACK
+        LOGICAL               :: IS_STACK
+        LOGICAL               :: IS_MRC
+
 
         INTEGER,PARAMETER     :: IDELAY  = 3
 
@@ -482,16 +506,28 @@ C          STANDARD COPY WITH FLIPPED ENDEDNESS
            GOTO 9000
 
         ELSEIF (FCHAR(4:7) == 'TO V') THEN !--------------- 'CP TO VOL'
-C          SPIDER IMAGE(S) FILE INTO VOLUME FILES '
+C          SPIDER IMAGE(S) FILE INTO VOLUME FILES  
            CALL COPYTOVOL()
            GOTO 9000
 
         ELSEIF (FCHAR(4:8) == 'TO ST') THEN !-------------- 'CP TO STK'
-C          SPIDER STACK(S) INTO A SINGLE STACK '
+C          SPIDER STACK(S) INTO A SINGLE STACK  
            CALL COPYTOSTK()
            GOTO 9000
 
+        ELSEIF (FCHAR(4:9) == 'TO MRC') THEN !------------- 'CP TO MRC'
+C          COPY SPIDER FILE TO MRC IMAGE/VOLUME
+           CALL COPYTOMRC(LUN1,LUN2,LUNDOC,LUNXM1,LUNXM2,IRTFLG)
+           GOTO 9000
+
+        ELSEIF (FCHAR(4:9) == 'FROM M' .OR.
+     &          FCHAR(4:9) == 'FROM C' ) THEN !----------- 'CP FROM MRC'
+C          FROM MRC FORMAT TO SPIDER 
+           CALL COPYFROMMRC(LUN1,LUN2,LUNDOC,LUNXM1,LUNXM2)
+           GOTO 9000
+
         ENDIF
+
 
 C                                    12345678     1234567890
         SELECT CASE(FCHAR(4:5))   ! 'CP TO XX' , 'CP FROM XX'
@@ -511,19 +547,18 @@ C          STANDARD COPY TO INDEXED STACK
            CALL COPYD(LUN1,LUN2,LUNDOC,LUNXM1,LUNXM2,INDXD,FLIPOUT)
 
         CASE ('')    ! ------------------------------------------ 'CP'
-C          STANDARD COPY 
+C          STANDARD COPY (CAN HANDLE MRC INPUT/OUTPUT)
            INDXD   = .FALSE.
            FLIPOUT = .FALSE.
            CALL COPYD(LUN1,LUN2,LUNDOC,LUNXM1,LUNXM2,INDXD,FLIPOUT)
 
-
         CASE ('TO')  ! ------------------------------------- 'CP TO **'
 
 C          OPEN INPUT IMAGE(S), (NOT FOURIER)
-           NILMAX = NIMAX  ! FROM CMLIMIT.INC
+           NILMAX = NIMAX          ! FROM CMLIMIT.INC
            ALLOCATE(ILIST(NILMAX), STAT=IRTFLG)
            IF (IRTFLG .NE. 0) THEN
-              CALL ERRT(46,'COPY1; ILIST....',NILMAX)
+              CALL ERRT(46,'COPY1; ILIST',NILMAX)
               RETURN
            ENDIF
 
@@ -537,22 +572,20 @@ C          OPEN INPUT IMAGE(S), (NOT FOURIER)
      &                  NDUM,NIMG,IMGNUM, IRTFLG) 
            IF (IRTFLG .NE. 0) RETURN
 
-           LOCAT   = INDEX(FILOLD,'@@')
-           LOCAST  = INDEX(FILOLD,'*')
-           ISSTACK = (MAXIM > 0)                      ! USING A STACK
-           BARE    = (LOCAT > 0 .AND. LOCAT == NLET)  ! BARESTACK
+           LOCAT    = INDEX(FILOLD,'@@')
+           LOCAST   = INDEX(FILOLD,'*')
+           IS_STACK = (MAXIM > 0)                     ! USING A STACK
+           BARE     = (LOCAT > 0 .AND. LOCAT == NLET) ! BARESTACK
 
 
-           IF (FCHAR(7:9) .NE. 'MRC') THEN
-              IF (BARE) THEN
-                 CALL ERRT(101,
+           IF (BARE) THEN
+              CALL ERRT(101,
      &                  'THIS OPERATION CAN NOT COPY A WHOLE STACK',NE)
-                 RETURN
-              ENDIF
-              IF (IMAMI .NE. 1) 
-     &            CALL NORM3(LUN1,NX,NY,NZ,FMAX,FMIN,AV)
+              RETURN
            ENDIF
 
+C          NEED FMIN & FMAX
+           IF (IMAMI .NE. 1) CALL NORM3(LUN1,NX,NY,NZ,FMAX,FMIN,AV)
 
            SELECT CASE(FCHAR(7:8)) 
 
@@ -563,19 +596,6 @@ C             FROM SPIDER IMAGE INTO EDITABLE IMAGE ------ 'CP TO ASCII'
            CASE ('BR')
 C             FROM 3D SPIDER FILE TO BRIX FORMAT----------- 'CP TO BRIX'
               CALL COPYBRIX(LUN1,LUN2,NX,NY,NZ)
-
-           CASE ('MR','CC')
-C             FROM SPIDER IMAGE FILE INTO MRC FORMAT ------- 'CP TO MRC'
-
-              IF (ISSTACK) THEN 
-C                COPYING WHOLE STACK
-                 CALL COPYTOMRC_STK(LUN1,LUN2,FILOLD, 
-     &                             ILIST,NIMG,MAXIM,IMGNUM,
-     &                             NX,NY,NZ)
-             ELSE
-C                COPYING IMAGE/VOLUME
-                 CALL COPYTOMRC(LUN1,LUN2,NX,NY,NZ)
-              ENDIF
 
            CASE ('PO')
 C             FROM SPIDER TO POSTSCRIPT IMAGE (8 BIT)------ 'CP TO POST'
@@ -615,10 +635,6 @@ C             NO SUCH COPY FUNCTION
            CASE ('AS')
 C             EDITABLE IMAGE FILE TO SPIDER IMAGE FILE - 'CP FROM ASCII'
               CALL COPYF(LUN1,LUN2)
-
-           CASE ('MR','CC')
-C             FROM MRC FORMAT TO SPIDER ------------------ 'CP FROM MRC'
-              CALL COPYFROMMRC(LUN1,LUN2,NX,NY,NZ)
 
            CASE ('PD')
 C             FROM PDB FILE TO SPIDER VOLUME FILE -------- 'CP FROM PDB'
@@ -685,12 +701,132 @@ C             NO SUCH COPY FUNCTION
         write(6,*) '  locat:',locat
         write(6,*) '  locast:',locast
         write(6,*) '  nlet:',nlet
-        write(6,*) '  isstack:',isstack
+        write(6,*) '  is_stack:',is_stack
         write(6,*) '  maxim:',maxim
         write(6,*) '  nimg: ',nimg
         write(6,*) '  bare: ',bare
         stop
 #endif
+@
+
+
+1.73
+log
+@comment
+@
+text
+@d112 2
+a113 2
+C          COPYING TO MRC IMAGE/VOLUME
+           CALL COPYTOMRC_NEW(LUN1,LUN2,LUNDOC,LUNXM1,LUNXM2,IRTFLG)
+@
+
+
+1.72
+log
+@COPYFROMMRC calling changed
+@
+text
+@d118 1
+a118 1
+C          FROM MRC FORMAT TO SPIDER ------------------ 'CP FROM MRC'
+@
+
+
+1.71
+log
+@stack_mrc
+@
+text
+@d111 11
+d124 1
+d143 1
+a143 1
+C          STANDARD COPY 
+a147 1
+
+d151 1
+a151 1
+           NILMAX = NIMAX  ! FROM CMLIMIT.INC
+d154 1
+a154 1
+              CALL ERRT(46,'COPY1; ILIST....',NILMAX)
+d174 2
+a175 3
+           IF (FCHAR(7:9) .NE. 'MRC') THEN
+              IF (BARE) THEN
+                 CALL ERRT(101,
+d177 1
+a177 4
+                 RETURN
+              ENDIF
+              IF (IMAMI .NE. 1) 
+     &            CALL NORM3(LUN1,NX,NY,NZ,FMAX,FMIN,AV)
+d180 2
+a192 13
+           CASE ('MR','CC')
+C             FROM SPIDER IMAGE FILE INTO MRC FORMAT ------- 'CP TO MRC'
+
+              IF (IS_STACK) THEN 
+C                COPYING WHOLE STACK
+                 CALL COPYTOMRC_STK(LUN1,LUN2,FILOLD, 
+     &                             ILIST,NIMG,MAXIM,IMGNUM,
+     &                             NX,NY,NZ)
+             ELSE
+C                COPYING IMAGE/VOLUME
+                 CALL COPYTOMRC(LUN1,LUN2,NX,NY,NZ)
+              ENDIF
+
+a230 4
+
+           CASE ('MR','CC')
+C             FROM MRC FORMAT TO SPIDER ------------------ 'CP FROM MRC'
+              CALL COPYFROMMRC(LUN1,LUN2,NX,NY,NZ)
+@
+
+
+1.70
+log
+@email_health_dept
+@
+text
+@d27 1
+d32 1
+a32 1
+C=* Copyright 1985-2018  Health Research Inc.,                         *
+d50 1
+a50 1
+C  COPY1(MAXDIM)
+d52 1
+a52 1
+C  PARAMETERS:      MAXDIM         MAX LENGTH FOR UNLABELED COMMON
+d57 1
+a57 1
+        SUBROUTINE COPY1(MAXDIM)
+d64 1
+a64 1
+        INTEGER               :: MAXDIM
+d75 3
+a77 1
+        LOGICAL               :: ISSTACK
+d102 1
+a102 1
+C          SPIDER IMAGE(S) FILE INTO VOLUME FILES '
+d107 1
+a107 1
+C          SPIDER STACK(S) INTO A SINGLE STACK '
+d157 4
+a160 4
+           LOCAT   = INDEX(FILOLD,'@@')
+           LOCAST  = INDEX(FILOLD,'*')
+           ISSTACK = (MAXIM > 0)                      ! USING A STACK
+           BARE    = (LOCAT > 0 .AND. LOCAT == NLET)  ! BARESTACK
+d187 1
+a187 1
+              IF (ISSTACK) THEN 
+d305 1
+a305 1
+        write(6,*) '  isstack:',isstack
 @
 
 

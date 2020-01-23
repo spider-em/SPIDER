@@ -1,23 +1,24 @@
 
 C++*********************************************************************
 C
-C    DELETF.F       REMOVED & ALTERED FROM UTIL1    DEC 88 ArDean Leith
-C                   VERBOSE                         MAR 02 ArDean Leith
-C                   SGI LEAK ON INTERNAL FMT        AUG 02 ArDean Leith
-C                   INDEXED STACK                   JAN 03 ARDEAN LEITH
-C                   OPFILEC                         FEB 03 ARDEAN LEITH
-C                   SPIREOUT                        JUL 05 ARDEAN LEITH
-C                   OPENINLN KIND                   OCT 10 ARDEAN LEITH
-C                   MPI HEADER NEEDED               MAR 11 ARDEAN LEITH
-C                   STACK@ ACCEPTED                 MAR 12 ARDEAN LEITH
-C                   FORMATTING                      SEP 13 ARDEAN LEITH
+C  DELETF.F        REMOVED & ALTERED FROM UTIL1    DEC 88 ArDean Leith
+C                  VERBOSE                         MAR 02 ArDean Leith
+C                  SGI LEAK ON INTERNAL FMT        AUG 02 ArDean Leith
+C                  INDEXED STACK                   JAN 03 ArDean Leith
+C                  OPFILEC                         FEB 03 ArDean Leith
+C                  SPIREOUT                        JUL 05 ArDean Leith
+C                  OPENINLN KIND                   OCT 10 ArDean Leith
+C                  MPI HEADER NEEDED               MAR 11 ArDean Leith
+C                  STACK@ ACCEPTED                 MAR 12 ArDean Leith
+C                  FORMATTING                      SEP 13 ArDean Leith
+C                  MRC SUPPORT                     SEP 19 ArDean Leith
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
 C=* Copyright 1985-2013  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
+C=* Email: spider@health.ny.gov                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -38,37 +39,52 @@ C
 C    PARAMETERS:     FILNAM    CHAR. VARIABLE FOR FILENAME (EMPTY)
 C                    LUN       UNIT FOR FILE OPENING
 C
-C    PURPOSE:        DELETE SPIDER FILE(S)
+C    PURPOSE:        DELETE SPIDER OR MRC FILE(S)
 C
+C23456789 123456789 123456789 123456789 123456789 123456789 123456789 12
 C **********************************************************************
 
         SUBROUTINE DELETF(FILNAM,LUN)
 
+        IMPLICIT  NONE
         INCLUDE 'CMBLOCK.INC'
         INCLUDE 'CMLIMIT.INC'
 
         CHARACTER(LEN=*)             :: FILNAM
+        INTEGER                      :: LUN
+
         CHARACTER(LEN=MAXNAM)        :: FILN
         CHARACTER(LEN=MAXNAM+20)     :: MESG
-        CHARACTER(LEN=1)             :: NULL
+        CHARACTER(LEN=1)             :: NULL = CHAR(0)
 
-        LOGICAL                      :: GOT_IMAGE,ISDIGI
+        LOGICAL                      :: GOT_SPI_STK_IMAGE,ISDIGI,IS_MRC
+        INTEGER                      :: ICOMM,MYPID,MPIERR,NLET,IRTFLG
+        INTEGER                      :: IFILE,IDIG,IFIRST,NLETA,NOFIND
+        INTEGER                      :: LOCAT,MAXIM,NX,NY,NZ,LASTFI,IGO
+        INTEGER                      :: IMGNUM,MAXIMNEW,NUMBUF,IER,NNN
+        INTEGER                      :: IDUM
 
         INTEGER, PARAMETER           :: I_8 = SELECTED_INT_KIND(12)
         INTEGER(KIND=I_8), PARAMETER :: ZERO_8 = 0
 
-#ifdef USE_MPI
-        include 'mpif.h'
-#endif
+        LOGICAL                      :: ISMRCFILE    ! FUNCTION
+
+
         CALL SET_MPI(ICOMM,MYPID,MPIERR) ! SETS ICOMM AND MYPID 
 
-        NULL = CHAR(0)
+        IF (FCHAR(4:4) == 'A') THEN      
+C          OPERATION: 'FI A' WORKS ON WHOLE SERIES
 
-200     IF (FCHAR(4:4) == 'A') THEN
            IF (MYPID <= 0) WRITE(NOUT,903) 
 903        FORMAT(/,' WARNING, YOU ARE DELETING WHOLE FILE SERIES!'/)
+
            CALL FILERD(FILNAM,NLET,NULL,'FIRST',IRTFLG)
-           IF (IRTFLG .NE. 0 .OR. FILNAM(1:1) .EQ. '*') RETURN
+           IF (IRTFLG .NE. 0 .OR. FILNAM(1:1) == '*') RETURN
+
+           IF (ISMRCFILE(FILNAM)) THEN
+             CALL ERRT(101,'OPERATION NOT SUPPORTED FOR MRC FILES',IDUM)
+             RETURN
+           ENDIF
 
 C          MULTIPLE FILE DELETION
            CALL GETFILENUM(FILNAM(1:NLET),IFILE,IDIG,.FALSE.,IRTFLG)
@@ -78,52 +94,66 @@ C          IDIG IS NUMBER OF CONSECUTIVE DIGITS AT END OF THE FIRST FILE NAME
            IGO    = NLET - IDIG + 1
 
         ELSE
+C          SINGLE FILE DELETION WANTED
+
+C          GET FILE NAME FOR DELETION
            CALL FILERD(FILNAM,NLET,NULL,'DELETE',IRTFLG)
            IF (IRTFLG .NE. 0 .OR. FILNAM(1:1) == '*') RETURN
-C          SINGLE FILE DELETION WANTED
+
            IFILE  = 1
            LASTFI = 1
         ENDIF
 
-        IFIRST = IFILE
+        IS_MRC =  (ISMRCFILE(FILNAM))
+        IF (IS_MRC) THEN
+C          MRC FILE DELETION
+           FILN   = FILNAM (1:NLET)
+           NLETA  = NLET
+        ELSE
 
-        FILN   = FILNAM(1:NLET) // '.' // DATEXC(1:3) // NULL
-        NLETA  = NLET + 4
+C          ADD EXTENSION TO FILNAM --> FILN
+           FILN = FILNAM(1:NLET) // '.' // DATEXC(1:3) 
+           NLETA  = NLET + 4
+        ENDIF
+          
+        IFIRST = IFILE
 
 	NOFIND = 0
 
-20      LOCAT     = INDEX(FILNAM,'@')      
-        GOT_IMAGE = (LOCAT .GT. 0 .AND. 
-     &               LOCAT .LT. NLET .AND. 
-     &               ISDIGI(FILNAM(LOCAT+1:LOCAT+1)))
+20      LOCAT  = INDEX(FILNAM,'@')    ! STACK INDICATOR 
 
-        IF (LOCAT > 0 .AND. GOT_IMAGE) THEN
-C          DELETE IMAGE IN AN IMAGE STACK
+C       SEE IF STACKED SPIDER IMAGE     
+        GOT_SPI_STK_IMAGE = (.NOT. IS_MRC .AND. LOCAT > 0 .AND. 
+     &                       LOCAT < NLET .AND. 
+     &                       ISDIGI(FILNAM(LOCAT+1:LOCAT+1)))
+
+        IF (GOT_SPI_STK_IMAGE) THEN
+C          DELETE IMAGE FROM IMAGE STACK
            MAXIM = 0
-           CALL OPFILEC(0,.FALSE.,FILNAM,LUN,'O',IFORM,NSAM,NROW,NSLICE,
+           CALL OPFILEC(0,.FALSE.,FILNAM,LUN,'O',IFORM,NX,NY,NZ,
      &                MAXIM,' ',.TRUE.,IRTFLG)
            IF (IRTFLG .NE. 0)  RETURN
 
 C          UPDATE IMAGE IN-USE VARIABLE
            CALL LUNGETINUSE(LUN,IMGNUM,IRTFLG)
            CALL LUNSETINUSE(LUN,0,IRTFLG)
-           CALL LUNWRTHED(LUN,NSAM,IMGNUM,IRTFLG)
+           CALL LUNWRTHED(LUN,NX,IMGNUM,IRTFLG)
 
 C          FIND MAXIM IN OVERALL HEADER
            CALL LUNGETMAXIM(LUN,MAXIM,IRTFLG)
 
-           IF (IMGNUM .EQ. MAXIM) THEN
+           IF (IMGNUM == MAXIM) THEN
 C             DELETED IMAGE IS MAXIM, MUST FIND NEW MAXIM
-              CALL FINDMAXIM(LUN,NSAM,MAXIM,MAXIMNEW,IRTFLG)
+              CALL FINDMAXIM(LUN,NX,MAXIM,MAXIMNEW,IRTFLG)
 
 C             UPDATE MAXIM IN OVERALL HEADER
-              CALL LUNSAVMAXIM(LUN,NSAM,MAXIMNEW,IRTFLG)
+              CALL LUNSAVMAXIM(LUN,NX,MAXIMNEW,IRTFLG)
            ENDIF
 
-           IF (VERBOSE .AND. MYPID .LE. 0) 
+           IF (VERBOSE .AND. MYPID <= 0) 
      &         WRITE(NOUT,*)'  DELETED STACKED IMAGE: ', FILNAM(1:NLET)
 
-           IF (MYPID .LE. 0 .AND. USE_SPIRE) THEN
+           IF (MYPID <= 0 .AND. USE_SPIRE) THEN
               MESG = '.DELETE FILE: ' // FILNAM(1:NLET)  
               CALL SPIREOUT(MESG,IRTFLG)
            ENDIF
@@ -142,30 +172,28 @@ C          FREE UP THE INLINE BUFFER (DEALLOCATES IF NECESSARY)
            ENDIF
            RETURN
 
-        ELSEIF(LOCAT == NLET .AND. NLET > 1) THEN        
-C          WHOLE STACK DELETE WANTED, GET RID OF @
+        ELSEIF (NLET > 1 .AND. LOCAT == NLET) THEN        
+C          WHOLE SPIDER STACK DELETE WANTED, GET RID OF @
            FILN  = FILNAM(1:NLET-1) // '.' // DATEXC(1:3) // NULL
            NLETA = NLET + 3
 
            IF (MYPID <= 0) THEN
               OPEN(LUN,FILE=FILN(1:NLETA),STATUS='OLD',IOSTAT=IER)
-              IF (IER == 0) CLOSE(LUN,STATUS='DELETE',IOSTAT=IER)
+              IF (IER == 0) CLOSE(LUN,STATUS='DELETE', IOSTAT=IER)
            ENDIF
-#ifdef USE_MPI
-           CALL MPI_BCAST(IER, 1, MPI_INTEGER, 0, ICOMM, IERR)
-#endif
+
+           CALL BCAST_MPI('DELETF','IER',IER,1,'I', ICOMM)
 
         ELSE
 C          DESTROY SIMPLE FILE  
         
            IF (MYPID <= 0) THEN
               OPEN(LUN,FILE=FILN(1:NLETA),STATUS='OLD',IOSTAT=IER)
-              IF (IER == 0) CLOSE(LUN,STATUS='DELETE',IOSTAT=IER)
+              IF (IER == 0) CLOSE(LUN,STATUS='DELETE', IOSTAT=IER)
            ENDIF
 
-#ifdef USE_MPI
-           CALL MPI_BCAST(IER, 1, MPI_INTEGER, 0, ICOMM, IERR)
-#endif
+           CALL BCAST_MPI('DELETF','IER',IER,1,'I', ICOMM)
+
         ENDIF
 
         IF (IER == 0) THEN
@@ -183,7 +211,7 @@ C          DESTROY SIMPLE FILE
               WRITE(NOUT,*) ' NO SUCH FILE: ',FILN(1:NLETA)
            ENDIF
 
-           IF (IFILE .EQ. IFIRST) NOFIND = 10
+           IF (IFILE == IFIRST) NOFIND = 10
            NOFIND = NOFIND + 1
         ENDIF
 
@@ -201,9 +229,9 @@ C          CREATE NEXT FILE NAME
         END
 
 
+C        -------------------- FINDMAXIM ----------------------------
 
-
-         SUBROUTINE FINDMAXIM(LUN,NSAM,MAXIMOLD,MAXIMNEW,IRTFLG)
+         SUBROUTINE FINDMAXIM(LUN,NX,MAXIMOLD,MAXIMNEW,IRTFLG)
 
 C        FIND HIGHEST NUMBER IMAGE STILL IN THIS STACK
 
@@ -216,13 +244,13 @@ C        MUST SET ISBARE FOR GETOLDSTACK TO WORK
 C        START WITH MAXIMOLD IMAGE
          IMGNUM = MAXIMOLD - 1
 
-         DO WHILE (IMGNUM .GT. 0)
+         DO WHILE (IMGNUM > 0)
 C           GET NEXT IMAGE FROM STACK
-            CALL GETOLDSTACK(LUN,NSAM,IMGNUM,
+            CALL GETOLDSTACK(LUN,NX,IMGNUM,
      &                      .FALSE.,.FALSE.,.FALSE.,IRTFLGT)
-            IF (IRTFLGT .GT. 0) GOTO 999
+            IF (IRTFLGT > 0) GOTO 999
 
-            IF (IRTFLGT .EQ. 0) EXIT  !FOUND NEW MAXIM
+            IF (IRTFLGT == 0) EXIT  !FOUND NEW MAXIM
 
 C           TRY NEXT IMAGE DOWN
             IMGNUM = IMGNUM - 1
@@ -234,5 +262,5 @@ C           TRY NEXT IMAGE DOWN
 999      CONTINUE
 C        MUST SET ISBARE FOR GETOLDSTACK TO WORK
          CALL LUNSETISBARE(LUN,.FALSE.,IRTFLG)
-         RETURN
+
          END

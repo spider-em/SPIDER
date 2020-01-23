@@ -1,18 +1,21 @@
 
-C++*******************************************************************
+C++*********************************************************************
 C
 C    NORM3.F
-C               SIG FOR BLANK IMAGE FLOAT SLOP     JAN 06 A. LEITH
-C               FLOAT                              APR 07 A. LEITH
-C               ERROR MESSAGES                     NOV 10 A. LEITH
-C               NORMVALSP ADDED                    AUG 11 A. LEITH
+C           SIG FOR BLANK IMAGE FLOAT SLOP         JAN 06 ArDean Leith
+C           FLOAT                                  APR 07 ArDean Leith
+C           ERROR MESSAGES                         NOV 10 ArDean Leith
+C           NORMVALSP ADDED                        AUG 11 ArDean Leith
+C           NORMVALSP ADDED                        AUG 11 ArDean Leith
+C           USED SETPRMB, IMPLICIT                 JUL 19 ArDean Leith
+C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2011  Health Research Inc.,                         *
+C=* Copyright 1985-2019  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
+C=* Email: spider@health.ny.gov                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -28,13 +31,13 @@ C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
 C **********************************************************************
 C
-C    NORM3(LUN,NSAM,NROW,NSLICE,FMAX,FMIN,AV)
+C    NORM3(LUN,NX,NY,NZ,FMAX,FMIN,AV)
 C
 C    PURPOSE:  DETERMINES MAX, MIN, AV, AND SIG FOR A SPIDER IMAGE
 C
 C    PARAMETERS:
 C        LUN          LOGICAL UNIT NUMBER OF IMAGE             (SENT)
-C        NSAM,NROW,NSLICE    DIMENSIONS OF VOLUME              (SENT)
+C        NX,NY,NZ     DIMENSIONS OF VOLUME                     (SENT)
 C        FMAX         MAXIMUM OF VOLUME                        (RET.)
 C        FMIN         MINIMUM OF VOLUME                        (RET.)
 C        AV           AVERAGE OF VOLUME                        (RET.)
@@ -42,33 +45,46 @@ C
 C    NOTE:    THIS USES UNLABELED COMMON!!
 C             SIG RETURNED IN COMMON  (LEGACY ISSUE)
 C
-C--*******************************************************************
+C--*********************************************************************
 
-      SUBROUTINE NORM3(LUN,NSAM,NROW,NSLICE,FMAX,FMIN,AV)
+      SUBROUTINE NORM3(LUN,NX,NY,NZ,FMAX,FMIN,AV)
 
+      IMPLICIT NONE
+
+      INTEGER          :: LUN,NX,NY,NZ
+      REAL             :: FMAX,FMIN,AV
+
+      REAL             :: BUF        
       COMMON BUF(1)
+
+      INTEGER          :: NSAMC,NROWC,IREC,NLABEL,IFORM,IMAMI,IHIST
+      REAL             :: FMAXC,FMINC,AVC,SIG
       COMMON /MASTER/NSAMC,NROWC,IREC,NLABEL,IFORM,IMAMI,FMAXC,FMINC,
-     &               AVC,SIG,IHIST
+     &                    AVC,SIG,IHIST
+
+      INTEGER          :: LUNT,NIN,NOUT
       COMMON /UNITS/LUNT,NIN,NOUT
 
-      DOUBLE PRECISION DAV,DAV2,DTOP,FNALL,DTEMP
+      DOUBLE PRECISION :: DAV,DAV2,DTOP,FNALL,DTEMP
+      REAL             :: B,DIFF 
+      INTEGER          :: NE,IRECT,K
 
-      FNALL = FLOAT(NSAM) * FLOAT(NROW) * FLOAT(NSLICE)
+      FNALL = FLOAT(NX) * FLOAT(NY) * FLOAT(NZ)
       IF (FNALL <= 0) THEN
-         WRITE(NOUT,*) '*** NSAM, NROW, NSLICE:',NSAM,NROW,NSLICE
+         WRITE(NOUT,*) '*** NX, NY, NZ:',NX,NY,NZ
          CALL ERRT(101,'NORM3, BAD DIMENSIONS',NE)
          RETURN
       ENDIF
 
-      DAV  = 0.
-      DAV2 = 0.
+      DAV  = 0.0
+      DAV2 = 0.0
 
       FMIN = HUGE(FMIN)
       FMAX = -FMIN
 
-      DO IRECT = 1,NROW*NSLICE
-         CALL REDLIN(LUN,BUF,NSAM,IRECT)
-         DO K = 1,NSAM
+      DO IRECT = 1,NY*NZ
+         CALL REDLIN(LUN,BUF,NX,IRECT)
+         DO K = 1,NX
             B    = BUF(K)
             FMAX = MAX(B,FMAX)
             FMIN = MIN(B,FMIN)
@@ -88,7 +104,7 @@ C--*******************************************************************
       IF (DIFF <= TINY(DIFF)) THEN
 C        BLANK IMAGE SOMETIMES LEADS TO SQRT NEG. NUMBER
 
-      ELSEIF (DTOP .LT. 0.0D0) THEN
+      ELSEIF (DTOP < 0.0D0) THEN
 C        SQRT OF NEGATIVE NUMBER
          WRITE(NOUT,*) '*** SQRT(',DTOP,') IMPOSSIBLE. ',
      &                 'ASSUMING THIS IS A BLANK IMAGE' 
@@ -104,7 +120,19 @@ C        CAN CALCULATE SIG
          SIG = DSQRT( DTOP / DBLE(FNALL - 1.0))
       ENDIF
 
-      CALL SETPRM(LUN,NSAM,NROW,FMAX,FMIN,AV,'U')
+
+      !write(6,*)' In norm3, before setprmb, fmin,fmax: ',fmin,fmax
+
+C     VALUES ARE SET IN COMMON BY NAME ABOVE
+
+C     WRITE(3,90) FMIN,FMAX,AV,SIG
+90    FORMAT('  FMIN: ', 1PG10.3,
+     &       '  FMAX: ', 1PG10.3,
+     &       '  AV: ',   1PG12.5,
+     &       '  SIG: ',  1PG12.5)
+
+C     SET VALUES IN FILE HEADER
+      CALL SETPRMB(LUN,FMAX,FMIN,AV,SIG)
 
       END
 

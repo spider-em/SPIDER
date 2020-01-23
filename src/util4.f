@@ -1,42 +1,42 @@
 C++*********************************************************************
 C
-C  UTIL4.F            ADDED IQ                      SEP 97 ARDEAN LEITH
-C                     ADDED IQ SYNC                 JUN 99 ARDEAN LEITH
-C                     ADDED NEG                     JUN 99 ARDEAN LEITH
-C                     NEG BUG                       FEB 01 ARDEAN LEITH
-C                     'AP MQ I'                     APR 01 ARDEAN LEITH
-C                     ADDED 'AP RQ'                 OCT 01 HAIXIAO GAO
-C                     ADDED 'IQ W'                  MAR 02 ARDEAN LEITH
-C                     ADDED 'IQ PAR'                JUN 02 ARDEAN LEITH
-C                     ADDED 'IQ GONE'               AUG 02 ARDEAN LEITH
-C                     ADDED 'MS' VOLUMES            AUG 02 ARDEAN LEITH
-C                     ADDED 'MS I'                  JAN 03 ARDEAN LEITH
-C                     OPFILEC                       FEB 03 ARDEAN LEITH
-C                     REMOVED 'AP MR'               APR 03 ARDEAN LEITH
-C                     USED APMASTER                 AUG 03 ARDEAN LEITH
-C                     MPI                           FEB 04 CHAO YANG
-C                     ADDED 'IQ PID'                JAN 05 ARDEAN LEITH
-C                     ADDED 'IQ R'                  NOV 05 ARDEAN LEITH
-C                     'MS IF' IFORM BUG             FEB 07 ARDEAN LEITH
-C                     'AP C'                        JUN 08 ARDEAN LEITH
-C                     REMOVED VAR3* NO MAN          MAY 09 ARDEAN LEITH
-C                     'AP SCC' OUT OF APMASTER      AUG 08 ARDEAN LEITH
-C                     'IQ DI'                       JAN 10 ARDEAN LEITH
-C                     INQUIRESYNC(.FALSE.,REMOVE)   AUG 10 ARDEAN LEITH
-C                     'AP TOOL'                     OCT 10 ARDEAN LEITH
-C                     REPLACED VAR3Q,VAR 3R         MAY 11 ARDEAN LEITH
-C                     NX, 'AP FOU' 'H' mode         MAY 12 ARDEAN LEITH
-C                     REMOVED 'HF'                  DEC 12 ARDEAN LEITH
-C                     INQUIRECOMP                   APR 13 ARDEAN LEITH
-C                     'IQ PAR' PROMPT               JUN 15 ARDEAN LEITH
+C  UTIL4.F            ADDED IQ                      SEP 97 ArDean Leith
+C                     ADDED IQ SYNC                 JUN 99 ArDean Leith
+C                     ADDED NEG                     JUN 99 ArDean Leith
+C                     NEG BUG                       FEB 01 ArDean Leith
+C                     'AP MQ I'                     APR 01 ArDean Leith
+C                     ADDED 'AP RQ'                 OCT 01 Haixiao Gao
+C                     ADDED 'IQ W'                  MAR 02 ArDean Leith
+C                     ADDED 'IQ PAR'                JUN 02 ArDean Leith
+C                     ADDED 'IQ GONE'               AUG 02 ArDean Leith
+C                     ADDED 'MS' VOLUMES            AUG 02 ArDean Leith
+C                     ADDED 'MS I'                  JAN 03 ArDean Leith
+C                     OPFILEC                       FEB 03 ArDean Leith
+C                     REMOVED 'AP MR'               APR 03 ArDean Leith
+C                     USED APMASTER                 AUG 03 ArDean Leith
+C                     MPI                           FEB 04 Chao Yang
+C                     ADDED 'IQ PID'                JAN 05 ArDean Leith
+C                     ADDED 'IQ R'                  NOV 05 ArDean Leith
+C                     'MS IF' IFORM BUG             FEB 07 ArDean Leith
+C                     'AP C'                        JUN 08 ArDean Leith
+C                     REMOVED VAR3* NO MAN          MAY 09 ArDean Leith
+C                     'AP SCC' OUT OF APMASTER      AUG 08 ArDean Leith
+C                     'IQ DI'                       JAN 10 ArDean Leith
+C                     INQUIRESYNC(.FALSE.,REMOVE)   AUG 10 ArDean Leith
+C                     'AP TOOL'                     OCT 10 ArDean Leith
+C                     REPLACED VAR3Q,VAR 3R         MAY 11 ArDean Leith
+C                     NX, 'AP FOU' 'H' mode         MAY 12 ArDean Leith
+C                     REMOVED 'HF'                  DEC 12 ArDean Leith
+C                     INQUIRECOMP                   APR 13 ArDean Leith
+C                     'IQ PAR' PROMPT               JUN 15 ArDean Leith
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2015  Health Research Inc.,                         *
+C=* Copyright 1985-2019  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
+C=* Email: spider@health.ny.gov                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -69,7 +69,6 @@ C--*********************************************************************
         LOGICAL                :: STRIP,ENDATSEMI,REMOVE
 
         INTEGER                :: getpid  ! SYSTEM INTRINSIC FUNCTION
-
 
         INTEGER, PARAMETER     :: LUN  = 20
         INTEGER, PARAMETER     :: LUN1 = 21
@@ -262,7 +261,6 @@ C             INQUIRE IF DIR EXISTS
 
            ELSE IF (FCHAR(4:5) == 'SY')  THEN
 C             WAIT TILL FILE EXISTS
-
               REMOVE =  (FCHAR(9:9) == 'D')
               CALL INQUIRESYNC(.FALSE.,REMOVE)
 
@@ -270,7 +268,7 @@ C             WAIT TILL FILE EXISTS
 C             WAIT TILL FILE GONE
               CALL INQUIRESYNC(.TRUE.,.FALSE.)
 
-          ELSE IF (FCHAR(4:4) == 'R')  THEN
+           ELSE IF (FCHAR(4:4) == 'R')  THEN
 C             CHECK ON REGISTER VARIABLE CONTENTS
               CALL INQUIREREG(.TRUE.,.TRUE.,IRTFLG)
 

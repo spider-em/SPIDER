@@ -1,15 +1,16 @@
 
 C **********************************************************************
 C
-C   CONINT.FOR  -- CREATED OCT 90
+C   CONINT.FOR  -- CREATED                       OCT 1990 ArDean Leith
+C
 C **********************************************************************
-C *  AUTHOR: ArDean Leith 
+C=* AUTHOR: ArDean Leith                                               *
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2013  Health Research Inc.,                         *
+C=* Copyright 1985-2019  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
+C=* Email: spider@health.ny.gov                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -25,17 +26,17 @@ C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
 C **********************************************************************
 C
-C      CONINT(IRTFLG)
+C  CONINT(IRTFLG)
 C
-C      PURPOSE:     READS SPIDER 3-D PICTURE FILE, CREATES 3-D IMAGE 
-C                   FILE CONTAINING NUMBERS FOR CONNECTED CLUSTERS
+C  PURPOSE:     READS SPIDER 3-D PICTURE FILE, CREATES 3-D IMAGE 
+C               FILE CONTAINING NUMBERS FOR CONNECTED CLUSTERS
 C
-C      PARAMETERS:  
+C  PARAMETERS:  
 C
-C      CALLS:       CCONECT     FILSLI
-C                   MAPIM
-C                   EMPSLI      EMPSLI
-C                   MAKTAB      SHOSLI
+C  CALLS:       CCONECT     FILSLI
+C               MAPIM
+C               EMPSLI      EMPSLI
+C               MAKTAB      SHOSLI
 C
 C23456789012345678901234567890123456789012345678901234567890123456789012
 C--*********************************************************************
@@ -250,13 +251,14 @@ C***************************************
         CALL MAPIM(LUNOUT,LUNOUT,NX,NREC1,NREC2,TABLE,LASTCLUS,
      &       BUF,IRTFLG)
 
-CCC        VALUES(1) = 1.0       
-CCC        VALUES(2) = NLAB
-CCC        VALUES(3) = 0.0
-C          NEGATIVE IRTFLG SUPRESSES LABEL CHANGE OUTPUT
-CCC        IRTFLG = -1         
-CCC        CALL SETLAB(LUNOUT,NX,BUF,6,3,VALUES,'U',IRTFLG)
+ccc        values(1) = 1.0       
+ccc        values(2) = nlab
+ccc        values(3) = 0.0
+ccc        negative irtflg supresses label change output
+ccc        irtflg = -1         
+ccc        call setlab(lunout,nx,buf,6,3,values,'u',irtflg)
 C****************** DEBUGING
+
         IF (DEBUGING) THEN
           ISLICE = 10          
           WRITE(10,*) ' FINAL STACK SLICE:',ISLICE

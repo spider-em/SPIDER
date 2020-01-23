@@ -1,0 +1,110 @@
+C++*********************************************************************
+C
+C  FILGET_AT.F  
+C               CREATED FROM FILGET.F            AUG 2019 Ardean Leith
+C
+C **********************************************************************
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2011  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@health.ny.gov                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C    FILGET_AT(FILPAT,IMGNUM,FILNAM,NLET,IRTFLG)
+C
+C    PURPOSE:     CREATES STACKED FILENAME FROM FILE-NAME PATTERN
+C                 AND CURRENT IMAGE NUMBER. FOR MRC STACKS
+C
+C    PARAMETERS:  FILPAT    CHAR. FILE NAME PATTERN             (SENT)
+C                 IMGNUM    FILE NUMBER                         (SENT)
+C                 FILNAM    SUBSTITUTED  FILE NAME              (RET.)
+C                 NLET      NUMBER OF LETTERS IN FILE NAME      (RET.)
+C                 IRTFLG    ERROR FLAG (0 IS NORMAL)            (RET.)
+C
+C--*********************************************************************
+
+      SUBROUTINE FILGET_AT(FILPAT,IMGNUM,FILNAM,NLET,IRTFLG)
+
+      IMPLICIT  NONE
+
+      INTEGER             :: IMGNUM,NLET,IRTFLG
+      CHARACTER(LEN=*)    :: FILPAT,FILNAM
+
+      INTEGER             :: LOCAT,LOCAST,LOCGO,IDUM,LENT
+      CHARACTER(LEN=10)   :: CNUM
+
+      INTEGER             :: lnblnkn
+
+C     PREPENDS IMGNUM TO INPUT: FILPAT  BEFOR @ OR 
+C         SETS FILENAME IN: HEADER OBJECT
+C         ALSO RETURNS: NEW FILENAME IN: FILPAT
+C
+C     APPEND IMAGE NUMBER TO BARE STACK FILE NAME
+C     (INTTOCHAR ALSO RETURNS NEW VALUE FOR NLET)
+C
+C     ***@STK.MRC or aaa/***@STK.MRC
+C        @STK.MRC or aaa/@STK.MRC
+C         IMG***.MRC ??
+
+      LOCAT  = INDEX(FILPAT,'@')
+      LOCAST = INDEX(FILPAT,'*')
+      NLET   = lnblnkn(FILPAT)
+
+      !write(3,*)' In filget_at, filpat: ',filpat(1:nlet)
+
+      IF (LOCAST >= LOCAT) THEN
+C        FOR MRC STACK *** MUST PRECEDE @
+         CALL ERRT(101,'NOT A MRC STACK TEMPLATE',IDUM)
+         IRTFLG = 1
+         RETURN
+      ELSEIF (LOCAST <= 0) THEN
+C        REPLACE @ IN BARE STACK WITH NUMBER
+         LOCGO = LOCAT 
+      ELSE
+C        REPLACE ** WITH NUMBER
+         LOCGO = LOCAST 
+      ENDIF
+
+C     CONVERT IMGNUM TO CHARACTERS
+      CALL INTTOCHAR(IMGNUM,CNUM,LENT,0)
+      IF (LENT < 0) THEN
+         CALL ERRT(102,'IMAGE NUMBER ERROR',IMGNUM)
+         IRTFLG = 2
+         RETURN
+      ENDIF
+
+      IF (LOCAST > 0) THEN
+C       TEMPLATED STACK:  **@STK.MRC
+        FILNAM = FILPAT(1:LOCAST-1) // CNUM(1:LENT) // 
+     &           FILPAT(LOCAT:NLET)
+
+      ELSE
+C       BARE STACK:  @STK.MRC
+        FILNAM = FILPAT(1:LOCAT-1)  // CNUM(1:LENT) // 
+     &           FILPAT(LOCAT:NLET) 
+      ENDIF
+
+      NLET = lnblnkn(FILNAM)
+
+      !write(3,*)' In filget_at, filnam: ', filnam(1:nlet)
+    
+      IRTFLG = 0
+      END
+
+
+
+

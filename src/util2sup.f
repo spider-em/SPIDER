@@ -16,7 +16,7 @@ C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
 C=* Copyright 1985-2014  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
+C=* Email: spider@health.ny.gov                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -32,7 +32,8 @@ C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
 C **********************************************************************
 C
-C  UTIL2SUP(PROMPT1,PROMPT2,PROMPT3, LUN1,LUN2,LUN3, SIGN)
+C  UTIL2SUP (PROMPT1,PROMPT2,PROMPT3, LUN1,LUN2,LUN3, SIGN)
+C  UTIL2SUPL(PROMPT1,PROMPT2,PROMPT3, SIGN) 
 C
 C  PARAMETERS:      
 C
@@ -294,7 +295,7 @@ C                OVERWRITING LOGIC              OCT 2014  ArDean Leith
 C
 C **********************************************************************
 C
-C  UTIL2SUPL(PROMPT1,PROMPT2,PROMPT3,SIGN, USEFACTORS)
+C  UTIL2SUPL(PROMPT1,PROMPT2,PROMPT3, SIGN) 
 C
 C  PARAMETERS:      
 C
@@ -434,31 +435,29 @@ C     FIND OUTPUT IMAGE NAME
 
       IF (LOCAT3 == 0 .AND. LOCAST3 == 0 .AND.
      &    NLET3 == NLET1  .AND.
-     &    FILPAT3(1:NLET3) == FILPAT1(1:NLET1) .AND.
-     &    NLIST3 == NLIST1) THEN
-C         SIMPLE OUTPUT FILE 
+     &    FILPAT3(1:NLET3) == FILPAT1(1:NLET1) ) THEN
+C         SIMPLE OUTPUT FILE - OVERWRITING INPUT FILE
        
-         OVERWRITE1 = .TRUE.  
-
-C        DUPLICATE FILE NAME!
          WRITE(NOUT,*) ' WARNING - OVERWRITING INPUT FILE: ', 
      &                   FILPAT1(1:NLET1)
-         LUN3   = LUN1
-         NLIST3 = NLIST1
+
+         OVERWRITE1 = .TRUE.  
+         LUN3       = LUN1
+         NLIST3     = NLIST1
 
        ELSEIF(LOCAT3 == 0 .AND. LOCAST3 == 0 .AND.
      &    NLET3 == NLET2  .AND.
-     &    FILPAT3(1:NLET3) == FILPAT2(1:NLET2) .AND.
-     &    NLIST3 == NLIST2) THEN
-C         SIMPLE OUTPUT FILE 
+     &    FILPAT3(1:NLET3) == FILPAT2(1:NLET2) ) THEN
+C         SIMPLE OUTPUT FILE - OVERWRITING INPUT FILE 
        
          OVERWRITE2 = .TRUE.  
  
-C        DUPLICATE FILE NAME!
          WRITE(NOUT,*) ' WARNING - OVERWRITING INPUT FILE: ', 
      &                   FILPAT2(1:NLET2)
-         LUN3   = LUN2
-         NLIST3 = NLIST2
+
+         OVERWRITE2 = .TRUE.  
+         LUN3       = LUN2
+         NLIST3     = NLIST2
 
       ELSE
 
@@ -477,8 +476,9 @@ C        OPEN OUTPUT IMAGE(S)
 C        IRTFLG = -2, FILE ALREADY OPEN
          IF (IRTFLG .NE. 0 .AND. IRTFLG .NE. -2) GOTO 9999
 
-C        write(6,*) 'filpat3:',nlist3,filpat3(1:10)
-C        write(6,*) 'ilist3:',imgnum3,'::',ilist3(1:nlist3)
+         !write(3,*)' filpat3:',filpat3(1:nlet3)
+         !write(3,*)' nlist3,ilist3: ',nlist3,ilist3(1:nlist3)
+         !write(3,*)' nilmax,imgnum3:',nilmax,imgnum3
 
          IF (NLET3 == NLET1  .AND.
      &       FILPAT3(1:NLET3) == FILPAT1(1:NLET1) .AND.
@@ -577,7 +577,8 @@ C          DO NOT OPEN NEXT THIRD INPUT FILE
 
 
       DO 
-        !write(6,*)'4 num,indx:',imgnum1,nindx1,nindx2,nindx3
+
+      !write(3,*)' In util2supl, num,indx:',imgnum1,nindx1,nindx2,nindx3
 
         ITER = ITER + 1
 
@@ -586,7 +587,7 @@ C       LOAD VOLUME FROM FIRST FILE INTO VOLBUF
 c          REUSE SAME FIRST INPUT BUFFER
            VOLBUF = VOLBUF1 
         ELSE 
-           !write(6,*) ' loading buf1,lun1:',lun1
+           !write(6,*)' Loading buf1,lun1:',lun1
            CALL REDVOL(LUN1,NX,NY,1,NZ,VOLBUF,IRTFLG)
            IF (IRTFLG .NE. 0) GOTO 9999
 
@@ -595,7 +596,7 @@ c          REUSE SAME FIRST INPUT BUFFER
 
         IF (SIGN < 1000) THEN
 C          COMBINE FIRST & SECOND FILE --> VOLBUF
-           !write(6,*) ' adding bufs,lun2:',lun2
+           !write(6,*)' Adding bufs,lun2:',lun2
 
            CALL ADD(VOLBUF,LUN2, ITYPE, NX,NY,NZ, SIGN)
         ELSE
@@ -613,12 +614,12 @@ C       PUT SUM, ETC. IN OUTPUT FILE ON LUN3
         CALL WRTVOL(LUN3,NX,NY, 1,NZ,VOLBUF,IRTFLG)
 
         IF ((NINDX1 >= NLIST1 .AND. NINDX2 >= NLIST2)) then
-           !write(6,*)  'nindx1 >= nlist1:', nindx1,' >= ',nlist1
-           !write(6,*)  'nindx2 >= nlist2:', nindx2,' >= ',nlist2
+           !write(3,*)' nindx1 >= nlist1:', nindx1,' >= ',nlist1
+           !write(3,*)' nindx2 >= nlist2:', nindx2,' >= ',nlist2
            EXIT      ! END OF INPUT LIST
         ENDIF
       
-        !write(6,*) ' same1,overwrite1:',same1,overwrite1
+        !write(3,*)' In util2sup, same1,overwrite1:',same1,overwrite1
         IF (.NOT. SAME1) THEN
 C          OPEN NEXT FIRST INPUT FILE 
  
@@ -628,17 +629,17 @@ C          OPEN NEXT FIRST INPUT FILE
      &                   LUN1,LUNCP,
      &                   FILPAT1,'O',
      &                   IMGNUM1, IRTFLG) 
-c           write(6,'(A,5i6)')
-c     &         ' Nextfile  num1,n1,indx1,irtflg:',
-c     &                     imgnum1,nlist1,nindx1,irtflg
+c           write(3,'(A,5i6)')
+c     &         ' In util2supl 1, num1,list1,indx1,irtflg:',
+c     &                         imgnum1,nlist1,nindx1,irtflg
            IF (IRTFLG < 0)  EXIT      ! END OF INPUT FILES
         ENDIF
 
-c        write(6,*) ' same2,overwrite2:',same2,overwrite2
+c       write(6,*)' same2,overwrite2:',same2,overwrite2
 
         IF (.NOT. SAME2) THEN
 C          OPEN NEXT SECOND INPUT FILE 
-           !write(6,*) ' same2:',same2,nindx2,nlist2,filpat2(1:10)
+           !write(6,*)' same2:',same2,nindx2,nlist2,filpat2(1:10)
 
            CALL NEXTFILE(NINDX2, ILIST2, 
      &                   FOUROK,LUNXM2,
@@ -646,19 +647,31 @@ C          OPEN NEXT SECOND INPUT FILE
      &                   LUN2,LUNCP,
      &                   FILPAT2,'O',
      &                   IMGNUM2, IRTFLG) 
-c          write(6,'(A,5i6)')
-c     &         ' Nextfile 2  num2,n2,indx2,irtflg:',
-c     &                     imgnum2,nlist2,nindx2,irtflg
+
+c           write(3,'(A,5i6)')
+c     &         ' In util2supl 2  num2,nlist2,nindx2,irtflg:',
+c     &                        imgnum2,nlist2,nindx2,irtflg
            IF (IRTFLG < 0)  EXIT       ! END OF INPUT FILES
         ENDIF
 
 
-        !write(6,*) ' same3,overwrite1 2:',same3,overwrite1,overwrite2
+        !write(6,*)' same3,overwrite1 2:',same3,overwrite1,overwrite2
         IF (.NOT. SAME3 .AND. 
      &      .NOT. OVERWRITE1 .AND. 
      &      .NOT. OVERWRITE2) THEN
+
 C          OPEN NEXT OUTPUT FILE 
-c          write(6,*) ' same3:',same3,nindx3,nlist3,filpat3(1:10)
+           IF (BARE3) THEN
+              NLIST3  = NLIST1
+              IF (BARE2) NLIST3 = MAX(NLIST1,NLIST2)
+           ENDIF
+
+c          write(3,*)' In util2sup 3, bare3,nindx3,nlist3: ',
+c     &                               bare3,nindx3,nlist3
+c          write(3,*)' In util2sup, nlist3,ilist3(1..),maxim3,imgnum3:',
+c     &                            nlist3,ilist3(1:nlist3),maxim3,imgnum3
+c          write(3,*)' In util2sup,filpat3: ',filpat3(1:10)
+c          !!if (nindx1 > ngot1 == nlist3) then overflow
 
            CALL NEXTFILE(NINDX3, ILIST3, 
      &                   FOUROK,LUNXM1,
@@ -666,9 +679,13 @@ c          write(6,*) ' same3:',same3,nindx3,nlist3,filpat3(1:10)
      &                   LUN3,LUNCP,
      &                   FILPAT3,'N',
      &                   IMGNUM3, IRTFLG) 
-c           write(6,'(A,5i6)')
-c     &         ' Nextfile 3  num3,n3,indx3,irtflg:',
-c     &                     imgnum3,nlist3, nindx3,irtflg
+
+c           write(3,'(A,5i6)')
+c     &         ' In util2supl 3  num3,nlist3,nindx3,irtflg:',
+c     &                        imgnum3,nlist3,nindx3,irtflg
+
+           IF (BARE3) IMGNUM3 = IMGNUM3 + 1   
+
          ENDIF
 
          IF (IRTFLG == -99) THEN

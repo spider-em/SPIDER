@@ -1,0 +1,853 @@
+; SOURCE:  spider/dev/testmrc.spi
+; AUTHOR:  ArDean Leith   July 2019 
+; USAGE:   spider spi/dat @exa-mrc
+; PURPOSE: Exercise MRC operations  
+; MIRROR:  rsync -av $spid/exa-mrc.spi  /usr16/software/spider/docs/exa/images
+
+; ----------------- Input files -------------------------------------
+
+! [block_img]       = 'sav_mo_block'     
+! [rib_stk]         = 'sav_rib_stk_01'    
+! [face_stk]        = 'sav_face_stk'      
+! [arrows_vol]      = 'sav_vol_arrows'      
+
+! [mrc_img]         = 'sav_6a55_00.mrc'     
+! [mrc_mo_img]      = 'sav_mo_block.mrc'     
+! [mrc_map_vol]     = 'sav_emd_20041.map'
+! [mrcs_img_stk]    = 'sav_535_shiny.mrcs'
+! [mrc_img_stk]     = 'sav_mo_stk.mrc' 
+! [mrc_face_stk]    = 'sav_fac_stk.mrc'      
+! [mrcs_stk_25]     = 'sav_11_sq3710_25.mrcs'     ;  1 image
+   
+! [mrc_16ubit_stk]  = 'sav_fly_16u_bit4.mrcs'     ;  4 images
+   
+; ----------------- Output files ------------------------------------
+
+; ----------------- END BATCH HEADER --------------------------------
+
+
+lb1 ; ------------------- Check  MRC image from NYSBC ---------------
+
+ MRC HEAD               ; Query MRC Header
+   sav_6a55_00.mrc      ; MRC image     (input)
+ 
+ DIS                    ; Display MRC image with SPIDER  
+   sav_6a55_00.mrc      ; MRC image     (input)
+   -resize 30%          ; Imagemagik  options 
+
+ DIS REL                ; Display MRC image with Relion  
+   sav_6a55_00.mrc      ; MRC image     (input)
+   --scale .3           ; Imagemagik options
+
+ SYS                    ; Display EMD Stacked image with Relion 
+   relion_display --i sav_6a55_00.mrc --scale .3 &
+
+!en
+
+lb2 ; ------------------- Check Relion MRCs stacked image -----------
+
+ MRC HEAD               ; Query MRCS Header
+   2@sav_535_shiny.mrcs ; MRC image     (input)
+ 
+ DIS                    ; Display MRCS Stacked image  
+   2@sav_535_shiny.mrcs ; MRC image     (input)
+                        ; Imagemagik default 
+
+ SYS                    ; Display EMD Stacked image  
+   relion_display --i 2@sav_535_shiny.mrcs --scale &
+!en
+
+lb3 ; ------------------- Check EMD MRC map volume-------------------
+
+ MRC HEAD               ; Query MRC Header
+   sav_emd_20041.map    ; MRC volume     (input)
+ 
+ DIS                    ; Display EMD Stacked image  (U Down to left)
+   sav_emd_20041.map    ; MRC volume     (input)
+   127                  ; Slice number
+                        ; Imagemagik default 
+!en
+
+lb4 ; ------------------- Copy stacked MRCS file to MRC image ------
+
+ CP
+   2@sav_535_shiny.mrcs ; Stacked image   (input) 
+   jnk_535_shiny.mrc    ; MRC Image       (output)
+
+lb5 ; ------------------- Check header on Extracted MRC image ------
+
+ MRC HEAD               ; Query MRC Header using SPIDER
+   jnk_535_shiny.mrc    ; MRC Image       (input)     
+
+ SYS                    ; Query MRC Header using IMOD header utility
+   header jnk_535_shiny.mrc                          
+
+ DIS                    ; Display extracted MRC image
+   jnk_535_shiny.mrc    ; Image           (input)  
+                        ; Imagemagik Default 
+!en
+
+lb7 ; ------------------- Find statistics on stacked MRC image -------
+
+ FS [max],[min]         ; File statistics on stacked image
+   1@sav_mo_stk.mrc     ; Image        (input)
+
+ MRC HEAD               ; Query MRC Header
+   @sav_mo_stk.mrc      ; Image        (input)
+
+ FS                     ; File statistics on stacked image
+   3@sav_mo_stk.mrc     ; Image        (input)
+
+ MRC HEAD
+   @sav_mo_stk.mrc      ; Image        (input)
+!en
+
+lb8 ; ------------------- Inquire header values ----------------------
+
+ FI H [imgstat],[mz]    ; File header on stacked image
+   2@sav_mo_stk.mrc     ; Image       (input)
+   IMGSTATS,MZ          ; Image in stats, # in stack
+ SYS
+   echo "  IMG IN STATS: {**[imgstat]}   MZ:{**[mz]}" 
+!en
+
+lb9  ; ------------------ Rescale stacked image into stacked image --
+
+ AR SCA                 ; Rescale a stacked image into stack
+   2@sav_mo_stk.mrc     ; File name   (input)
+   2@jnk_mo_stk.mrc     ; File name   (output)
+   0 255                ; Range
+
+ FS                     ; File statistics on stacked image
+   2@jnk_mo_stk.mrc     ; Image       (input)
+!en
+
+lb10 ; ------------------- Rescale whole stack into stack ------------
+
+ AR SCA                 ; Rescale a whole stack into a stack
+   @sav_mo_stk.mrc      ; File name   (input)
+   @jnk_ar_stk.mrc      ; File name   (output)
+   0 255
+
+ FS                     ; File statistics on whole stack
+   @jnk_ar_stk.mrc
+
+ MRC HEAD               ; Query MRC Header
+   3@jnk_ar_stk.mrc     ; File name  (output)
+
+!en
+
+lb11 ; ----------------- 'CE AD' on whole SPIDER stack into stack ----
+
+ CE AD                  ; Top-hat filter on whole stack
+   sav_rib_stk_01@      ; File name  (input)
+   jnk_cead_stk@        ; File name  (output)
+   CPF 	                ; CPF formulation
+   2  	                ; 2 Iterations
+
+ FS
+   jnk_cead_stk@        ; File name  (input)
+
+lb12 ; ---------------- -- Copy SPIDER stacked files to MRC stack ---
+
+ CP                      ; Copy SPIDER stacked file into MRC stack
+   sav_face_stk@1        ; File name  (input)
+   1@jnk_sav_fac_stk.mrc ; File name  (output)
+ CP                      ; Copy 
+   sav_face_stk@17       ; File name  (input)
+   2@jnk_sav_fac_stk.mrc ; File name  (output)
+ CP                      ; Copy 
+   sav_face_stk@33       ; File name  (input)
+   3@jnk_sav_fac_stk.mrc ; File name  (output)
+ CP                      ; Copy 
+   sav_face_stk@49       ; File name  (input)
+   4@jnk_sav_fac_stk.mrc ; File name  (output)
+
+ FS                      ; File stats on stack
+   @jnk_sav_fac_stk.mrc  ; Image      (input)
+
+!en
+
+lb13 ; ----------------- 'CE AD' on whole MRC stack into stack -------
+
+ CE AD                  ; Top-hat filter on whole stack
+   @sav_fac_stk.mrc     ; MRC stack file name  (input)
+   @jnk_cead_stk.mrc    ; File name  (output)
+   CPF 	                ; CPF formulation
+   2  	                ; 2 Iterations
+
+ FS
+   @jnk_cead_stk.mrc    ; File name  (input)
+
+ DIS                    ; Display MRC stacked file
+   1@sav_fac_stk.mrc    ; MRC stack file name  (input)
+                        ; Imagemagik default 
+ DIS                    ; Display MRC stacked file
+   2@sav_fac_stk.mrc    ; MRC stack file name  (input)
+                        ; Imagemagik default 
+ DIS                    ; Display MRC stacked file
+   3@sav_fac_stk.mrc    ; MRC stack file name  (input)
+                        ; Imagemagik default 
+ DIS                    ; Display MRC stacked file
+   4@sav_fac_stk.mrc    ; MRC stack file name  (input)
+                        ; Imagemagik default 
+!en
+
+lb14 ; ------------------- Duplicate  a MRC stack --------------------
+
+ DO [i] = 1,4               ; 'CP' Does not work with whole MRC stacks
+ CP
+   {**[i]}@sav_fac_stk.mrc  ; MRC stack file   (input)
+   {**[i]}@jnk1_fac_stk.mrc ; MRC stack file   (input)
+ ENDDO
+    
+lb15 ; ---------------------- 'ST' on MRC stack ----------------------
+
+ MRC HEAD               ; Query MRC Header
+   @jnk1_fac_stk.mrc    ; MRC Stack name  (input) 
+
+ ST                     ; Clear MRC header statistics
+   @jnk1_fac_stk.mrc    ; File name  (input)
+   C                    ; Clear statistics 
+
+ FS [mx],[mn],[av],[d]  ; Get file stats
+   @jnk1_fac_stk.mrc    ; File name  (input)
+
+ ; ---------------------- 'ST' on MRC stack --------------------------
+ ST                     ; Set header locations  
+   @jnk1_fac_stk.mrc    ; File name  (input)
+   A                    ; Set statistics 
+   1                    ; Angle set 
+   90,180,270           ; Values
+
+ FI H [mn],[mx],[a],[si]; Query header locations by name
+   @jnk1_fac_stk.mrc    ; File name  (input)
+   MIN,MAX,AVG,RMS      ; Names of  header locations  to query
+
+ ; ---------------------- 'ST' on MRC stack -------------------------
+ ST                     ; Set header locations  
+   @jnk1_fac_stk.mrc    ; File name  (input)
+   F                    ; Fix statistics 
+   [mx]                 ; FMAX 
+   [mn]                 ; FMIN
+   Yes                  ; AV and SIG available
+   [a],[si]             ; AV & SIG
+
+ ; ---------------------- 'ST' on MRC stack --------------------------
+ ST                     ; Set header locations  
+   @jnk1_fac_stk.mrc    ; File name  (input)
+   Locs                 ; Set a location number 
+   11                   ; Cellax location
+   64                   ; Value
+
+ MRC HEAD               ; Query MRC Header
+   @jnk1_fac_stk.mrc     ; File name  (input) 
+
+ ; ---------------------- 'ST' on MRC stack -------------------------
+ ST 
+   @jnk1_fac_stk.mrc    ; File name  (input) 
+   Data-origin          ; Set data origin 
+   UL                   ; Origin
+   R                    ; Handedness
+
+ MRC HEAD               ; Query MRC Header
+   @jnk1_fac_stk.mrc    ; File name  (input) 
+!en
+
+lb16 ; ------------------ 'ST H' on MRC stack ------------------------
+
+ ST H                   ; Set header locations by name
+   @jnk1_fac_stk.mrc    ; File name  (input)
+   NX,ANG1,MIN          ; Names of  header locations  to be set 
+   64, 180,[mn]         ; Values
+
+ FI H [phi],[min],      ; Query header locations by name
+   @jnk1_fac_stk.mrc    ; File name  (input)
+   ANG1,MIN             ; Names of  header locations  to query
+
+ MRC HEAD               ; Query MRC Header
+   @jnk1_fac_stk.mrc    ; File name  (input) 
+!en
+
+lb20; ------------------- Create model MRC image ---------------------
+
+ MO                     ; 2x2 Block pattern 
+   jnk_mo_block_ul.mrc  ; MRC model image   (output)  
+   100 100              ; Size
+   P                    ; 2x2 Block pattern
+
+ MRC HEAD               ; Query MRC Header
+   jnk_mo_block_ul.mrc  ; MRC model file   (output)  
+
+ DIS
+   jnk_mo_block_ul.mrc  ; Display MRC model image   (input)  
+                        ; Imagemagik default 
+ SYS                    ; Display MRC model image with Relion 
+   relion_display --i jnk_mo_block_ul.mrc &
+
+lb21; ------------------- Change MRC origin/axis for existing image --
+
+ MO                     ; 2x2 Block pattern 
+   jnk_mo_block_ull.mrc ; MRC model image   (output)  
+   100 100              ; Size
+   P                    ; 2x2 Block pattern
+
+ SYS                    ; Display MRC model  image with Relion 
+   relion_display --i jnk_mo_block_ull.mrc &
+ 
+ ST                     ; Set header values in file
+   jnk_mo_block_ull.mrc ; MRC model image      (in/output)  
+   DAta                 ; Data origin
+   LL                   ; Origin at lower left(ll) 
+   L                    ; Left Handedness 
+
+ MRC HEAD               ; Query MRC Header
+   jnk_mo_block_ull.mrc ; MRC model image   (input)  
+
+ DIS                    ; Appearance should be SAME !!! (not-intuitive)
+   jnk_mo_block_ull.mrc ; MRC model image   (input)  
+                        ; Imagemagik default 
+ 
+!en
+
+lb22; ------------------- Change MRC default origin/axis for image ---
+
+ MD MRC                 ; Change default MRC file data origin
+   AXis                 ; Mode
+   LL                   ; Upper left
+   L                    ; Left handed
+
+ MD MRC                 ; List available MRC modes  
+   Menu                 ; List of available MRC modes        
+
+ MD MRC                 ; List current MRC mode settings  
+   Status               ; Status of modes        
+
+ MO                     ; 2x2 Block pattern 
+   jnk_mo_block_ll.mrc  ; SPIDER model file   (output)  
+   100 100              ; Size
+   P                    ; 2x2 Block pattern
+
+ MRC HEAD               ; Query MRC Header
+   jnk_mo_block_ll.mrc  ; SPIDER model file   (output)  
+
+ DIS
+   jnk_mo_block_ll.mrc  ; SPIDER model file   (output)  
+                        ; Default
+ SYS                    ; Display MRC  image with Relion 
+   relion_display --i jnk_mo_block_ll.mrc &
+
+!en
+
+lb23 ; ----------------- 'CP' SPIDER to MRC Copy -----------------------
+
+ MO                    ; Create SPIDER Block Image 
+   jnk_mo_block        ; SPIDER model file   (output)  
+   64 64               ; Size
+   P                   ; 2x2 Block pattern
+
+ FS [max]              ; File statistics
+   jnk_mo_block        ; MRC Model file      (input)  
+
+ DIS                   ; Display SPIDER image            OK   
+   jnk_mo_block        ; SPIDER Model file   (input)  
+                       ; Imagemagik Default 
+
+ CP                    ; Copy SPIDER file to MRC
+   jnk_mo_block        ; Model file          (input)  
+   jnk_mo_block.mrc    ; Model file          (output)  
+
+ FS [max]              ; MRC File statistics
+   jnk_mo_block.mrc    ; MRC Model file      (input)  
+
+ DIS                   ; Display MRC file
+   jnk_mo_block.mrc    ; Circle file         (input)
+                       ; Imagemagik Default 
+!en
+
+lb24 ; ------------------ MRC  Volume Creation ------------------------
+
+ MO 3                   ; Create volume 
+   jnk_mo_vol.mrc       ; MRC model volume     (output)  
+   64 64 64             ; Size
+   P                    ; 2x2x2 Block pattern
+
+ DIS                                              
+   jnk_mo_vol.mrc       ; MRC model volume     (input) 
+   64                   ; Slice 
+                        ; Imagemagik Default 
+
+ MRC HEAD               ; Query MRC Header
+    jnk_mo_vol.mrc      ; MRC file
+
+!en
+
+lb25 ; ------------------ Copy SPIDER volume to MRC volume -------------
+
+ CP                     ; Copy SPIDER volume
+   sav_vol_arrows.dat   ; SPIDER volume  (input)
+   jnk_vol_arrows.mrc   ; MRC volume     (output)
+ 
+ MRC HEAD               ; Query MRC Header
+   jnk_vol_arrows.mrc   ; MRC volume     (input)
+
+ DIS                    ; Display image                                         
+   jnk_vol_arrows.mrc   ; SPIDER file    (input) 
+   70                   ; Slice 
+                        ; Imagemagik Default 
+
+ DIS                    ; Display image                                         
+   sav_vol_arrows       ; SPIDER file    (input) 
+   70                   ; Slice 
+                        ; Imagemagik Default 
+ !en
+
+lb26 ; ------------------ Query Other MRC File Headers ----------------
+
+ MRC HEAD                 ; Query MRC stack Header    
+   sav_11_sq3710_25.mrcs  ; MRC stack file
+
+!en
+
+lb27 ; ------------------ Query 16 bit MRC File Header ----------------
+
+ MRC HED
+   sav_fly_16u_bit4.mrcs   ; MRC file          (input)
+
+ FS    
+   3@sav_fly_16u_bit4.mrcs ; MRC file          (input)
+
+ FI
+   1@sav_fly_16u_bit4.mrcs ; MRC file          (input)
+
+ DIS                       ; Display 16 bit image                                            
+   2@sav_fly_16u_bit4.mrcs ; MRC file          (input)
+   -equalize  -resize 20%  ; Imagemagik options 
+
+ !DIS                       ; Display 16 bit image      ALL BLACK                                      
+ !  2@sav_fly_16u_bit4.mrcs ; MRC file          (input)
+ !  -resize 20%             ; Imagemagik option 
+ !!  --scale .2             ; Relion option 
+ !!  -resize 20%            ; Imagemagik option 
+
+
+lb28 ; ------------------ MRCs Stack Creation ------------------------
+
+ MO                     ; 2x2 Block pattern 
+   1@jnk_mo_stk.mrcs    ; Model file          (output)  
+   64 64                ; Size
+   P                    ; 2x2 Block pattern
+
+ MO                     ; 2x2 Block pattern 
+   2@jnk_mo_stk.mrcs    ; Model file          (output)  
+   64 64                ; Size
+   T                    ; Sine pattern
+
+ MRC HEAD               ; Query MRC Header
+    1@jnk_mo_stk.mrcs   ; Model file          (input)  
+
+ MRC HEAD               ; Query MRC Header
+    2@jnk_mo_stk.mrcs   ; Model file          (input)  
+
+ DIS                    ; Display stacked MRC image     
+    2@jnk_mo_stk.mrcs   ; Model file          (input)  
+                        ; Imagemagik Default 
+!en
+
+lb29 ; ------------------ MRC Image to SPIDER Copy -------------------
+
+ CP                     ; Copy MRC file to SPIDER 
+   sav_mo_block.mrc     ; MRC model file      (output)  
+   jnk_mo_block         ; SPIDER model file    (input)  
+
+ DIS                    ; Display SPIDER file
+   jnk_mo_block         ; SPIDER model file    (input) 
+                        ; Default
+
+lb30 ; ----------------- Inquire if MRC file exists -----------------
+
+ IQ FI [exist]          ; Use "IQ FI" to see if file exists
+   sav_mo_block.mrc     ; MRC model file        (input)  
+
+ IF ([exist]<= 0) THEN  ; ERROR if file not found
+   SYS
+     echo ' ERROR: File not found: sav_mo_block.mrc'
+   EN
+ ENDIF
+
+ FS [max]               ; Check image has correct max (4.0)
+   sav_mo_block.mrc     ; MRC model file        (input)  
+
+!en
+
+lb31 ; ----------------- ADD SPIDER series    'AD 2' ser ser sser  -----
+
+ DE                    ; Delete SPIDER stack
+    jnkstk@            ; Stack file         (remove)
+
+ DO I = 1,4            ; Create SPIDER file series and stack
+   CP                  ; Copy to series
+    sav_mo_block       ; Image file         (input)   
+    jnk{***I}          ; File series        (output)
+
+   CP                  ; Copy to SPIDER stack
+    sav_mo_block       ; Image file         (input)   
+    jnkstk@{***I}      ; Stack file         (output)
+ ENDDO
+
+ ; Commence 'AD 2' ser ser sser  --------------------
+ AD 2                  ; a + a -> c  
+   jnk***              ; Max=1 min=0        (input)
+   1-4
+   jnk***              ; Max=1 min=0        (input)
+   1-4
+   jnkstk0@***         ; Max=2 min=0        (output)
+   1-4
+ FS [max]              ; Find image statistics
+   jnkstk0@3           ; Image              (input)
+ IQ REG                ; Check register contents
+   [max],8.0
+
+!en
+
+lb32 ; ----------------- ADD MRC series    'AD 2' ser ser sser  ------
+
+ DE                    ; Delete MRC stack
+    jnkstk.mrc         ; MRC Stack file     (remove)
+
+ DO I = 1,4            ; Create MRC file series and stack
+   CP                  ; Copy to file series
+    sav_mo_block       ; Image file         (input)   
+    jnk{***I}.mrc      ; MRC File series    (output)
+
+   CP                  ; Copy to MRC stack
+    sav_mo_block       ; Image file         (input)   
+    {***I}@jnkstk.mrc  ; MRC Stack file     (output)
+ ENDDO
+
+ ; Commence 'AD 2' ser ser sser  --------------------
+ AD 2                  ; a + a -> c  
+   jnk***.mrc          ; Max=1 min=0      (input)
+   1-4                 ; Images
+   jnk***.mrc          ; Max=1 min=0      (input)
+   1-4                 ; Images
+   ***@jnkstk.mrc      ; Max=2 min=0      (output)
+   1-4                 ; Images
+ FS [max]              ; Find image statistics
+   3@jnkstk.mrc        ; Stacked image    (input)
+ IQ REG                ; Check register contents
+   [max], 8.0
+
+
+lb33 ; ----------------- Create MRC Stack  Using: opfilec_mrc --------
+
+ MO                    ; Make sine wave test image
+   1@jnk_mo_stk.mrc    ; Stacked MRC File   (Output)
+   64, 64              ; Size          
+   T                   ; Model type
+
+ MO                    ; Make sine wave test image
+   2@jnk_mo_stk.mrc    ; Stacked MRC File   (Output)
+   64, 64              ; Size          
+   T                   ; Model type
+
+ MRC HEAD              ; Query MRC header
+  @jnk_mo_stk.mrc      ; Stacked MRC File   (Input)
+ !en
+
+lb34 ; ---------------- 'FS' on MRC Stack ---------------------------
+
+ MO                    ; Make sine wave test image
+   1@jnk_mo_stk.mrc    ; Stacked MRC File   (Output)
+   64, 64              ; Size          
+   T                   ; Model type
+
+ MO                    ; Make sine wave test image
+   2@jnk_mo_stk.mrc    ; Stacked MRC File   (Output)
+   64, 64              ; Size          
+   T                   ; Model type
+
+! FS                    ; File Statistics  opfiles, getoldfil_mrc
+!   1@jnk_mo_stk.mrc    ; Stacked MRC File   (Input)
+
+ FS                    ; File Statistics  opfiles, getoldfil_mrc
+   2@jnk_mo_stk.mrc    ; Stacked MRC File   (Input)
+
+
+lb35 ; ---------------- 'FS' on MRC Templated Stacked Images  --------
+
+ MO                    ; Make sine wave test image
+   1@jnk_sin_stk.mrc   ; Stacked MRC File   (Output)
+   64, 64              ; Size          
+   T                   ; Model type
+
+ MO                    ; Make sine wave test image
+   2@jnk_sin_stk.mrc   ; Stacked MRC File   (Output)
+   64, 64              ; Size          
+   T                   ; Model type
+
+ FS                    ; File Statistics  opfiles, getoldfil_mrc
+   *@jnk_sin_stk.mrc   ; Stacked MRC File   (Output)
+   1,2
+!en
+
+lb36 ; ---------------- Create MRC Templated Images ------------------
+
+  MO                   ; Make sine wave test image
+   jnk_sin_1.mrc       ; MRC File          (Output)
+   64, 64              ; Size          
+   T                   ; Model type
+
+ MO                    ; Make sine wave test image
+   jnk_sin_2.mrc       ; MRC File          (Output)
+   64, 64              ; Size          
+   T                   ; Model type
+
+ FS                    ; Templated file Statistics 
+   jnk_sin_*.mrc       ; MRC File           (Input)
+   1,2
+!en
+
+lb37 ; ---------------- Create MRC stack -----------------------------
+
+ MO                    ; Make sine wave test image
+   1@jnk_sin_stk.mrc   ; Stacked MRC File    (Output)
+   64, 64              ; Size          
+   T                   ; Model type
+
+ MO                    ; Make sine wave test image
+   2@jnk_sin_stk.mrc   ; Stacked MRC File    (Output)
+   64, 64              ; Size          
+   T                   ; Model type
+
+ FS                    ; Bare stack file statistics 
+   @jnk_sin_stk.mrc    ; MRC Image stack     (Input)
+
+!en
+
+lb38 ; ----------------- 'CP TO MRC' 32 bit stack -------------------
+
+ CP TO MRC             ; Make   32 bit MRC file
+   sav_rib_stk_01@     ; SPIDER image file      (input)
+   @jnk_rib_stk_01.mrc ; New MRC image          (output)
+   2                   ; 32 bits  
+   UL                  ; Origin UL  
+   1,1                 ; Pixel sizes (A)
+ 
+ FS
+   @jnk_rib_stk_01.mrc ; New MRC image          (output)
+
+ !en
+
+lb39 ; --------------- 'CP TO MRC' 32 bit --------------------------
+
+ FS [max],[min],[avg],[std]
+   sav_mo_block       ; SPIDER image file       (input)
+ [avg]
+ IQ REG
+   [avg],2.5
+
+ CP TO MRC            ; Make   32 bit MRC file
+   sav_mo_block       ; SPIDER image file       (input)
+   jnk_mo_block.mrc   ; New MRC image           (output)
+   32, 0              ; 32 bits, Origin UL  
+   1,1                ; Pixel sizes (A)
+ 
+ !FS
+ !  jnk_mo_block.mrc  ; MRC model file          (input) 
+
+ MRC HEAD
+   jnk_mo_block.mrc   ; MRC model file          (input) 
+
+ DIS                  ; Display MRC file
+   jnk_mo_block.mrc   ; MRC model file          (input) 
+                      ; Imagemagik default
+ 
+ CP TO MRC            ; Make   32 bit MRC volume
+   sav_vol_arrows     ; SPIDER volume file      (input)
+   jnk_vol_arrows.mrc ; New MRC image           (output)
+   32, 0              ; 32 bits, Origin UL  
+   1,1,1              ; Pixel sizes (A)
+ 
+ FS                   ; Find image statistics
+   jnk_vol_arrows.mrc ; MRC model file          (input) 
+
+ MRC HEAD             ; Query MRC header
+   jnk_vol_arrows.mrc ; MRC model file          (input) 
+
+ DIS                  ; Display MRC file
+   jnk_vol_arrows.mrc ; MRC model file          (input)
+   72                 ; Slice
+                      ; Imagemagik default
+ !en
+
+lb40 ; ----------------- 'CP TO MRC' 16 bit --------------------------
+
+ CP TO MRC             ; Make 16 bit MRC file
+   sav_mo_block        ; SPIDER image file       (input)
+   jnk_mo_block16.mrc  ; New MRC file            (output)
+   16, 1               ; MRC data: 16 bits, Origin UL (YES==1) 
+   1,1                 ; Pixel size (A)
+
+ DIS                   ; Display MRC file
+   jnk_mo_block16.mrc  ; MRC model file          (input) 
+                       ; Imagemagik default
+
+ MRC HEAD              ; Query MRC header
+   jnk_mo_block16.mrc  ; MRC model file          (input) 
+!en
+
+lb41 ; ----------------- 'CP TO MRC' 8 bit --------------------------
+
+ CP TO MRC             ; Make 8 bit MRC file
+   sav_mo_block        ; SPIDER image file         (input)
+   jnk_mo_block8.mrc   ; New MRC file              (output)
+   8, 1                ; MRC data: 8 bits, Origin UL (YES==1) 
+   1,1                 ; Angstroms / pixel
+
+ DIS                   ; Display MRC file
+   jnk_mo_block8.mrc   ; MRC model file       (input) 
+                       ; Imagemagik default
+
+ MRC HEAD              ; Query MRC header
+   jnk_mo_block8.mrc   ; MRC model file       (input) 
+ 
+!en
+
+lb42 ; ----------------- 'CP TO MRC' 8 bit whole stack --------------
+
+ CP TO MRC             ; Make 8 bit MRC file
+   sav_rib_stk_01@     ; SPIDER image stack   (input)
+   @jnk_rib_stk_8.mrc  ; New MRC stack file   (output)
+   0                   ; MRC data: 8 bits 
+   UL                  ; MRC data origin 
+   1,1                 ; Angstroms / pixel
+
+ MRC HEAD              ; Query MRC header
+   @jnk_rib_stk_8.mrc  ; MRC stack file       (input) 
+
+ DIS                   ; Display MRC file
+   3@jnk_rib_stk_8.mrc ; MRC stacked file     (input) 
+                       ; Imagemagik default 
+!en
+
+lb43 ; --------------- 'CP FROM MRC' single image --------------------
+
+ CP FROM MRC           ; Convert MRC to SPIDER 
+   sav_mo_block.mrc    ; MRC model file       (input) 
+   jnkfrommrc_block    ; SPIDER file          (output)
+   UL                  ; Data origin
+ 
+ FS [max],[min],[avg],[std]
+   jnkfrommrc_block    ; SPIDER file          (output)
+ [avg]
+ IQ REG
+   [avg],2.5
+
+ DIS                 ; Display SPIDER file   
+   jnkfrommrc_block  ; SPIDER file          (output)
+                     ; Imagemagik default
+
+ SYS                 ; Display SPIDER file  
+   relion_display --i jnkfrommrc_block.dat &    
+!en
+
+
+lb44 ; -------------- 'CP FROM MRC' stacked image -------------------
+
+ MRC HEAD            ; Query MRC header
+   2@sav_mo_stk.mrc  ; Stacked MRC image  (input) 
+
+ CP FROM MRC         ; Convert MRC stacked images to SPIDER 
+   2@sav_mo_stk.mrc  ; Stacked MRC image  (input) 
+   jnkfrommrc_stk    ; SPIDER file        (output)
+   UL                ; Data origin
+
+ DIS                 ; Display SPIDER file   
+   jnkfrommrc_stk    ; SPIDER file        (output)
+                     ; Imagemagik default
+!en
+
+lb45 ; ------------- 'CP FROM MRC' whole stack ----------------------
+
+
+ !FS
+ !  sav_rib_stk_01@
+
+ CP FROM MRC         ; Convert MRC stack to SPIDER 
+   @sav_mo_stk.mrc   ; MRC   file         (input) 
+   jnkstkfrommrc@    ; SPIDER file        (output)
+   4                 ; First destination image
+   UL                ; Data origin
+
+ SYS
+   echo
+
+ FS                  ; Get file stats
+   jnkstkfrommrc@    ; SPIDER stack       (input)
+!en
+
+lb46 ; ------------- 'CP FROM MRC' templated stack to templated ------
+
+ !FS
+ !  jnkstkfrommrc@    ; SPIDER stack      (input)
+ !  sav_rib_stk_01@
+
+ CP FROM MRC         ; Convert MRC to SPIDER 
+   *@sav_mo_stk.mrc  ; MRC stack file     (input) 
+   2-3               ; File numbers 
+   jnkfrommrc_*      ; SPIDER files       (output)
+   4,5               ; File numbers 
+   UL                ; Data origin
+
+ SYS
+   echo
+
+ FS                  ; Get file stats
+   jnkfrommrc_*      ; SPIDER file series (input)
+   4-5               ; File numbers 
+!en
+
+lb47 ; ----------------- 'DISP REL' MRC stack  ---------------------
+
+ !DIS                  ; Display image using Imagemagick
+ !  sav_rib_stk_01@1   ; SPIDER stacked image (input)
+ !                     ; Imagemagick options
+ !SYS
+ !  echo
+
+ DIS RELION              ; Display MRCs stack using Relion
+   535_particles_shiny_nb50_new.mrcs 
+   --scale .2 --col 10   ; Relion_display options
+!en
+
+lb48 ; ---------------- 'Delete  MRC File' --------------------------
+
+ DE                     ; Delete MRC file 
+   jnk_mos_block.mrc    ; MRC model file     (deleted) 
+
+
+EN
+
+
+; ------------- UNUSED BELOW HERE -----------------------------------
+
+ !relion_display --i emd_127.spi                   U Down to left OK
+ !web spi            emd_127.spi                   U Down to left OK
+ !spider DIS         emd_127.spi                   U Down to left OK
+ !relion_display               --i jnk_mo_block8.mrc
+ !relion_image_handler --stats --i jnk_mo_block8.mrc
+     
+ !cp -p sav_6a55_00.mrc     /usr16/software/spider/docs/exa/images
+ !cp -p sav_535_shiny.mrcs  /usr16/software/spider/docs/exa/images
+ !cp -p sav_mo_stk.mrc      /usr16/software/spider/docs/exa/images
+ !cp -p sav_rib_stk_01.mrc  /usr16/software/spider/docs/exa/images
+ !cp -p sav_fac_stk.mrc     /usr16/software/spider/docs/exa/images
+ !cp -p sav_vol_arrows.mrc  /usr16/software/spider/docs/exa/images
+ !cp -p sav_11_sq3710.mrcs  /usr16/software/spider/docs/exa/images
+ !cp -p sav_fly_8bit.mrcs   /usr16/software/spider/docs/exa/images
+ !cp -p sav_mo_block.mrc    /usr16/software/spider/docs/exa/images
+ !cp -p sav_mo_block.dat    /usr16/software/spider/docs/exa/images
+ !cp -p sav_emd_20041.map   /usr16/software/spider/docs/exa/images
+
+

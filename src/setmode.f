@@ -1,40 +1,42 @@
 
 C++*********************************************************************
 C
-C SETMODE                  REMOVED FROM DRIVER.F   MAR 93 ARDEAN LEITH
-C                          F90 CHANGES           APRIL 98 ARDEAN LEITH
-C                          NO RESULTS ADDED       SEPT 98 ARDEAN LEITH
-C                          ADDED SET REGS          AUG 00 ARDEAN LEITH
-C                          SET MEM REMOVED         JAN 01 ARDEAN LEITH
-C                          REG PIPE ADDED          JUL 01 ARDEAN LEITH
-C                          DELAY FREE              JUN 02 ARDEAN LEITH
-C                          OMP_GET_NUM_PROCS       JUL 03 ARDEAN LEITH
-C                          RDPRI1S(ISEED           OCT 03 ARDEAN LEITH
-C                          NOUT REDIRECT           OCT 03 ARDEAN LEITH
-C                          SELECT REWRITE          NOV 03 ARDEAN LEITH
-C                          TO_TERM                 DEC 03 ARDEAN LEITH
-C                          SAVED ISEED             FEB 04 ARDEAN LEITH
-C                          SET REGS REMOVED        NOV 05 ARDEAN LEITH
-C                          LEGACY () INPUT         JUN 06 ARDEAN LEITH
-C                          CVARS                   OCT 06 ARDEAN LEITH
-C                          IF TERMOFF, NOUT   = 3  SEP 07 ARDEAN LEITH
-C                          SET FFTW THREADS        DEC 07 ARDEAN LEITH
-C                          SET USE_FBP_INTERP      JUN 11 ARDEAN LEITH
-C                          SET USE_FBS_INTERP      JUL 11 ARDEAN LEITH
-C                          NO USE_FBP_INTERP       SEP 11 ARDEAN LEITH
-C                          USE_FBP_INTERP          APR 12 ARDEAN LEITH
-C                          VERBOSE                 APR 12 ARDEAN LEITH
-C                          UNUSED DELAY REMOVED    APR 13 ARDEAN LEITH
-C                          OUTPUT FORMATTING       AUG 13 ARDEAN LEITH
-C                          IN_PARALLEL             DEC 15 ARDEAN LEITH
-C                          SET MP FAILS ON GYAN    MAR 16 ARDEAN LEITH
+C SETMODE                  REMOVED FROM DRIVER.F   MAR 93 ArDean Leith
+C                          F90 CHANGES           APRIL 98 ArDean Leith
+C                          NO RESULTS ADDED       SEPT 98 ArDean Leith
+C                          ADDED SET REGS          AUG 00 ArDean Leith
+C                          SET MEM REMOVED         JAN 01 ArDean Leith
+C                          REG PIPE ADDED          JUL 01 ArDean Leith
+C                          DELAY FREE              JUN 02 ArDean Leith
+C                          OMP_GET_NUM_PROCS       JUL 03 ArDean Leith
+C                          RDPRI1S(ISEED           OCT 03 ArDean Leith
+C                          NOUT REDIRECT           OCT 03 ArDean Leith
+C                          SELECT REWRITE          NOV 03 ArDean Leith
+C                          TO_TERM                 DEC 03 ArDean Leith
+C                          SAVED ISEED             FEB 04 ArDean Leith
+C                          SET REGS REMOVED        NOV 05 ArDean Leith
+C                          LEGACY () INPUT         JUN 06 ArDean Leith
+C                          CVARS                   OCT 06 ArDean Leith
+C                          IF TERMOFF, NOUT   = 3  SEP 07 ArDean Leith
+C                          SET FFTW THREADS        DEC 07 ArDean Leith
+C                          SET USE_FBP_INTERP      JUN 11 ArDean Leith
+C                          SET USE_FBS_INTERP      JUL 11 ArDean Leith
+C                          NO USE_FBP_INTERP       SEP 11 ArDean Leith
+C                          USE_FBP_INTERP          APR 12 ArDean Leith
+C                          VERBOSE                 APR 12 ArDean Leith
+C                          UNUSED DELAY REMOVED    APR 13 ArDean Leith
+C                          OUTPUT FORMATTING       AUG 13 ArDean Leith
+C                          IN_PARALLEL             DEC 15 ArDean Leith
+C                          SET MP FAILS ON GYAN    MAR 16 ArDean Leith
+C                          HANDLE 'MD MRC'         NOV 19 ArDean Leith
+C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2016  Health Research Inc.,                         *
+C=* Copyright 1985-2019  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
+C=* Email: spider@health.ny.gov                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -128,12 +130,19 @@ C       NUMBER OF OPERATIONS IN MODE MENU
      &              'PARALLEL    ','NO PARALLEL',
      &              'SET THREADS '/
 
-C       MODE SWITCH OPERATION
-C       READ IN THE MODE.  IF NOTHING TYPED IN, GET NEXT OPERATION
-9400    CALL RDPRMC(MODE,NLET,.TRUE.,'MODE',NULL,IRTFLG)
-        IF (MODE(1:1)  ==  ' ') RETURN
+      IF (FCHAR(4:4) == 'M') THEN
+C        HANDLE 'MD MRC'
+         CALL SETMODE_MRC()
+         RETURN
+      ENDIF
 
-        SELECT CASE(MODE)
+
+C     MODE SWITCH OPERATION, READ IN THE MODE.  
+C     IF NOTHING TYPED IN, GET NEXT OPERATION
+9400  CALL RDPRMC(MODE,NLET,.TRUE.,'MODE',NULL,IRTFLG)
+      IF (MODE(1:1)  ==  ' ') RETURN
+
+      SELECT CASE(MODE)
 
       CASE("ME")
 C       MENU ------------------------------------------------------ ME

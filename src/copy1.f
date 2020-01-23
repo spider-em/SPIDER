@@ -24,13 +24,14 @@ C               'CP TO VOL'                         MAY 13 ArDean Leith
 C               'CP FROM TIF'                       MAR 14 ArDean Leith
 C               'CP TO MRC' STACKS                  JUN 15 ArDean Leith
 C               REMOVED XPLO OPS                    JAN 18 ArDean Leith
+C               'CP TO STK' NOT FOR MRC             OCT 19 ArDean Leith
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2018  Health Research Inc.,                         *
+C=* Copyright 1985-2019  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
+C=* Email: spider@health.ny.gov                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -46,21 +47,21 @@ C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
 C **********************************************************************
 C
-C  COPY1(MAXDIM)
+C  COPY1(INT_UNUSED)
 C
-C  PARAMETERS:      MAXDIM         MAX LENGTH FOR UNLABELED COMMON
+C  PARAMETERS:      INT_UNUSED         UNUSED
 C
 C23456789012345678901234567890123456789012345678901234567890123456789012
 C--*********************************************************************
 
-        SUBROUTINE COPY1(MAXDIM)
+        SUBROUTINE COPY1(INT_UNUSED)
 
         IMPLICIT NONE
 
         INCLUDE 'CMBLOCK.INC'
         INCLUDE 'CMLIMIT.INC'
 
-        INTEGER               :: MAXDIM
+        INTEGER               :: INT_UNUSED
         INTEGER               :: ICOMM,MYPID,MPIERR
         INTEGER               :: NILMAX,IRTFLG,NLET,ITYPE,NX,NY,NZ,NE
         INTEGER               :: MAXIM,NDUM,NIMG,IMGNUM,LOCAT,LOCAST
@@ -71,7 +72,9 @@ C--*********************************************************************
 
         CHARACTER(LEN=1)      :: NULL = CHAR(0)
         LOGICAL               :: INDXD,FLIPOUT,ASKNAM,FOUROK,BARE
-        LOGICAL               :: ISSTACK
+        LOGICAL               :: IS_STACK
+        LOGICAL               :: IS_MRC
+
 
         INTEGER,PARAMETER     :: IDELAY  = 3
 
@@ -96,16 +99,28 @@ C          STANDARD COPY WITH FLIPPED ENDEDNESS
            GOTO 9000
 
         ELSEIF (FCHAR(4:7) == 'TO V') THEN !--------------- 'CP TO VOL'
-C          SPIDER IMAGE(S) FILE INTO VOLUME FILES '
+C          SPIDER IMAGE(S) FILE INTO VOLUME FILES  
            CALL COPYTOVOL()
            GOTO 9000
 
         ELSEIF (FCHAR(4:8) == 'TO ST') THEN !-------------- 'CP TO STK'
-C          SPIDER STACK(S) INTO A SINGLE STACK '
+C          SPIDER STACK(S) INTO A SINGLE STACK  
            CALL COPYTOSTK()
            GOTO 9000
 
+        ELSEIF (FCHAR(4:9) == 'TO MRC') THEN !------------- 'CP TO MRC'
+C          COPY SPIDER FILE TO MRC IMAGE/VOLUME
+           CALL COPYTOMRC(LUN1,LUN2,LUNDOC,LUNXM1,LUNXM2,IRTFLG)
+           GOTO 9000
+
+        ELSEIF (FCHAR(4:9) == 'FROM M' .OR.
+     &          FCHAR(4:9) == 'FROM C' ) THEN !----------- 'CP FROM MRC'
+C          FROM MRC FORMAT TO SPIDER 
+           CALL COPYFROMMRC(LUN1,LUN2,LUNDOC,LUNXM1,LUNXM2)
+           GOTO 9000
+
         ENDIF
+
 
 C                                    12345678     1234567890
         SELECT CASE(FCHAR(4:5))   ! 'CP TO XX' , 'CP FROM XX'
@@ -125,19 +140,18 @@ C          STANDARD COPY TO INDEXED STACK
            CALL COPYD(LUN1,LUN2,LUNDOC,LUNXM1,LUNXM2,INDXD,FLIPOUT)
 
         CASE ('')    ! ------------------------------------------ 'CP'
-C          STANDARD COPY 
+C          STANDARD COPY (CAN HANDLE MRC INPUT/OUTPUT)
            INDXD   = .FALSE.
            FLIPOUT = .FALSE.
            CALL COPYD(LUN1,LUN2,LUNDOC,LUNXM1,LUNXM2,INDXD,FLIPOUT)
 
-
         CASE ('TO')  ! ------------------------------------- 'CP TO **'
 
 C          OPEN INPUT IMAGE(S), (NOT FOURIER)
-           NILMAX = NIMAX  ! FROM CMLIMIT.INC
+           NILMAX = NIMAX          ! FROM CMLIMIT.INC
            ALLOCATE(ILIST(NILMAX), STAT=IRTFLG)
            IF (IRTFLG .NE. 0) THEN
-              CALL ERRT(46,'COPY1; ILIST....',NILMAX)
+              CALL ERRT(46,'COPY1; ILIST',NILMAX)
               RETURN
            ENDIF
 
@@ -151,22 +165,20 @@ C          OPEN INPUT IMAGE(S), (NOT FOURIER)
      &                  NDUM,NIMG,IMGNUM, IRTFLG) 
            IF (IRTFLG .NE. 0) RETURN
 
-           LOCAT   = INDEX(FILOLD,'@')
-           LOCAST  = INDEX(FILOLD,'*')
-           ISSTACK = (MAXIM > 0)                      ! USING A STACK
-           BARE    = (LOCAT > 0 .AND. LOCAT == NLET)  ! BARESTACK
+           LOCAT    = INDEX(FILOLD,'@')
+           LOCAST   = INDEX(FILOLD,'*')
+           IS_STACK = (MAXIM > 0)                     ! USING A STACK
+           BARE     = (LOCAT > 0 .AND. LOCAT == NLET) ! BARESTACK
 
 
-           IF (FCHAR(7:9) .NE. 'MRC') THEN
-              IF (BARE) THEN
-                 CALL ERRT(101,
+           IF (BARE) THEN
+              CALL ERRT(101,
      &                  'THIS OPERATION CAN NOT COPY A WHOLE STACK',NE)
-                 RETURN
-              ENDIF
-              IF (IMAMI .NE. 1) 
-     &            CALL NORM3(LUN1,NX,NY,NZ,FMAX,FMIN,AV)
+              RETURN
            ENDIF
 
+C          NEED FMIN & FMAX
+           IF (IMAMI .NE. 1) CALL NORM3(LUN1,NX,NY,NZ,FMAX,FMIN,AV)
 
            SELECT CASE(FCHAR(7:8)) 
 
@@ -177,19 +189,6 @@ C             FROM SPIDER IMAGE INTO EDITABLE IMAGE ------ 'CP TO ASCII'
            CASE ('BR')
 C             FROM 3D SPIDER FILE TO BRIX FORMAT----------- 'CP TO BRIX'
               CALL COPYBRIX(LUN1,LUN2,NX,NY,NZ)
-
-           CASE ('MR','CC')
-C             FROM SPIDER IMAGE FILE INTO MRC FORMAT ------- 'CP TO MRC'
-
-              IF (ISSTACK) THEN 
-C                COPYING WHOLE STACK
-                 CALL COPYTOMRC_STK(LUN1,LUN2,FILOLD, 
-     &                             ILIST,NIMG,MAXIM,IMGNUM,
-     &                             NX,NY,NZ)
-             ELSE
-C                COPYING IMAGE/VOLUME
-                 CALL COPYTOMRC(LUN1,LUN2,NX,NY,NZ)
-              ENDIF
 
            CASE ('PO')
 C             FROM SPIDER TO POSTSCRIPT IMAGE (8 BIT)------ 'CP TO POST'
@@ -229,10 +228,6 @@ C             NO SUCH COPY FUNCTION
            CASE ('AS')
 C             EDITABLE IMAGE FILE TO SPIDER IMAGE FILE - 'CP FROM ASCII'
               CALL COPYF(LUN1,LUN2)
-
-           CASE ('MR','CC')
-C             FROM MRC FORMAT TO SPIDER ------------------ 'CP FROM MRC'
-              CALL COPYFROMMRC(LUN1,LUN2,NX,NY,NZ)
 
            CASE ('PD')
 C             FROM PDB FILE TO SPIDER VOLUME FILE -------- 'CP FROM PDB'
@@ -299,7 +294,7 @@ C             NO SUCH COPY FUNCTION
         write(6,*) '  locat:',locat
         write(6,*) '  locast:',locast
         write(6,*) '  nlet:',nlet
-        write(6,*) '  isstack:',isstack
+        write(6,*) '  is_stack:',is_stack
         write(6,*) '  maxim:',maxim
         write(6,*) '  nimg: ',nimg
         write(6,*) '  bare: ',bare

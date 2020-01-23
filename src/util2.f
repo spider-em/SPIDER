@@ -1,74 +1,77 @@
 C++*********************************************************************
 C
-C UTIL2.F         CHANGED:  MAHIEDDINE LADJADJ                  4/23/93
-C                           JING SU                             8/24/93
-C                           REWRITTEN             ARDEAN LEITH  8/30/96
-C                           ADDED "PP S"          ARDEAN LEITH  4/08/98
-C                           STACKS IN "AD"        ARDEAN LEITH 01/11/99
-C                           REWROTE "AD"..        ARDEAN LEITH 04/03/99
-C                           USED RDPRM3S          ARDEAN LEITH 08/05/99
-C                           USED ALLOCATE         ARDEAN LEITH 01/04/01
-C                           'PA' & 'IN' 3D        ARDEAN LEITH 03/01/01
-C                           'CE VAR'              ARDEAN LEITH 05/01/01
-C                           'CE RAN'              ARDEAN LEITH 05/02/01
-C                           'CE MAX'              ARDEAN LEITH 05/03/01
-C                           'CE MIN'              ARDEAN LEITH 05/03/01
-C                           'CE LAP'              ARDEAN LEITH 05/03/01
-C                           'CE SOB'              ARDEAN LEITH 05/03/01
-C                           'CE PRE'              ARDEAN LEITH 05/03/01
-C                           'CE TOP'              ARDEAN LEITH 05/04/01
-C                           'CE RIDGE'            ARDEAN LEITH 05/08/01
-C                           'CE HURST'            ARDEAN LEITH 05/08/01
-C                           'CE HARALICK'         ARDEAN LEITH 05/16/01
-C                           NORM3 IN CE           ARDEAN LEITH 04/02/02
-C                           'CE LAHE'             ARDEAN LEITH 04/10/02
-C                           'CE AD'               ARDEAN LEITH 04/18/02
-C                           'CE OR'               ARDEAN LEITH 04/18/02
-C                           'AR SCA'              ARDEAN LEITH 09/11/02
-C                           'AR SCA' NORM3        ARDEAN LEITH 10/04/02
-C                           STACKS SUPPORT        ARDEAN LEITH 10/04/02 
-C                           'CE L' REMOVED        ARDEAN LEITH 11/19/02 
-C                           'WI' x,Y,Z            ARDEAN LEITH 12/02/02  
-C                           OPFILEC               ARDEAN LEITH  3/18/03  
-C                           'AD F'                ARDEAN LEITH  3/24/03    
-C                           'AD S'                ARDEAN LEITH  4/21/03    
-C                           'DIV'                 ARDEAN LEITH  5/30/03    
-C                           'SQRT'                ARDEAN LEITH  5/30/03   
-C                           RDPRM3S BUG           ARDEAN LEITH  9/05/03   
-C                           GPRP                  ARDEAN LEITH  9/08/03
-C                           MPI                   CHAO YANG    10/31/03
-C                           USEBORDER             ARDEAN LEITH 11/21/03
-C                           'PD' LOCATION         ARDEAN LEITH  5/14/04
-C                           MPI REMOVED           CHAO YANG    11/19/04
-C                           'CE WA'               ARDEAN LEITH 11/19/04
-C                           'CE ME'               ARDEAN LEITH 06/22/05
-C                           'BL' AV BUG           ARDEAN LEITH 03/30/06
-C                           'WI' 1 SLICE BUG      ARDEAN LEITH 10/19/06
-C                           NSLICEW = -999999999  ARDEAN LEITH 03/05/07
-C                           SETPRMB PARAMETERS    ARDEAN LEITH 05/19/09
-C                           'IP' SETPRMS          ARDEAN LEITH 11/23/10
-C                           REMOVED 'NK'          ARDEAN LEITH 11/24/10
-C                           'IP' CUTOUT           ARDEAN LEITH 11/23/10
-C                           'IP FT'               ARDEAN LEITH  5/23/11
-C                           'IP FP'               ARDEAN LEITH  5/23/11
-C                           'MM' FOURIER OK       ARDEAN LEITH  7/23/11
-C                           'PD' PROMPT           ARDEAN LEITH 11/03/11
-C                           'AS AV' PROMPT        ARDEAN LEITH 03/13/12
-C                           'AD L', 'MU L'...     ARDEAN LEITH 11/01/12
-C                           'MA SOFT'             ARDEAN LEITH 04/25/13
-C                           'IN S' BUG            ARDEAN LEITH 01/10/14
-C                           'CE' UNCOCUMENTED     ARDEAN LEITH 02/10/14
-C                           'MA' FMIN             ARDEAN LEITH 12/10/14
-C                           'DIS' ADDED           ARDEAN LEITH  1/05/15
-C                           PUTLIN PARAMETES      ARDEAN LEITH  6/13/18
+C UTIL2.F                   NEW
+C                           CHANGED:         Mahieddine Ladjadj 4/23/93
+C                           MODIFIED              Jing Su       8/24/93
+C                           REWRITTEN             ArDean Leith  8/30/96
+C                           ADDED "PP S"          ArDean Leith  4/08/98
+C                           STACKS IN "AD"        ArDean Leith 01/11/99
+C                           REWROTE "AD"..        ArDean Leith 04/03/99
+C                           USED RDPRM3S          ArDean Leith 08/05/99
+C                           USED ALLOCATE         ArDean Leith 01/04/01
+C                           'PA' & 'IN' 3D        ArDean Leith 03/01/01
+C                           'CE VAR'              ArDean Leith 05/01/01
+C                           'CE RAN'              ArDean Leith 05/02/01
+C                           'CE MAX'              ArDean Leith 05/03/01
+C                           'CE MIN'              ArDean Leith 05/03/01
+C                           'CE LAP'              ArDean Leith 05/03/01
+C                           'CE SOB'              ArDean Leith 05/03/01
+C                           'CE PRE'              ArDean Leith 05/03/01
+C                           'CE TOP'              ArDean Leith 05/04/01
+C                           'CE RIDGE'            ArDean Leith 05/08/01
+C                           'CE HURST'            ArDean Leith 05/08/01
+C                           'CE HARALICK'         ArDean Leith 05/16/01
+C                           NORM3 IN CE           ArDean Leith 04/02/02
+C                           'CE LAHE'             ArDean Leith 04/10/02
+C                           'CE AD'               ArDean Leith 04/18/02
+C                           'CE OR'               ArDean Leith 04/18/02
+C                           'AR SCA'              ArDean Leith 09/11/02
+C                           'AR SCA' NORM3        ArDean Leith 10/04/02
+C                           STACKS SUPPORT        ArDean Leith 10/04/02 
+C                           'CE L' REMOVED        ArDean Leith 11/19/02 
+C                           'WI' x,Y,Z            ArDean Leith 12/02/02  
+C                           OPFILEC               ArDean Leith  3/18/03  
+C                           'AD F'                ArDean Leith  3/24/03    
+C                           'AD S'                ArDean Leith  4/21/03    
+C                           'DIV'                 ArDean Leith  5/30/03    
+C                           'SQRT'                ArDean Leith  5/30/03   
+C                           RDPRM3S BUG           ArDean Leith  9/05/03   
+C                           GPRP                  ArDean Leith  9/08/03
+C                           MPI                   Chao Yang    10/31/03
+C                           USEBORDER             ArDean Leith 11/21/03
+C                           'PD' LOCATION         ArDean Leith  5/14/04
+C                           MPI REMOVED           Chao Yang    11/19/04
+C                           'CE WA'               ArDean Leith 11/19/04
+C                           'CE ME'               ArDean Leith 06/22/05
+C                           'BL' AV BUG           ArDean Leith 03/30/06
+C                           'WI' 1 SLICE BUG      ArDean Leith 10/19/06
+C                           NSLICEW = -999999999  ArDean Leith 03/05/07
+C                           SETPRMB PARAMETERS    ArDean Leith 05/19/09
+C                           'IP' SETPRMS          ArDean Leith 11/23/10
+C                           REMOVED 'NK'          ArDean Leith 11/24/10
+C                           'IP' CUTOUT           ArDean Leith 11/23/10
+C                           'IP FT'               ArDean Leith  5/23/11
+C                           'IP FP'               ArDean Leith  5/23/11
+C                           'MM' FOURIER OK       ArDean Leith  7/23/11
+C                           'PD' PROMPT           ArDean Leith 11/03/11
+C                           'AS AV' PROMPT        ArDean Leith 03/13/12
+C                           'AD L', 'MU L'...     ArDean Leith 11/01/12
+C                           'MA SOFT'             ArDean Leith 04/25/13
+C                           'IN S' BUG            ArDean Leith 01/10/14
+C                           'CE' UNCOCUMENTED     ArDean Leith 02/10/14
+C                           'MA' FMIN             ArDean Leith 12/10/14
+C                           'DIS' ADDED           ArDean Leith  1/05/15
+C                           PUTLIN PARAMETERS     ArDean Leith  6/13/18
+C                           COSMETIC              ArDean Leith 10/10/19
+C                           'MD MRC'              ArDean Leith 11/20/19
 C 
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2018  Health Research Inc.,                         *
+C=* Copyright 1985-2019  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
+C=* Email: spider@health.ny.gov                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -96,18 +99,22 @@ C--*********************************************************************
         INCLUDE 'CMBLOCK.INC'
         INCLUDE 'CMLIMIT.INC'
 
-        COMMON BUF(1)
+        INTEGER                    :: MAXDIM
+
+        COMMON BUF(1)  ! LEGACY SIZE SHOULD BE UPDATED!! al
 
         CHARACTER(LEN=MAXNAM)      :: FILNAM1,FILNAM2,FILNAM3,FILNAM
 
-        INTEGER, PARAMETER         :: NFUNC=32
+        INTEGER, PARAMETER         :: NFUNC=33
         CHARACTER(LEN=2)           :: FUNC(NFUNC)
 
         REAL                       :: FWA(3)
-        INTEGER                    :: IORDER(3),ISIZE(3)
         REAL, ALLOCATABLE          :: Q(:)
+        INTEGER                    :: IORDER(3),ISIZE(3)
+        INTEGER                    :: IRTFLG
         CHARACTER(LEN=MAXNAM)      :: EXPR
-        CHARACTER(LEN=1)           :: MODE,NULL
+        CHARACTER(LEN=1)           :: NULL = CHAR(0)
+        CHARACTER(LEN=1)           :: MODE
         CHARACTER(LEN=2)           :: ANS
         LOGICAL                    :: NORMIT,USEBORDER
 
@@ -123,16 +130,16 @@ C--*********************************************************************
      &            'DF', 'MA', 'WV', 'PP', 'SZ', 
      &            'WU', 'MM', 'CM', 'PV', 'NK', 
      &            'AS', 'MN', 'TH', 'GP', 'RP',
-     &            'MX', '30'/ 
+     &            'MX', '30', '31'/ 
 
-        NULL   = CHAR(0)
         MAXIM  = 0
         MAXIM2 = 0
         IRTFLG = 0
 
-        IF (FCHAR(1:4) == 'SQRT') GOTO 21 
-        IF (FCHAR(1:2) == '12')   GOTO 6 
-        IF (FCHAR(1:2) == '30')   GOTO 66 
+        IF (FCHAR(1:4) == 'SQRT') GOTO 21 ! SQRT
+        IF (FCHAR(1:2) == '12')   GOTO 6  ! DIV
+        IF (FCHAR(1:2) == '30')   GOTO 66 ! DISP
+        IF (FCHAR(1:2) == '31')   GOTO 67 ! MRC
 
         DO  IFUNC = 1, NFUNC
           IF (FCHAR(1:2) == FUNC(IFUNC)) THEN
@@ -149,8 +156,19 @@ C       OPERATION ----------- DISP = 30 ------------------------ 'DISP'
 66      CALL DISP()              
         GOTO 9000
 
+C       OPERATION ----------- DISP = 31 ------------------------ 'MRC' 
+67      IF (FCHAR(4:4) == 'H')  THEN
+C          INQUIRE MRC HEADER CONTENTS
+           CALL LISTHEDMRC(LUN1,IRTFLG)
+
+        ELSE IF (FCHAR(4:4) == 'M') THEN
+C          HANDLE 'MRC MD'
+           CALL SETMODE_MRC()
+        ENDIF
+        GOTO 9000
+
 C       OPERATION  ADD ------------------------------------------- 'AD' 
-C       AD        ADD IMAGES           
+C       AD         ADD IMAGES           
 
 1       IF (FCHAR(4:4) == 'S') THEN
 C          ADD SERIES OF IMAGES, FASTER WITH LESS MEMORY ALLOCATED
@@ -337,7 +355,7 @@ C       OPEN SECOND INPUT FILE
         IF (IRTFLG == -1) GOTO 7
         IF (IRTFLG .NE. 0) GOTO 9000
 
-        IF (IFORM .LE. 0) THEN
+        IF (IFORM <= 0) THEN
            IER = 2
            GOTO 9900
         ENDIF 
@@ -392,7 +410,7 @@ C       OPEN THE OUTPUT FILE
            ANS(1:1) = 'N'
         ENDIF
 
-        IF (NC .GE. 2 .AND. ANS(2:2).EQ. 'C') IN = 3
+        IF (NC >= 2 .AND. ANS(2:2).EQ. 'C') IN = 3
         IF (ANS(:1) == 'Y' .OR. ANS(:1) == 'M') THEN
            IF (IMAMI1 .NE. 1) THEN
               CALL NORM3(LUN1,NSAM1,NROW1,NSLICE1,FMAX1,FMIN1,AV1)
@@ -411,7 +429,7 @@ C       OPEN THE OUTPUT FILE
 
         NSAMS  = 1
         NROWS  = 1
-        IF (NSLICE2 .LE. 1) THEN
+        IF (NSLICE2 <= 1) THEN
 C          PAD INTO A INTO AN IMAGE
            NSLICS = 1
            CALL RDPRIS(NSAMS,NROWS,NOT_USED,
@@ -423,7 +441,7 @@ C          PAD INTO A VOLUME
      &              'TOP LEFT COORDINATES',IRTFLG)
            IF (IRTFLG .NE. 0) GOTO 9000
 
-           IF (NSLICS .LE. -1000000) THEN
+           IF (NSLICS <= -1000000) THEN
 C             NEED TO INQUIRE AS TO NSLICS
               NSLICS = 1
               CALL RDPRI1S(NSLICS,NOT_USED,
@@ -662,16 +680,16 @@ C          FOR LEGACY INPUT OF X, Y ONLY, THEN Z ON NEXT LINE
            NSLICEW = 1
            CALL RDPRI1S(NSLICEW,NOT_USED,'TOP SLICE',IRTFLG)
            IF (IRTFLG .NE. 0) GOTO 9000
-        ELSEIF (NSLICE1 .LE. 1) THEN
+        ELSEIF (NSLICE1 <= 1) THEN
            NSLICEW = 1
         ENDIF
 
         IF ((NSAMW               > NSAM1)   .OR.
      &      (NROWW               > NROW1)   .OR.
      &      (NSLICEW             > NSLICE1) .OR.
-     &      ((NSAMW + NSAM2)     .LE. 1) .OR. 
-     &      ((NROWW + NROW2)     .LE. 1) .OR. 
-     &      ((NSLICEW + NSLICE2) .LE. 1)) THEN
+     &      ((NSAMW + NSAM2)     <= 1) .OR. 
+     &      ((NROWW + NROW2)     <= 1) .OR. 
+     &      ((NSLICEW + NSLICE2) <= 1)) THEN
             WRITE(NOUT,*)' WARNING: NO INPUT PIXELS WITHIN OUTPUT IMAGE'
         ENDIF
 
@@ -829,7 +847,6 @@ C       AR        ARITHMETIC OPERATION
 
 14      CONTINUE
 
-
 C       OPEN INPUT FILE,  STACK OK FOR PLAIN 'AR'
         IF (FCHAR(4:5) .NE. 'IF') MAXIM = -1
         CALL OPFILEC(0,.TRUE.,FILNAM,LUN1,'O',ITYPE,
@@ -861,10 +878,15 @@ C          PLAIN 'AR'
         IF (IRTFLG .NE. 0) GOTO 9000
 
         NORMIT = (FCHAR(4:5) == 'SC')
-        IMGNUM = -3
+        IMGNUM = -3   
+
+        !write(6,*)' In util2 -imgnum,nslice,maxim:',imgnum,nslice1,maxim
+
         DO WHILE (IMGNUM < MAXIM) 
+           !write(6,*) ' In util2 - imgnum,maxim 2:',imgnum,maxim
            CALL GETSTACK(LUN1,LUN2,IMGNUM,MAXIM,
      &                   VERBOSE,.FALSE.,FDUM,NORMIT,IRTFLG)
+           !write(6,*) ' In util2 - irtflg:',irtflg
            IF (IRTFLG .NE. 0) GOTO 9000
 
            IF (FCHAR(4:5) == 'SC') THEN
@@ -874,6 +896,8 @@ C          PLAIN 'AR'
               CALL ARITH(LUN1,LUN2,
      &                   NSAM1,NROW1,NSLICE1,EXPR(1:NLET))
            ENDIF
+           !write(6,*) ' In util2 -:',imgnum,nslice1,maxim
+
         ENDDO
 
         GOTO 9000

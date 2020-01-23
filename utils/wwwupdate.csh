@@ -22,7 +22,6 @@ set spiredir     = /usr16/software/spider/spire/
 set docsdir      = $spider_root/docs/
 set srcdir       = $spider_root/src/ 
 set procsdir     = $spider_root/proc/ 
-set pubsubdir    = $spider_root/pubsub/ 
 set tipsdir      = $spider_root/docs/tips/ 
 set toolsdir     = $spider_root/tools-src/ 
 
@@ -85,8 +84,8 @@ echo " Copying exa, icons, buttons, img & spidui SPIDER files xxxxxxxxxxxxxxxxxx
 $sendit    $docsdir/img/*               $wwwdocsdir/img/
 $sendit    $docsdir/buttons/*           $wwwdocsdir/buttons/
 
-sendit -r    $docsdir/spipylib            $wwwdocsdir 
-sendit -r    $docsdir/exa                 $wwwdocsdir
+$sendit -r    $docsdir/spipylib            $wwwdocsdir 
+$sendit -r    $docsdir/exa                 $wwwdocsdir
 
 echo " Copied exa, icons, buttons, img & spidui SPIDER files " >> $LOGFILE
 
@@ -186,6 +185,7 @@ echo " Copied python tools files" >> $LOGFILE
 
 # Copy SPIDER pubsub files ------------------------------------------
 echo  " Copying pubsub & procs files xxxxxxxxxxxxxxxxxxxxxxxxxxx" 
+set pubsubdir    = $spider_root/pubsub/ 
 $sendit  $pubsubdir/*    $wwwhostdir/pubsub  
 $sendit  $procsdir/*     $wwwhostdir/proc  
 echo  " Copied  proc & pubsub  files "  >> $LOGFILE

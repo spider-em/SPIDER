@@ -1,59 +1,61 @@
 C++*********************************************************************
 C
-C TSWITCH.F               FILENAMES LENGTHENED           JAN 89 al
-C                         REWRITTEN                      MAR 90 al
-C                         REWRITTEN                      MAR 93 al
-C                         ADDED   'IQ'                   SEP 97 al
-C                         ADDED   'AF'                   FEB 98 pap
-C                         REMOVED 'PR'                   AUG 98 al
-C                         ADDED   'IA'                   SEP 98 al
-C                         ADDED   'NE'                   JUN 99 al
-C                         ADDED   'FV'                   DEC 99 pap
-C                         ADDED   'SO'                   MAR 00 al
-C                         ADDED   'ER'                   FEB 01 al
-C                         ADDED   'EV'                   APR 01 al
-C                         ADDED   'PI'                   JUL 01 al
-C                         ADDED   'VA'                   MAY 02 pap
-C                         ADDED   'SN'                   MAY 02 pap
-C                         ADDED   'LA'                   OCT 02 al
-C                         ADDED   'MX'                   MAR 03 br
-C                         ADDED   'DIV'  FOR 'MU D   '   MAY 03 al
-C                         ADDED   'SQRT' FOR 'WU'        MAY 03 al
-C                         MOVED   'MD' TO SPIDER         DEC 03 al
-C                         ADDED   'PB'                   JAN 04 pap
-C                         ADDED   'WA'                   APR 04 al
-C                         ADDED   'SY'                   APR 05 al
-C                         ADDED   'TS'                   SEP 05 al
-C                         ADDED   'DV'                   NOV 05 al
-C                         REMOVED REG_READPQ             NOV 05 al
-C                         RENAMED 'PB ..'                SEP 06 al
-C                         ADDED   'RB ..'                DEC 06 al
-C                         ADDED   'BPD ..'               JAN 07 al
-C                         ADDED   'RTD ..'               JAN 07 al
-C                         'BPD --> BP, BP --> OLD'       JUN 08 al
-C                         'LO'                           JUL 08 al
-C                         'XM'                           DEC 10 al
-C                         'DN'                           FEB 11 al
-C                         'ROT'                          SEP 11 al
-C                         'IQ VER'                       JAN 12 al
-C                         ADDED 'CENT' UTIL_1011         FEB 12 al
-C                         ADDED 'FSC','FRC'              FEB 12 al
-C                         'VM'='SYS'                     MAR 12 al
-C                         ADDED UTIL8 'SH' 23            MAR 12 al
-C                         REMOVED 'CTF'                  MAY 12 al
-C                         REPLACED 'CTF'                 JUN 12 al
-C                         'SPH'                          FEB 13 al
-C                         'HIS'                          AUG 13 al
-C                         'DIS'                          JAN 15 al
-C                         'ML'                           JAN 15 al
-C                         'RI'                           APR 16 al
+C TSWITCH.F         FILENAMES LENGTHENED           JAN 89 ArDean Leith
+C                   REWRITTEN                      MAR 90 ArDean Leith
+C                   REWRITTEN                      MAR 93 ArDean Leith
+C                   ADDED   'IQ'                   SEP 97 ArDean Leith
+C                   ADDED   'AF'                   FEB 98 Pawel Penczek
+C                   REMOVED 'PR'                   AUG 98 ArDean Leith
+C                   ADDED   'IA'                   SEP 98 ArDean Leith
+C                   ADDED   'NE'                   JUN 99 ArDean Leith
+C                   ADDED   'FV'                   DEC 99 Pawel Penczek
+C                   ADDED   'SO'                   MAR 00 ArDean Leith
+C                   ADDED   'ER'                   FEB 01 ArDean Leith
+C                   ADDED   'EV'                   APR 01 ArDean Leith
+C                   ADDED   'PI'                   JUL 01 ArDean Leith
+C                   ADDED   'VA'                   MAY 02 Pawel Penczek
+C                   ADDED   'SN'                   MAY 02 Pawel Penczek
+C                   ADDED   'LA'                   OCT 02 ArDean Leith
+C                   ADDED   'MX'                   MAR 03 Bimal Rath
+C                   ADDED   'DIV'  FOR 'MU D'      MAY 03 ArDean Leith
+C                   ADDED   'SQRT' FOR 'WU'        MAY 03 ArDean Leith
+C                   MOVED   'MD' TO SPIDER         DEC 03 ArDean Leith
+C                   ADDED   'PB'                   JAN 04 Pawel Penczek
+C                   ADDED   'WA'                   APR 04 ArDean Leith
+C                   ADDED   'SY'                   APR 05 ArDean Leith
+C                   ADDED   'TS'                   SEP 05 ArDean Leith
+C                   ADDED   'DV'                   NOV 05 ArDean Leith
+C                   REMOVED REG_READPQ             NOV 05 ArDean Leith
+C                   RENAMED 'PB ..'                SEP 06 ArDean Leith
+C                   ADDED   'RB ..'                DEC 06 ArDean Leith
+C                   ADDED   'BPD ..'               JAN 07 ArDean Leith
+C                   ADDED   'RTD ..'               JAN 07 ArDean Leith
+C                   'BPD --> BP, BP --> OLD'       JUN 08 ArDean Leith
+C                   'LO'                           JUL 08 ArDean Leith
+C                   'XM'                           DEC 10 ArDean Leith
+C                   'DN'                           FEB 11 ArDean Leith
+C                   'ROT'                          SEP 11 ArDean Leith
+C                   'IQ VER'                       JAN 12 ArDean Leith
+C                   ADDED 'CENT' UTIL_1011         FEB 12 ArDean Leith
+C                   ADDED 'FSC','FRC'              FEB 12 ArDean Leith
+C                   'VM'='SYS'                     MAR 12 ArDean Leith
+C                   ADDED UTIL8 'SH' 23            MAR 12 ArDean Leith
+C                   REMOVED 'CTF'                  MAY 12 ArDean Leith
+C                   REPLACED 'CTF'                 JUN 12 ArDean Leith
+C                   'SPH'                          FEB 13 ArDean Leith
+C                   'HIS'                          AUG 13 ArDean Leith
+C                   'DIS'                          JAN 15 ArDean Leith
+C                   'ML'                           JAN 15 ArDean Leith
+C                   'RI'                           APR 16 ArDean Leith
+C                   'MRC'                          NOV 19 ArDean Leith
+C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2016  Health Research Inc.,                         *
+C=* Copyright 1985-2019  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
+C=* Email: spider@health.ny.gov                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -101,7 +103,7 @@ C	1	UTIL1		DE DU FI HI HD LI MO PK RA RN
 C				TT ST TF FS CA GR CG CV CL CTF HIS
 C	2	UTIL2		AD BL CP IN IP MU PA PD SQ SU DIV
 C				WI CE AR MR DF MA WV PP SZ WU MM CM 
-C				PV NK AS MN TH GP RP MX SQRT 14
+C				PV NK AS MN TH GP RP MX SQRT 14 31
 C	3	UTIL3		AF ED RC RT BC CT OR FC SL RO OD MK OP
 C                               RTD
 C                               DI ER
@@ -129,7 +131,7 @@ C       23      UTIL_1011       CEN
 C       24      UTIL_1110       SH
 C       25      UTIL_1010       NORM
 C
-C  156 DV unused nov 2005
+C  156 DV unused Nov 2005
 C23456789012345678901234567890123456789012345678901234567890123456789012
 C--*********************************************************************
 
@@ -141,7 +143,7 @@ C--*********************************************************************
       COMMON /SP_OPER/      FCHARS
 
 C     NUMBER OF OPERATIONS IN MENU 
-      INTEGER, PARAMETER :: NMENU = 172 ! HIGHEST 2 CHAR NUMBER=30
+      INTEGER, PARAMETER :: NMENU = 173 ! HIGHEST 2 CHAR NUMBER=31
 
       CHARACTER(LEN=2)   :: MENU(NMENU)
       CHARACTER(LEN=12)  :: MENUL(NMENU)
@@ -237,6 +239,7 @@ C     NUMBER OF OPERATIONS IN MENU
       DATA MENU(54),  MENUL(54),  IW(54)  /'MN','  ',2/
       DATA MENU(55),  MENUL(55),  IW(55)  /'MO','MODEL',1/
       DATA MENU(56),  MENUL(56),  IW(56)  /'MR','  ',2/
+      DATA MENU(173), MENUL(173), IW(173) /'31','MRC',2/
       DATA MENU(132), MENUL(132), IW(132) /'MS','  ',9/
       DATA MENU(57),  MENUL(57),  IW(57)  /'MU','MULT',2/
       DATA MENU(151), MENUL(151), IW(151) /'MX','  ',2/

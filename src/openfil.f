@@ -1,27 +1,29 @@
 
 C++*********************************************************************
 C
-C OPENFIL.F       ADAPTED FROM OPEN3.FOR            OCT 88 ArDean Leith
-C                 LONG FILENAMES                    OCT 88 ArDean Leith
-C                 MERGED WITH OPENF                 AUG 96 ArDean Leith
-C                 -1, -3 & -7 FOURIER REMOVED       AUG 96 ArDean Leith
-C                 F90 CHANGES                       APR 98 ArDean Leith
-C                 USED LUNHDR                       JAN 99 ArDean Leith
-C                 INDEXED STACKS                    JAN 03 ArDean Leith
-C                 HEADER COPY                       FEB 03 ArDean Leith
-C                 ENDEDNESS                         FEB 03 ArDean Leith
-C                 REMOVED IRTFLG INPUT              APR 04 ARDEAN LEITH
-C                 MPI OPEN BUG & BCAST CHANGES      OCT 08 ARDEAN LEITH
-C                 OPENINLN INTEGER*8                OCT 10 ARDEAN LEITH
-C                 NZ LIMITED TO 100000 BUG          JAN 15 ARDEAN LEITH
+C OPENFIL.F     ADAPTED FROM OPEN3.FOR           OCT 1988 ArDean Leith
+C               LONG FILENAMES                   OCT 1988 ArDean Leith
+C               MERGED WITH OPENF                AUG 1996 ArDean Leith
+C               -1, -3 & -7 FOURIER REMOVED      AUG 1996 ArDean Leith
+C               F90 CHANGES                      APR 1998 ArDean Leith
+C               USED LUNHDR                      JAN 1999 ArDean Leith
+C               INDEXED STACKS                   JAN 2003 ArDean Leith
+C               HEADER COPY                      FEB 2003 ArDean Leith
+C               ENDEDNESS                        FEB 2003 ArDean Leith
+C               REMOVED IRTFLG INPUT             APR 2004 ArDean Leith 
+C               MPI OPEN BUG & BCAST CHANGES     OCT 2008 ArDean Leith 
+C               OPENINLN INTEGER*8               OCT 2010 ArDean Leith 
+C               NZ LIMITED TO 100000 BUG         JAN 2015 ArDean Leith 
+C               MRC SUPPORT                      MAY 2019 ArDean Leith
+C               OPEN ON 2 LUNS RECODED           AUG 2019 ArDean Leith
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2015  Health Research Inc.,                         *
+C=* Copyright 1985-2019  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
+C=* Email: spider@health.ny.gov                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -49,7 +51,7 @@ C
 C    PARAMETERS:
 C        LUNT       UNIT TO COPY HEADER VALUES FROM               (SENT)
 C        FILNAM     CHARACTER ARRAY, CONTAINING FILE NAME         (SENT)
-C        LUN        LOGICAL UNIT NUMBER FOR FILNAM.               (SENT)
+C        LUNSENT    LOGICAL UNIT NUMBER FOR FILNAM.               (SENT)
 C        NX,NY      DIMENSIONS OF FILE                (SENT OR RETURNED)
 C        NZ         NUMBER OF SLICES IN IMAGE         (SENT OR RETURNED)
 C        NSTACK     STACK INDICATOR                    (SENT / RETURNED)
@@ -82,41 +84,63 @@ C               -12   E2    2-D FOURIER TRANSFORM, MIXED RADIX EVEN
 C               -21   O3    3-D FOURIER TRANSFORM, MIXED RADIX ODD
 C               -22   E3    3-D FOURIER TRANSFORM, MIXED RADIX EVEN
 C
-C    CALL TREE:  SEE OPFILEC
+C    CALL TREE:  
+C
+C                  MRC file
+C     OPFILEC ---? -----------> OPENFIL_MRC --> ...
+C                |
+C                |                      Regular
+C                | Not a stack          file
+C                ?------------> OPENFIL ------> ...
+C                |                 |
+C                |                 |    Inline
+C                |                 |    file
+C                |                 `----------> INLNBUF 
+C                |                              OPENINLN
+C                ? File stack
+C                |-------------> OPENSTK -----> OPENFIL -->
+C                |                 
+C                ? Inline stack
+C                |-------------> OPNINSTK ----> ...
+C
+C       NOTE: SHOULD NEVER BE CALL WITH MRC FILES     
 C
 C23456789 123456789 123456789 123456789 123456789 123456789 123456789 12
 C--*********************************************************************
 
-	SUBROUTINE OPENFIL(LUNT,FILNAM,LUN,NX,NY,NZ,NSTACK,
+	SUBROUTINE OPENFIL(LUNT,FILNAM,LUNSENT,NX,NY,NZ,NSTACK,
      &                     ITYPE,DISP,KEEPEXT,IRTFLG)
 
         INCLUDE 'CMLIMIT.INC'
         INCLUDE 'CMBLOCK.INC'
         INCLUDE 'LABLOCK.INC'
 
+        INTEGER                      :: LUNARA,LUNSTK,LUNARB
         COMMON /LUNARA/ LUNARA(100),LUNSTK(100),LUNARB(100)
 
+        INTEGER                      :: LUNT,LUNSENT
         CHARACTER(LEN=*)             :: FILNAM
+        INTEGER                      :: NX,NY,NZ,NSTACK,ISTACK
+        CHARACTER(LEN=1)             :: DISP
+        LOGICAL                      :: KEEPEXT
+        INTEGER                      :: IRTFLG
+
         CHARACTER(LEN=MAXNAM)        :: FILNM
         CHARACTER(LEN=2*MAXNAM)      :: MSG
-        CHARACTER(LEN=1)             :: NULL,DISP
-        LOGICAL                      :: EX,CALLERRT,OPENED,KEEPEXT
+        CHARACTER(LEN=1)             :: NULL = CHAR(0)
+        LOGICAL                      :: EX,CALLERRT,OPENED
         INTEGER, PARAMETER           :: I_8 = SELECTED_INT_KIND(12)
-	INTEGER(KIND=I_8)            :: NWORDS8
+	INTEGER(KIND=I_8)            :: NWORDS_8
         INTEGER(KIND=I_8), PARAMETER :: ZERO_8 = 0
+        INTEGER                      :: LUN
 
-#ifdef USE_MPI
-        include 'mpif.h' 
-        LOGICAL            :: ONLYONE_RED,ONLYONE_WRT
-        COMMON /COMM_MPI/ONLYONE_RED,ONLYONE_WRT
+        LOGICAL                      :: IS_MRC
 
-        ICOMM = MPI_COMM_WORLD
-        CALL MPI_COMM_RANK(ICOMM, MYPID, MPIERR)
-        IF (.NOT. ONLYONE_RED) MYPID = -1  !KLUDGE FOR 'AP REF'
-#else 
-        MYPID = -1    
-#endif    
-        NULL = CHAR(0)
+C       INCLUSION FOR OPTIONAL MPI INITIALIZATION. MAY ALTER MYPID  
+        INTEGER                      :: MYPID = -1
+#include "MPI_INIT.INC"
+
+        LUN = LUNSENT            ! IN CASE LUNSENT IS CONSTANT
 
 C       SET FLAG FOR ERRONEOUS RETURN
         IRTFLG = 1
@@ -124,6 +148,7 @@ C       SET FLAG FOR ERRONEOUS RETURN
 C	CHECK IF USER WANTS TO USE THE IN-LINE BUFFER.
         INLNED = 0
         IF (FILNAM(1:1) == '_') THEN
+C	   USE AN IN-LINE BUFFER.
            CALL INLNBUF(FILNAM,NLET,INLNED,IRTFLGT)
            IF (IRTFLGT .NE. 0)  RETURN
 
@@ -142,6 +167,8 @@ C          USE REGULAR FILE
 C          NULLIFY THE INLINE POINTER (CLOSEINLN IS INSIDE OPENINLN.F)
            CALL CLOSEINLN(LUN,IRTFLGT)
 
+           !write(3,*) ' In openfil, keepext,filnam:',keepext,filnam
+
            IF (KEEPEXT) THEN
               FILNM = FILNAM
               NLET  = lnblnk(FILNM)
@@ -149,6 +176,7 @@ C          NULLIFY THE INLINE POINTER (CLOSEINLN IS INSIDE OPENINLN.F)
               CALL FILNAMANDEXT(FILNAM,DATEXC,FILNM,NLET,.TRUE.,IRTFLGT)
 	      IF (IRTFLGT .NE.0) RETURN
            ENDIF
+           !write(3,*) ' In openfil, filnm: ',filnm(:nlet),disp
 
 C          SEE IF FILE EXISTS NOW
            IF (MYPID <= 0) THEN
@@ -169,7 +197,8 @@ C          SEE IF FILE EXISTS NOW
         ENDIF
 
 C       SET ACTUAL LUN FOR THIS FILE
-        LUNARB(LUN) = LUN
+C       LUNARB(LUN) = LUN
+        CALL LUNSETLUNB(LUN,LUN,IRTFLG)
 
         CALLERRT = (DISP(1:1) .NE. 'Z' .AND. DISP(1:1) .NE. 'E')
 
@@ -196,9 +225,16 @@ C           BE REPLACED.  OLD FILES ARE DELETED FIRST
           ENDIF
 
 C         INITIALIZE HEADER OBJECT FOR NEW IMAGE 
-          CALL LUNSETHDR(LUNT,LUN,NX,NY,NZ,ITYPE,NSTACK,IRTFLGT)
+          CALL LUNGETIS_MRC(LUNT,IS_MRC,IRTFLG)
+          IF (IS_MRC) THEN 
+C            DO NOT COPY FROM LUNT IF IT IS A MRC FILE
+             CALL LUNSETHDR(0,   LUN,NX,NY,NZ,ITYPE,NSTACK,IRTFLGT)
+          ELSE
+             CALL LUNSETHDR(LUNT,LUN,NX,NY,NZ,ITYPE,NSTACK,IRTFLGT)
+          ENDIF
 
-C         SET FMIN.... TO AVOID FLT. PT. ERROR ON DEC
+C         SET FILE'S FMIN.... TO AVOID FLT. PT. ERROR ON DEC
+C         DOES NOT ALTER STATS: FMIN... IN COMMON BLOCK
           CALL LUNSETSTAT(LUN,0,0.0,0.0,0.0,0.0,IRTFLGT)
 
 	  IF (INLNED == 0) THEN
@@ -210,6 +246,7 @@ C	     REGULAR FILE, NOT INLINE FILE
      &               FORM='UNFORMATTED',
      &               ACCESS='DIRECT',IOSTAT=IER,RECL=LENREC)
              ENDIF
+
 #ifdef USE_MPI
              IF (ONLYONE_RED) THEN
                 CALL BCAST_MPI('OPENFIL','IER',IER,1,'I',ICOMM)
@@ -223,7 +260,7 @@ C	     REGULAR FILE, NOT INLINE FILE
 
 C            FOR USING NEW FILE ON OLDER SPIDER RELEASES
              CALL LUNSET25(LUN,-1,IRTFLGT)
-
+ 
           ELSE
 C            SET UP INLINE BUFFER AND TIE IT TO LUN
 
@@ -239,15 +276,18 @@ C            SAVE ISTACK IN NON-VOLATILE PART OF HEADER OBJECT
                 RETURN
              ENDIF
 
-             NWORDS8 = (NRECS + INDXREC) * LENBYT / 4
+             NWORDS_8 = (NRECS + INDXREC) * LENBYT / 4
 
-             CALL OPENINLN(LUN,INLNED,.TRUE.,NX,NWORDS8,
+             CALL OPENINLN(LUN,INLNED,.TRUE.,NX,NWORDS_8,
      &                     .TRUE.,IRTFLGT)
              IF (IRTFLGT .NE. 0)  RETURN
 	  ENDIF
+          !write(3,*)' In openfil,opened filnm: ', filnm(1:nlet)
 
 C         PUSH HEADER OBJECT INFO INTO NEW FILE
           CALL LUNWRTHED(LUN,NX,0,IRTFLGT)
+
+
 
           GOTO 2000
 
@@ -262,11 +302,7 @@ C         FILE EXISTS, AND IS ACCESSED WITH 'OLD', OPEN THE FILE
 	  IF (.NOT. EX) THEN
 C            ERROR -- FILE DOES NOT EXIST, BUT BEING OPENED WITH 'OLD
              IF (MYPID <= 0)
-     &             WRITE(NOUT,*) '*** FILE NOT FOUND: ',FILNM(1:NLET)
-
-#ifdef USE_MPI
-c            write(6,*) ' openfil; ',mypid, ' not found: ',filnm(1:nlet)
-#endif
+     &          WRITE(NOUT,*) '*** FILE NOT FOUND: ',FILNM(1:NLET)
 
 C	     FOR DISP=Z, DO NOT STOP THE BATCH JOB BY CALLING ERRT
              IF (CALLERRT) THEN
@@ -274,99 +310,104 @@ C	     FOR DISP=Z, DO NOT STOP THE BATCH JOB BY CALLING ERRT
                 CALL ERRT(101,MSG,NE)
              ENDIF
              RETURN
-          ENDIF
+          ENDIF    ! END OF: .NOT. EX
+
 
           IF (INLNED .NE. 0) THEN
 C            USE EXISTING INLINE BUFFER, TIE IT TO LUN & RETRIEVE NX
              CALL OPENINLN(LUN,INLNED,.FALSE.,NX,ZERO_8,
      &                     CALLERRT,IRTFLGT)
              IF (IRTFLGT .NE. 0)  RETURN
-          ELSE
-C            REGULAR FILE ACCESS
 
-             LENREC = LENOPENFILE(256*4)
+          ELSE
+C            REGULAR SPIDER FILE ACCESS
+
+C            SEE IF FILE ALREADY OPEN ON DIFFERENT LUN THAN CURRENT
              IF (MYPID <= 0) THEN
-                OPEN(LUN,FILE=FILNM(1:NLET),STATUS='OLD',
-     &               ACCESS='DIRECT',
-     &              FORM='UNFORMATTED',RECL=LENREC,IOSTAT=IER)
+                INQUIRE(FILE=FILNM(1:NLET),IOSTAT=IRTFLG,OPENED=OPENED,
+     &                  NUMBER=LUNOPENED)
+
+c                write(3,*)  ' Inquire file: ',filnm(1:nlet),
+c     &                      '  Opened:',opened,' On lun:',lunopened,
+c     &                      '  Irtflg: ',irtflg  
+             ENDIF   ! END OF: MYPID <= 0
+
+#ifdef USE_MPI
+             IF (ONLYONE_RED) THEN
+               CALL BCAST_MPI('OPENFIL','IRTFLG',   IRTFLG, 1,'I',ICOMM)
+               CALL BCAST_MPI('OPENFIL','OPENED',   OPENED, 1,'L',ICOMM)
+               CALL BCAST_MPI('OPENFIL','LUNOPENED',LUNOPENED,
+     &                         1,'I',ICOMM)
              ENDIF
+#endif
+
+             IF (OPENED) THEN
+C               MUST REDIRECT OLD LUNS TO CURRENT LUN BEFORE OPENING 
+                IF (MYPID <= 0)  CLOSE(LUNOPENED)
+                DO I = 1,100
+                   CALL LUNGETLUNB(I,LUNNOW,IRTFLG)
+                   IF (LUNNOW == LUNOPENED) THEN
+                      CALL LUNSETLUNB(I,LUN,IRTFLG)
+                   ENDIF
+                ENDDO                      
+             ENDIF
+             !write(3,*)' In openfil, lun,lunopened: ',lun,lunopened
+
+C            NOW WE CAN OPEN THIS FILE ON LUN
+             IF (MYPID <= 0) THEN
+               LENREC = LENOPENFILE(256*4)  ! USED FOR SPIDER FILE
+               OPEN(LUN,FILE=FILNM(1:NLET),STATUS='OLD',
+     &               ACCESS='DIRECT',
+     &               FORM='UNFORMATTED',RECL=LENREC,IOSTAT=IER)
+             ENDIF  ! END OF: MYPID <= 0
 #ifdef USE_MPI
              IF (ONLYONE_RED) THEN
                 CALL BCAST_MPI('OPENFIL','IER',IER,1,'I',ICOMM)
              ENDIF
 #endif
 
-             IF (IER .NE. 0) THEN        
-C               SEE IF FILE ALREADY OPEN ON DIFFERENT LUN
-                IF (MYPID <= 0) THEN
-                   INQUIRE(FILE=FILNM(1:NLET),IOSTAT=IER,OPENED=OPENED,
-     &                     NUMBER=LUNOPENED)
-                ENDIF
-#ifdef USE_MPI
-                IF (ONLYONE_RED) THEN
-                  CALL BCAST_MPI('OPENFIL','IER',IER,1,'I',ICOMM)
-                  CALL BCAST_MPI('OPENFIL','OPENED',OPENED,1,'L',ICOMM)
-                  CALL BCAST_MPI('OPENFIL','LUNOPENED',LUNOPENED,1,
-     &                           'I',ICOMM)
-                ENDIF
-#endif
-                IF (OPENED) THEN
-C                  MUST REDIRECT OLD LUNS TO CURRENT LUN, 
-                   IF (MYPID <= 0)  CLOSE(LUNOPENED)
-                   DO I = 1,100
-                      IF (LUNARB(I) == LUNOPENED) LUNARB(I) = LUN
-                   ENDDO
+             IF (IER .NE. 0) THEN
+C              UNKNOWN OPENING ERROR
+               MSG = 'OPENFIL; OPENING FILE: ' // FILNM(1:NLET)
+               CALL ERRT(101,MSG,NE)
+               RETURN
+             ENDIF  ! END OF: IER .NE. 0 
+             !write(3,*)' In openfil, filnm:', filnm(1:nlet)
 
-C                  NOW WE CAN REOPEN THIS SAME FILE ON LUN
-                   IF (MYPID <= 0) THEN
-                      OPEN(LUN,FILE=FILNM(1:NLET),STATUS='OLD',
-     &                     ACCESS='DIRECT',
-     &                     FORM='UNFORMATTED',RECL=LENREC,IOSTAT=IER)
-                   ENDIF
-#ifdef USE_MPI
-                   IF (ONLYONE_RED) THEN
-                      CALL BCAST_MPI('OPENFIL','IER',IER,1,'I',ICOMM)
-                   ENDIF
-#endif
-                ELSE
-C                  UNKNOWN ERROR
-                   MSG = 'OPENFIL; OPENING FILE: ' // FILNM(1:NLET)
-                   CALL ERRT(101,MSG,NE)
-                   RETURN
-                ENDIF
-             ENDIF
-     	  ENDIF
+          ENDIF     ! END OF:  IF (INLNED .EQ. 0)
 
-C         READ OVERALL HEADER FROM FILE 
+C         READ OVERALL HEADER FROM SPIDER FILE 
           CALL LUNREDHED(LUN,256,0,.TRUE.,IRTFLGT)
-          IF (IRTFLGT .NE. 0 .AND. MYPID <= 0) 
-     &       WRITE(NOUT,*) '*** ERROR READING HEADER OF: ',FILNM(:NLET)
-          IF (IRTFLGT .NE. 0) RETURN
+          IF (IRTFLGT .NE. 0 .AND. MYPID <= 0) THEN
+             WRITE(NOUT,*) '*** ERROR READING HEADER OF: ',FILNM(:NLET)
+             IF (IRTFLGT .NE. 0) RETURN
+          ENDIF    ! END OF: IRTFLGT .NE. 0 ......
 
 C         NEED ITYPE
           CALL LUNGETTYPE(LUN,ITYPE,IRTFLGT)
 
           IF (ITYPE == -1 .OR. ITYPE == -3 .OR. ITYPE == -7) THEN
-C           WANT TO READ OBSOLETE FORMAT FOURIER FILE
+C           READING OBSOLETE FORMAT FOURIER FILE
             WRITE(NOUT,96)
 96          FORMAT(' *** CAN NOT READ OBSOLETE FOURIER FORMAT',/,
-     &          '*** CONVERT FOURIER FILE TO REAL FORMAT USING ',
-     &          'ORIGINAL VERSION OF SPIDER.'/)
-             CALL ERRT(100, 'OPENFIL',NE)
-             RETURN
+     &            '*** CONVERT FOURIER FILE TO REAL FORMAT USING ',
+     &            'ORIGINAL VERSION OF SPIDER.'/)
+            CALL ERRT(100, 'OPENFIL',NE)
+            RETURN
           ENDIF
 
 C         NEED NX VALUE 
           CALL LUNGETSIZE(LUN,NX,NY,NZ,IRTFLGT)
           IF (IRTFLGT .NE. 0) RETURN
 
-          !print *, 'READING HEADER OF: ',FILNM(:NLET)
-          !print *, 'NX...: ',LUN,NX,NY,NZ,itype
+          !write(3,*)' In openfil, nx,itype:',nx,itype
+          !print *,  'Reading header of: ',filnm(:nlet)
+          !print *,  'nx...: ',lun,nx,ny,nz,itype
 
           IF (ITYPE == 0 .OR. 
-     &       NX <= 0     .OR. NY <= 0     .OR. NZ <= 0 .OR.
-     &       NX > 10000000 .OR. NY > 10000000 .OR. 
-     &       NZ > 10000000) THEN
+     &          NX <= 0       .OR. NY <= 0       .OR. NZ <= 0 .OR.
+     &          NX > 10000000 .OR. NY > 10000000 .OR. 
+     &          NZ > 10000000) THEN
 C           NOT A NATIVE SPIDER IMAGE
 
 C           FLIP BYTES IN HEADER OBJECT 
@@ -385,7 +426,7 @@ C              PROBABLY NOT A SPIDER IMAGE
                ENDIF
                IRTFLG = 5   ! RETURN ERROR FLAG FOR NON-SPIDER IMAGE
 
-            ELSEIF ( NY <= 0 ) THEN
+            ELSEIF ( NX <= 0 ) THEN
 C              PROBABLY NOT A SPIDER IMAGE
                IF (CALLERRT) THEN
                  CALL ERRT(101,'INVALID HEADER, NX',NX)
@@ -406,11 +447,11 @@ C              PROBABLY NOT A SPIDER IMAGE
                ENDIF
                IRTFLG = 5   ! RETURN ERROR FLAG FOR NON-SPIDER IMAGE
 
-             ELSEIF (NX > 1000000) THEN
+            ELSEIF (NX > 1000000) THEN
 C              PROBABLY NOT A SPIDER IMAGE
                IF (CALLERRT) THEN
                  CALL ERRT(102,
-     &              'INVALID HEADER, NX (LIMIT=10000000)',NX)
+     &                 'INVALID HEADER, NX (LIMIT=10000000)',NX)
                ENDIF
                IRTFLG = 5   ! RETURN ERROR FLAG FOR NON-SPIDER IMAGE
 
@@ -418,7 +459,7 @@ C              PROBABLY NOT A SPIDER IMAGE
 C              PROBABLY NOT A SPIDER IMAGE
                IF (CALLERRT) THEN
                  CALL ERRT(102,
-     &              'INVALID HEADER, NY (LIMIT=10000000)',NY)
+     &               'INVALID HEADER, NY (LIMIT=10000000)',NY)
                ENDIF
                IRTFLG = 5   !RETURN ERROR FLAG FOR NON-SPIDER IMAGE
 
@@ -426,7 +467,7 @@ C              PROBABLY NOT A SPIDER IMAGE
 C              PROBABLY NOT A SPIDER IMAGE
                IF (CALLERRT) THEN
                  CALL ERRT(102,
-     &              'INVALID HEADER, NZ (LIMIT=10000000)',NZ)
+     &                 'INVALID HEADER, NZ (LIMIT=10000000)',NZ)
                ENDIF
                IRTFLG = 5   ! RETURN ERROR FLAG FOR NON-SPIDER IMAGE
             ENDIF
@@ -442,18 +483,18 @@ C              RETURN ERROR FLAG FOR NON-SPIDER IMAGE
           ENDIF
 
 
-C         ON UNIX, REOPEN THE FILE WITH FINAL RECORD LENGTH
           IF (INLNED == 0) THEN
+C            REOPEN SPIDER FILE WITH FINAL RECORD LENGTH
              CLOSE(LUN)
              LENREC = LENOPENFILE(NX*4)
              IF (MYPID <= 0) THEN
   	        OPEN(LUN,FILE=FILNM(1:NLET),STATUS='OLD',
-     &               FORM='UNFORMATTED',
-     &               ACCESS='DIRECT',IOSTAT=IER,RECL=LENREC)
+     &                  FORM='UNFORMATTED',
+     &                  ACCESS='DIRECT',IOSTAT=IER,RECL=LENREC)
              ENDIF
 #ifdef USE_MPI
              IF (ONLYONE_RED) THEN
-                CALL BCAST_MPI('OPENFIL','IER',IER,1,'I',ICOMM)
+               CALL BCAST_MPI('OPENFIL','IER',IER,1,'I',ICOMM)
              ENDIF
 #endif
              IF (IER .NE. 0) THEN        
@@ -461,13 +502,13 @@ C         ON UNIX, REOPEN THE FILE WITH FINAL RECORD LENGTH
                 CALL ERRT(101,MSG,NE)
                 RETURN
              ENDIF
-          ENDIF
+          ENDIF   ! END OF: INLNED == 0
 
-        ELSE
+        ELSE  
            MSG = 'OPENFIL; PGM. ERROR, UNKNOWN DISP: ' // DISP
            CALL ERRT(101,MSG,NE)
            RETURN
-        ENDIF
+        ENDIF    ! END OF:  (DISP == 'O' .OR. ......
 
 2000	CONTINUE
 
@@ -488,6 +529,7 @@ C       FOR INDEXED STACKS THIS INCLUDES INDEX OFFSET
         ENDIF
 
 C       PUT COMMON VALUES INTO COMMON AREA (NOT NEEDED IN FUTURE?)
+C       SET STATS: FMIN... IN COMMON BLOCK AND FILE HEADER
         CALL LUNSETCOMMON(LUN,IRTFLGT)
 
 C       WRITE OUT FILE OPENING INFO
@@ -504,6 +546,6 @@ C          NOT A STACK, RETURN -2
 
 C       SET FLAG FOR NORMAL RETURN	
         IRTFLG = 0
-        RETURN
 
 	END
+

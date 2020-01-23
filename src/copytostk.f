@@ -1,14 +1,15 @@
 C **********************************************************************
 C
-C COPYTOSTK  'CP TO STK' STACKS                    APR 15 ArDean Leith
+C COPYTOSTK  'CP TO STK' STACKS                  APR 2015 ArDean Leith
+C            MRC NOT SUPPORTED                   OCT 2019 ArDean Leith
 C
 C **********************************************************************
 C=* Author: ArDean Leith                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2016  Health Research Inc.,                         *
+C=* Copyright 1985-2019  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
+C=* Email: spider@health.ny.gov                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -36,9 +37,7 @@ C***********************************************************************
         IMPLICIT NONE
 
         INCLUDE 'CMBLOCK.INC'
-        INCLUDE 'CMLIMIT.INC'
-
-        ! NIMAX & INUMBR COME FROM CMLIMIT.INC
+        INCLUDE 'CMLIMIT.INC'   ! NIMAX & INUMBR COME FROM CMLIMIT.INC
  
         REAL                  :: BUF
         COMMON /IOBUF/  BUF(NBUFSIZ)
@@ -48,7 +47,7 @@ C***********************************************************************
         CHARACTER(LEN=MAXNAM) :: PROMPT,FILPAT,FILOLD,FILOLDS 
         CHARACTER(LEN=MAXNAM) :: FILNEW
 
-        INTEGER               :: NILMAX, IRTFLG, NOT_USED
+        INTEGER               :: NILMAX, IRTFLG, NOT_USED, IDUM
         INTEGER               :: NLET1,NLET2,I,IMG2GO, IMG1,IMG2
         INTEGER               :: ITYPE1,ITYPE2, LOCAT,LOCAST 
         INTEGER               :: NSTKS, ISTK, INUM, NSTACK1, NSTACK2
@@ -56,6 +55,7 @@ C***********************************************************************
         LOGICAL               :: ISSTACK, BARE,WANTNEXT,MUSTGET
         LOGICAL               :: ASKNAM,WANTSTACK,FOUROK,SAYIT
         LOGICAL               :: COPYSTAT
+        LOGICAL               :: IS_MRC
 
         REAL                  :: UNUSED 
 
@@ -64,6 +64,8 @@ C***********************************************************************
         INTEGER, PARAMETER    :: LUNDOC = 80
 
         CHARACTER, PARAMETER  :: NULL   = CHAR(0)
+
+        LOGICAL               :: ISMRCFILE    ! FUNCTION
 
         FOUROK  = .TRUE.           ! FOURIER STACKS OK
         NILMAX  = NIMAX            ! FROM CMLIMIT
@@ -74,8 +76,8 @@ C       ASK FOR INPUT FILE NAME TEMPLATE AND NUMBERS
         CALL FILELIST(ASKNAM,LUNDOC,FILPAT,
      &                NLET,INUMBR,NILMAX, NSTKS,PROMPT,IRTFLG)
         IF (IRTFLG .NE. 0) RETURN
-        !write(6,*)'nstks:',nstks
  
+
         LOCAT  = INDEX(FILPAT(1:NLET),'@')   
         LOCAST = INDEX(FILPAT(1:NLET),'*')
 
@@ -114,7 +116,14 @@ C	OPEN OUTPUT STACK
      &          FOUROK,IRTFLG)
         IF (IRTFLG .NE. 0) RETURN
  
-        !write(6,*)'  opened filnew:',nlet2,filnew(1:nlet2)
+        IS_MRC = ISMRCFILE(FILNEW)
+        IF (IS_MRC) THEN
+           CALL ERRT(101,'CAN NOT CREATE MRC STACKS',IDUM)
+           GOTO 9999
+        ENDIF
+
+
+        !write(6,*)'  Opened filnew:',nlet2,filnew(1:nlet2)
 
         WANTNEXT = .TRUE.
         MUSTGET  = .FALSE.

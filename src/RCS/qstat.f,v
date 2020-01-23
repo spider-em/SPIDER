@@ -1,6 +1,7 @@
-head	1.25;
+head	1.27;
 access;
 symbols
+	pre_mrcs:1.25
 	healthdept_2018:1.25
 	pre_getangas:1.21
 	GPL2010:1.19
@@ -22,6 +23,16 @@ symbols
 locks; strict;
 comment	@c @;
 
+
+1.27
+date	2020.01.08.18.26.14;	author leith;	state Exp;
+branches;
+next	1.26;
+
+1.26
+date	2019.11.26.16.03.16;	author leith;	state Exp;
+branches;
+next	1.25;
 
 1.25
 date	2018.10.03.14.34.13;	author leith;	state Exp;
@@ -154,9 +165,9 @@ desc
 @
 
 
-1.25
+1.27
 log
-@email_health_dept
+@commented output
 @
 text
 @
@@ -165,12 +176,13 @@ C
 C    QSTAT.F           LONG FILE NAMES JAN             89 ArDean Leith
 C                      MODIFIED FOR STACKS             98 ArDean Leith
 C                      ==,NSAM,IMPLICIT                16 ArDean Leith
+C                      (IN HEADER) MSG                 19 ArDean Leith
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2016  Health Research Inc.,                         *
+C=* Copyright 1985-2019  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@@health.ny.gov                                        *
 C=*                                                                    *
@@ -209,7 +221,7 @@ C--*******************************************************************
 
       CHARACTER(LEN=MAXNAM) :: FILNAM1,FILNAMM
 
-      LOGICAL               :: ISFIRST,FOUROK
+      LOGICAL               :: ISFIRST,FOUROK,NEWCALC
       INTEGER               :: ILIST1(NIMAX)
       INTEGER               :: NILMAX,NLET1,IFORM1,NX1,NY1,NZ1
       INTEGER               :: NDUM,NGOT1,IMG1,IRTFLG
@@ -219,8 +231,7 @@ C--*******************************************************************
       INTEGER               :: NSTACK1, IMAMI1, IFORMM, NINDX1, NLET 
       INTEGER               :: lnblnk 
 
-
-      REAL                  :: unused
+      REAL                  :: UNUSED
       CHARACTER (LEN=1)     :: NULL = CHAR(0)
 
       CALL SET_MPI(ICOMM,MYPID,MPIERR) ! SETS ICOMM AND MYPID
@@ -235,7 +246,9 @@ C     OPEN INPUT FILE
      &             FOUROK, ILIST1,NILMAX, 
      &             NDUM,NGOT1,IMG1, IRTFLG)
  
-      !write(6,'(a,8i5)')' nstack1,ngot1,img1:',nstack1,ngot1,img1,irtflg
+      !write(6,'(a,8i5)')' nstack1,ngot1,img1:',nstack1,ngot1,img1
+      !write(3,'(a,8i5)')' In qstat; ngot,nstack,img:',nstack1,ngot1,img1
+      !write(3,'(a,8i5)')' In qstat; ilist1:',ilist1(1:5)
       IF (IRTFLG .NE. 0) RETURN
       
 
@@ -264,6 +277,7 @@ C        OPEN MASK INPUT FILE
            CALL NORMM(LUN1,LUNM,NX1,NY1,NZ1,
      &                 FMAX,FMIN,AV,NPOINT)
  
+           NEWCALC = .FALSE.
            IF (MYPID <= 0 .AND. ISFIRST) THEN
               NLET = lnblnk(FILNAMM)
               WRITE(NOUT,99) FILNAMM(1:NLET)
@@ -273,12 +287,15 @@ C        OPEN MASK INPUT FILE
 98            FORMAT('  NUMBER OF POINTS: ',I8)
            ENDIF
            ISFIRST = .FALSE.
+           NEWCALC = .TRUE.
 
         ELSEIF (IMAMI1 .NE. 1) THEN    ! IMAMI IS FROM CMBLOCK
+           NEWCALC = .TRUE.
            CALL NORM3(LUN1,NX1,NY1,NZ1,FMAX,FMIN,AV)
         ENDIF
 
-        CALL REPORTSTAT(FMIN,FMAX,AV,SIG)
+        !write(3,'(a,8i5)')' In qstat; ngot,nstack,img:',nstack1,ngot1,img1
+        CALL REPORTSTAT(NEWCALC, FMIN,FMAX,AV,SIG)
 
 C       OPEN NEXT INPUT FILE, UPDATE NINDX1 
         CALL NEXTFILE(NINDX1,   ILIST1, 
@@ -300,28 +317,94 @@ C       OPEN NEXT INPUT FILE, UPDATE NINDX1
 
 C     --------------- REPORTSTAT -----------------------------------
 
-      SUBROUTINE REPORTSTAT(FMINT,FMAXT,AVT,SIGT)
+      SUBROUTINE REPORTSTAT(NEWCALC,FMINT,FMAXT,AVT,SIGT)
 
       IMPLICIT NONE
       INCLUDE 'CMBLOCK.INC'
 
-      REAL    :: FMINT,FMAXT,AVT,SIGT
-      INTEGER :: IRTFLG
+      LOGICAL           :: NEWCALC
+      REAL              :: FMINT,FMAXT,AVT,SIGT
+      INTEGER           :: IRTFLG
 
-      WRITE(NOUT,90) FMINT,FMAXT,AVT,SIGT
+      CHARACTER(LEN=9)  :: MSG
+      INTEGER           :: NC
+
+      MSG = 'IN HEADER'
+      NC  = 9
+      IF (NEWCALC) THEN
+         MSG = 'NEW'
+         NC  = 3
+      ENDIF
+
+      WRITE(NOUT,90) FMINT,FMAXT,AVT,SIGT,MSG(1:NC)
 90    FORMAT('  FMIN: ', 1PG10.3,
      &       '  FMAX: ', 1PG10.3,
      &       '  AV: ',   1PG12.5,
-     &       '  SIG: ',  1PG12.5)
+     &       '  SIG: ',  1PG12.5,
+     &       '  (',A,')')
 
+C     SET VALUES IN COMMAND LINE REGISTERS
       CALL REG_SET_NSEL(1,4,FMAXT,FMINT, AVT, SIGT, 0.0, IRTFLG)
 
+C     SET VALUES IN LEGACY LOWER REGISTERS
       CALL REG_SET(3,FMAXT,CHAR(0), IRTFLG)
       CALL REG_SET(4,FMINT,CHAR(0), IRTFLG)
       CALL REG_SET(5,AVT,  CHAR(0), IRTFLG)
       CALL REG_SET(6,SIGT, CHAR(0), IRTFLG)
 
       END
+@
+
+
+1.26
+log
+@IN HEADER msg added to report line
+@
+text
+@d77 3
+a79 1
+      !write(6,'(a,8i5)')' nstack1,ngot1,img1:',nstack1,ngot1,img1,irtflg
+d125 1
+@
+
+
+1.25
+log
+@email_health_dept
+@
+text
+@d7 1
+d13 1
+a13 1
+C=* Copyright 1985-2016  Health Research Inc.,                         *
+d52 1
+a52 1
+      LOGICAL               :: ISFIRST,FOUROK
+d62 1
+a62 2
+
+      REAL                  :: unused
+d106 1
+d116 1
+d119 1
+d123 1
+a123 1
+        CALL REPORTSTAT(FMIN,FMAX,AV,SIG)
+d145 1
+a145 1
+      SUBROUTINE REPORTSTAT(FMINT,FMAXT,AVT,SIGT)
+d150 13
+a162 2
+      REAL    :: FMINT,FMAXT,AVT,SIGT
+      INTEGER :: IRTFLG
+d164 1
+a164 1
+      WRITE(NOUT,90) FMINT,FMAXT,AVT,SIGT
+d168 2
+a169 1
+     &       '  SIG: ',  1PG12.5)
+d171 1
+d174 1
 @
 
 

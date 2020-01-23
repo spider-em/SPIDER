@@ -1,22 +1,23 @@
 C++*********************************************************************
 C
-C MODEL3.F                         DOCUMENT FILE OPTION FEB   88 JF
-C                                  FILENAMES LENGTHENED DEC   88 AL
-C                                  CHAR. VARIABLES      AUG   89 AL
-C                                  REWRITTEN SOME       APR   97 AL
-C                                  HELIX BUGS FIXED     AUG   02 AL
-C                                  RDPRAF REMOVED       DEC   05 AL
-C                                  NORMAL GAUSSIAN      APR   09 AL
-C                                  CYL BUG              SEP   09 AL
-C                                  G2..                 JAN   12 AL
+C MODEL3.F          DOCUMENT FILE OPTION          FEB 88 Joachim Frank
+C                   FILENAMES LENGTHENED          DEC 88 ArDean Leith
+C                   CHAR. VARIABLES               AUG 89 ArDean Leith
+C                   REWRITTEN SOME                APR 97 ArDean Leith
+C                   HELIX BUGS FIXED              AUG 02 ArDean Leith
+C                   RDPRAF REMOVED                DEC 05 ArDean Leith
+C                   NORMAL GAUSSIAN               APR 09 ArDean Leith
+C                   CYL BUG                       SEP 09 ArDean Leith
+C                   G2..                          JAN 12 ArDean Leith
+C                   BLOCK PATTERN                 SEP 19 ArDean Leith
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2012  Health Research Inc.,                         *
+C=* Copyright 1985-2019  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
+C=* Email: spider@health.ny.gov                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -83,6 +84,7 @@ C--********************************************************************
      &    '        H    -- HELIX OF SPHERES'/
      &    '        HA   -- HELIX OF SPHERES, ADD DENSITIES'/
      &    '        NUM  -- LINE NUMBERS'/
+     &    '        P    -- BLOCK PATTERN'/
      &    '        R    -- RANDOM DENSITY PATTERN'/
      &    '        T    -- TWO 3D SINE WAVES'/
      &    '        S    -- 3D SINE WAVES'/
@@ -92,7 +94,7 @@ C--********************************************************************
      &    '        W    -- DENSITY WEDGE'/)
 
        CALL RDPRMC(ANS,NCHAR,.TRUE.,
-     &      'B/C/G/G1/G2/G3/H/HA/NUM/R/T/S/SP/SPA/SPV/W', NULL,IRTFLG)
+     &      'B/C/G/G1/G2/G3/H/HA/NUM/P/R/T/S/SP/SPA/SPV/W', NULL,IRTFLG)
 
       SELECT CASE (ANS(:NCHAR))
 
@@ -656,8 +658,8 @@ C      SUCH THAT THE SUM OF ALL THE VOXEL DENSITIES EQUAL 1.0.
      &              'RADII IN  X,Y,Z ( = STD. DEV.)',IRTFLG)
 
         WRITE(NOUT,90) XCEN,YCEN,ZCEN, STDX,STDY,STDZ
-90      FORMAT('  CENTER:',G8.2,',',G8.2,',',G8.2,
-     &         '  RADII:', G8.2,',',G8.2,',',G8.2) 
+90      FORMAT('  CENTER:',G9.2,',',G9.2,',',G9.2,
+     &         '  RADII:', G9.2,',',G9.2,',',G9.2) 
 
 C       SET THE ORDER FOR SUPERGAUSSIAN 
         NORDER = 1
@@ -690,6 +692,50 @@ C       SET THE ORDER FOR SUPERGAUSSIAN
              CALL WRTLIN(LUN1,A0,NX,J+(K-1)*NY)
            ENDDO
         ENDDO
+
+
+C     BLOCKS **************************************************** BLOCK PATTERN
+      CASE ('P')
+
+        NXD2 = NX / 2
+        NYD2 = NY / 2
+        NZD2 = NZ / 2
+
+        DO K = 1,NZ
+          IF (K <= NZD2) THEN
+            DO J = 1,NY
+              DO I = 1,NX
+	        IF     (I <= NXD2 .AND. J <= NYD2)  THEN
+                  A0(I) = 1.0
+	        ELSEIF (I  > NXD2 .AND. J <= NYD2)  THEN
+                  A0(I) = 2.0
+	        ELSEIF (I <= NXD2 .AND. J  > NYD2)  THEN
+                  A0(I) = 4.0
+	        ELSEIF (I  > NXD2 .AND. J  > NYD2)  THEN
+                  A0(I) = 3.0
+	        ENDIF
+              ENDDO
+              CALL WRTLIN(LUN1,A0,NX,(K-1)*NY+J)
+            ENDDO
+          ELSE
+            DO J = 1,NY
+              DO I = 1,NX
+	        IF     (I <= NXD2 .AND. J <= NYD2)  THEN
+                  A0(I) = 5.0
+	        ELSEIF (I  > NXD2 .AND. J <= NYD2)  THEN
+                  A0(I) = 6.0
+	        ELSEIF (I <= NXD2 .AND. J  > NYD2)  THEN
+                  A0(I) = 8.0
+	        ELSEIF (I  > NXD2 .AND. J  > NYD2)  THEN
+                  A0(I) = 7.0
+	        ENDIF
+              ENDDO
+              CALL WRTLIN(LUN1,A0,NX,(K-1)*NY+J)
+            ENDDO
+          ENDIF
+        ENDDO
+
+C     DEFAULT **************************************************** DEFAULT
 
       CASE DEFAULT
          CALL ERRT(101,'UNIDENTIFIED OPTION',NE)

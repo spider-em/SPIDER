@@ -7,9 +7,9 @@ C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2018  Health Research Inc.,                         *
+C=* Copyright 1985-2019  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
+C=* Email: spider@health.ny.gov                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -31,7 +31,7 @@ C
 C PURPOSE: OPENS NON-SPIDER STREAM FILE (CAN HAVE EXTENSION OTHER
 C          THAN DATEXC)
 C
-C NOTES: 
+C NOTES:   IF IRTFLG == 999 ON INPUT DO NOT ECHO FILE OPENING INFO
 C
 C23456789012345678901234567890123456789012345678901234567890123456789012
 C***********************************************************************
@@ -52,7 +52,8 @@ C***********************************************************************
         LOGICAL           :: CALLERRT
         INTEGER           :: IRTFLG
 
-        LOGICAL           :: EX,CONVERT_TO_LITTLE
+        LOGICAL           :: EX,CONVERT_TO_LITTLE,CONVERT_TO_BIG
+        LOGICAL           :: SAYIT
         CHARACTER(LEN=96) :: PROMPT
         CHARACTER(LEN=80) :: EXTEN
         CHARACTER(LEN=7)  :: STATVAR
@@ -63,6 +64,8 @@ C***********************************************************************
         INTEGER           :: LENOPN,LENREC
 
         CALL SET_MPI(ICOMM,MYPID,MPIERR) ! SETS ICOMM AND MYPID  #ifdef USE_MPI
+
+        SAYIT = (IRTFLG .NE. 999)
 
 C       SET DEFAULT ERROR RETURN
         IRTFLG = 1
@@ -93,7 +96,7 @@ C             ADD THE EXTENSION THAT IS SENT TO FILNAM
 
         LUN = ABS(LUNT)
         IF ((LUN <= 0 .OR. LUN > 100) .AND.
-     &     (LUN .NE. 103)) THEN
+     &      (LUN .NE. 103)) THEN
 C          LUN=103 USED IN  SYMPARTEXT 
            CALL ERRT(102,'IN SOURCE CODE, LUN MUST BE 1...100',LUN)
            RETURN
@@ -109,6 +112,7 @@ C          MAKE SURE THIS IS NOT TREATED AS INLINE FILE
 
 C       SET STATUS FOR OPEN
 
+        CONVERT_TO_BIG    = (DISP(2:2) == 'B')
         CONVERT_TO_LITTLE = (DISP(2:2) == 'L')
         STATVAR           = 'NEW'
 
@@ -157,6 +161,14 @@ C                FORCE OUTPUT TO LITTLE_ENDIAN
      &             FORM=FORMVAR, ACCESS='STREAM',
      &             IOSTAT=IRTFLGT)
 
+              ELSEIF (CONVERT_TO_BIG) THEN
+C                FORCE OUTPUT TO BIG_ENDIAN
+
+	         OPEN(UNIT=LUN,STATUS=STATVAR,
+     &             CONVERT='BIG_ENDIAN',
+     &             FORM=FORMVAR, ACCESS='STREAM',
+     &             IOSTAT=IRTFLGT)
+
 	      ELSE
 
 	         OPEN(UNIT=LUN,STATUS=STATVAR,
@@ -172,10 +184,20 @@ C               FORCE OUTPUT TO LITTLE_ENDIAN
      &             CONVERT='LITTLE_ENDIAN',
      &             FORM=FORMVAR, ACCESS='STREAM', 
      &             IOSTAT=IRTFLGT)
-             ELSE
-	        OPEN(UNIT=LUN,FILE=FILNAM(1:NCHAR),STATUS=STATVAR,
+
+              ELSEIF (CONVERT_TO_BIG) THEN
+C                FORCE OUTPUT TO BIG_ENDIAN
+
+	         OPEN(UNIT=LUN,FILE=FILNAM(1:NCHAR),STATUS=STATVAR,
+     &             CONVERT='BIG_ENDIAN',
+     &             FORM=FORMVAR, ACCESS='STREAM',
+     &             IOSTAT=IRTFLGT)
+
+              ELSE
+	         OPEN(UNIT=LUN,FILE=FILNAM(1:NCHAR),STATUS=STATVAR,
      &             FORM=FORMVAR, ACCESS='STREAM', 
      &             IOSTAT=IRTFLGT)
+
              ENDIF
 
            ENDIF
@@ -193,11 +215,11 @@ C               FORCE OUTPUT TO LITTLE_ENDIAN
            RETURN
         ENDIF
 
-        IF (VERBOSE .AND. MYPID <= 0) THEN
+        IF (SAYIT .AND. VERBOSE .AND. MYPID <= 0) THEN
            WRITE(NOUT,91) FORMVAR(1:1), FILNAM(:NCHAR)
- 91        FORMAT('  OPENED (',A1,'): ',A)
+ 91        FORMAT('  OPENED  (',A1,'): ',A)
         ENDIF
-
+ 
         IRTFLG = 0
 
         END

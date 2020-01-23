@@ -1,6 +1,7 @@
-head	1.18;
+head	1.19;
 access;
 symbols
+	pre_mrcs:1.18
 	healthdept_2018:1.18
 	pre_getangas:1.12
 	GPL2010:1.10
@@ -22,6 +23,11 @@ symbols
 locks; strict;
 comment	@c @;
 
+
+1.19
+date	2019.11.04.17.35.09;	author leith;	state Exp;
+branches;
+next	1.18;
 
 1.18
 date	2018.10.03.14.34.11;	author leith;	state Exp;
@@ -119,24 +125,27 @@ desc
 @
 
 
-1.18
+1.19
 log
-@email_health_dept
+@mrc_support
 @
 text
 @
-C++*******************************************************************
+C++*********************************************************************
 C
 C    NORM3.F
-C               SIG FOR BLANK IMAGE FLOAT SLOP     JAN 06 A. LEITH
-C               FLOAT                              APR 07 A. LEITH
-C               ERROR MESSAGES                     NOV 10 A. LEITH
-C               NORMVALSP ADDED                    AUG 11 A. LEITH
+C           SIG FOR BLANK IMAGE FLOAT SLOP         JAN 06 ArDean Leith
+C           FLOAT                                  APR 07 ArDean Leith
+C           ERROR MESSAGES                         NOV 10 ArDean Leith
+C           NORMVALSP ADDED                        AUG 11 ArDean Leith
+C           NORMVALSP ADDED                        AUG 11 ArDean Leith
+C           USED SETPRMB, IMPLICIT                 JUL 19 ArDean Leith
+C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2011  Health Research Inc.,                         *
+C=* Copyright 1985-2019  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@@health.ny.gov                                        *
 C=*                                                                    *
@@ -154,13 +163,13 @@ C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
 C **********************************************************************
 C
-C    NORM3(LUN,NSAM,NROW,NSLICE,FMAX,FMIN,AV)
+C    NORM3(LUN,NX,NY,NZ,FMAX,FMIN,AV)
 C
 C    PURPOSE:  DETERMINES MAX, MIN, AV, AND SIG FOR A SPIDER IMAGE
 C
 C    PARAMETERS:
 C        LUN          LOGICAL UNIT NUMBER OF IMAGE             (SENT)
-C        NSAM,NROW,NSLICE    DIMENSIONS OF VOLUME              (SENT)
+C        NX,NY,NZ     DIMENSIONS OF VOLUME                     (SENT)
 C        FMAX         MAXIMUM OF VOLUME                        (RET.)
 C        FMIN         MINIMUM OF VOLUME                        (RET.)
 C        AV           AVERAGE OF VOLUME                        (RET.)
@@ -168,33 +177,46 @@ C
 C    NOTE:    THIS USES UNLABELED COMMON!!
 C             SIG RETURNED IN COMMON  (LEGACY ISSUE)
 C
-C--*******************************************************************
+C--*********************************************************************
 
-      SUBROUTINE NORM3(LUN,NSAM,NROW,NSLICE,FMAX,FMIN,AV)
+      SUBROUTINE NORM3(LUN,NX,NY,NZ,FMAX,FMIN,AV)
 
+      IMPLICIT NONE
+
+      INTEGER          :: LUN,NX,NY,NZ
+      REAL             :: FMAX,FMIN,AV
+
+      REAL             :: BUF        
       COMMON BUF(1)
+
+      INTEGER          :: NSAMC,NROWC,IREC,NLABEL,IFORM,IMAMI,IHIST
+      REAL             :: FMAXC,FMINC,AVC,SIG
       COMMON /MASTER/NSAMC,NROWC,IREC,NLABEL,IFORM,IMAMI,FMAXC,FMINC,
-     &               AVC,SIG,IHIST
+     &                    AVC,SIG,IHIST
+
+      INTEGER          :: LUNT,NIN,NOUT
       COMMON /UNITS/LUNT,NIN,NOUT
 
-      DOUBLE PRECISION DAV,DAV2,DTOP,FNALL,DTEMP
+      DOUBLE PRECISION :: DAV,DAV2,DTOP,FNALL,DTEMP
+      REAL             :: B,DIFF 
+      INTEGER          :: NE,IRECT,K
 
-      FNALL = FLOAT(NSAM) * FLOAT(NROW) * FLOAT(NSLICE)
+      FNALL = FLOAT(NX) * FLOAT(NY) * FLOAT(NZ)
       IF (FNALL <= 0) THEN
-         WRITE(NOUT,*) '*** NSAM, NROW, NSLICE:',NSAM,NROW,NSLICE
+         WRITE(NOUT,*) '*** NX, NY, NZ:',NX,NY,NZ
          CALL ERRT(101,'NORM3, BAD DIMENSIONS',NE)
          RETURN
       ENDIF
 
-      DAV  = 0.
-      DAV2 = 0.
+      DAV  = 0.0
+      DAV2 = 0.0
 
       FMIN = HUGE(FMIN)
       FMAX = -FMIN
 
-      DO IRECT = 1,NROW*NSLICE
-         CALL REDLIN(LUN,BUF,NSAM,IRECT)
-         DO K = 1,NSAM
+      DO IRECT = 1,NY*NZ
+         CALL REDLIN(LUN,BUF,NX,IRECT)
+         DO K = 1,NX
             B    = BUF(K)
             FMAX = MAX(B,FMAX)
             FMIN = MIN(B,FMIN)
@@ -214,7 +236,7 @@ C--*******************************************************************
       IF (DIFF <= TINY(DIFF)) THEN
 C        BLANK IMAGE SOMETIMES LEADS TO SQRT NEG. NUMBER
 
-      ELSEIF (DTOP .LT. 0.0D0) THEN
+      ELSEIF (DTOP < 0.0D0) THEN
 C        SQRT OF NEGATIVE NUMBER
          WRITE(NOUT,*) '*** SQRT(',DTOP,') IMPOSSIBLE. ',
      &                 'ASSUMING THIS IS A BLANK IMAGE' 
@@ -230,7 +252,19 @@ C        CAN CALCULATE SIG
          SIG = DSQRT( DTOP / DBLE(FNALL - 1.0))
       ENDIF
 
-      CALL SETPRM(LUN,NSAM,NROW,FMAX,FMIN,AV,'U')
+
+      !write(6,*)' In norm3, before setprmb, fmin,fmax: ',fmin,fmax
+
+C     VALUES ARE SET IN COMMON BY NAME ABOVE
+
+C     WRITE(3,90) FMIN,FMAX,AV,SIG
+90    FORMAT('  FMIN: ', 1PG10.3,
+     &       '  FMAX: ', 1PG10.3,
+     &       '  AV: ',   1PG12.5,
+     &       '  SIG: ',  1PG12.5)
+
+C     SET VALUES IN FILE HEADER
+      CALL SETPRMB(LUN,FMAX,FMIN,AV,SIG)
 
       END
 
@@ -625,6 +659,67 @@ C          TRAP FOR BLANK IMAGE AREA IMPRECISION
 
         END
 
+@
+
+
+1.18
+log
+@email_health_dept
+@
+text
+@d2 1
+a2 1
+C++*******************************************************************
+d5 7
+a11 4
+C               SIG FOR BLANK IMAGE FLOAT SLOP     JAN 06 A. LEITH
+C               FLOAT                              APR 07 A. LEITH
+C               ERROR MESSAGES                     NOV 10 A. LEITH
+C               NORMVALSP ADDED                    AUG 11 A. LEITH
+d16 1
+a16 1
+C=* Copyright 1985-2011  Health Research Inc.,                         *
+d34 1
+a34 1
+C    NORM3(LUN,NSAM,NROW,NSLICE,FMAX,FMIN,AV)
+d40 1
+a40 1
+C        NSAM,NROW,NSLICE    DIMENSIONS OF VOLUME              (SENT)
+d48 5
+a52 1
+C--*******************************************************************
+d54 2
+a55 1
+      SUBROUTINE NORM3(LUN,NSAM,NROW,NSLICE,FMAX,FMIN,AV)
+d57 1
+d59 3
+d63 3
+a65 1
+     &               AVC,SIG,IHIST
+d68 3
+a70 1
+      DOUBLE PRECISION DAV,DAV2,DTOP,FNALL,DTEMP
+d72 1
+a72 1
+      FNALL = FLOAT(NSAM) * FLOAT(NROW) * FLOAT(NSLICE)
+d74 1
+a74 1
+         WRITE(NOUT,*) '*** NSAM, NROW, NSLICE:',NSAM,NROW,NSLICE
+d79 2
+a80 2
+      DAV  = 0.
+      DAV2 = 0.
+d85 3
+a87 3
+      DO IRECT = 1,NROW*NSLICE
+         CALL REDLIN(LUN,BUF,NSAM,IRECT)
+         DO K = 1,NSAM
+d107 1
+a107 1
+      ELSEIF (DTOP .LT. 0.0D0) THEN
+d123 13
+a135 1
+      CALL SETPRM(LUN,NSAM,NROW,FMAX,FMIN,AV,'U')
 @
 
 

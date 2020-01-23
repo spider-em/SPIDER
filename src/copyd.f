@@ -17,7 +17,7 @@ C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
 C=* Copyright 1985-2014  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
+C=* Email: spider@health.ny.gov                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -35,7 +35,7 @@ C **********************************************************************
 C
 C  COPYD(LUN1,LUN2,LUNDOC,LUNXM1,LUNXM2,INDXD,FLIPOUT)
 C
-C  PURPOSE:  COPY A SPIDER IMAGE FILE TO ANOTHER FILE
+C  PURPOSE:  COPY SPIDER IMAGE/VOL TO ANOTHER FILE INCLUDING MRC FIL
 C 
 C  PARAMETERS: LUN1,LUN2      READ & WRITE UNIT                 (SENT)
 C              LUNDOC         READ & WRITE UNIT                 (SENT)
@@ -90,6 +90,7 @@ C       OPEN FIRST INPUT FILE, DISP = 'E' DOES NOT STOP ON ERROR
      &               NDUM,NGOT1,IMG1, IRTFLG) 
 
         IF (IRTFLG == 5) THEN
+C          NOT A VALID SPIDER OR MRC INPUT DATA FILE
 
            CALL FILERD(FILNAM2,NLET2,NULL,'OUTPUT FILE NAME',IRTFLG)
            IF (IRTFLG .NE. 0) RETURN 
@@ -160,13 +161,13 @@ C          REPLACE HEADER WITH BYTE-FLIPPED HEADER
            CALL LUNWRTHED (LUN2,NX1,0,IRTFLG)
         ENDIF
        !call lungetstat(lun2,imamit,fmint,fmaxt,avt,sigt,irtflg)
-       !write(6,*)' stats3:',imamit,fmint,fmaxt,avt,sigt 
+       !write(3,*)' In copyd, stats3:',imamit,fmint,fmaxt,avt,sigt 
 
         NINDX1 = 1
         NINDX2 = 1
         DO                ! LOOP OVER ALL IMAGES/STACKS
 
-C          DO NOT REPORT FILE INFO IF WHOLE STACK
+C          DO NOT REPORT FILE INFO IF WHOLE STACK (VERBOSE IN COMMON)
 	   IF (NSTACK1 > 0 .AND. NSTACK2 >= 0) VERBOSE = .FALSE. 
 
 C          COPY THE DESIRED NUMBER OF DATA RECORDS
@@ -175,15 +176,15 @@ C          COPY THE DESIRED NUMBER OF DATA RECORDS
               CALL WRTLIN(LUN2,BUF,NX1,IREC)
            ENDDO
 
-C          OPEN NEXT SET OF I/O FILES, UPDATES NINDX* 
-           !write(6,*)  ' CALLING nextfiles'
+C          OPEN NEXT SET OF I/O FILES, UPDATES NINDX1 & NINDX2 
+           !write(3,*)' In copyd, calling nextfiles:',nindx1,nindx2 
            CALL NEXTFILES(NINDX1,NINDX2,  ILIST1,ILIST2, 
      &                    .FALSE., LUNXM1,LUNXM2,
      &                    NGOT1,NGOT2,    NSTACK1,NSTACK2,  
      &                    LUN1,LUN1,LUN2, FILNAM1,FILNAM2,
      &                    IMG1,IMG2, IRTFLG)
- 
-           !write(6,*) ' After nextfiles, irtflg',irtflg
+
+           !write(3,*) ' In copyd, after nextfiles, irtflg',irtflg
            !if (irtflg .ne. 0) then
            !write(6,'(A,4i6)') 
 !     &        ' Nextfiles img1,img2,irtflg:',img1,img2,irtflg

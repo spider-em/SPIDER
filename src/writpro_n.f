@@ -16,7 +16,7 @@ C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
 C=* Copyright 1985-2015  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
+C=* Email: spider@health.ny.gov                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -245,7 +245,7 @@ C              OPEN NEXT PROJECTION OUTPUT FILE
      &                   '  PSI:',F6.1,' THETA:',F6.1,' PHI:',F6.1)
                ENDIF
 
-C              PUT ANGLES IN HEADER ALSO
+C              PUT ANGLES IN HEADER ALSO   (MRC OK)
                BUFOUT(1) = ANGBUF(1,IFILE)  !PSI
                BUFOUT(2) = ANGBUF(2,IFILE)
                BUFOUT(3) = ANGBUF(3,IFILE)

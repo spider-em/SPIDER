@@ -19,14 +19,16 @@ C              2015 STACK SUPPORT                  JUL 15 ArDean Leith
 C              COPYTOMRC_STK ADDED, STACK BUGGY    JUN 16 ArDean Leith
 C              BOTLEFT OPTION REINTRODUCED         SEP 16 ArDean Leith
 C              CREATES LITTLE ENDED FILES ONLY     JAN 18 ArDean Leith
+C              GETLAB PARAMETERS                   NOV 19 ArDean Leith
+C              REWRITE                             DEC 19 ArDean Leith
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2018  Health Research Inc.,                         *
+C=* Copyright 1985-2019  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
+C=* Email: spider@health.ny.gov                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -42,7 +44,7 @@ C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
 C **********************************************************************
 C 
-C COPYTOMRC(LUNSPI,LUNMRC,NX,NY,NZ)
+C COPYTOMRC    (LUNSPI,LUNMRC,NX,NY,NZ)
 C COPYTOMRC_STK(LUNSPI,LUNMRC,NX,NY,NZ) 
 C                                                                    
 C PURPOSE: COPY FROM SPIDER TO MRC FILE FORMAT
@@ -57,217 +59,343 @@ C
 C23456789012345678901234567890123456789012345678901234567890123456789012
 C***********************************************************************
 
-        SUBROUTINE COPYTOMRC(LUNSPI,LUNMRC,NX,NY,NZ)
+      SUBROUTINE COPYTOMRC(LUNSPI,LUNMRC,
+     &                     LUNDOC,LUNXM1,LUNXM2,IRTFLG)
 
-        IMPLICIT NONE
+      IMPLICIT NONE
 
-        INCLUDE 'CMBLOCK.INC'
-        INCLUDE 'CMLIMIT.INC'
+      INCLUDE 'CMBLOCK.INC'
+      INCLUDE 'CMLIMIT.INC'
+
+      INTEGER                  :: IERR
+      COMMON /IOERR/ IERR
+
+      INTEGER                  :: BUF
+      COMMON /IOBUF/ BUF(NBUFSIZ)
+
+      INTEGER                  :: LUNSPI,LUNMRC,LUNDOC,LUNXM1,LUNXM2
+      INTEGER                  :: IRTFLG
+
+      INTEGER *2               :: I2MAX,I2VAL
+      INTEGER *4               :: I4VAL
+      INTEGER                  :: NC,MRCMODE,IGO,IEND,IDUM
+      INTEGER                  :: NINDX1,NINDX2
+      REAL                     :: FN,FNCON,FMINT,FMAXT,FAVT,FSIGT
+      REAL                     :: SCALEX,SCALEY,SCALEZ
+
+      INTEGER,ALLOCATABLE      :: ILIST1(:),ILIST2(:)
+
+      CHARACTER (LEN=MAXNAM)   :: PROMPT 
+      CHARACTER (LEN=MAXNAM)   :: FILNAM1,FILNAM2,MRCFILE
+      CHARACTER (LEN=2*MAXNAM) :: COMMAN
+      LOGICAL                  :: VERBOSE_SAVE,IS_MRC,IS_BARE
+      CHARACTER (LEN=1)        :: NULL = CHAR(0)
+      CHARACTER (LEN=1)        :: DISP
+      CHARACTER (LEN=4)        :: CAXIS,CSTR
+      INTEGER                  :: ICOMM,MYPID,MPIERR
+      INTEGER                  :: IFORM1,NX1,NY1,NZ1,NSTACK1,NSTACK2
+      INTEGER                  :: NDUM,NGOT1,NGOT2,IMG1,IMG2,NILMAX,IVAL
+      INTEGER                  :: MAXIM1,MAXIM2,NLET1,NLET2
+      INTEGER                  :: LENT,NOT_USED,IRECIN
+
+      INTEGER                  :: lnblnkn      ! FUNCTION
+        
+      CALL SET_MPI(ICOMM,MYPID,MPIERR) ! SETS ICOMM AND MYPID
+
+      VERBOSE_SAVE = VERBOSE           ! SAVE CURRENT VERBOSITY
+
+      NILMAX  = NIMAX             ! FROM CMLIMIT
+      ALLOCATE(ILIST1(NIMAX),
+     &         ILIST2(NIMAX),
+     &         STAT=IRTFLG)
+      IF (IRTFLG .NE. 0) THEN
+         CALL ERRT(46,'COPYTOMRC; ILIST...',2*NIMAX)
+         RETURN
+      ENDIF
+
+C     OPEN FIRST INPUT FILE, DISP = 'E' DOES NOT STOP ON ERROR
+      MAXIM1 = 0
+      PROMPT =
+     &     'SPIDER INPUT FILE NAME OR TEMPLATE (e.g. SPI_STK@**)~~9'
+      CALL OPFILES(0,LUNSPI,LUNDOC,LUNXM1,  
+     &               .TRUE.,FILNAM1,NLET1, 'E',
+     &               IFORM1,NX1,NY1,NZ1,NSTACK1,
+     &               PROMPT,
+     &              .TRUE., ILIST1,NILMAX, 
+     &               NDUM,NGOT1,IMG1, IRTFLG) 
+
+
+      CALL LUNGETIS_MRC(LUNSPI,IS_MRC,IRTFLG)      
+      CALL LUNGETISBARE(LUNSPI,IS_BARE,IRTFLG)
+
+      IF (IS_MRC) THEN
+         CALL ERRT(101,'OPERATION DOES NOT READ MRC FILES',NDUM)
+         GOTO 999
+      ENDIF
+
+      !write(3,'(A,4i6)')' In nstack1,ngot1,img1:',nstack1,ngot1,img1
+
+      CALL FILERD(FILNAM2,NLET2,NULL,
+     &       'MRC OUTPUT FILE NAME OR TEMPLATE (e.g. **@MRC_STK.mrc)~',
+     &       IRTFLG)
+      IF (IRTFLG .NE. 0) GOTO 999
+
+      IF (INDEX(FILNAM2,'.mrc') <= 0 .AND.
+     &    INDEX(FILNAM2,'.MRC') <= 0) THEN
+         CALL ERRT(101,
+     &     'OUTPUT FILE NAME MUST HAVE MRC/mrc EXTENSION',NDUM)
+         GOTO 999
+      ENDIF
+
+
+C     FIND HEADER VALUES FOR THE MRC FILE
+
+      WRITE(NOUT,*) ' MRC DATA MODE 0:  8-BIT SIGNED INT, ',
+     &              ' 1: 16-BIT SIGNED INT  '
+      WRITE(NOUT,*)  '               2: 32-BIT REAL,       ',
+     &              ' 6: 16-BIT UNSIGNED INT'
+
+      MRCMODE = 2
+      CALL RDPRI1S(MRCMODE,NOT_USED,'MRC MODE (0/1/2/6)',IRTFLG)
+      IF (IRTFLG .NE. 0) GOTO 999
+
+C     LEGACY INPUT TRAP
+      IF (MRCMODE ==  8) MRCMODE = 0   !  8 BIT UNSIGNED INT
+      IF (MRCMODE == 16) MRCMODE = 6   ! 16 BIT UNSIGNED INT
+      IF (MRCMODE == 32) MRCMODE = 2   ! 32 BIT FLOATING POINT
+
+      WRITE(NOUT,*) ' ' 
+      WRITE(NOUT,*) ' MRC DATA ORIGIN     UL: UPPER LEFT, ',
+     &              ' LL: LOWER LEFT  '
+      IF (NZ1 > 1) THEN
+         WRITE(NOUT,*) ' MRC HANDEDNESS  L: LEFT, ',
+     &                 '        R:  RIGHT '
+      ENDIF
+
+      CAXIS(1:2) = 'UL'        ! DEFAULT
+
+      IF (NZ1 <= 1) THEN
+         CALL RDPRMC(CSTR,NC,.TRUE.,'MRC DATA ORIGIN (UL/LL)',
+     &               NULL,IRTFLG)
+         IF (IRTFLG .NE. 0)  RETURN
+
+         IF (CSTR(1:NC) == 'LL')  CAXIS(1:2) = 'LL'
  
-        COMMON /IOERR/  IERR       ! LEGACY REDLIN ERROR FLAG
+      ELSE
+C        VOLUME OUTPUT
+         CALL RDPRMC(CSTR,NC,.TRUE.,  
+     &          'DATA ORIGIN (UL/LL) & HANDEDNESS (L/R)',NULL,IRTFLG)
+         IF (IRTFLG .NE. 0)  RETURN
 
-        REAL                    :: BUFIN
-        COMMON /IOBUF/  BUFIN(NBUFSIZ)
+C        GET FIRST TOKEN (CHAR. STRING DELIMITED BY A ", ( ) ] -")
+         CALL GETNEXTTOKEN_N(CSTR,NC,1,IGO,IEND)
+         IF (IGO <= 0) THEN
+            CALL ERRT(101,'INVALID INPUT',IDUM)
+            GOTO 999
+         ENDIF
 
-        INTEGER                 :: LUNSPI,LUNMRC, NX,NY,NZ
+         IF (CSTR(IGO:IGO+1) == 'LL') CAXIS(1:2) = 'LL'
 
-        REAL,       ALLOCATABLE :: STREAMBUF(:)
-        INTEGER *1, ALLOCATABLE :: I1STREAMBUF(:)
-        INTEGER *2, ALLOCATABLE :: I2STREAMBUF(:)
-        INTEGER,    ALLOCATABLE :: ILIST(:)
-        REAL                    :: BUF(NBUFSIZ),FIXLENBUF(256)
-        INTEGER *1              :: I1BUF(1024)
-        COMMON                     BUF,FIXLENBUF,I1BUF
+         IF (CAXIS(1:2) .NE. 'UL' .AND. CAXIS(1:2) .NE. 'LL')THEN
+            CALL ERRT(101,'INVALID ORIGIN',IDUM)
+            RETURN
+         ENDIF
 
-        CHARACTER(LEN=MAXNAM)   :: MRCFILE,FILPAT,FILOUT
-        CHARACTER(LEN=8)        :: ANS
-        CHARACTER(LEN=80)       :: PROMPT
-        LOGICAL                 :: FLIP,ISSWABT,BOTLEFT
-        LOGICAL                 :: isswab
-        INTEGER                 :: IVAL
-        INTEGER *1              :: I1VAL
-        INTEGER *2              :: I2VAL
+C        GET SECOND TOKEN (CHAR. STRING DELIMITED BY A ", ( ) ] -")
+         CALL GETNEXTTOKEN_N(CSTR,NC,IEND+1,IGO,IEND)
+         IF (IGO <= 0) THEN
+            CALL ERRT(101,'INVALID INPUT',IDUM)
+            GOTO 999
+         ENDIF
+         CAXIS(4:4) = 'L'
 
-        INTEGER *2              :: I2V
-        INTEGER *1              :: I1V(2),I1TMP
-        EQUIVALENCE                (I2V,I1V)
+         IF     (CSTR(IGO:IGO) == '0') THEN
+            CAXIS(4:4) = 'R' 
+         ENDIF 
+      
+         IF (CAXIS(4:4) .NE. 'L' .AND. CAXIS(4:4) .NE. 'R')THEN
+            CALL ERRT(101,'INVALID HANDEDNESS',IDUM)
+            RETURN
+         ENDIF
+      ENDIF
 
-        REAL    *4              :: R4VALIN,R4VALOUT
-        INTEGER *1              :: I1VALIN(4),I1VALOUT(4)
-        EQUIVALENCE                (R4VALIN,I1VALIN),(R4VALOUT,I1VALOUT)
+C     FIND HEADER VALUES FOR THE MRC FILE
 
-        INTEGER                 :: IERR,LENOPENB,LENOPENF,IRTFLG,MODE
-        INTEGER                 :: NSYMBT,MACHST,NE,MAXIM,IOFFSET 
-        INTEGER                 :: LENOPEN,NCHAR,IRECMRC
-        INTEGER                 :: IBOTLEFT,NOT_USED,ILOCOUT
-        INTEGER                 :: IRECIN,ILOCIN,IRECINT,NSYMBYT
-        REAL                    :: RMS,FMINT,FMAXT,FAVT,FSIGT,FN,FNCON
-        REAL                    :: UNUSED,SCALE,SCALEX,SCALEY,SCALEZ
-        INTEGER                 :: IX,IY,IZ,NLET
-        INTEGER                 :: I,NSTACKT,ITYPE,NUNUSED,NSTACKOUT
-        INTEGER                 :: IMGNUMOUT,NSTACK,IGO
-        INTEGER                 :: NIMG,MZ
+      IF (MRCMODE == 2 .AND. MAXIM1 < 0) THEN
+C        32 BIT FLOATING POINT  IMAGE OR VOLUME (NOT WHOLE STACK)
 
-        LOGICAL                 :: FOUROK
+C        NEED FMIN & FMAX (SIG IN COMMON: MASTER)
+         IF (IMAMI .NE. 1) CALL NORM3(LUNSPI,NX1,NY1,NZ1,FMAX,FMIN,AV)
 
-        IERR = 0
+         FMINT = FMIN
+         FMAXT = FMAX
+         FAVT  = AV
+         FSIGT = SIG
+C     UNFININISHED HERE !!!!!!!!!!!!!!!!!!!
 
-C       OPEN NEW MRC FILE FOR DIRECT ACCESS, RECORD LENGTH 1024 BYTES
-C       FORCE IT TO LITTLE ENDED OUTPUT, OVERRULES COMPILER  'UL'
-        LENOPENB = 1024
-        LENOPENF = LENOPENB / 4
-        CALL OPAUXFILE(.TRUE.,MRCFILE,DATEXC,LUNMRC,LENOPENB,'UL',
-     &                 'MRC OUTPUT',.TRUE.,IRTFLG)
+      ELSEIF (MRCMODE == 0  .AND. MAXIM1 < 0 ) THEN
+C        8 BIT SIGNED INTEGER IMAGE OR VOLUME (NOT WHOLE STACK)
 
-        IVAL     = 8
-        IBOTLEFT = 1
-        CALL RDPRI2S(IVAL,IBOTLEFT,NOT_USED,
-     &   'MRC DATA LENGTH (8/32 BITS), ORIGIN AT BOTTOM LEFT (YES==1)',
-     &   IRTFLG)
-        IF (IRTFLG .NE. 0) GOTO 9999
+C        NEED FMIN & FMAX (SIG IN COMMON: MASTER)
+         IF (IMAMI .NE. 1) CALL NORM3(LUNSPI,NX1,NY1,NZ1,FMAX,FMIN,AV)
+         IF (FMIN < -128) THEN
+            I4VAL = FMIN
+            CALL ERRT(102,'POSSIBLE 8 BIT INTEGER UNDERFLOW',I4VAL)
+            GOTO 999
+         ELSEIF (FMAX > 127) THEN 
+            I4VAL = FMAX
+            CALL ERRT(102,'POSSIBLE 8 BIT INTEGER OVERFLOW',I4VAL)
+            GOTO 999
+         ENDIF
 
-        MODE = 2
-        IF (IVAL == 8) MODE = 0
+      ELSEIF (MRCMODE == 1  .AND. MAXIM1 < 0 ) THEN
+C        16 BIT SIGNED INTEGER IMAGE OR VOLUME (NOT WHOLE STACK)
 
-        BOTLEFT = (IBOTLEFT == 1)   ! USUAL MRC BOTTOM!!
+C        NEED FMIN & FMAX (SIG IN COMMON: MASTER)
+         IF (IMAMI .NE. 1) CALL NORM3(LUNSPI,NX1,NY1,NZ1,FMAX,FMIN,AV)
 
-C       CREATE A NEW HEADER FOR THE MRC FILE
-        FMINT = FMIN
-        FMAXT = FMAX
-        FAVT  = AV
-        FSIGT = SIG
+         IF (FMIN < -HUGE(I2VAL)) THEN
+            I4VAL = FMIN
+            CALL ERRT(102,'POSSIBLE 16 BIT INTEGER UNDERFLOW',I4VAL)
+            GOTO 999
+         ELSEIF (FMAX > HUGE(I2VAL)) THEN 
+            I4VAL = FMAX
+            CALL ERRT(102,'POSSIBLE 16 BIT INTEGER OVERFLOW',I4VAL)
+            GOTO 999
+         ENDIF
 
-        IF (MODE == 0) THEN
-           FN    = (255.0 - 0.0) / (FMAXT - FMINT)
-           FNCON = 0.0 - FN * FMINT
+      ELSEIF (MRCMODE == 6  .AND. MAXIM1 < 0 ) THEN
+C        16 BIT UNSIGNED INTEGER (NOT WHOLE STACK)
 
-           FMINT = 0.0
-           FMAXT = 255.0
-           I2VAL = FMINT * FN + FNCON
-           FAVT  = I2VAL
-C          FSIGT IS NOT RIGHT!!!!
-           FSIGT = -1.0
-        ENDIF
+C        NEED FMIN & FMAX (SIG IN COMMON: MASTER)
+         IF (IMAMI .NE. 1) CALL NORM3(LUNSPI,NX1,NY1,NZ1,FMAX,FMIN,AV)
 
-C       TRY TO GET SCALE VALUE (MAY NOT BE USED)
-        CALL GETLAB(LUNSPI,NX,UNUSED,21,1,SCALE,IRTFLG)
-        SCALEX  = SCALE
-        SCALEY  = SCALE
-        SCALEZ  = SCALE
+         IF (FMIN < -HUGE(I2VAL)) THEN
+            I4VAL = FMIN
+            CALL ERRT(102,'POSSIBLE 16 BIT INTEGER UNDERFLOW',I4VAL)
+            GOTO 999
+         ELSEIF (FMAX > HUGE(I2VAL)) THEN 
+            I4VAL = FMAX
+            CALL ERRT(102,'POSSIBLE 16 BIT INTEGER OVERFLOW',I4VAL)
+            GOTO 999
+         ENDIF
+      ENDIF
 
-C       CREATE HEADER. (NOTE: FMIN, FMAX, AV ARE SAME AS SPIDER IMAGE)
-        NIMG    = 1
-        MZ      = NZ
-        NSYMBYT = 0
-        ISSWABT = .FALSE.
 
-        CALL SETHEDCCP4(FIXLENBUF, NX, NY, NZ,
-     &            FMINT,FMAXT,FAVT,FSIGT,
-     &            SCALEX,SCALEY,SCALEZ,MODE,
-     &            ISSWABT,NSYMBYT, NIMG,MZ,IRTFLG)
-        IF (IRTFLG .NE. 0) GOTO 9999
+C     TRY TO GET SPIDER IMAGE SCALE VALUE (USUALLY NOT SET)
+      CALL GETLAB(LUNSPI,21,1,SCALEX,IRTFLG)
 
-C       WRITE HEADER OF 1024 BYTES (256 FLOATS) TO MRC FILE
-        CALL WRTLIN(LUNMRC,FIXLENBUF,LENOPENF,1) 
-
-C       SET STARTING RECORD FOR MRC DATA
-        IRECMRC = 1   !SKIPS ONE HEADER RECORD
-        ILOCOUT = 0
-
-        IF (MODE == 2) THEN
-C          FLOATING POINT OUTPUT
-
-           DO  IRECIN = 1,NY * NZ
-
-C             READ EACH ROW OF SPIDER INPUT FILE 
-              IF (BOTLEFT) THEN
-                 IRECINT = (NY * NZ) - IRECIN + 1  
-              ELSE
-                 IRECINT = IRECIN  
-              ENDIF
-              CALL REDLIN(LUNSPI,BUFIN,NX,IRECINT)
-
-C             PUT ROW OUT TO MRC FILE
-              DO ILOCIN=1,NX
-                ILOCOUT            = ILOCOUT + 1
-                FIXLENBUF(ILOCOUT) = BUFIN(ILOCIN)
-
-                IF (ILOCOUT >= LENOPENF) THEN
-C                  PUT OUT COMPLETED RECORD
-
-                   IRECMRC = IRECMRC + 1
-
-                   CALL WRTLIN(LUNMRC,FIXLENBUF,LENOPENF,IRECMRC)
-                   !write(6,*) '  Rec: ',irecint,'-->',irecmrc
-
-                   ILOCOUT = 0
-                ENDIF
-              ENDDO
-           ENDDO
-
-           IF (ILOCOUT > 0) THEN
-C             PUT OUT ANY REMAINING MRC RECORD
-              IRECMRC = IRECMRC + 1
-              CALL WRTLIN(LUNMRC,FIXLENBUF,ILOCOUT,IRECMRC)
-              !write(6,*) '  Rec: ',irecint,'-->',irecmrc
-           ENDIF
-        
-        ELSEIF (MODE == 0) THEN
-C          COPY FROM SPIDER TO MRC 8 BIT FILE FORMAT 
-
-           DO IRECIN = 1,NY * NZ
-C             READ EACH ROW OF SPIDER INPUT FILE 
-              IF (BOTLEFT) THEN
-                 IRECINT = (NY * NZ) - IRECIN + 1  
-                 CALL REDLIN(LUNSPI,BUFIN,NX,IRECINT)
-              ELSE
-                 CALL REDLIN(LUNSPI,BUFIN,NX,IRECIN)
-              ENDIF
-
-C             PUT ROW OUT TO MRC FILE
-              DO ILOCIN=1,NX
-                ILOCOUT        = ILOCOUT + 1
-                I2VAL          = BUFIN(ILOCIN) * FN + FNCON
-                I1BUF(ILOCOUT) = I2VAL
-
-                IF (ILOCOUT >= LENOPENB) THEN
-C                  PUT OUT COMPLETED RECORD
-                   IRECMRC = IRECMRC + 1
-
-                   CALL WRTLIN8(LUNMRC,I1BUF,LENOPENB,IRECMRC)
-                   IF (IERR .NE. 0) THEN
-                      CALL ERRT(102,'WRITING RECORD',IRECMRC)
-                      GOTO 9999
-                   ENDIF
-                   ILOCOUT = 0
-                ENDIF
-              ENDDO
-           ENDDO
-
-           IF (ILOCOUT > 0) THEN
-C             PUT OUT REMAINING RECORD
-              IRECMRC = IRECMRC + 1
-              CALL WRTLIN8(LUNMRC,I1BUF,ILOCOUT,IRECMRC)
-          ENDIF
-
-        ELSE
-           CALL ERRT(102,'CAN NOT CREATE MRC MODE',MODE)
-           GOTO 9999
-        ENDIF
-
-        IF (IERR .NE. 0) THEN
-           CALL ERRT(102,'WRITING RECORD',IRECIN)
-           GOTO 9999
-        ENDIF
+      IF (SCALEX > 0) THEN
+           WRITE(NOUT,*) ' PIXEL SIZE (A) FOR ALL AXES IN ',
+     &                   ' SPIDER HEADER(21): ',SCALEX
+           SCALEY  = SCALEX
+           SCALEZ  = SCALEX
+      ELSE
+C          NOTHING IN SPIDER HEADER?
+           SCALEX = 1.0
+           SCALEY = 1.0
+           SCALEZ = 1.0
+      ENDIF
 
         
-9999    CLOSE(LUNSPI)
-        CLOSE(LUNMRC)
-        IF(ALLOCATED(STREAMBUF)) DEALLOCATE(STREAMBUF)
+      IF (NZ1 > 1) THEN
+         CALL RDPRM3S(SCALEX,SCALEY,SCALEZ,NOT_USED,
+     &              'PIXEL SIZE (A) FOR X, Y, & Z AXES',IRTFLG)
+      ELSE
+         CALL RDPRM2S(SCALEX,SCALEY,NOT_USED,
+     &              'PIXEL SIZE (A) FOR X &  Y AXES',IRTFLG)
+      ENDIF
+      IF (IRTFLG .NE. 0) RETURN
 
-        END
+      NSTACK2 =  1   ! UNUSED
+      DISP    = 'U'  ! NEW OUTPUT FILE        
+
+C     OPEN FIRST OUTPUT FILE 
+      IMG2 = IMG1
+      CALL OPFILES(LUNSPI,LUNMRC,LUNDOC,LUNXM2, 
+     &              .FALSE.,FILNAM2,NLET2,DISP,
+     &              IFORM1,NX1,NY1,NZ1,NSTACK2,
+     &              FILNAM2,
+     &              .TRUE., ILIST2,NILMAX, 
+     &              NDUM,NGOT2,IMG2, IRTFLG) 
+
+      !write(3,'(A,4i6)')' In copytomrc nstack2,ngot2:',nstack2,ngot2
+      !write(3,'(A,i6,A)')' In copytomrc img2:',img2
+      !write(3,*)         ' In copytomrc caxis:',caxis
+
+      CALL LUNSETMODE_MRC(LUNMRC,MRCMODE,IRTFLG)
+      CALL LUNSETHAND_MRC(LUNMRC,CAXIS,IRTFLG)
+      CALL LUNSETPIXSIZES_MRC(LUNMRC,SCALEX,SCALEY,SCALEZ,IRTFLG)
+      CALL LUNWRTHED_MRC(LUNMRC,IRTFLG)
+
+C     SETS LUNMRCNBYT(LUN) = NBYT
+      CALL LUNSETPOS_MRC(LUNMRC,IMG1,IRTFLG)
+
+C     DO NOT REPORT FILE INFO IF WHOLE STACK
+      IF (NSTACK1 > 0 .AND. NSTACK2 >= 0) VERBOSE = .FALSE. 
+
+      NINDX1 = 1
+      NINDX2 = 1
+      DO                ! LOOP OVER ALL IMAGES/STACKS
+
+C        COPY THE DESIRED NUMBER OF DATA RECORDS FROM EACH FILE
+         DO IRECIN = 1,NY1*NZ1
+
+C           READ EACH ROW OF SPIDER INPUT FILE 
+            CALL REDLIN(LUNSPI,BUF,NX1,IRECIN)
+
+C           WRITE EACH ROW OF SPIDER INPUT FILE 
+            IF (MRCMODE == 2) THEN
+C              32 BIT FLOATING POINT  
+               CALL WRTLIN_MRC(LUNMRC,BUF,NX1,IRECIN,MYPID,IERR)
+
+            ELSEIF (MRCMODE == 0 ) THEN
+C              8 BIT SIGNED INTEGER
+               CALL WRTLIN_MRC(LUNMRC,BUF,NX1,IRECIN,MYPID,IERR)
+ 
+            ELSEIF (MRCMODE == 1) THEN
+C              16 BIT SIGNED INTEGER
+               CALL WRTLIN_MRC(LUNMRC,BUF,NX1,IRECIN,MYPID,IERR)
+ 
+            ELSEIF (MRCMODE == 6) THEN
+C              16 BIT UNSIGNED INTEGER
+               CALL WRTLIN_MRC(LUNMRC,BUF,NX1,IRECIN,MYPID,IERR)
+ 
+            ENDIF
+
+            IF (IERR .NE. 0) THEN
+              LENT = lnblnkn(MRCFILE)
+              WRITE(NOUT,99) IERR,IRECIN,NX1,LUNMRC,MRCFILE(:LENT)
+99            FORMAT( '  *** ERROR(',I4,') WRITING RECORD: ',I12,
+     &                ' LENGTH: ', I9,' UNIT: ',I3,' FILE: ',A)
+              CALL ERRT(101,'ON MRC FILE OUTPUT',IERR)
+              GOTO 999
+            ENDIF
+
+         ENDDO     ! END OF: DO IRECIN = 1,NY*NZ
 
 
+C        OPEN NEXT SET OF I/O FILES, UPDATES NINDX1 & NINDX2 
+         !write(3,*)' In copytomrc, calling nextfiles:',nindx1,nindx2 
+
+         CALL NEXTFILES(NINDX1,NINDX2,  ILIST1,ILIST2, 
+     &                  .FALSE., LUNXM1,LUNXM2,
+     &                  NGOT1,NGOT2,    NSTACK1,NSTACK2,  
+     &                  LUNSPI,LUNSPI,LUNMRC, FILNAM1,FILNAM2,
+     &                  IMG1,IMG2, IRTFLG)
+         IF (IRTFLG .NE. 0) EXIT      ! ERROR / END OF INPUT STACK
+      ENDDO
+
+      IRTFLG = 0
+   
+999   CLOSE(LUNSPI)
+      CLOSE(LUNMRC)
+
+      VERBOSE = VERBOSE_SAVE          ! RESTORE VERBOSITY 
+      IF (ALLOCATED(ILIST1)) DEALLOCATE(ILIST1)
+      IF (ALLOCATED(ILIST2)) DEALLOCATE(ILIST2)
+
+      END
 
 
 
@@ -331,9 +459,10 @@ C       COPY STACKS FROM SPIDER TO MRC FILE FORMAT
         REAL                    :: FLIPBUF(NX)
 
         CHARACTER(LEN=MAXNAM)   :: MRCFILE
-        LOGICAL                 :: ISSWABT, BOTLEFT
+        CHARACTER(LEN=4)        :: CSAXIS
+        LOGICAL                 :: ISSWABT
 
-        LOGICAL                 :: isswab
+        LOGICAL                 :: isswab,BOTLEFT
         INTEGER                 :: lnblnkn
 
         INTEGER *8              :: IPOSMRC
@@ -382,7 +511,7 @@ C       ORIGIN ON X,Y & Z AXIS  (MAKE THIS ALWAYS ZERO)
         ORIGZ   = 0.0
 
 C       TRY TO GET SPIDER IMAGE SCALE VALUE (MAY NOT BE SET?)
-        CALL GETLAB(LUNSPI,NX,UNUSED,21,1,SCALEX,IRTFLG)
+        CALL GETLAB(LUNSPI,21,1,SCALEX,IRTFLG)
         SCALEY  = SCALEX
         SCALEZ  = SCALEX
 

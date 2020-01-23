@@ -8,6 +8,7 @@ ELEMENTS =  \
  $(LIB)(spider.o)    \
  $(LIB)(openinln.o)  \
  $(LIB)(lunsethdr.o) \
+ $(LIB)(lunsetmrchdr.o) \
  $(LIB)(fftw3.o)     \
  $(LIB)(lundoc.o)    \
  $(LIB)(apsh_tool.o) \
@@ -148,8 +149,6 @@ ELEMENTS =  \
  $(LIB)(conint.o)\
  $(LIB)(cop.o)   \
  $(LIB)(copy1.o) \
- $(LIB)(copyangles.o)  \
- $(LIB)(copyangles_1.o)\
  $(LIB)(copybrix.o)    \
  $(LIB)(copyfrommrc.o) \
  $(LIB)(copytomrc.o)   \
@@ -205,18 +204,19 @@ ELEMENTS =  \
  $(LIB)(deletf.o) \
  $(LIB)(dendro.o) \
  $(LIB)(denlst.o) \
- $(LIB)(denov.o) \
- $(LIB)(deucl.o) \
- $(LIB)(dhide.o) \
+ $(LIB)(denov.o)  \
+ $(LIB)(deucl.o)  \
+ $(LIB)(dhide.o)  \
  $(LIB)(diff1o.o) \
  $(LIB)(dilation.o) \
- $(LIB)(dirnm.o) \
- $(LIB)(disc.o) \
+ $(LIB)(dirnm.o)   \
+ $(LIB)(disc.o)    \
  $(LIB)(discrim.o) \
- $(LIB)(dist1.o) \
- $(LIB)(dist2.o) \
- $(LIB)(dist4.o) \
- $(LIB)(dist_p.o) \
+ $(LIB)(disp.o)    \
+ $(LIB)(dist1.o)   \
+ $(LIB)(dist2.o)   \
+ $(LIB)(dist4.o)   \
+ $(LIB)(dist_p.o)  \
  $(LIB)(distest.o) \
  $(LIB)(divcr3.o) \
  $(LIB)(dust.o) \
@@ -277,6 +277,7 @@ ELEMENTS =  \
  $(LIB)(filerd.o) \
  $(LIB)(filgen.o) \
  $(LIB)(filget.o) \
+ $(LIB)(filget_at.o) \
  $(LIB)(filnamandext.o) \
  $(LIB)(filnamsub.o) \
  $(LIB)(filseqp.o) \
@@ -425,6 +426,7 @@ ELEMENTS =  \
  $(LIB)(lenopenfile.o) \
  $(LIB)(listit.o) \
  $(LIB)(listitr.o) \
+ $(LIB)(listhedmrc.o) \
  $(LIB)(lmdif.o) \
  $(LIB)(lmdif1.o) \
  $(LIB)(lnblnk.o) \
@@ -542,10 +544,14 @@ ELEMENTS =  \
  $(LIB)(openchk.o) \
  $(LIB)(opendoc.o) \
  $(LIB)(openfil.o) \
+ $(LIB)(openfil_mrc.o) \
+ $(LIB)(openfil_o_mrc.o) \
+ $(LIB)(openfil_n_mrc.o) \
  $(LIB)(openinstk.o) \
  $(LIB)(openstk.o) \
  $(LIB)(opfilec.o) \
  $(LIB)(opfiles.o) \
+ $(LIB)(opfiles_mrc.o) \
  $(LIB)(opstreamfile.o) \
  $(LIB)(opsf3_p.o) \
  $(LIB)(opsf_p.o) \
@@ -731,6 +737,7 @@ ELEMENTS =  \
  $(LIB)(sethead.o) \
  $(LIB)(setlab.o)  \
  $(LIB)(setmode.o) \
+ $(LIB)(setmode_mrc.o) \
  $(LIB)(setnumrings.o) \
  $(LIB)(setpart.o) \
  $(LIB)(setprm.o)  \

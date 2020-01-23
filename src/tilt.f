@@ -10,9 +10,9 @@ C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Copyright 1985-2019  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
+C=* Email: spider@health.ny.gov                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -30,7 +30,7 @@ C **********************************************************************
 C
 C   TILT(LUN)
 C
-C    PARAMETERS:     LUN     LOGICAL UNIT NUMBER OF FILE
+C    PARAMETERS:     LUN     I/O UNIT NUMBER OF FILE
 C
 C--*********************************************************************
 
@@ -39,6 +39,11 @@ C--*********************************************************************
         INCLUDE 'CMBLOCK.INC'  
         INCLUDE 'LABLOCK.INC'  
         INCLUDE 'CMLIMIT.INC' 
+
+        INTEGER               :: LUN
+
+        INTEGER               :: IDUM
+        LOGICAL               :: IS_MRC
 
         INTEGER               :: NUMBER(200)
         CHARACTER(LEN=MAXNAM) :: FILNAM,FILPAT
@@ -61,6 +66,12 @@ C       GET IMAGE FILE NAMES
         IF (IRTFLG .NE. 0) IERR=4
 	IF (IFORM .NE .-1) IERR=2
 	IF (IERR  .NE. 0)  GOTO 999
+
+        CALL LUNGETIS_MRC(LUN,IS_MRC,IRTFLG)
+        IF (IS_MRC) THEN
+           CALL ERRT(101,'OPERATION DOES NOT HANDLE MRC FILES',IDUM)
+           GOTO 999
+        ENDIF
 
 C       FIRST FILE ASSUMED TO BE THE AXIAL PROJ. IT IS ONLY OPENED
 C       TO KEEP DIMENSIONS FOR CHECKING AGAINST DIMS. OF SUBSEQUENT FILES.
@@ -124,9 +135,9 @@ C       TO KEEP DIMENSIONS FOR CHECKING AGAINST DIMS. OF SUBSEQUENT FILES.
           VALUES(1) = 1.0  
           VALUES(2) = PHI
           VALUES(3) = THA
-          CALL SETLAB(LUN,NSAM,FDUM,14,3,VALUES,'F',IRTFLG)
+          CALL SETLAB_R(LUN,14,3,VALUES,.FALSE.,IRTFLG)
           VALUES(1) = 1.0
-          CALL SETLAB(LUN,NSAM,FDUM,21,1,VALUES,'U',IRTFLG)
+          CALL SETLAB_R(LUN,21,1,VALUES,.FALSE.,IRTFLG)
 
           CLOSE(LUN)
 	ENDDO
@@ -135,6 +146,5 @@ C       TO KEEP DIMENSIONS FOR CHECKING AGAINST DIMS. OF SUBSEQUENT FILES.
 
 
 999	CALL ERRT(IERR,'TILT  ',NE)
-	RETURN
 	END
 

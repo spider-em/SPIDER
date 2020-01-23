@@ -46,7 +46,7 @@ chdir  $destdir
 echo  ' Creating:   ' $destdir 'tar files.'
 
 \rm  -f spire.tar spire.tar.gz
-tar cf spire.tar ./*
+tar cvf spire.tar ./*
 gzip spire.tar  
 
 ###gzip -k spire.tar  #Keep uncompressed tar file

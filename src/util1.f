@@ -1,59 +1,61 @@
 C
 C++*********************************************************************
 C
-C    UTIL1.F   TITLE PROCESSING MODIFIED          NOV  87 ARDEAN LEITH
-C              LONG FILE NAMES ADDED              DEC  88 ARDEAN LEITH
-C	       ALTERED                            4/21/93 MAHIEDDINE LADJADJ
-C	       ALTERED                            8/25/93 JING SU
-C	       LI COMMAND REWRITTEN               8/30/96 ARDEAN LEITH
-C	       TT COMMAND REWRITTEN               6/28/97 ARDEAN LEITH
-C              ST PARAMETERS ALTERED              SEP  98 ARDEAN LEITH
-C              'TT COP' ADDED                     JUN  99 ARDEAN LEITH
-C              'CA SM' ALTERED                    AUG  99 ARDEAN LEITH
-C              'TF CTS' ALTERED                   NOV  00 HAIXIAO GAO
-C              'TF CTF' REMOVED                   JAN  01 ARDEAN LEITH
-C              'TF CRF' ADDED                     JAN  11 PAUL PENCZEK
-C              'TF ECTF' ADDED                    JUL  31 PAUL PENCZEK
-C              'TF ECTF' --> 'TF ED'              JUN  02 BILL BAXTER
-C              'HI E' ADDED                       FEB  03 ARDEAN LEITH
-C              OPFILEC                            FEB  03 ARDEAN LEITH
-C              'HI J' ADDED                       MAR  03 ARDEAN LEITH
-C              'PK DR' ADDED                      MAR  03 BIMAL RATH
-C              'CA' REWRITE                       SEP  03 ARDEAN LEITH
-C              'TF EA' REMOVED                    NOV  03 PAUL PENCZEK
-C              'TF ED' REPLACED                   NOV  03 PAUL PENCZEK
-C              'CA SMI' ADDED                     JAN  04 ARDEAN LEITH
-C              'HI J' VMIN, VMAX                  FEB  04 ARDEAN LEITH
-C               TRAFC & TRAFCT MERGED             MAR  04 ARDEAN LEITH
-C               ~7 REPLACES IRTFLG                APR  04 ARDEAN LEITH
-C               'PK 3R'                           NOV  04 ARDEAN LEITH
-C               'TF SIM' ADDED                    NOV  07 BIMAL RATH 
-C               'TF LM4'ADDED                     MAR  06 ZHONG  HUANG 
-C               'HI DOC' DUPLICATES HI D          MAR  06 ARDEAN LEITH 
-C               'FI H' ON STACK HEADER            OCT  10 ARDEAN LEITH 
-C               'TF COR'                          NOV  10 ARDEAN LEITH 
-C               'FI H' INQUIREHEAD ARGS           NOV  10 ARDEAN LEITH 
-C               'ST H'                            NOV  10 ARDEAN LEITH 
-C	        'FI H' NO FILE BUG                JAN  11 ARDEAN LEITH
-C	        CASE                              JAN  11 ARDEAN LEITH
-C	        'CTF FIND'                        MAY  12 ARDEAN LEITH
-C	        'CTF ED'                          JUN  12 ARDEAN LEITH
-C	        'CA EIGPCT'                       JAN  13 ARDEAN LEITH
-C	        'FI' PROMPT SHORTENED             JUN  13 ARDEAN LEITH
-C               'TF RCTF' REMOVED                 JAN  14 ARDEAN LEITH
-C               'LI T x' ADDED                    AUG  14 ARDEAN LEITH
-C               'ST H' KLUDGE FOR BAD EM2EM STACK AUG  14 ARDEAN LEITH
-C               CALL NOISE PARAMETERS             NOV  14 ARDEAN LEITH
-C	        'FI CEN' ADDED                    DEC  14 ARDEAN LEITH
-C	        'TF C?' MERGERS                   NOV  15 ARDEAN LEITH
-C	        'FI H' CAN OPEN STACK WITHOUT @   FEB  16 ARDEAN LEITH
+C    UTIL1.F   TITLE PROCESSING MODIFIED          NOV  87 ArDean Leith
+C              LONG FILE NAMES ADDED              DEC  88 ArDean Leith
+C	       ALTERED                            4/21/93 Mahieddine Ladjadj
+C	       ALTERED                            8/25/93 Jing Su
+C	       LI COMMAND REWRITTEN               8/30/96 ArDean Leith
+C	       TT COMMAND REWRITTEN               6/28/97 ArDean Leith
+C              ST PARAMETERS ALTERED              SEP  98 ArDean Leith
+C              'TT COP' ADDED                     JUN  99 ArDean Leith
+C              'CA SM' ALTERED                    AUG  99 ArDean Leith
+C              'TF CTS' ALTERED                   NOV  00 Haixiao Gao
+C              'TF CTF' REMOVED                   JAN  01 ArDean Leith
+C              'TF CRF' ADDED                     JAN  11 Paul Penczek
+C              'TF ECTF' ADDED                    JUL  31 Paul Penczek
+C              'TF ECTF' --> 'TF ED'              JUN  02 Bill Baxter
+C              'HI E' ADDED                       FEB  03 ArDean Leith
+C              OPFILEC                            FEB  03 ArDean Leith
+C              'HI J' ADDED                       MAR  03 ArDean Leith
+C              'PK DR' ADDED                      MAR  03 Bimal Rath
+C              'CA' REWRITE                       SEP  03 ArDean Leith
+C              'TF EA' REMOVED                    NOV  03 Paul Penczek
+C              'TF ED' REPLACED                   NOV  03 Paul Penczek
+C              'CA SMI' ADDED                     JAN  04 ArDean Leith
+C              'HI J' VMIN, VMAX                  FEB  04 ArDean Leith
+C               TRAFC & TRAFCT MERGED             MAR  04 ArDean Leith
+C               ~7 REPLACES IRTFLG                APR  04 ArDean Leith
+C               'PK 3R'                           NOV  04 ArDean Leith
+C               'TF SIM' ADDED                    NOV  07 Bimal  Rath 
+C               'TF LM4'ADDED                     MAR  06 Zhong  Huang 
+C               'HI DOC' DUPLICATES HI D          MAR  06 ArDean Leith 
+C               'FI H' ON STACK HEADER            OCT  10 ArDean Leith 
+C               'TF COR'                          NOV  10 ArDean Leith 
+C               'FI H' INQUIREHEAD ARGS           NOV  10 ArDean Leith 
+C               'ST H'                            NOV  10 ArDean Leith 
+C	        'FI H' NO FILE BUG                JAN  11 ArDean Leith
+C	        CASE                              JAN  11 ArDean Leith
+C	        'CTF FIND'                        MAY  12 ArDean Leith
+C	        'CTF ED'                          JUN  12 ArDean Leith
+C	        'CA EIGPCT'                       JAN  13 ArDean Leith
+C	        'FI' PROMPT SHORTENED             JUN  13 ArDean Leith
+C               'TF RCTF' REMOVED                 JAN  14 ArDean Leith
+C               'LI T x' ADDED                    AUG  14 ArDean Leith
+C               'ST H' KLUDGE FOR BAD EM2EM STACK AUG  14 ArDean Leith
+C               CALL NOISE PARAMETERS             NOV  14 ArDean Leith
+C	        'FI CEN' ADDED                    DEC  14 ArDean Leith
+C	        'TF C?' MERGERS                   NOV  15 ArDean Leith
+C	        'FI H' CAN OPEN STACK WITHOUT @   FEB  16 ArDean Leith
+C	        'TT' NOT IN MRC FILE              JUL  19 ArDean Leith
+C	         MRC FILE SUPPORT                 OCT  19 ArDean Leith
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
-C=* SPIDER System Authors:  Joachim Frank & ARDEAN LEITH               *
-C=* Copyright 1985-2016  Health Research Inc.,                         *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2019  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
+C=* Email: spider@health.ny.gov                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -74,6 +76,7 @@ C
 C   PURPOSE:    ORIGINALLY, DRIVER FOR ROUTINES REQUIRING A SINGLE FILE
 C
 C   PARAMETERS: MAXDIM     MAX LENGTH OF COMMON BUFFER
+C               IRTRET     ERROR RETURN FLAG
 C
 C23456789 123456789 123456789 123456789 123456789 123456789 123456789 12
 C--*********************************************************************
@@ -83,6 +86,12 @@ C--*********************************************************************
 	INCLUDE 'CMBLOCK.INC' 
 	INCLUDE 'CMLIMIT.INC' 
 
+        INTEGER                    :: MAXDIM,IRTRET
+
+        LOGICAL                    :: IS_MRC
+        INTEGER                    :: MAXIM,MAXIM2,IDUM
+
+        INTEGER                    :: ICOMM,MYPID,MPIERR 
 	INTEGER, PARAMETER         :: NFUNC = 19
         CHARACTER(LEN=2)           :: FUNC(NFUNC)
 
@@ -113,8 +122,9 @@ C     &           'CG', 'CV', 'CL', 'HD'/
       MAXIM   = 0
       MAXIM2  = 0
 
-      CALL SET_MPI(icomm,mypid,mpierr)  ! SET MYPID
+      CALL SET_MPI(ICOMM,MYPID,MPIERR)  ! SET MYPID
 
+C     NUMBER OF COMMAND LINE REGISTERS
       CALL REG_GET_USED(NSEL_USED)
 
 
@@ -202,10 +212,7 @@ C	   FILE INFO FOR SINGLE FILE, NO ERROR STOP IF NOT FOUND
      &             NX,NY,NZ,
      &             MAXIM,'INPUT',.TRUE.,IRTFLG)
 
-           IF (IRTFLG == 0) THEN
-C             FILE FOUND
-              CALL FILDAT(LUN1,NX)
-           ELSE
+           IF (IRTFLG .NE. 0) THEN
 C             FILE NOT FOUND, ZERO REG. FOR NX, NY ...
               CALL REG_SET(1,0.0,NULL,IRTFLG)
               CALL REG_SET(2,0.0,NULL,IRTFLG)
@@ -214,6 +221,14 @@ C             FILE NOT FOUND, ZERO REG. FOR NX, NY ...
               CALL REG_SET(7,0.0,NULL,IRTFLG)
            ENDIF
 
+           CALL LUNGETIS_MRC(LUN1,IS_MRC,IRTFLG)
+           IF (IRTFLG .NE. 0) GOTO 9000
+           IF (IS_MRC) THEN
+             CALL FILDAT_MRC(LUN1,NX)
+           ELSE
+             CALL FILDAT(LUN1,NX)
+           ENDIF
+ 
         ELSEIF (FCHAR(4:4) == 'T') THEN !  --------------------- 'FI T'
 C          TEST OF FILENAME SUBSTITUTION MECHANISM
 
@@ -256,7 +271,15 @@ C             NEED HEADER LOCATION
            ENDIF
            CALL OPFILEC(0,.FALSE.,FILNAM,LUN1,'O',ITYPE,
      &                 NX,NY,NZ,MAXIM,' ',.TRUE.,IRTFLG)
-           IF (IRTFLG == 0) CALL FILDAT(LUN1,NX)
+           IF (IRTFLG .NE. 0) GOTO 9000
+
+           CALL LUNGETIS_MRC(LUN1,IS_MRC,IRTFLG)
+           IF (IRTFLG .NE. 0) GOTO 9000
+           IF (IS_MRC) THEN
+             CALL FILDAT_MRC(LUN1,NX)
+           ELSE
+             CALL FILDAT(LUN1,NX)
+           ENDIF
         ENDIF
         GOTO 9000
 
@@ -416,6 +439,7 @@ C          SINGLE NUMBER (REGISTER) OPTION:
 	CALL OPFILEC(0,.TRUE.,FILNAM,LUN1,'U',IFORM,
      &             NX2,NY2,NZ,
      &             MAXIM,'OUTPUT',.TRUE.,IRTFLG)
+
 	IF (IRTFLG .NE. 0 .AND. FILNAM(1:1) .NE. '*') GOTO 9000
 
 	IF (FCHAR(4:4) == '3') THEN
@@ -429,6 +453,7 @@ C             FOR 'MO 3'
            ENDIF
         ELSE
 C          FOR 'MO'
+           !!write(3,*) ' in util1,   irtflg!!!!!!:',irtflg
            CALL MODEL(LUN1,NX2,NY2)
 	ENDIF
         GOTO 9000
@@ -490,13 +515,14 @@ C          FOR 'MO'
         CALL  RAMP_P(LUN1,LUN2,NX,NY,NOUT)
 	GOTO 8999
             
-      CASE ('RN') ! ----------------- RENAME ---------------------- 'RN'
+      CASE ('RN') ! ---------------- RENAME ---------------------- 'RN'
 
         CALL ERRT(101,'OBSOLETE OPERATION',NE)
 	GOTO 9001
 
 
       CASE ('TT') !   -----------CHANGE TITLE--------------------- 'TT'
+
 
         IF (FCHAR(4:4) == 'C') THEN
 C          OPEN THE FILE THAT CONTAINS DESIRED TITLE
@@ -508,9 +534,16 @@ C          OPEN THE FILE THAT CONTAINS DESIRED TITLE
 
 C       OPEN THE FILE THAT RECEIVES TITLE 
 	CALL OPFILEC(0,.TRUE.,FILNAM,LUN2,'O',ITYPE,
-     &              NX1,NY1,NZ1,
-     &             MAXIM,'OUTPUT',.TRUE.,IRTFLG)
+     &               NX1,NY1,NZ1,
+     &               MAXIM,'OUTPUT',.TRUE.,IRTFLG)
 	IF (IRTFLG .NE. 0) GOTO 9000
+
+        CALL LUNGETIS_MRC(LUN2,IS_MRC,IRTFLG)
+        IF (IS_MRC) THEN
+          CALL ERRT(101,'NO TITLE IN MRC FILES',IDUM)
+          IRTRET = 1
+          RETURN
+        ENDIF
 
 C       GET NEW TITLE HERE 
         IF (FCHAR(4:4) == 'C') THEN
@@ -530,26 +563,37 @@ C	TITLE ALTERATION CAN PROCEED NOW
 C       DISP OF "Z" ALLOWS  CORRECTING STACK ERROR
 
         IF (FCHAR(4:4) == 'H')  THEN  
+C          SET HEADER VARIABLES IN FILE, SELECT BY NAME
+
            MAXIM = 2   ! ALLOWS OPENING OVERALL STACK HEADER
            CALL OPFILEC(0,.TRUE.,FILNAM,LUN1,'Z',ITYPE,
      &             NX,NY,NZ,
      &             MAXIM,'SET HEADER VALUES IN',.TRUE.,IRTFLG)
 
+
 C          SET HEADER VARIABLES IN FILE, IRTFLG==5 IS TO ALLOW IMGNUM CHANGE 
 
            IF (IRTFLG == 0 .OR. IRTFLG == 5) THEN
-              CALL SETHEAD(LUN1,NX,NY,NZ,IRTFLG)
+              CALL SETHEAD(LUN1,NX,NY,NZ,IRTFLG)    ! MRC OK
            ENDIF
 
         ELSEIF (FCHAR(4:4) == 'E')  THEN  
+C          CORRECT BAD EM2EM HEADER VARIABLES IN FILE
            MAXIM = 2   ! ALLOWS OPENING OVERALL STACK HEADER
            CALL OPFILEC(0,.TRUE.,FILNAM,LUN1,'Z',ITYPE,
      &             NX,NY,NZ,
      &             MAXIM,'FIX STACKED IMAGE HEADER VALUES IN',
      &            .TRUE.,IRTFLG)
 
+           CALL LUNGETIS_MRC(LUN1,IS_MRC,IRTFLG)
+           IF (IS_MRC) THEN
+             CALL ERRT(101,'NOT RELEVENT FOR MRC FILES',IDUM)
+             IRTRET = 1
+             RETURN
+           ENDIF
+
 C          CORRECT BAD EM2EM HEADER VARIABLES IN FILE
-           CALL SETHEADEM2(LUN1,NY,IRTFLG)
+           CALL SETHEADEM2(LUN1,NY,IRTFLG)    ! MRC WAS ERRT
 
         ELSE
            CALL OPFILEC(0,.TRUE.,FILNAM,LUN1,'Z',ITYPE,
@@ -558,7 +602,7 @@ C          CORRECT BAD EM2EM HEADER VARIABLES IN FILE
            IF (IRTFLG .NE. 0) RETURN
 
 C  	   SET LABEL VALUES TO SOLICITED INPUT
-           CALL SETVAL(LUN1,NX,NY,NZ)
+           CALL SETVAL(LUN1,NX,NY,NZ)    ! MRC OK
         ENDIF
         GOTO 9000
 
@@ -669,6 +713,7 @@ C  	   SET LABEL VALUES TO SOLICITED INPUT
             CALL QSTATLOC(LUN1,LUNDOC,LUNXM)
 
           CASE DEFAULT
+            !write(6,*) ' In util1 - lun1,lun2:',lun1,lun2
             CALL QSTAT(LUN1,LUN2,LUNDOC,LUNXM)
             CLOSE(LUN2)
 

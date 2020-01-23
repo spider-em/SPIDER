@@ -25,7 +25,7 @@ C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
 C=* Copyright 1985-2012  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
+C=* Email: spider@health.ny.gov                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -503,7 +503,7 @@ C      PURPOSE: PUT ANGLES, ETC AS HEADER VALUES IN IMAGE
        INTEGER               :: IRTFLG
 
        CHARACTER(LEN=MAXNAM) :: FILNAM
-       INTEGER               :: MAXIM,ITYPE,LSAM,LROW,LSLICE,NLET
+       INTEGER               :: MAXIM,ITYPE,NX,NY,NZ,NLET
        LOGICAL               :: FOUROK = .FALSE.
 
 C      OPEN EXISTING IMAGE FILE FOR OUTPUT
@@ -518,10 +518,10 @@ C         CREATE IMAGE FILE NAME FIRST
  
        MAXIM = 0
        CALL OPFILEC(0,.FALSE.,FILNAM,LUNIN,'O',ITYPE,
-     &              LSAM,LROW,LSLICE,MAXIM,' ',FOUROK,IRTFLG)
+     &              NX,NY,NZ,MAXIM,' ',FOUROK,IRTFLG)
        IF (IRTFLG .NE. 0)  RETURN
 
-C      PUT ANGLES, ETC IN HEADER
+C      PUT ANGLES, ETC IN HEADER  (MRC OK)
        CALL LUNSETVALS(LUNIN,IAPLOC+1,NVALS,PARLIST,IRTFLG)
 
        CLOSE(LUNIN)

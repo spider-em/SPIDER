@@ -1,11 +1,22 @@
-head	1.5;
+head	1.7;
 access;
 symbols
+	pre_mrcs:1.5
 	healthdept_2018:1.5
 	pre_getangas:1.1;
 locks; strict;
 comment	@c @;
 
+
+1.7
+date	2019.12.03.19.43.35;	author leith;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2019.11.04.17.36.11;	author leith;	state Exp;
+branches;
+next	1.5;
 
 1.5
 date	2018.10.03.14.34.16;	author leith;	state Exp;
@@ -37,20 +48,20 @@ desc
 @@
 
 
-1.5
+1.7
 log
-@email_health_dept
+@removed unused variables
 @
 text
 @C++*********************************************************************
 C                                                                      *
-C  SETHEAD.F     NEW                            NOV  2010 ARDEAN LEITH *                       
+C  SETHEAD.F     NEW                            NOV  2010 ArDean Leith *                       
 C                                                                      *
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Copyright 1985-2019  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@@health.ny.gov                                        *
 C=*                                                                    *
@@ -66,7 +77,7 @@ C=* General Public License for more details.                           *
 C=* You should have received a copy of the GNU General Public License  *
 C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
-C **********************************************************************
+C***********************************************************************
 C
 C   SETHEAD(LUN,NX,NY,NZ.IRTFLG)    
 C
@@ -79,34 +90,46 @@ C                IRTFLG    ERROR FLAG                         (RET.)
 C                          0  IS NORMAL
 C                          1 INQUIRY WAS NOT AS EXPECTED
 C
-C--*********************************************************************
+C***********************************************************************
 
       SUBROUTINE SETHEAD(LUN,NX,NY,NZ,IRTFLG)
 
+      IMPLICIT NONE
+
       INCLUDE 'CMBLOCK.INC' 
       INCLUDE 'CMLIMIT.INC' 
- 
-      LOGICAL                   :: STRIP
-      CHARACTER(LEN=160)        :: RESPONSE,ARGNOW,MSG
-      CHARACTER(LEN=1)          :: NULL = CHAR(0)
 
-      INTEGER, PARAMETER        :: MAXREGNAM = 10
-      CHARACTER(LEN=MAXREGNAM)  :: REGNAME
+      INTEGER                 :: LUN,NX,NY,NZ,IRTFLG 
+
+      CHARACTER(LEN=160)      :: RESPONSE,ARGNOW,MSG
+      CHARACTER(LEN=1)        :: NULL = CHAR(0)
+
+      INTEGER, PARAMETER      :: MAXREGNAM = 10
+      CHARACTER(LEN=MAXREGNAM):: REGNAME
 
 C     MAXNSEL IS CURRENTLY SAME AS IN REG_SET.F !!!
-      INTEGER, PARAMETER        :: MAXNSEL = 24  ! SEARCH & REGISTER LIST
-      INTEGER                   :: LOCATION(MAXNSEL)
-      INTEGER                   :: IREGSELS(MAXNSEL)
-      REAL                      :: VALUES(MAXNSEL)
-      CHARACTER(LEN=8)          :: NAMES(MAXNSEL)
-
-
+      INTEGER, PARAMETER      :: MAXNSEL = 24  ! SEARCH & REGISTER LIST
+      INTEGER                 :: LOCATION(MAXNSEL)
+      INTEGER                 :: IREGSELS(MAXNSEL)
+      REAL                    :: VALUES(MAXNSEL)
+      CHARACTER(LEN=8)        :: NAMES(MAXNSEL)
+      LOGICAL                 :: IS_MRC
+      INTEGER                 :: I,IVALS,NGOT,IHEDLOC
+      INTEGER                 :: ICOMM,MYPID,MPIERR 
+        
       CALL SET_MPI(ICOMM,MYPID,IRTFLG)   ! RETURNS MPI PROCESS ID OR -1
 
-      CALL INQUIREHEAD_LOC(LOCATION,NAMES,IVALS,IRTFLG)
+      CALL LUNGETIS_MRC(LUN,IS_MRC,IRTFLG)
       IF (IRTFLG .NE. 0) RETURN
 
-C     NOW HAVE LIST OF ALL VARIABLE NUMBERS TO BE SET IN: LOCATION 
+C     GET LIST OF ALL VARIABLE NUMBERS TO BE SET IN: LOCATION 
+      IF (IS_MRC) THEN
+         CALL INQUIREHEAD_LOC_MRC(LOCATION,NAMES,IVALS,IRTFLG)
+      ELSE
+         CALL INQUIREHEAD_LOC(    LOCATION,NAMES,IVALS,IRTFLG)
+      ENDIF     
+      IF (IRTFLG .NE. 0) RETURN
+      ! write(6,*)' Matching values; ',ivals
 
 C     GET LIST OF VARIABLE VALUES IN: VALUES 
       CALL RDPRA('VALUE(S)',IVALS,0,.FALSE.,VALUES,NGOT,IRTFLG)
@@ -117,16 +140,22 @@ C     GET LIST OF VARIABLE VALUES IN: VALUES
          RETURN
       ENDIF
 
-      ! write(6,*) ' matching values',ivals
-
 
       DO I=1,IVALS    ! LOOP OVER ALL  WANTED HEADER VALUES
-
         IHEDLOC = LOCATION(I)     ! HEADER LOCATION WANTED
+        !write(6,*)' In sethead - i,values(i): ',i,values(i)
 
 C       SET HEADER VALUE FOR THIS HEADER LOCATION  
-        CALL SETLAB(LUN,NX,UNUSED,IHEDLOC,1,VALUES(I),'U',IRTFLG)
-        !write(6,*) ' IHEDLOC: ',IHEDLOC,VALUES(I)
+        IF (IS_MRC) THEN
+C         MRC FILE
+          CALL LUNSETVALS_R_MRC(LUN,IHEDLOC,1,VALUES(I),IRTFLG)
+        ELSE
+C         SPIDER FILE
+          CALL SETLAB_R(LUN,IHEDLOC,1,VALUES(I),.FALSE.,IRTFLG)
+        ENDIF
+        ! write(6,*) ' IHEDLOC: ',IHEDLOC,VALUES(I)
+        IF (IRTFLG .NE. 0) RETURN
+
 
 C       KLUDGE FOR NZ < 0
         IF (LOCATION(I) == 1 .AND. VALUES(I) < 0) 
@@ -134,15 +163,21 @@ C       KLUDGE FOR NZ < 0
 
         IF (VERBOSE .AND. (MYPID <= 0) ) THEN
 C          ECHO HEADER VALUE & REGISTER SETTING
-           !WRITE(NOUT,91) IHEDLOC,NAME(IHEDLOC),VALUES(I)
+           ! WRITE(NOUT,91) IHEDLOC,NAME(IHEDLOC),VALUES(I)
 91         FORMAT('  HEADER VARIABLE: ',I3,'  NAME: ',A,' = ',1PG11.3)
-        ENDIF  ! END OF: IF (VERBOSE .AND. (MYPID .LE. 0) ) THEN
+        ENDIF  ! END OF: IF (VERBOSE .AND. (MYPID <= 0) ) THEN
       ENDDO    ! END OF: DO I=1,IVALS  
   
- 
+      IF (IS_MRC) THEN
+C       WRITING TO MRC FILE (SPIDER DONE IN SETLAB_R)
+        CALL LUNWRTHED_MRC(LUN,IRTFLG)
+      ENDIF
+
       END
 
+C     ---------------- SETHEADEM2 -----------------------------------
 
+C     PURPOSE: ALLOWS FIXING BAD FILES FROM: EM2EM O
 
       SUBROUTINE SETHEADEM2(LUN,NY,IRTFLG)
 
@@ -195,11 +230,91 @@ C         ECHO HEADER VALUE CHANGE
       ENDIF 
    
       IRTFLG = 0
-
       END
 
 
 
+
+@
+
+
+1.6
+log
+@mrc_support
+@
+text
+@a64 3
+      INTEGER                 :: JENIS(56),IVAL
+      REAL                    :: FVAL
+ 
+@
+
+
+1.5
+log
+@email_health_dept
+@
+text
+@d3 1
+a3 1
+C  SETHEAD.F     NEW                            NOV  2010 ARDEAN LEITH *                       
+d9 1
+a9 1
+C=* Copyright 1985-2010  Health Research Inc.,                         *
+d25 1
+a25 1
+C **********************************************************************
+d38 1
+a38 1
+C--*********************************************************************
+d42 2
+a45 4
+ 
+      LOGICAL                   :: STRIP
+      CHARACTER(LEN=160)        :: RESPONSE,ARGNOW,MSG
+      CHARACTER(LEN=1)          :: NULL = CHAR(0)
+d47 1
+a47 2
+      INTEGER, PARAMETER        :: MAXREGNAM = 10
+      CHARACTER(LEN=MAXREGNAM)  :: REGNAME
+d49 2
+a50 6
+C     MAXNSEL IS CURRENTLY SAME AS IN REG_SET.F !!!
+      INTEGER, PARAMETER        :: MAXNSEL = 24  ! SEARCH & REGISTER LIST
+      INTEGER                   :: LOCATION(MAXNSEL)
+      INTEGER                   :: IREGSELS(MAXNSEL)
+      REAL                      :: VALUES(MAXNSEL)
+      CHARACTER(LEN=8)          :: NAMES(MAXNSEL)
+d52 2
+d55 13
+d70 1
+a70 1
+      CALL INQUIREHEAD_LOC(LOCATION,NAMES,IVALS,IRTFLG)
+d73 8
+a80 1
+C     NOW HAVE LIST OF ALL VARIABLE NUMBERS TO BE SET IN: LOCATION 
+a90 2
+      ! write(6,*) ' matching values',ivals
+
+a92 1
+
+d94 1
+d97 10
+a106 2
+        CALL SETLAB(LUN,NX,UNUSED,IHEDLOC,1,VALUES(I),'U',IRTFLG)
+        !write(6,*) ' IHEDLOC: ',IHEDLOC,VALUES(I)
+d114 1
+a114 1
+           !WRITE(NOUT,91) IHEDLOC,NAME(IHEDLOC),VALUES(I)
+d116 1
+a116 1
+        ENDIF  ! END OF: IF (VERBOSE .AND. (MYPID .LE. 0) ) THEN
+d119 5
+a123 1
+ 
+d126 1
+d128 1
+a180 1
 
 @
 
