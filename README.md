@@ -8,6 +8,8 @@ over 210,000 lines of Fortran code and 7400 files.
 The complete distribution can easily be downloaded from the 
 [Wadsworth Center](http://spider.wadsworth.org/spider_doc/spider/docs/spi-register.html). 
 
+The latest release contains support for reading/writing MRC files.
+
 * Uses:
                
    1.  [Averaging of single particle objects](http://spider.wadsworth.org/spider_doc/spider/docs/philosophy.html) 
