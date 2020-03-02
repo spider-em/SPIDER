@@ -12,11 +12,12 @@ C                         VS PIXEL REGISTER   OCT 2004 ArDean Leith    *
 C                                                                      *
 C **********************************************************************
 C=*                                                                    *
+C=* Author: ArDean Leith                                               *                                                            *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
 C=* Copyright 1985-2010  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
+C=* Email: spider@health.ny.gov                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -56,7 +57,7 @@ C                          VS: VARIANCE SMOOTHING  - RECTILINEAR NEIGH.
 C
 C  PURPOSE: ALTER CONTRAST IN AN IMAGE OR VOLUME USING CONVOLUTION OR 
 C           OTHER LOCAL IMAGE SPACE METHODS
-C                                                                      *
+C                                                                       
 C **********************************************************************
 
 	SUBROUTINE FILTER(LUN1,LUN2,NSAM,NROW,NSLICE,MAXIM,
@@ -218,7 +219,7 @@ C       PREWITT 3D Y MASK
      &        1, 1, 1/
  
 C       PREWITT 3D Z MASK
-         DATA PREZ3/
+        DATA PREZ3/
      &        1, 1, 1, 
      &        1, 1, 1, 
      &        1, 1, 1,
@@ -229,7 +230,7 @@ C       PREWITT 3D Z MASK
      &       -1,-1,-1, 
      &       -1,-1,-1/
 
-        THREED = (NSLICE .GT. 1)
+        THREED = (NSLICE  >  1)
 
 C       SET DEFAULT NEIGHBORS
         LX = 3
@@ -243,21 +244,21 @@ C       CATEGORIES ONLY USED BY HURST
 
 C       SOME FILTERS NEED >1 KERNAL
         NK  = 1
-        IF (MODE(1:1) .EQ. 'S' .OR. MODE(1:1) .EQ. 'P' .OR.
-     &      MODE(1:1) .EQ. 'H') NK = 2
-        IF ((MODE(1:1) .EQ. 'S' .OR. MODE(1:1) .EQ. 'P' ) .AND. 
-     &       NSLICE .GT. 1) NK = 3
-        IF (MODE(1:1) .EQ. 'F') NK = 9
+        IF (MODE(1:1)  ==  'S' .OR. MODE(1:1)  ==  'P' .OR.
+     &      MODE(1:1)  ==  'H') NK = 2
+        IF ((MODE(1:1)  ==  'S' .OR. MODE(1:1)  ==  'P' ) .AND. 
+     &       NSLICE  >  1) NK = 3
+        IF (MODE(1:1)  ==  'F') NK = 9
 
-        IF (MODE(1:1) .EQ. 'T') THEN
+        IF (MODE(1:1)  ==  'T') THEN
 C          TOP-HAT OVER SPECIFIED NEIGHBORHOOD
 
 11         CALL RDPRIS(IDIN,IDOUT,NOT_USED,
      &                 'INNER & OUTER DIAMETERS',IRTFLG)
            IF (IRTFLG .NE. 0) GOTO 9999
 
-           IF ((IDIN  .LT. 1 .OR. MOD(IDIN,2)  .EQ. 0) .OR.
-     &         (IDOUT .LT. 1 .OR. MOD(IDOUT,2) .EQ. 0)) THEN
+           IF ((IDIN   <  1 .OR. MOD(IDIN,2)   ==  0) .OR.
+     &         (IDOUT  <  1 .OR. MOD(IDOUT,2)  ==  0)) THEN
               CALL ERRT(101,'DIAMETERS MUST BE ODD  AND > 0',IDUM) 
               GOTO 11
            ENDIF
@@ -273,13 +274,13 @@ C          TOP-HAT OVER SPECIFIED NEIGHBORHOOD
               NEIGH = NEIGH * LZ
            ENDIF
 
-        ELSEIF (MODE(1:1) .EQ. 'H') THEN
+        ELSEIF (MODE(1:1)  ==  'H') THEN
 C          HURST OVER SPECIFIED DIAMETER
 
 12         CALL RDPRI1S(IDOUT,NOT_USED,'DIAMETER',IRTFLG)
            IF (IRTFLG .NE. 0) GOTO 9999
 
-           IF (IDOUT .LT. 1 .OR. MOD(IDOUT,2) .EQ. 0) THEN
+           IF (IDOUT  <  1 .OR. MOD(IDOUT,2)  ==  0) THEN
               CALL ERRT(101,'DIAMETER MUST BE ODD  AND > 0',IDUM) 
               GOTO 12
            ENDIF
@@ -293,10 +294,10 @@ C          HURST OVER SPECIFIED DIAMETER
               THREED = .FALSE.
            ENDIF
 
-        ELSEIF (MODE(1:2) .EQ. 'RA' .OR. MODE(1:1) .EQ. 'M' .OR.
-     &          MODE(1:1) .EQ. 'L'  .OR. MODE(1:1) .EQ. 'V' .OR.
-     &          MODE(1:1) .EQ. '-'  .OR. MODE(1:1) .EQ. '-' .OR.
-     &          MODE(1:2) .EQ. 'VS' .OR. MODE(1:2) .EQ. 'LH') THEN
+        ELSEIF (MODE(1:2)  ==  'RA' .OR. MODE(1:1)  ==  'M' .OR.
+     &          MODE(1:1)  ==  'L'  .OR. MODE(1:1)  ==  'V' .OR.
+     &          MODE(1:1)  ==  '-'  .OR. MODE(1:1)  ==  '-' .OR.
+     &          MODE(1:2)  ==  'VS' .OR. MODE(1:2)  ==  'LH') THEN
 C          RANGE, MAX, MIN, LAPLACIAN, VARIANCE, LOCAL HISTOGRAM
 C          VARIANCE SMOOTHING, FILTER OVER SPECIFIED NEIGHBORHOOD
 
@@ -309,16 +310,16 @@ C          VARIANCE SMOOTHING, FILTER OVER SPECIFIED NEIGHBORHOOD
            ENDIF
            IF (IRTFLG .NE. 0) GOTO 9999
 
-           IF (LX .LT. 3 .OR. MOD(LX,2) .EQ. 0 .OR. 
-     &         LY .LT. 3 .OR. MOD(LY,2) .EQ. 0 .OR. (THREED .AND.
-     &         LZ .LT. 3 .OR. MOD(LZ,2) .EQ. 0)) THEN
+           IF (LX  <  3 .OR. MOD(LX,2)  ==  0 .OR. 
+     &         LY  <  3 .OR. MOD(LY,2)  ==  0 .OR. (THREED .AND.
+     &         LZ  <  3 .OR. MOD(LZ,2)  ==  0)) THEN
               CALL ERRT(101,'DIMENSIONS MUST BE ODD  AND > 2',IDUM) 
               GOTO 10
            ENDIF
 
            NEIGH = LX * LY * LZ
 
-	   IF (MODE(1:2) .EQ. 'LH') THEN
+	   IF (MODE(1:2)  ==  'LH') THEN
 C             LAHE
               NBINS = 64
               CALL RDPRI1S(NBINS,NOT_USED,'NUMBER OF BINS',IRTFLG)
@@ -326,7 +327,7 @@ C             LAHE
               GOTO 1000
 
            ENDIF
-        ELSEIF (MODE(1:1) .EQ. 'F') THEN
+        ELSEIF (MODE(1:1)  ==  'F') THEN
 C          FREI-CHEN FILTER OVER 3x3 NEIGHBORHOOD
            IF (THREED) THEN
               WRITE(NOUT,*) ' THIS FILTER IS NOT IMPLEMENTED IN 3D!' 
@@ -344,7 +345,7 @@ C       ALLOCATE SPACE FOR KERNAL(S)
             RETURN
         ENDIF
 
-        IF (MODE(1:2) .EQ. 'GX') THEN
+        IF (MODE(1:2)  ==  'GX') THEN
 C          X GRADIENT OVER A 3X3 NEIGHBORHOOD
            IF (THREED) THEN
               VKERNAL = GRAD3X 
@@ -352,7 +353,7 @@ C          X GRADIENT OVER A 3X3 NEIGHBORHOOD
               VKERNAL = GRAD2X
            ENDIF
 
-        ELSEIF (MODE(1:2) .EQ. 'GY') THEN
+        ELSEIF (MODE(1:2)  ==  'GY') THEN
 C          Y GRADIENT OVER A 3X3 NEIGHBORHOOD
            IF (THREED) THEN
               VKERNAL = GRAD3Y 
@@ -360,11 +361,11 @@ C          Y GRADIENT OVER A 3X3 NEIGHBORHOOD
               VKERNAL = GRAD2Y
            ENDIF
 
-        ELSEIF (MODE(1:2) .EQ. 'GZ') THEN
+        ELSEIF (MODE(1:2)  ==  'GZ') THEN
 C          Z GRADIENT OVER A 3X3 NEIGHBORHOOD
            VKERNAL = GRAD3Z 
 
-        ELSEIF (MODE(1:1) .EQ. 'G') THEN
+        ELSEIF (MODE(1:1)  ==  'G') THEN
 C          GRADIENT OVER A 3X3 NEIGHBORHOOD
            IF (THREED) THEN 
               VKERNAL = GRAD3
@@ -373,26 +374,26 @@ C          GRADIENT OVER A 3X3 NEIGHBORHOOD
            ENDIF
            VKERNAL(NEIGH/2 + 1) = - (NEIGH - 1)
 
-        ELSEIF (MODE(1:1) .EQ. 'V') THEN
+        ELSEIF (MODE(1:1)  ==  'V') THEN
 C          VARIANCE, VARIANCE SMOOTHING  OVER A RECTILINEAR NEIGHBORHOOD
            CONTINUE
 
-        ELSEIF (MODE(1:1) .EQ. 'R' .OR.
-     &          MODE(1:2) .EQ. 'MA' .OR. MODE(1:2) .EQ. 'MI') THEN
+        ELSEIF (MODE(1:1)  ==  'R' .OR.
+     &          MODE(1:2)  ==  'MA' .OR. MODE(1:2)  ==  'MI') THEN
 C          RANGE, RIDGE, MAX. OR MIN. OVER A RECTILINEAR NEIGHBORHOOD
            DO I = 1, NEIGH
               VKERNAL(I) = 1.0
            ENDDO
            VKERNAL(NEIGH/2 + 1) = 0.0
 
-        ELSEIF (MODE(1:1) .EQ. 'L') THEN
+        ELSEIF (MODE(1:1)  ==  'L') THEN
 C          LAPLACIAN  OVER A RECTILINEAR NEIGHBORHOOD
            DO I = 1, NEIGH
               VKERNAL(I) = -1.0
            ENDDO
            VKERNAL(NEIGH/2 + 1)   =  NEIGH - 1
 
-        ELSEIF (MODE(1:1) .EQ. 'S') THEN
+        ELSEIF (MODE(1:1)  ==  'S') THEN
 C          SOBEL OVER A 3X3 NEIGHBORHOOD
            IF (.NOT. THREED) THEN
               DO I = 1, NEIGH
@@ -407,7 +408,7 @@ C          SOBEL OVER A 3X3 NEIGHBORHOOD
               ENDDO
            ENDIF
 
-         ELSEIF (MODE(1:1) .EQ. 'P') THEN
+         ELSEIF (MODE(1:1)  ==  'P') THEN
 C          PREWITT OVER A 3X3 NEIGHBORHOOD
            IF (.NOT. THREED) THEN
               DO I = 1, NEIGH
@@ -422,20 +423,20 @@ C          PREWITT OVER A 3X3 NEIGHBORHOOD
               ENDDO
            ENDIF
 
-        ELSEIF (MODE(1:1) .EQ. 'T') THEN
+        ELSEIF (MODE(1:1)  ==  'T') THEN
 C          TOP-HAT
            LXD2 = LX / 2
            LZD2 = LZ / 2
 	   CALL FILTER_HAT(RADIN,RADOUT,LXD2,LZD2,NEIGH,
      &                     VKERNAL,THREED)
 
-        ELSEIF (MODE(1:1) .EQ. 'H') THEN
+        ELSEIF (MODE(1:1)  ==  'H') THEN
 C          HURST
            LXD2 = LX / 2
 	   CALL FILTER_HURST(LXD2,THREED,NEIGH,ICAT,
      &             VKERNAL,VKERNAL(NEIGH+1))
 
-        ELSEIF (MODE(1:1) .EQ. 'F') THEN
+        ELSEIF (MODE(1:1)  ==  'F') THEN
 C          FREI-CHEN
 	   CALL FILTER_FREI(NEIGH,VKERNAL)
         ENDIF
@@ -447,7 +448,7 @@ C          FREI-CHEN
            GOTO 9999
         ENDIF
 
-        IF (MAXIM .LE. 0) THEN
+        IF (MAXIM  <=  0) THEN
 C          NOT A WHOLE STACK, LOAD INPUT VOLUME
            CALL REDVOL(LUN1,NSAM,NROW,1,NSLICE,VIN,IRTFLG)
            IF (IRTFLG .NE. 0) GOTO 9999
@@ -460,17 +461,17 @@ C          NOT A WHOLE STACK, LOAD INPUT VOLUME
         WRITE(NOUT,90) NEIGH
 90      FORMAT('  NEIGHBORHOOD: ',I4)
 
-        IF (MODE(1:2) .EQ. 'LH') THEN
+        IF (MODE(1:2)  ==  'LH') THEN
 C          LAHE
            CALL FILTER_LAHE(VIN,NSAM,NROW,NSLICE,LXD2,LYD2,LZD2,
      &                     NEIGH,MODE,LUN2,FMINT,FMAXT,NBINS)
 
-        ELSEIF ((NK .GT. 1) .AND. THREED) THEN
+        ELSEIF ((NK  >  1) .AND. THREED) THEN
 C          USES MULTIPLE KERNALS ON A WHOLE VOLUME
            CALL FILTER3M(VIN,NSAM,NROW,NSLICE,VKERNAL,LXD2,LYD2,LZD2,
      &                  NEIGH,MODE,NK,LUN2,ICAT)
 
-        ELSEIF (NK .GT. 1) THEN
+        ELSEIF (NK  >  1) THEN
 C          USES MULTIPLE KERNALS ON 2D IMAGE
            DO ISLICE=1,NSLICE
               ILOC = (ISLICE - 1) * NROW * NSAM + 1
@@ -485,19 +486,11 @@ C          OPERATION WORKS ON A WHOLE VOLUME
 
         ELSE
 C          OPERATION WORKS ON 2D IMAGE OR SLICE-BY-SLICE THRU A VOLUME
-C          INCLUDING STACKS
-           LOADIT = (MAXIM .GT. 0)
-           IMGNUM = -3
-           DO WHILE (IMGNUM .LT. MAXIM) 
-              CALL GETSTACK(LUN1,LUN2,IMGNUM,MAXIM,VERBOSE,
-     &                      LOADIT,VIN,.TRUE.,IRTFLG)
-              IF (IRTFLG .NE. 0) GOTO 9999
 
-              DO ISLICE=1,NSLICE
-                 ILOC = (ISLICE - 1) * NROW * NSAM + 1
-                 CALL FILTER2(VIN(ILOC),NSAM,NROW,NSLICE,VKERNAL,
+           DO ISLICE=1,NSLICE
+              ILOC = (ISLICE - 1) * NROW * NSAM + 1
+              CALL FILTER2(VIN(ILOC),NSAM,NROW,NSLICE,VKERNAL,
      &                      LXD2,LYD2,NEIGH,MODE,LUN2,FMIN,ISLICE,SIGT)
-              ENDDO
            ENDDO
         ENDIF
 
@@ -522,24 +515,24 @@ C       AUTOMATIC ARRAY
 	CHARACTER(LEN=2) ::      MODE
 
         NK = NKT 
-        IF (MODE(1:1) .EQ. 'H') NK = 1
+        IF (MODE(1:1) == 'H') NK = 1
 
         DO IY=1,NROW  
                     
            DO IX=1,NSAM
               VALT  = 0.0
-              IF (MODE(1:1) .EQ. 'R' .OR. MODE(1:1) .EQ. 'M' .OR.
-     &            MODE(1:1) .EQ. 'S' .OR. MODE(1:1) .EQ. 'P') THEN
+              IF (MODE(1:1) == 'R' .OR. MODE(1:1) == 'M' .OR.
+     &            MODE(1:1) == 'S' .OR. MODE(1:1) == 'P') THEN
 C                RANGE, ETC, USE MIN OR MAX OR BOTH
                  VALMIN = HUGE(VALMIN)
                  VALMAX = -VALMIN
 
-              ELSEIF (MODE(1:1) .EQ. 'H') THEN
+              ELSEIF (MODE(1:1)  ==  'H') THEN
 C                HURST,  ZERO DIFFERENCE ARRAYS
                  VALSMIN =  HUGE(VALMIN) 
                  VALSMAX = -VALSMIN 
  
-              ELSEIF (MODE(1:1) .EQ. 'F') THEN
+              ELSEIF (MODE(1:1)  ==  'F') THEN
 C                FREI CHEN NEEDS TWO SUMS
                  VAL1 = 0.0
                  VAL2 = 0.0
@@ -547,7 +540,7 @@ C                FREI CHEN NEEDS TWO SUMS
 
 C             APPLY  MULTIPLE KERNALS
               DO KER = 1,NK
-                 IF (MODE .EQ. 'F') VALT = 0.0
+                 IF (MODE  ==  'F') VALT = 0.0
                  DO MY=-LYD2,LYD2
                     IYT = MOD(IY+MY+NROW-1,NROW)+1
 
@@ -555,10 +548,10 @@ C             APPLY  MULTIPLE KERNALS
 C                      VALUE FOR PIXEL UNDER CURRENT KERNAL ELEMENT
                        VOK = VIN(MOD(IX+MX+NSAM-1,NSAM)+1,IYT)
 
-                       IF (MODE(1:1) .EQ. 'H') THEN
+                       IF (MODE(1:1)  ==  'H') THEN
 C                         HURST
                           IVOK = VKERNAL(MX,MY,1)
-                          IF (IVOK .GT. 0) THEN
+                          IF (IVOK  >  0) THEN
                              VALSMIN(IVOK) = MIN(VALSMIN(IVOK),VOK) 
                              VALSMAX(IVOK) = MAX(VALSMAX(IVOK),VOK) 
                           ENDIF
@@ -572,13 +565,13 @@ C                   END LOOP: MX=-LXD2,LXD2
                  ENDDO
 C                END LOOP: DO MY=-LYD2,LYD2 
 
-                 IF (MODE(1:1) .EQ. 'S' .OR. MODE(1:1) .EQ. 'P') THEN
+                 IF (MODE(1:1)  ==  'S' .OR. MODE(1:1)  ==  'P') THEN
 C                   SOBEL OR PREWITT
                     VALMAX = MAX(VALMAX,VALT)
 
-                 ELSEIF (MODE(1:1) .EQ. 'F') THEN
+                 ELSEIF (MODE(1:1)  ==  'F') THEN
 C                   FREI-CHEN
-                    IF (KER .GE. 2 .AND. KER .LE. 3) THEN
+                    IF (KER .GE. 2 .AND. KER  <=  3) THEN
                        VAL1 = VAL1 + VALT**2
                     ELSE
                        VAL2 = VAL2 + VALT**2
@@ -588,16 +581,16 @@ C                   FREI-CHEN
               ENDDO
 C             END LOOP:  DO KER = 1,NK
 
-              IF (MODE(1:1) .EQ. 'S' .OR. MODE(1:1) .EQ. 'P') THEN
+              IF (MODE(1:1)  ==  'S' .OR. MODE(1:1)  ==  'P') THEN
 C                SOBEL OR PREWITT
                  VOUT(IX) = VALMAX
 
-              ELSEIF (MODE(1:1) .EQ. 'H') THEN
+              ELSEIF (MODE(1:1)  ==  'H') THEN
 C                HURST
 	         CALL FILTER_HURST_DO(VKERNAL(-LXD2,-LYD2,2),ICAT,
      &               VALSMIN,VALSMAX,VOUT(IX))
 
-               ELSEIF (MODE(1:1) .EQ. 'F') THEN
+               ELSEIF (MODE(1:1)  ==  'F') THEN
 C                FREI-CHEN
                  IF (VAL2 .NE. 0.0) THEN
                     VOUT(IX) = COS(SQRT(VAL1/VAL2))
@@ -631,7 +624,7 @@ C       AUTOMATIC ARRAY
 	CHARACTER(LEN=2) ::           MODE 
 
         NK = NKT 
-        IF (MODE(1:1) .EQ. 'H') NK = 1
+        IF (MODE(1:1)  ==  'H') NK = 1
 
         DO IZ=1,NSLICE
 
@@ -639,8 +632,8 @@ C       AUTOMATIC ARRAY
                     
            DO IX=1,NSAM
               VALT = 0.0
-              IF (MODE(1:1) .EQ. 'R' .OR. MODE(1:1) .EQ. 'M' .OR.
-     &            MODE(1:1) .EQ. 'S' .OR. MODE(1:1) .EQ. 'P') THEN
+              IF (MODE(1:1)  ==  'R' .OR. MODE(1:1)  ==  'M' .OR.
+     &            MODE(1:1)  ==  'S' .OR. MODE(1:1)  ==  'P') THEN
 C                RANGE, ETC, USE MIN OR MAX OR BOTH
                  VALMIN = HUGE(VALMIN)
                  VALMAX = -VALMIN
@@ -665,7 +658,7 @@ C                      END LOOP: MX=-LXD2,LXD2
 C                   END LOOP: DO MY=-LYD2,LYD2 
                  ENDDO
 
-                 IF (MODE(1:1) .EQ. 'S' .OR. MODE(1:1) .EQ. 'P') THEN
+                 IF (MODE(1:1)  ==  'S' .OR. MODE(1:1)  ==  'P') THEN
 C                   SOBEL OR PREWITT
                     VALMAX = MAX(VALMAX,VALT)
                  ENDIF
@@ -673,7 +666,7 @@ C                   SOBEL OR PREWITT
               ENDDO
 C             END LOOP:  DO KER = 1,NK
 
-              IF (MODE(1:1) .EQ. 'S' .OR. MODE(1:1) .EQ. 'P') THEN
+              IF (MODE(1:1)  ==  'S' .OR. MODE(1:1)  ==  'P') THEN
 C                SOBEL OR PREWITT
                  VOUT(IX) = VALMAX
               ENDIF
@@ -705,7 +698,7 @@ C       AUTOMATIC ARRAY
 
 	CHARACTER(LEN=2)       :: MODE 
 
-        IF (MODE(1:1) .EQ. 'V') THEN
+        IF (MODE(1:1)  ==  'V') THEN
 C          VARIANCE OR VARIANCE SMOOTHING
            CONAVG  = 1.0 / FLOAT(NEIGH)
            CONVAR  = 1.0 / FLOAT(NEIGH -1)
@@ -720,14 +713,14 @@ C          VARIANCE OR VARIANCE SMOOTHING
            DO IX=1,NSAM
               VALT = 0.0
 
-              IF (MODE(1:1) .EQ. 'V') THEN
+              IF (MODE(1:1)  ==  'V') THEN
 C                VARIANCE
                  VALAVG  = 0
                  VOC     = VIN(IX,IY,IZ)    
                  LMED    = 0
 
-              ELSEIF (MODE(1:1) .EQ. 'R' .OR. MODE(1:1) .EQ. 'M' .OR.
-     &                MODE(1:1) .EQ. 'T') THEN
+              ELSEIF (MODE(1:1)  ==  'R' .OR. MODE(1:1)  ==  'M' .OR.
+     &                MODE(1:1)  ==  'T') THEN
 C                RANGE, RIDGE, MIN, MAX, OR TOP-HAT
                  VALMIN  = HUGE(VALMIN)
                  VALMAX  = -VALMIN
@@ -746,28 +739,28 @@ C             APPLY KERNAL
 C                   VALUE FOR IMAGE UNDER CURRENT KERNAL ELEMENT
                     VOK = VIN(MOD(IX+MX+NSAM-1,NSAM)+1,IYT,IZT)
 
-                    IF (MODE(1:1) .EQ. 'V') THEN
+                    IF (MODE(1:1)  ==  'V') THEN
 C                      USE SQ. FOR VARIANCE
                        VALT   = VALT   + VOK ** 2
                        VALAVG = VALAVG + VOK 
 
-                       IF (MODE(2:2) .EQ. 'S') THEN
+                       IF (MODE(2:2)  ==  'S') THEN
 C                          NEED TO GET MEDIAN FOR VARIANCE SMOOTHING
                            LMED       = LMED + 1
                            FMED(LMED) = VOK
                        ENDIF
  
-                    ELSEIF (MODE(1:1) .EQ. 'R' .OR. 
-     &                      MODE(1:1) .EQ. 'M') THEN
+                    ELSEIF (MODE(1:1)  ==  'R' .OR. 
+     &                      MODE(1:1)  ==  'M') THEN
 C                      RANGE, RIDGE, MIN., OR MAX.
                        VALMIN = MIN(VALMIN,VOK)
                        VALMAX = MAX(VALMAX,VOK)
 
-                    ELSEIF (MODE(1:1) .EQ. 'T') THEN
+                    ELSEIF (MODE(1:1)  ==  'T') THEN
 C                      TOP-HAT
-                       IF (VKERNAL(MX,MY,MZ) .EQ. 1) THEN
+                       IF (VKERNAL(MX,MY,MZ)  ==  1) THEN
                           VALMAX = MAX(VALMAX,VOK)
-                       ELSEIF (VKERNAL(MX,MY,MZ) .EQ. 2) THEN
+                       ELSEIF (VKERNAL(MX,MY,MZ)  ==  2) THEN
                           VALMAX2 = MAX(VALMAX2,VOK)
                        ENDIF
 
@@ -779,36 +772,36 @@ C                      USE SUM OF KERNAL PRODUCTS
               ENDDO
               ENDDO
 
-              IF (MODE(1:2) .EQ. 'RA') THEN
+              IF (MODE(1:2)  ==  'RA') THEN
 C                RANGE
                  VOUT(IX) = VALMAX - VALMIN
 
-              ELSEIF (MODE(1:1) .EQ. 'R') THEN
+              ELSEIF (MODE(1:1)  ==  'R') THEN
 C                RIDGE
-                 IF (VOC .LT. VALMIN .OR. VALMAX .GT. VOC) THEN
+                 IF (VOC  <  VALMIN .OR. VALMAX  >  VOC) THEN
                      VOUT(IX) = FMINT
                  ELSE
                      VOUT(IX) = VOC
                  ENDIF
-              ELSEIF (MODE(1:2) .EQ. 'MA') THEN
+              ELSEIF (MODE(1:2)  ==  'MA') THEN
 C                MAX
                  VOUT(IX) = VALMAX 
 
-              ELSEIF (MODE(1:2) .EQ. 'MI') THEN
+              ELSEIF (MODE(1:2)  ==  'MI') THEN
 C                MIN
                  VOUT(IX) = VALMIN 
 
-              ELSEIF (MODE(1:1) .EQ. 'T') THEN
+              ELSEIF (MODE(1:1)  ==  'T') THEN
 C                TOP-HAT
                  VOUT(IX) = VALMAX2 - VALMAX 
 
-              ELSEIF (MODE(1:2) .EQ. 'VS') THEN
+              ELSEIF (MODE(1:2)  ==  'VS') THEN
 C                VARIANCE SMOOTHING
                  SLOC = ABS(CONVAR * 
      &                  (VALT - CONAVG *(VALAVG * VALAVG)))
 
-                 IF (((VOC - VALAVG)**2) .GT. SLOC .AND. 
-     &                SLOC .GT. SIGTSQ) THEN
+                 IF (((VOC - VALAVG)**2)  >  SLOC .AND. 
+     &                SLOC  >  SIGTSQ) THEN
 C                    USE MEDIAN FROM NEIGHBORING VALUES
                      CALL FSORT(FMED,LMED)
                      VOUT(IX) = FMED(KMED)
@@ -818,7 +811,7 @@ C                    KEEP SAME VALUE
                      VOUT(IX) = VOC
                  ENDIF
 
-              ELSEIF (MODE(1:1) .EQ. 'V') THEN
+              ELSEIF (MODE(1:1)  ==  'V') THEN
 C                VARIANCE
                  VOUT(IX) =  CONVAR * (VALT - CONAVG *(VALAVG * VALAVG)) 
               ELSE
@@ -833,7 +826,7 @@ C          OUTPUT VOLUME LINE
          ENDDO
          ENDDO
 
-         IF (MODE(1:2) .EQ. 'VS') THEN
+         IF (MODE(1:2)  ==  'VS') THEN
 C           VARIANCE SMOOTHING
 
             FREPL = FLOAT(NREPL)
@@ -861,7 +854,7 @@ C       AUTOMATIC ARRAYS
 
 	CHARACTER(LEN=2)                       :: MODE 
 
-        IF (MODE(1:1) .EQ. 'V') THEN
+        IF (MODE(1:1)  ==  'V') THEN
 C          VARIANCE
            CONAVG   = 1.0 / FLOAT(NEIGH)
            CONVAR   = 1.0 / FLOAT(NEIGH - 1)
@@ -875,14 +868,14 @@ C          VARIANCE
            DO IX=1,NSAM
               VALT = 0.0
 
-              IF (MODE(1:1) .EQ. 'V') THEN
+              IF (MODE(1:1)  ==  'V') THEN
 C                VARIANCE
                  VALAVG  = 0
                  VOC     = VIN(IX,IY)    
                  LMED    = 0
 
-             ELSEIF (MODE(1:1) .EQ. 'R' .OR. MODE(1:1) .EQ. 'M' .OR.
-     &                MODE(1:1) .EQ. 'T') THEN
+             ELSEIF (MODE(1:1)  ==  'R' .OR. MODE(1:1)  ==  'M' .OR.
+     &                MODE(1:1)  ==  'T') THEN
 C                RANGE, RIDGE, MIN, MAX, OR TOP-HAT
                  VALMIN  = HUGE(VALMIN)
                  VALMAX  = -VALMIN
@@ -898,30 +891,30 @@ C             APPLY KERNAL
 C                   VALUE FOR IMAGE UNDER CURRENT KERNAL ELEMENT
                     VOK = VIN(MOD(IX+MX+NSAM-1,NSAM)+1,IYT)
 
-                    IF (MODE(1:1) .EQ. 'V') THEN
+                    IF (MODE(1:1)  ==  'V') THEN
 C                      USE SQ. FOR VARIANCE
                        VALT   = VALT   + VOK ** 2
                        VALAVG = VALAVG + VOK 
 
-                       IF (MODE(2:2) .EQ. 'S') THEN
+                       IF (MODE(2:2)  ==  'S') THEN
 C                          NEED TO GET MEDIAN FOR VARIANCE SMOOTHING
                            LMED       = LMED + 1
                            FMED(LMED) = VOK
                        ENDIF
  
-                    ELSEIF (MODE(1:1) .EQ. 'R' .OR. 
-     &                      MODE(1:1) .EQ. 'M') THEN
+                    ELSEIF (MODE(1:1)  ==  'R' .OR. 
+     &                      MODE(1:1)  ==  'M') THEN
 C                      RANGE, RIDGE, MIN., OR MAX.
                        VALMIN = MIN(VALMIN,VOK)
                        VALMAX = MAX(VALMAX,VOK)
 
-                    ELSEIF (MODE(1:1) .EQ. 'T') THEN
+                    ELSEIF (MODE(1:1)  ==  'T') THEN
 C                      TOP-HAT
-                       IF (VKERNAL(MX,MY) .EQ. 1) THEN
+                       IF (VKERNAL(MX,MY)  ==  1) THEN
 C                         OUTER RING
                           VALMAX = MAX(VALMAX,VOK)
 
-                       ELSEIF (VKERNAL(MX,MY) .EQ. 2) THEN
+                       ELSEIF (VKERNAL(MX,MY)  ==  2) THEN
 C                         INNER RING
                           VALMAX2 = MAX(VALMAX2,VOK)
                        ENDIF
@@ -933,30 +926,30 @@ C                      USE SUM OF KERNAL * IMAGE PRODUCTS
                  ENDDO
               ENDDO
 
-              IF (MODE(1:2) .EQ. 'RA') THEN
+              IF (MODE(1:2)  ==  'RA') THEN
 C                RANGE
                  VOUT(IX) = VALMAX - VALMIN
 
-              ELSEIF (MODE(1:1) .EQ. 'R') THEN
+              ELSEIF (MODE(1:1)  ==  'R') THEN
 C                RIDGE
-                 IF (VOC .LT. VALMIN .OR. VALMAX .GT. VOC) THEN
+                 IF (VOC  <  VALMIN .OR. VALMAX  >  VOC) THEN
                      VOUT(IX) = FMINT
                  ELSE
                      VOUT(IX) = VOC
                  ENDIF
-              ELSEIF (MODE(1:2) .EQ. 'MA') THEN
+              ELSEIF (MODE(1:2)  ==  'MA') THEN
 C                MAX
                  VOUT(IX) = VALMAX 
 
-              ELSEIF (MODE(1:2) .EQ. 'MI') THEN
+              ELSEIF (MODE(1:2)  ==  'MI') THEN
 C                MIN
                  VOUT(IX) = VALMIN 
 
-              ELSEIF (MODE(1:1) .EQ. 'T') THEN
+              ELSEIF (MODE(1:1)  ==  'T') THEN
 C                TOP-HAT
                  VOUT(IX) = VALMAX2 - VALMAX 
 
-              ELSEIF (MODE(1:2) .EQ. 'VS') THEN
+              ELSEIF (MODE(1:2)  ==  'VS') THEN
 C                VARIANCE SMOOTHING
 C                 VALT   = VALT   - VOC ** 2
 C                 VALAVG = VALAVG - VOC 
@@ -965,8 +958,8 @@ C                 VALAVG = VALAVG - VOC
      &                  (VALT - CONAVG *(VALAVG * VALAVG)))
                  VT   = VALAVG * CONAVG
 
-                 IF (((VOC - VT)**2) .GT. SLOC .AND. 
-     &                SLOC .GT. SIGTSQ) THEN
+                 IF (((VOC - VT)**2)  >  SLOC .AND. 
+     &                SLOC  >  SIGTSQ) THEN
 
 C                    USE MEDIAN FROM NEIGHBORING VALUES
                      CALL FSORT(FMED,LMED)
@@ -982,7 +975,7 @@ C                    KEEP SAME VALUE
                      VOUT(IX) = VOC
                  ENDIF
 
-              ELSEIF (MODE(1:1) .EQ. 'V') THEN
+              ELSEIF (MODE(1:1)  ==  'V') THEN
 C                VARIANCE
                  VOUT(IX) =  CONVAR * (VALT - CONAVG*(VALAVG * VALAVG)) 
 
@@ -996,7 +989,7 @@ C          OUTPUT IMAGE LINE
            CALL WRTLIN(LUN2,VOUT,NSAM,IREC)
          ENDDO
 
-         IF (MODE(1:2) .EQ. 'VS') THEN
+         IF (MODE(1:2)  ==  'VS') THEN
 C           VARIANCE SMOOTHING
 
             FNREPL = FLOAT(NREPL)
@@ -1027,11 +1020,11 @@ C       ------------------------- FILTER_HAT ----------------------------
                  DIST = SQRT(FLOAT(MX)**2 + FLOAT(MY)**2 + FLOAT(MZ)**2)
                  ILOC = ILOC + 1
 
-                 IF (DIST  .LT. RADIN) THEN
+                 IF (DIST   <  RADIN) THEN
 C                   INNER REGION
                     VKERNAL(ILOC) = 2
 
-                 ELSEIF (DIST  .LT. RADOUT) THEN
+                 ELSEIF (DIST   <  RADOUT) THEN
 C                   OUTER REGION
                     VKERNAL(ILOC) = 1
 
@@ -1136,15 +1129,15 @@ C       FIND UNIQUE DISTANCES**2 TO ANY KERNAL ELEMENT
               IVAL     = MX**2 + MY**2
               ILOC     = ILOC + 1 
               NEWDIST  = .TRUE.
-              IF (ICAT .GT. 0) THEN
+              IF (ICAT  >  0) THEN
                  DO I = 1,ICAT
-                    IF (IUNIQ(I) .EQ. IVAL) THEN
+                    IF (IUNIQ(I)  ==  IVAL) THEN
                        NEWDIST = .FALSE.
                        EXIT
                     ENDIF
                  ENDDO
               ENDIF
-              IF (NEWDIST .AND. IVAL .GT. 0) THEN
+              IF (NEWDIST .AND. IVAL  >  0) THEN
                  ICAT        = ICAT + 1
                  IUNIQ(ICAT) = IVAL
               ENDIF
@@ -1154,12 +1147,12 @@ C       FIND UNIQUE DISTANCES**2 TO ANY KERNAL ELEMENT
 C       SET KERNAL ELEMENTS TO CATEGORIES
         VKERNAL = 0
         ILOC    = 0
-        DO MY=-LXD2,LXD2
-           DO MX=-LXD2,LXD2
+        DO MY = -LXD2,LXD2
+           DO MX = -LXD2,LXD2
               ILOC = ILOC + 1
               IVAL = MX**2 + MY**2
               DO I=1,ICAT
-                 IF (IVAL .EQ. IUNIQ(I)) THEN
+                 IF (IVAL  ==  IUNIQ(I)) THEN
                     VKERNAL(ILOC) = I
                     VLOGDIST(I)   = LOG(SQRT(FLOAT(IVAL)))
                     EXIT
@@ -1183,7 +1176,7 @@ C       SURE, THIS IS SLOW, BUT IT IS NOT IMPORTANT!
 
 C       FIND RANGE FOR ALL CATEGORIES
         DO I = 1,ICAT
-          IF ((VALSMAX(I) - VALSMIN(I)) .LE. EPS) THEN
+          IF ((VALSMAX(I) - VALSMIN(I))  <=  EPS) THEN
               VAL = 0.0
               RETURN
            ENDIF

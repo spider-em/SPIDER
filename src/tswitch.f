@@ -48,12 +48,13 @@ C                   'DIS'                          JAN 15 ArDean Leith
 C                   'ML'                           JAN 15 ArDean Leith
 C                   'RI'                           APR 16 ArDean Leith
 C                   'MRC'                          NOV 19 ArDean Leith
+C                   'AR' TO UTIL_11                JAN 20 ArDean Leith
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2019  Health Research Inc.,                         *
+C=* Copyright 1985-2020  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@health.ny.gov                                        *
 C=*                                                                    *
@@ -130,6 +131,7 @@ C       22      MOTIF1          LO
 C       23      UTIL_1011       CEN
 C       24      UTIL_1110       SH
 C       25      UTIL_1010       NORM
+C       26      UTIL_11         AR
 C
 C  156 DV unused Nov 2005
 C23456789012345678901234567890123456789012345678901234567890123456789012
@@ -154,7 +156,7 @@ C     NUMBER OF OPERATIONS IN MENU
       DATA MENU(2),   MENUL(2),   IW(2)   /'AD','ADD',2/
       DATA MENU(136), MENUL(136), IW(136) /'AF','  ',3/
       DATA MENU(3),   MENUL(3),   IW(3)   /'AP','  ',9/
-      DATA MENU(4),   MENUL(4),   IW(4)   /'AR','  ',2/
+      DATA MENU(4),   MENUL(4),   IW(4)   /'AR','  ',26/
       DATA MENU(5),   MENUL(5),   IW(5)   /'AS','  ',2/
       DATA MENU(129), MENUL(129), IW(129) /'AT','  ',9/
       DATA MENU(6),   MENUL(6),   IW(6)   /'BC','  ',3/
@@ -481,6 +483,9 @@ C        SPECIAL CASE FOR OPERATIONS IN SPIDER
 
       CASE(25)
           CALL UTIL_1010()
+
+      CASE(26)
+          CALL UTIL_11()
 
       END SELECT
 

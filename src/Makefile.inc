@@ -347,10 +347,7 @@ ELEMENTS =  \
  $(LIB)(getlbno.o)  \
  $(LIB)(getlab.o)   \
  $(LIB)(get_tf_input.o) \
- $(LIB)(getnewstack.o)  \
  $(LIB)(getnexttoken.o) \
- $(LIB)(getoldstack.o)  \
- $(LIB)(getstack.o) \
  $(LIB)(getsym.o)   \
  $(LIB)(getthreads.o) \
  $(LIB)(gnc.o)   \
@@ -866,6 +863,7 @@ ELEMENTS =  \
  $(LIB)(util5.o)    \
  $(LIB)(util6.o)    \
  $(LIB)(util7.o)    \
+ $(LIB)(util_11.o)   \
  $(LIB)(util_1010.o) \
  $(LIB)(util_1011.o) \
  $(LIB)(util_1110.o) \

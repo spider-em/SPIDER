@@ -1,4 +1,4 @@
-head	1.5;
+head	1.6;
 access;
 symbols
 	pre_mrcs:1.4
@@ -6,6 +6,11 @@ symbols
 locks; strict;
 comment	@c @;
 
+
+1.6
+date	2020.02.24.16.59.49;	author leith;	state Exp;
+branches;
+next	1.5;
 
 1.5
 date	2019.11.04.17.35.58;	author leith;	state Exp;
@@ -38,21 +43,22 @@ desc
 @
 
 
-1.5
+1.6
 log
-@mrc_support
+@removed stack operation
 @
 text
 @C **********************************************************************
 C
 C COPYTOSTK  'CP TO STK' STACKS                  APR 2015 ArDean Leith
 C            MRC NOT SUPPORTED                   OCT 2019 ArDean Leith
+C            REMOVED GETOLDSTACK..               FEB 2020 ArDean Leith
 C
 C **********************************************************************
-C=* Author: ArDean Leith                                                                    *
+C=* Author: ArDean Leith                                               *                                                            *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2019  Health Research Inc.,                         *
+C=* Copyright 1985-2020  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@@health.ny.gov                                        *
 C=*                                                                    *
@@ -91,15 +97,16 @@ C***********************************************************************
 
         CHARACTER(LEN=MAXNAM) :: PROMPT,FILPAT,FILOLD,FILOLDS 
         CHARACTER(LEN=MAXNAM) :: FILNEW
+        CHARACTER(LEN=10)     :: CNUM
 
         INTEGER               :: NILMAX, IRTFLG, NOT_USED, IDUM
         INTEGER               :: NLET1,NLET2,I,IMG2GO, IMG1,IMG2
         INTEGER               :: ITYPE1,ITYPE2, LOCAT,LOCAST 
         INTEGER               :: NSTKS, ISTK, INUM, NSTACK1, NSTACK2
-
-        LOGICAL               :: ISSTACK, BARE,WANTNEXT,MUSTGET
-        LOGICAL               :: ASKNAM,WANTSTACK,FOUROK,SAYIT
-        LOGICAL               :: COPYSTAT
+        INTEGER               :: NSTACK1_1,NLETC
+        integer               :: lunaraoff,lunstkoff
+        LOGICAL               :: ISSTACK, BARE
+        LOGICAL               :: ASKNAM,FOUROK
         LOGICAL               :: IS_MRC
 
         REAL                  :: UNUSED 
@@ -154,7 +161,7 @@ C       OPEN FIRST INPUT STACK TO GET SIZING NEEDED FOR OUTPUT FILE
 C	OPEN OUTPUT STACK
         ASKNAM  = .TRUE.
         NSTACK2 = 1               ! OPEN A STACK
-        ITYPE2  = ITYPE1
+        ITYPE2  = ITYPE1          ! SAME IFORM
 
         CALL OPFILEC(0,ASKNAM,FILNEW,LUN2,'U',ITYPE2,
      &          NX,NY,NZ,NSTACK2,'OUTPUT STACK (E.G. NEWSTK@@)~',
@@ -163,19 +170,14 @@ C	OPEN OUTPUT STACK
  
         IS_MRC = ISMRCFILE(FILNEW)
         IF (IS_MRC) THEN
-           CALL ERRT(101,'CAN NOT CREATE MRC STACKS',IDUM)
+           CALL ERRT(101,'USE <CP> TO CREATE MRC STACKS',IDUM)
            GOTO 9999
         ENDIF
 
 
         !write(6,*)'  Opened filnew:',nlet2,filnew(1:nlet2)
 
-        WANTNEXT = .TRUE.
-        MUSTGET  = .FALSE.
-        SAYIT    = .TRUE.
-        COPYSTAT = .TRUE.
-
-        IMG2     = IMG2GO   ! STARTING OUTPUT IMAGE NUMBER
+        IMG2 = IMG2GO   ! STARTING OUTPUT IMAGE NUMBER
 
 C       LOOP OVER ALL INPUT STACKS (1...NSTKS)
         DO I = 1,NSTKS
@@ -183,32 +185,63 @@ C       LOOP OVER ALL INPUT STACKS (1...NSTKS)
            CALL FILGET(FILPAT,FILOLD,NLET,ISTK,IRTFLG)
 
            FILOLDS = FILOLD(1:NLET) // '@@'
-           !write(6,*)'  filolds:',nlet,filolds(1:nlet)
+           !write(3,*)'  filolds:',nlet,filolds(1:nlet+5)
 
-C          OPEN INPUT STACK
+C          OPEN BARE INPUT STACK
            ASKNAM  = .FALSE.
            NSTACK1 = 1            ! CAN OPEN STACK
            CALL OPFILEC(0,ASKNAM,FILOLDS,LUN1,'O',LTYPE,
      &                  LX,LY,LZ,NSTACK1,' ',FOUROK,IRTFLG)
-           IF (IRTFLG .NE. 0) RETURN
            
-           !write(6,*)'  opened bare stack:',filold(1:nlet), ' nstack1:',nstack1
+c          write(3,*)'  Opened bare input stack:',filolds(1:nlet+5), 
+c     &                  ' nstack1:',nstack1,irtflg
+           IF (IRTFLG .NE. 0) RETURN
 
 C          MUST CONTAIN  SAME SIZE AND TYPE OF IMAGES/VOLUMES
            CALL SIZCHK(UNUSED, LX,LY,LZ,LTYPE, NX,NY,NZ,ITYPE1, IRTFLG)
            IF (IRTFLG .NE. 0) GOTO 9999
 
+
 C          LOOP OVER ALL IMAGES IN THE INPUT STACK
            DO IMG1 = 1,NSTACK1
 
-C             GET OLD STACKED IMAGE
-              CALL GETOLDSTACK(LUN1,NX,IMG1,WANTNEXT,MUSTGET,
-     &                         SAYIT,IRTFLG)
-              IF (IRTFLG .NE. 0) EXIT
+C             OPEN NEXT IMAGE IN INPUT STACK
+              CLOSE(LUN1)
+              NSTACK1_1 = 0            ! STACKED IMAGE
+              CALL INTTOCHAR(IMG1,CNUM,NLETC,1)
+              FILOLDS = FILOLD(1:NLET) // '@@' // CNUM(1:NLETC)
+              CALL OPFILEC(0,ASKNAM,FILOLDS,LUN1,'O',LTYPE,
+     &                  LX,LY,LZ,NSTACK1_1,' ',FOUROK,IRTFLG)
+c             write(3,*)'  Opened stacked input :',filolds(1:nlet+5), 
+c&                  ' nstack1_1:',nstack1_1,irtflg
+              IF (IRTFLG .NE. 0) RETURN
 
-C             OPEN NEW STACKED IMAGE
-              CALL GETNEWSTACK(LUN1,LUN2,COPYSTAT,NX,IMG2,IRTFLG)
-              IF (IRTFLG .NE. 0) GOTO 9999
+C             GET OVERALL HEADER FROM THE NEW STACK FILE
+              CALL LUNREDHED(LUN2,NX,0,   .FALSE.,IRTFLG)
+              IF (IRTFLG .NE. 0) THEN
+                CALL ERRT(101,'FAILED TO OPEN NEW HEADER',IDUM)
+                GOTO 9999
+              ENDIF
+
+C             UPDATE OVERALL HEADER WITH MAXIMUM IMAGE NUMBER
+              CALL LUNSETMAXIM( LUN2,IMG2,IRTFLG)
+              CALL LUNSETMAXALL(LUN2,IMG2,IRTFLG)
+
+C             SAVE OVERALL HEADER NOW TO PRESERVE MAXIM
+              CALL LUNWRTHED(LUN2,NX,0,IRTFLG)
+
+C             SET OFFSETS FOR REDLIN/WRTLIN ON THIS LUN
+              CALL LUNSETIMGOFF(LUN2,IMG2,NX,IRTFLG)
+
+C             PUT IMAGE INUSE IN THIS IMAGE'S HEADER OBJECT
+              CALL LUNSETINUSE(LUN2,IMG2,IRTFLG)
+
+C             PUSH HEADER OBJECT INFO INTO NEW STACKED FILE
+              CALL LUNWRTHED(LUN2,NX,IMG2,IRTFLG)
+
+c             write(3,*)'  In copytostk 2, img2,irtflg:',img2,irtflg,ny
+c             call lungethedoff(lun2,nx,img2, lunaraoff,lunstkoff,irtflg)
+c             write(3,*)'  In copytostk 3 --:',img2,lunaraoff,lunstkoff
 
 C             COPY THE DATA RECORDS
               DO IREC = 1,NY * NZ
@@ -219,7 +252,8 @@ C             COPY THE DATA RECORDS
 C             INCREMENT OUTPUT IMAGE NUMBER
               IMG2 = IMG2 + 1
 
-           ENDDO
+           ENDDO   ! END OF THIS INPUT STACK
+
 C          CLOSE INPUT STACK
            CLOSE(LUN1)
         ENDDO
@@ -254,6 +288,66 @@ C             OPEN NEXT SET OF I/O FILES, UPDATES NINDX*
 C       OPEN FIRST INPUT FILE, DISP = 'E' DOES NOT STOP ON ERROR
 #endif
 
+@
+
+
+1.5
+log
+@mrc_support
+@
+text
+@d5 1
+d8 1
+a8 1
+C=* Author: ArDean Leith                                                                    *
+d11 1
+a11 1
+C=* Copyright 1985-2019  Health Research Inc.,                         *
+d50 1
+d56 4
+a59 4
+
+        LOGICAL               :: ISSTACK, BARE,WANTNEXT,MUSTGET
+        LOGICAL               :: ASKNAM,WANTSTACK,FOUROK,SAYIT
+        LOGICAL               :: COPYSTAT
+d114 1
+a114 1
+        ITYPE2  = ITYPE1
+d123 1
+a123 1
+           CALL ERRT(101,'CAN NOT CREATE MRC STACKS',IDUM)
+d130 1
+a130 6
+        WANTNEXT = .TRUE.
+        MUSTGET  = .FALSE.
+        SAYIT    = .TRUE.
+        COPYSTAT = .TRUE.
+
+        IMG2     = IMG2GO   ! STARTING OUTPUT IMAGE NUMBER
+d138 1
+a138 1
+           !write(6,*)'  filolds:',nlet,filolds(1:nlet)
+d140 1
+a140 1
+C          OPEN INPUT STACK
+d145 3
+a148 2
+           
+           !write(6,*)'  opened bare stack:',filold(1:nlet), ' nstack1:',nstack1
+d154 1
+d158 37
+a194 8
+C             GET OLD STACKED IMAGE
+              CALL GETOLDSTACK(LUN1,NX,IMG1,WANTNEXT,MUSTGET,
+     &                         SAYIT,IRTFLG)
+              IF (IRTFLG .NE. 0) EXIT
+
+C             OPEN NEW STACKED IMAGE
+              CALL GETNEWSTACK(LUN1,LUN2,COPYSTAT,NX,IMG2,IRTFLG)
+              IF (IRTFLG .NE. 0) GOTO 9999
+d205 2
+a206 1
+           ENDDO
 @
 
 

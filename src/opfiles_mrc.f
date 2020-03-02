@@ -1,20 +1,14 @@
  
 C++*********************************************************************
 C                                                                      
-C  OPFILES_MRC.F   NEW                          12/15/06  ArDean Leith    
-C              BAD NUMBRT() TRAP                05/21/09  ArDean Leith  
-C              ASKNAM                           12/06/10  ArDean Leith 
-C              NX...                            03/26/12  ArDean Leith 
-C              COPY NON SPIDER INPUT            05/26/14  ArDean Leith 
-C              COPY NON SPIDER INPUT            05/26/14  ArDean Leith 
-C              LOCAST, ASKLIST FOR ILIST        10/02/14  ArDean Leith
-C              DO NOT CHECK .MRC FOR XMIPP       7/25/19  ArDean Leith
-C              SPLIT FROM OPFILES                7/30/19  ArDean Leith
+C  OPFILES_MRC.F    CREATED FROM OPFILES         7/30/19  ArDean Leith
+C                   COMMENTS                     2/06/20  ArDean Leith
+C
 C ********************************************************************** 
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2019  Health Research Inc.,                         *
+C=* Copyright 1985-2020  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@health.ny.gov                                        *
 C=*                                                                    *
@@ -34,9 +28,10 @@ C **********************************************************************
 C 
 C  CONTAINS: OPFILES_MRC, GETOLDIMG_MRC, GETNEWIMG_MRC 
 C
-C  OPFILES_MRC(LUNCP,LUNIMG,LUNDOC,LUNXM,  ASKNAM,FILPAT,NLET, DISP,
-C          ITYPE,NX,NY,NZ,MAXIM,FOUROK,
-C          ILIST,NIMAXT, NTOT,IMGNUM, IRTFLG)
+C  OPFILES_MRC(LUNCP,LUNIMG,LUNDOC,LUNXM,  
+C              ASKNAM,FILPAT,NLET, DISP,
+C              ITYPE,NX,NY,NZ,MAXIM,FOUROK,
+C              IMGNUM, IRTFLG)
 C 
 C  PURPOSE: SOLICITS FILE NAME(S) AND OPENS FILE(S)
 C           SUPPORT ROUTINE FOR CONVERTING OPERATIONS TO 
@@ -82,19 +77,12 @@ C                        NEXT-TO-NEXT-TO LAST
 C                        ACCEPTS AN EXTENSION
 C                        (OTHERWISE DISCARDED!)
 C                     ~6 KEEPS OLD DATE/TIME
-C        FOUROK     CAN USE EXISTING FOURIER FILES?               (SENT)
-C        ILIST      IMAGE NUMBER LIST                             (RET)
-C                     IF NIMAXT < 0 MUST BE SENT
-C                     NOT USED IF SINGLE IMAGE/SELFILE 
-C        NIMAXT     MAX LENGTH OF IMAGE NUMBER LIST               (SENT)
-C                     <0 MEANS DO NOT ASK FOR LIST
-C        NTOT       # OF IMAGES IN IMAGE NUMBER LIST              (RET)
-C                     ZERO FOR SINGLE IMAGE AND NO * 
-C        IMGNUM    IMAGE NUMBER THAT IS CURRENTLY OPEN       (SENT/RET)
-C                   ON INPUT: IF (BARESTACK) IS # WANTED
-C                   ON OUTPUT:   <0 IS SELFILE IN USE 
+C        IMGNUM     IMAGE NUMBER                              (SENT/RET)
+C                     ON INPUT:   IMAGE NUMBER THAT IS WANTED
+C                     ON OUTPUT:  >=0 IMAGE NUMBER CURRENTLY OPEN 
+C                                 <0 IS SELFILE IN USE 
 C        IRTFLG     ERROR FLAG (0 IS NORMAL)                      (RET)
-C                      -1 GOTO PREVIOUS QUESTION
+C                      -1 GO TO PREVIOUS QUESTION
 C 
 C  CALL TREE:
 C
@@ -129,8 +117,7 @@ C--*********************************************************************
        SUBROUTINE OPFILES_MRC(LUNCP,LUNIMG,LUNDOC,
      &                        FILPAT,NLET, DISP,
      &                        ITYPE,NX,NY,NZ,MAXIM,
-     &                        FOUROK,ILIST,NIMAXT, 
-     &                        NTOT,IMGNUM, IRTFLG) 
+     &                        IMGNUM, IRTFLG) 
  
        IMPLICIT NONE
 
@@ -142,17 +129,16 @@ C--*********************************************************************
        INTEGER                   :: NLET
        CHARACTER(LEN=1)          :: DISP 
        INTEGER                   :: ITYPE,NX,NY,NZ,MAXIM
-       LOGICAL                   :: FOUROK
-       INTEGER                   :: ILIST(*)
-       INTEGER                   :: NIMAXT,NTOT,IMGNUM,IRTFLG
+       LOGICAL                   :: FOUROK = .FALSE.
+       INTEGER                   :: IMGNUM,IRTFLG
 
-       LOGICAL                   :: SAYIT,ASKLIST
+       LOGICAL                   :: SAYIT
        CHARACTER (LEN=MAXNAM)    :: FILNAM,FILNAMNOAT 
        CHARACTER (LEN=2*MAXNAM)  :: MESG 
        CHARACTER (LEN=1)         :: NULL = CHAR(0)
 
        INTEGER                   :: LOCAT,LOCAST,LENE
-       INTEGER                   :: NIMAXP,LUNOP,NLETT,I
+       INTEGER                   :: LUNOP,NLETT,I
 
        LOGICAL                   :: ISOPEN,IS_BAREL
        CHARACTER (LEN=MAXNAM)    :: FILNAMT 
@@ -168,14 +154,12 @@ C--*********************************************************************
        !write(3,*)' In opfiles_mrc,locast,locat,:',locast,locat,is_barel
        !write(3,*)' In opfiles_mrc, imgnum:',imgnum,filpat
 
-       NIMAXP  = ABS(NIMAXT)
- 
        IF (LOCAST > 0 .AND. LOCAST < LOCAT) THEN
 C         TEMPLATED STACKED MRC FILE: ***@STK.MRC --------- **@STK.MRC
 
           !write(3,*)' In opfiles_mrc, opening: ',filpat(1:nlet)
         
-C         SUBSTITUTE STACKED IMGNUM INTO FILE NAME PATTERN -> FILNAM   
+C         SUBSTITUTE STACKED IMGNUM INTO FILE NAME PATTERN -> FILNAM 
           CALL FILGET_AT(FILPAT,IMGNUM,FILNAM,NLET,IRTFLG)
           IF (IRTFLG .NE. 0) RETURN
 
@@ -213,8 +197,8 @@ C         OPEN THE FILE
 C         THIS IS NOT A BARE STACK REQUEST
           CALL LUNSETISBARE_MRC(LUNIMG,.FALSE.,IRTFLG)
 
-          ! write(6,*)' Opened templated file: ',FILPAT(1:NLET),
-          ! &              '  for:',ntot,' images.'
+c          write(3,*)' Opened templated file: ',filnam(1:20),
+c     &              '  for:',imgnum
 
        ELSEIF (LOCAT == 1 .OR. IS_BAREL) THEN
 C         WHOLE BARESTACK:  @STK.mrc  ---------------------- @STK.mrc
@@ -230,7 +214,7 @@ C         SUBSTITUTE STACKED IMGNUM INTO FILE NAME PATTERN -> FILNAM
 C         OPEN FIRST FILE IN MRC STACK
           IMGNUM = 1
           MAXIM  = 1
-          !write(3,*)' In opfiles_mrc, filnamnoat: ',filnamnoat(1:nlet)
+         !write(3,*)' In opfiles_mrc, filnamnoat: ',filnamnoat(1:nlet)
 
           INQUIRE(FILE=FILNAMNOAT,OPENED=ISOPEN,NUMBER=LUNOP)
           MESG = '  FILE: ' // FILNAMNOAT(1:NLET)//'  ALREADY OPENED ON' 
@@ -274,8 +258,7 @@ C         RETURN FILENAME WITH ANY EXTENSION IF NOT SPIDER IMAGE
           ! write(3,*)' In opfiles_mrc, imami : ',imami
           ! write(3,*)' In opfiles_mrc, openrf simple file: ',filpat
 
-          NTOT       = 0
-          IMGNUM     = 1
+          IMGNUM = 1
 
        ENDIF
 
@@ -286,7 +269,7 @@ C **********************************************************************
 C
 C    GETNEWIMG_MRC( LUN, FILPAT,NWANT,SAYIT,FILNAM,NGOT,IRTFLG)
 C
-C    PURPOSE:       TO OPEN A SPECIFIED TEMPLATED MRC IMAGE FOR 
+C    PURPOSE:       OPEN A SPECIFIED TEMPLATED MRC IMAGE FOR 
 C                   RANDOM ACCESS READING/WRITING.
 C
 C    PARAMETERS:
@@ -323,7 +306,6 @@ C **********************************************************************
         CHARACTER(LEN=1)       :: DSP
         CHARACTER(LEN=4)       :: CAXIS
         LOGICAL                :: FOUROK = .FALSE.
-        LOGICAL                :: ISBARE
         INTEGER                :: NLET,LOCAST,LOCAT,NX,NY,NZ,ITYPE
         INTEGER                :: MAXIM,MZ,NSTACK,IMGNUM,LENT,IMGNUMOLD
         LOGICAL                :: WANTUL

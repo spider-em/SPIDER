@@ -159,7 +159,7 @@ C       @@@@@@@@@@@@@@@@@@@@@@@@@@ DATA STATEMENTS @@@@@@@@@@@@@@@@@@@@
 C       @@@@@@@@@@@@@@@@@@@@@@ VERSION INITIALIZATION @@@@@@@@@@@@@@@@@
 
 CHERE               123456789 123456789 123456789 1234567890 
-        DATA CVERS/'VERSION:  UNIX 26.03  ISSUED:  1/20/2020'/
+        DATA CVERS/'VERSION:  UNIX 26.04  ISSUED:  2/27/2020'/
 
         DATA RESULM/'results'/
         DATA LOGM/'LOG'/

@@ -64,12 +64,14 @@ C                           'DIS' ADDED           ArDean Leith  1/05/15
 C                           PUTLIN PARAMETERS     ArDean Leith  6/13/18
 C                           COSMETIC              ArDean Leith 10/10/19
 C                           'MD MRC'              ArDean Leith 11/20/19
-C 
+C                           EXTRACTED 'AR'        ArDean Leith  1/27/20
+C                           ANISO MOVED OUT       ArDean Leith  2/07/20
+C    
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2019  Health Research Inc.,                         *
+C=* Copyright 1985-2020  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@health.ny.gov                                        *
 C=*                                                                    *
@@ -89,7 +91,9 @@ C **********************************************************************
 C
 C  UTIL2(MAXDIM)
 C
-C  PARAMETERS:      MAXDIM         MAX LENGTH FOR UNLABELED COMMON
+C  PARAMETERS:  MAXDIM         MAX LENGTH FOR UNLABELED COMMON
+C
+C  NOTE:        'AR' NOW IN: UTIL1001 Jan 2020
 C
 C23456789012345678901234567890123456789012345678901234567890123456789012
 C--*********************************************************************
@@ -116,7 +120,7 @@ C--*********************************************************************
         CHARACTER(LEN=1)           :: NULL = CHAR(0)
         CHARACTER(LEN=1)           :: MODE
         CHARACTER(LEN=2)           :: ANS
-        LOGICAL                    :: NORMIT,USEBORDER
+        LOGICAL                    :: USEBORDER
 
         INTEGER, PARAMETER         :: LUN1  = 21
         INTEGER, PARAMETER         :: LUN2  = 22
@@ -156,7 +160,7 @@ C       OPERATION ----------- DISP = 30 ------------------------ 'DISP'
 66      CALL DISP()              
         GOTO 9000
 
-C       OPERATION ----------- DISP = 31 ------------------------ 'MRC' 
+C       OPERATION ----------- DISP = 31 ------------------------- 'MRC' 
 67      IF (FCHAR(4:4) == 'H')  THEN
 C          INQUIRE MRC HEADER CONTENTS
            CALL LISTHEDMRC(LUN1,IRTFLG)
@@ -187,8 +191,7 @@ C             IMAGE LIST SUPPORTED  'AD 2', 'AD 2F', 'AD 2R'
      &                        SIGN)
            ELSE
               CALL UTIL2SUP('FIRST INPUT',
-     &                      'NEXT INPUT','SUMMED OUTPUT',
-     &                      LUN1,LUN2,LUN3, SIGN)
+     &                      'NEXT INPUT','SUMMED OUTPUT', SIGN)
            ENDIF
         ENDIF
         GOTO 9000
@@ -229,7 +232,7 @@ C       OPERATION ----------- COPY  ------------------------------ 'CP'
 
 C       OPERATION -------- INSERT -------------------------------- 'IN' 
 C               IN      : INSERT
-C               IN S    : INSERT AND CONTRAST STRETCH
+C               IN S    : INSERT  AND CONTRAST STRETCH
 
 4       CALL OPFILEC(0,.TRUE.,FILNAM,LUN1,'O',IFORM,
      &               NSAM1,NROW1,NSLICE1,
@@ -299,7 +302,7 @@ C       MU O          MULTIPLY WITH ARITHMETIC OR
 
 6       SIGN = +2.0
         IF ( INDEX(FCHAR(4:) ,'D') > 0 .OR. 
-     &            FCHAR(1:2) == '12')   THEN
+     &             FCHAR(1:2) == '12')   THEN
 C          'MU D' OR 'DIV'   DIVIDE REAL FILES
            IF ( INDEX(FCHAR(4:) ,'2') > 0) THEN
 C             IMAGE LIST SUPPORTED
@@ -308,8 +311,7 @@ C             IMAGE LIST SUPPORTED
      &                       'OUTPUT FILE NAME OR TEMPLATE~',
      &                       SIGN)
            ELSE
-              CALL UTIL2SUP('INPUT','DIVISOR','OUTPUT',
-     &                       LUN1,LUN2,LUN3, SIGN)
+              CALL UTIL2SUP('INPUT','DIVISOR','OUTPUT', SIGN)
            ENDIF
 
         ELSEIF (INDEX (FCHAR(4:),'O') > 0) THEN
@@ -320,8 +322,7 @@ C          'MU O', 'MU 2O'          ARITHMETIC OR
      &                      'OUTPUT FILE NAME OR TEMPLATE~',
      &                      SIGN)
            ELSE
-              CALL UTIL2SUP('INPUT','SECOND INPUT','OUTPUT',
-     &               LUN1,LUN2,LUN3, SIGN)
+              CALL UTIL2SUP('INPUT','SECOND INPUT','OUTPUT', SIGN)
            ENDIF
         ELSE
 C          MULTIPLICATION
@@ -332,8 +333,7 @@ C             IMAGE LIST SUPPORTED
      &                      'OUTPUT FILE NAME OR TEMPLATE~',
      &                       SIGN)
            ELSE
-              CALL UTIL2SUP('INPUT','MULTIPLIER','OUTPUT',
-     &                       LUN1,LUN2,LUN3, SIGN)
+              CALL UTIL2SUP('INPUT','MULTIPLIER','OUTPUT', SIGN)
            ENDIF
         ENDIF
         RETURN
@@ -364,7 +364,7 @@ C       OPEN SECOND INPUT FILE
         NROWS   = 1
         NSLICES = 1
         CALL RDPRI3S(NSAMS,NROWS,NSLICES,NOT_USED,
-     &     'TOP LEFT COORDINATES',IRTFLG)
+     &              'TOP LEFT COORDINATES',IRTFLG)
 
         CALL PATCH(LUN1,LUN2,NSAM1,NROW1,NSLICE1, NSAM2,NROW2,
      &             NSLICE2, NSAMS,NROWS,NSLICES, 0,0,FCHAR(4:4),
@@ -377,7 +377,7 @@ C       SET UNDETERMINED STATISTICS FLAG
 
 C       OPERATION   PAD  ----------------------------------------- 'PD' 
 
-C       EMBED A PICT. OR VOL. IN A LARGER EMPTY ARRAY.
+C       EMBED AN IMAGE OR VOLUME IN A LARGER EMPTY ARRAY.
 
 C       OPEN INPUT FILE
 8       CALL OPFILEC(0,.TRUE.,FILNAM,LUN1,'O',ITYPE,
@@ -410,7 +410,7 @@ C       OPEN THE OUTPUT FILE
            ANS(1:1) = 'N'
         ENDIF
 
-        IF (NC >= 2 .AND. ANS(2:2).EQ. 'C') IN = 3
+        IF (NC >= 2 .AND. ANS(2:2) ==  'C') IN = 3
         IF (ANS(:1) == 'Y' .OR. ANS(:1) == 'M') THEN
            IF (IMAMI1 .NE. 1) THEN
               CALL NORM3(LUN1,NSAM1,NROW1,NSLICE1,FMAX1,FMIN1,AV1)
@@ -531,7 +531,7 @@ C              INTEGER SHIFT
                ENDIF
                CALL SHIFT_PF(Q(1),NNNN/2,NSAM1,NROW1,NSLICE1,
      &                       SAMS,ROWS,SLICS)
-               INS=-1
+               INS = -1
                CALL FMRS_3(Q(1),NSAM1,NROW1,NSLICE1,INS)
                DO J = 1, NROW1*NSLICE1
                   CALL WRTLIN(LUN2,Q(1 + (J-1)*NNNN),NSAM1,J)
@@ -553,8 +553,8 @@ C              INTEGER SHIFT
      &                 'SHIFT COMPONENTS IN X & Y',IRTFLG)
            IF (IRTFLG .NE. 0) GOTO 9000
 
-         IF (REAL(IFIX(SAMS)).EQ.SAMS .AND.
-     &       REAL(IFIX(ROWS)).EQ.ROWS) THEN
+         IF (REAL(IFIX(SAMS)) == SAMS .AND.
+     &       REAL(IFIX(ROWS)) == ROWS) THEN
 C          INTEGER SHIFT
            NSAMS = SAMS
            NROWS = ROWS
@@ -565,7 +565,7 @@ C          INTEGER SHIFT
            CALL  SHIFT2(LUN1,LUN2,NSAM1,NROW1,NSAMS,NROWS)
 
          ELSE
-            IF (FCHAR(4:5).EQ.'F')  THEN
+            IF (FCHAR(4:5) == 'F')  THEN
                NNNN    = NSAM1+2-MOD(NSAM1,2)
                MEMWANT = NNNN*NROW1
                ALLOCATE(Q(MEMWANT),STAT=IRTFLG)
@@ -644,8 +644,7 @@ C          IMAGE LIST SUPPORTED
      &            'OUTPUT FILE NAME OR TEMPLATE~',
      &            SIGN)
         ELSE
-           CALL UTIL2SUP('INPUT','SUBTRACTED','OUTPUT',
-     &                   LUN1,LUN2,LUN3, SIGN)
+           CALL UTIL2SUP('INPUT','SUBTRACTED','OUTPUT', SIGN)
         ENDIF
         RETURN
 
@@ -736,6 +735,11 @@ C          ADJUST OPTICAL DENSITIES
            CALL  HISTOD
            GOTO  9911
 
+        ELSEIF (FCHAR(4:5) == 'AD')  THEN
+C          ANISOTROPIC DIFFUSION
+           CALL  UTIL_11()
+           GOTO  9911
+
         ENDIF
 
 C       OPEN INPUT FILE, SOME OPERATIONS CAN TAKE WHOLE STACKS
@@ -761,10 +765,6 @@ C       OPEN OUTPUT FILE
         IF (FCHAR(4:6) == 'GNC') THEN
 C          GRADUATED NON CONVEX RESTORATION
            CALL GNC(LUN1,LUN2,NSAM1,NROW1)
-
-        ELSEIF (FCHAR(4:5) == 'AD')  THEN
-C          ANISO DIFFUSION (CAN HANDLE WHOLE STACKS) 
-           CALL ANISO(LUN1,LUN2,NSAM1,NROW1,NSLICE1,MAXIM,IRTFLG)
 
         ELSEIF (FCHAR(4:5) == 'OR')  THEN
 
@@ -841,65 +841,9 @@ C             SAME AS 'CE ST' CONTRAST STRETCH
         ENDIF
         GOTO 9000
 
-
-C       OPERATION  ----------------------------------------------  'AR' 
-C       AR        ARITHMETIC OPERATION
-
-14      CONTINUE
-
-C       OPEN INPUT FILE,  STACK OK FOR PLAIN 'AR'
-        IF (FCHAR(4:5) .NE. 'IF') MAXIM = -1
-        CALL OPFILEC(0,.TRUE.,FILNAM,LUN1,'O',ITYPE,
-     &               NSAM1,NROW1,NSLICE1,
-     &               MAXIM,'INPUT',.TRUE.,IRTFLG)
-        IF (IRTFLG .NE. 0) GOTO 9000
-
-C       OPEN OUTPUT FILE
-        IF (MAXIM > 0) MAXIM2 = MAXIM
-        CALL OPFILEC(LUN1,.TRUE.,FILNAM,LUN2,'U',ITYPE,
-     &               NSAM1,NROW1,NSLICE1,
-     &               MAXIM2,'OUTPUT',.TRUE.,IRTFLG)
-        IF (IRTFLG .NE. 0) GOTO 9000
-
-        IF (FCHAR(4:5) == 'IF') THEN
-           CALL ARITHL(LUN1,LUN2,NSAM1,NROW1,NSLICE1)
-           GOTO 9000
-
-        ELSE IF (FCHAR(4:5) == 'SC') THEN
-C          'AR SCA'
-           CALL RDPRM2S(FLOW,FHI,NOT_USED,
-     &                  'NEW IMAGE MIN. & MAX.',IRTFLG)
-        ELSE
-C          PLAIN 'AR' 
-           IRTFLG = -999     ! NO UPPERCASE
-           CALL RDPRMC(EXPR,NLET,.TRUE.,
-     &                 'FORMULA: P2=',NULL,IRTFLG)
-        ENDIF
-        IF (IRTFLG .NE. 0) GOTO 9000
-
-        NORMIT = (FCHAR(4:5) == 'SC')
-        IMGNUM = -3   
-
-        !write(6,*)' In util2 -imgnum,nslice,maxim:',imgnum,nslice1,maxim
-
-        DO WHILE (IMGNUM < MAXIM) 
-           !write(6,*) ' In util2 - imgnum,maxim 2:',imgnum,maxim
-           CALL GETSTACK(LUN1,LUN2,IMGNUM,MAXIM,
-     &                   VERBOSE,.FALSE.,FDUM,NORMIT,IRTFLG)
-           !write(6,*) ' In util2 - irtflg:',irtflg
-           IF (IRTFLG .NE. 0) GOTO 9000
-
-           IF (FCHAR(4:5) == 'SC') THEN
-              CALL ARITHSCA(LUN1,LUN2,NSAM1,NROW1,NSLICE1,
-     &                      FMIN,FMAX,FLOW,FHI)
-           ELSE
-              CALL ARITH(LUN1,LUN2,
-     &                   NSAM1,NROW1,NSLICE1,EXPR(1:NLET))
-           ENDIF
-           !write(6,*) ' In util2 -:',imgnum,nslice1,maxim
-
-        ENDDO
-
+C       ----------- ARITHMETIC OPERATION --------------------- 'AR IF' 
+C       MOVED TO UTIL_1001 AND ARITHL
+14      CALL ERRT(101,'SHOULD NEVER CALL AR HERE',NDUM)
         GOTO 9000
 
 C       ------------------- MIRROR SYMMETRY ---------------------  'MR'
@@ -1349,8 +1293,7 @@ C       OPEN IMAGE INPUT FILE
         CLOSE(LUN2)
         CLOSE(LUN3)
 
-9911    RETURN
-        END
+9911    END
 
 
 

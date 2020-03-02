@@ -1,4 +1,4 @@
-head	1.36;
+head	1.37;
 access;
 symbols
 	pre_mrcs:1.25
@@ -13,6 +13,11 @@ symbols
 locks; strict;
 comment	@c @;
 
+
+1.37
+date	2020.02.06.15.18.23;	author leith;	state Exp;
+branches;
+next	1.36;
 
 1.36
 date	2020.01.16.18.37.26;	author leith;	state Exp;
@@ -199,9 +204,10 @@ desc
 @@
 
 
-1.36
+1.37
 log
-@removed debug output
+@nextfile(s)  bare and series numbering 
+cosmetic
 @
 text
 @ 
@@ -216,6 +222,7 @@ C              COPY NON SPIDER INPUT            05/26/14  ArDean Leith
 C              LOCAST, ASKLIST FOR ILIST        10/02/14  ArDean Leith
 C              DO NOT CHECK .MRC FOR XMIPP       7/25/19  ArDean Leith
 C              MRC SUPPORT                       8/05/19  ArDean Leith
+C              COMMENTS                          2/06/20  ArDean Leith
 C
 C ********************************************************************** 
 C=*                                                                    *
@@ -242,8 +249,9 @@ C
 C  CONTAINS:  OPFILES, GETOLDIMG, GETNEWIMG, NEXTFILE, NEXTFILES 
 C
 C  OPFILES(LUNCP,LUNIMG,LUNDOC,LUNXM,  ASKNAM,FILPAT,NLET, DISP,
-C          ITYPE,NX,NY,NZ,MAXIM, PROMPT,FOUROK,
-C          ILIST,NIMAXT, NTOT,IMGNUM, IRTFLG)
+C          ITYPE,NX,NY,NZ,MAXIM, PROMPT,
+C          FOUROK, ILIST,NIMAXT, UNUSED
+C          NTOT,IMGNUM, IRTFLG)
 C 
 C  PURPOSE: SOLICITS FILE NAME(S) AND OPENS FILE(S)
 C           SUPPORT ROUTINE FOR CONVERTING OPERATIONS TO 
@@ -280,10 +288,9 @@ C
 C        MAXIM      STACK INDICATOR                          (SENT/RET)
 C                   ON INPUT: STACK INDICATOR IF DISP == 'I'     (SENT)
 C                   ON OUTPUT:                                    (RET)
-C                       -2 NON-STACK IMAGE                
-C                       -1 STACKED IMAGE                  
-C                     >= 0 IS CURRENT MAX. IMAGE NO. FOR STACK             
-C
+C                       -2 A NON-STACK IMAGE                
+C                       -1 A SINGLE STACKED IMAGE                  
+C                     >= 0 CURRENT MAX. IMAGE NO. IN STACK             
 C        PROMPT     PROMPT FOR FILNAME                           (SENT)
 C                     IF NOT (ASKNAM) THIS IS FILE NAME          (SENT)
 C                     ~ (TILDE) IN LAST CHAR. SAYS SKIP
@@ -299,12 +306,17 @@ C                     IF NIMAXT < 0 MUST BE SENT
 C                     NOT USED IF SINGLE IMAGE/SELFILE 
 C        NIMAXT     MAX LENGTH OF IMAGE NUMBER LIST              (SENT)
 C                     <0 MEANS DO NOT ASK FOR LIST
-C        UNUSED     UNUSED                                          (?)
+C        NTOT:      # OF IMAGES IN IMAGE NUMBER LIST              (RET)
+C                   ZERO FOR SINGLE IMAGE AND NO * 
+C        IMGNUM     IMAGE NUMBER THAT IS CURRENTLY OPEN      (SENT/RET)
+C                   ON INPUT:   IF (BARESTACK) IS # WANTED
+C                   ON OUTPUT:  <0 IS SELFILE IN USE 
+C        ILIST      IMAGE NUMBER LIST                             (RET)
+C                     IF NIMAXT < 0 MUST BE SENT
+C                     UNUSED IF SINGLE IMAGE/SELFILE 
+C        UNUSED     UNUSED PARAMETER                                (?)
 C        NTOT       # OF IMAGES IN IMAGE NUMBER LIST              (RET)
 C                     ZERO FOR SINGLE IMAGE AND NO * 
-C        IMGNUM     IMAGE NUMBER THAT IS CURRENTLY OPEN      (SENT/RET)
-C                   ON INPUT: IF (BARESTACK) IS # WANTED
-C                   ON OUTPUT:   <0 IS SELFILE IN USE 
 C        IRTFLG     ERROR FLAG (0 IS NORMAL)                      (RET)
 C                      -1 GOTO PREVIOUS QUESTION
 C                      -5 NOT A SPIDER OR MRC FILE
@@ -387,12 +399,14 @@ C--*********************************************************************
        CHARACTER (LEN=1)         :: DISPT 
        CHARACTER (LEN=1)         :: NULL = CHAR(0)
 
-       LOGICAL                   :: IS_MRC
+       LOGICAL                   :: IS_MRC,IS_BARE
        LOGICAL                   :: ISMRCFILE    ! FUNCTION 
 
        INTEGER                   :: LNBLNKN      ! FUNCTION
 
        LOCTILDE = INDEX(PROMPT,'~') ! unfinished
+
+       !write(3,*)' In opfiles, imgnum: ',imgnum
 
        IF (ASKNAM .AND. PROMPT == NULL) THEN
 C         ASK FOR FILE NAME, CAN ACCEPT EXTENSION
@@ -430,10 +444,17 @@ C         USE FILENAME SENT IN: PROMPT
        !write(3,*)' locast,locat:',locast,locat,filpat(1:nlet)
        !write(6,*)' ilist:',ilist(1)
        !write(6,*)' locast,locat,nstack:',locast,locat,maxim
+       !write(3,*)' in opfiles, nimaxt:',nimaxt
 
-       ASKLIST = (NIMAXT >= 0)
-       NIMAXP  = ABS(NIMAXT)
+       ASKLIST = (NIMAXT > 0)   ! ASK FOR IMAGE NUMBER(S)
+       NIMAXP  = ABS(NIMAXT)    ! ILIST DIMENSION, IF ILIST IN USE
  
+       !write(3,*)' in opfiles, nimaxt: ',nimaxt
+       !write(3,*)' in opfiles, asklist: ',asklist
+       !write(3,*)' In opfiles, imgnum: ',imgnum
+
+       IMGWANT = MAX(1,IMGNUM)   ! DEFAULT IMAGE NUMBER               
+       
        IF (LOCAST > 0 .AND. ASKLIST) THEN
 C         GET LIST OF IMAGES FROM DOC. FILE OR INPUT LINE
           NTOT   = 0 
@@ -441,38 +462,52 @@ C         GET LIST OF IMAGES FROM DOC. FILE OR INPUT LINE
      &                  NTOT,' ',IRTFLG)
           IF (IRTFLG .NE. 0) RETURN
 
-C         START WITH FIRST FILE IN STACK SERIES
-          IMGWANT  = ILIST(1)
-          IF (IMGWANT < 0 .OR. IMGWANT > 10000000) THEN
-             CALL ERRT(102,'INVALID IMAGE NUMBER',IMGWANT)
-             IRTFLG = 1
-             RETURN
-          ENDIF
+C         START WITH FIRST FILE IN SERIES
+          IMGWANT = ILIST(1)
+          !write(3,*)' In opfiles, imgwant aa: ',imgwant
+
+       ELSEIF (LOCAST > 0 .AND. NIMAXT < 0) THEN
+
+C         ILIST CONTAINS TEMPLATED SERIES, 
+C         START WITH FIRST FILE IN THIS SERIES
+          IMGWANT = ILIST(1)
+          NTOT    = NIMAXP
+          !write(3,*)' In opfiles, imgwant bb: ',imgwant
 
        ELSEIF (.NOT. ASKLIST) THEN
           NTOT = NIMAXP
        ENDIF
 
-       IMGNUMIN = IMGNUM
-       IMGNUM   = 0 
-       !write(6,*) ' In opfiles - imgnum 0: ',imgnum
+       IF (IMGWANT < 0 .OR. IMGWANT > 10000000) THEN
+          CALL ERRT(102,'INVALID IMAGE NUMBER',IMGWANT)
+          IRTFLG = 1
+          RETURN
+       ENDIF
+
+       !write(3,*)' In opfiles, nimaxt: ',nimaxt
+       !write(3,*)' In opfiles, ilist: ',ilist(1:5)
+       !write(3,*)' In opfiles, asklist,nimaxp: ',asklist,nimaxp
+       !write(3,*)' In opfiles, maxim,ntot,imgwant: ',maxim,ntot,imgwant
 
 C      SEE IF THIS IS A MRC FILE
        IS_MRC = ISMRCFILE(FILPAT)
 
+       !write(3,*)' In opfiles, imgwant cc: ',imgwant
        IF (IS_MRC) THEN
 C         OPEN MRC FILE
           CALL OPFILES_MRC(LUNCP,LUNIMG,LUNDOC,
      &                     FILPAT,NLET, DISP,
      &                     ITYPE,NX,NY,NZ,MAXIM,
-     &                     FOUROK,ILIST,NIMAXT, 
-     &                     NTOT,IMGWANT, IRTFLG) 
+     &                     IMGWANT, IRTFLG) 
           
-          !write(3,*)' In opfiles, maxim,ntot,imgwant: ',maxim,ntot,imgwant
           IMGNUM = IMGWANT
 
           RETURN
        ENDIF
+
+       IMGNUMIN = IMGNUM
+       IMGNUM   = 0 
+       !write(3,*) ' In opfiles - imgnum 0: ',imgnum
 
        IF (LOCAT > 0 .AND. LOCAST > LOCAT) THEN
 C         TEMPLATED STACKED FILE: STK@@**** -------------- _9@@* or STK@@**
@@ -1130,8 +1165,8 @@ C               OVERUN OUTPUT LIST = -99          1/15/12 ArDean Leith
 C **********************************************************************
 C
 C NEXTFILES(NINDX1, NINDX2, INUMBR1,INUMBR2, 
-C           FOUROK,NGOT1,NGOT2,   
-C           MAXIM1,MAXIM2,   
+C           FOUROK,NLIST1,NLIST2,   
+C           NSTACK1,NSTACK2,   
 C           LUN1,LUNCP,LUN2, FILPAT1,FILPAT2,
 C           IMGNUM1,IMGNUM2,IRTFLG) 
 C
@@ -1142,8 +1177,8 @@ C PARAMETERS: NINDX1,NINDX2    LIST INDICES                 (SENT/RET.)
 C             INUMBR1,INUMR2   IMAGE NUMBER LISTS                (SENT)
 C             FOUROK           FOURIER INPUT IS OK               (SENT)
 C             LUNXM1,LUNXM2    LUN FOR SELFILE INPUT             (SENT)
-C             NGOT1,NGOT2      # OF IMAGES                       (SENT)
-C             MAXIM1,MAXIM2    MAXIM VALUES                      (SENT)
+C             NLIST1,NLIST2    NUMBER OF IMAGES                  (SENT)
+C             NSTACK1,NSTACK2  MAX IMAGE IN STACK                (SENT)
 C             LUN1             LUN FOR INPUT  (0 = NO FILE IN)   (SENT)
 C             LUNCP            LUN FOR OUTPUT HEADER COPY        (SENT)
 C             LUN2             LUN FOR OUTPUT (0 = NO FILE OUT)  (SENT)
@@ -1166,26 +1201,25 @@ C--*********************************************************************
  
       SUBROUTINE NEXTFILES(NINDX1, NINDX2, INUMBR1,INUMBR2, 
      &                     FOUROK,LUNXM1,LUNXM2,
-     &                     NGOT1,NGOT2,     MAXIM1,MAXIM2,   
+     &                     NLIST1,NLIST2,   NSTACK1,NSTACK2,   
      &                     LUN1,LUNCP,LUN2, FILPAT1,FILPAT2,
-     &                     IMGNUM1,IMGNUM2,IRTFLG) 
+     &                     IMGNUM1,IMGNUM2, IRTFLG) 
  
       IMPLICIT NONE
 
       INTEGER           :: NINDX1,NINDX2
-      INTEGER           :: INUMBR1(NGOT1),INUMBR2(NGOT2)
+      INTEGER           :: INUMBR1(NLIST1),INUMBR2(NLIST2)
       LOGICAL           :: FOUROK
       INTEGER           :: LUNXM1,LUNXM2
-      INTEGER           :: NGOT1,NGOT2
-      INTEGER           :: MAXIM1,MAXIM2,LUN1,LUNCP,LUN2
+      INTEGER           :: NLIST1,NLIST2
+      INTEGER           :: NSTACK1,NSTACK2,LUN1,LUNCP,LUN2
       CHARACTER(LEN=*)  :: FILPAT1,FILPAT2
       INTEGER           :: IMGNUM1,IMGNUM2,IRTFLG
 
       INTEGER           :: NWANT1,NWANT2, it
       LOGICAL           :: SAYIT = .TRUE.
-      LOGICAL           :: GOTAST1,GOTAST2,IS_MRC1,IS_MRC2,IS_BARE1    
-
-      LOGICAL           :: ISMRCFILE    ! FUNCTION
+      LOGICAL           :: GOTAST1, GOTAST2
+      LOGICAL           :: IS_BARE1,IS_BARE2    
 
       NINDX1 = NINDX2 + 1
       NINDX2 = NINDX2 + 1
@@ -1193,44 +1227,32 @@ C--*********************************************************************
       IF (LUN1 > 0) THEN  
 C        OPEN NEXT INPUT FILE 
          GOTAST1 = (INDEX(FILPAT1,'*') > 0)
-         IS_MRC1 = ISMRCFILE(FILPAT1)
 
-C        IS THIS IS A BARE STACK OPERATION?  (OK FOR SPIDER & MRC)
+C        IS THIS A BARE STACK OPERATION?  (OK FOR SPIDER & MRC)
          CALL LUNGETISBARE(LUN1,IS_BARE1,IRTFLG)
 
          IF (IMGNUM1 == -1 .AND. LUNXM1 > 0 ) THEN
 C           XMIPP SELFILE LISTED IMAGE
             NWANT1 = -1
 
-         ELSEIF (IS_MRC1 .AND. IS_BARE1 .AND. MAXIM1 >= 0 .AND. 
-     &           .NOT. GOTAST1 ) THEN
-C           MRC BARE STACK INPUT   (NO LIST)
+         ELSEIF ( IS_BARE1 ) THEN
+C           MRC OR SPIDER BARE STACK INPUT   (NO LIST)
+
+            IF (IMGNUM1 < 0) IMGNUM1 = 1
             NWANT1 = IMGNUM1 + 1
-            !write(3,*) 'In nextfiles, :',is_mrc1,isbare,maxim1,nwant1
-
-            IF (NWANT1 > MAXIM1) THEN
-C              FINISHED THE WHOLE MRC BARE STACK
-               IRTFLG = -1
-               RETURN
-            ENDIF
-
-         ELSEIF (MAXIM1 >= 0 .AND. .NOT. GOTAST1 ) THEN
-C           BARE STACK INPUT (NO LIST)
-
-            NWANT1 = IMGNUM1 + 1
-            IF (NWANT1 > NGOT1) THEN
+            IF (NWANT1 > NSTACK1) THEN
 C              FINISHED THE WHOLE STACK
                IRTFLG = -1
                RETURN
             ENDIF
 
-         ELSEIF (MAXIM1 == -2  .OR.
-     &           MAXIM1 == -1  .OR.
-     &           MAXIM1  >    0 ) THEN
+         ELSEIF (NSTACK1 == -2  .OR.
+     &           NSTACK1 == -1  .OR.
+     &           NSTACK1  >    0 ) THEN
 C           NON STACKED IMAGE WITH/WITHOUT TEMPLATED LIST
 C           STACKED     IMAGE WITH/WITHOUT LIST         
 
-            IF (NINDX1 > NGOT1) THEN
+            IF (NINDX1 > NLIST1) THEN
 C              OVERUN INPUT LIST
                IRTFLG = -1
                RETURN
@@ -1242,58 +1264,70 @@ C           OPEN NEXT INPUT FILE
          ENDIF
 
          !write(3,*)' In nextfiles, nwant1: ',nwant1
-         !write(6,'(a,8i5)')' In nextfiles, nwant1: ',nwant1
-         !&                                   lun1,nwant1,imgnum1
+         !write(6,'(a,8i5)')' In nextfiles, nwant1: ',
+         !                                  nwant1,lun1,nwant1,imgnum1
          CALL GETOLDIMG(LUN1,LUNXM1,FILPAT1,NWANT1,SAYIT, 
      &                  FOUROK,IMGNUM1,IRTFLG)
 
-         !write(3,*)' gotoldimg, maximi1,gotast1: ',maxim1,gotast1
+         !write(3,*)' gotoldimg, nstacki1,gotast1: ',nstack1,gotast1
 
          IF (IRTFLG < 0)    RETURN    ! END OF WHOLE-STACK
          IF (IRTFLG .NE. 0) RETURN    ! ERROR
 
-         IF (MAXIM1 > 0 .AND. .NOT. GOTAST1) THEN
+         IF (IS_BARE1) THEN
 C           INPUT FROM A BARE STACK 
             NINDX1 = IMGNUM1
             NINDX2 = IMGNUM1
          ENDIF
       ENDIF
-           ! write(6,*) 'nextfiles1: l1,l2,irtflg:',lun1,lun2,irtflg
+      ! write(6,*) 'In nextfiles1: l1,l2,irtflg:',lun1,lun2,irtflg
+
 
       IF (LUN2 > 0) THEN  
 C        OPEN NEXT OUTPUT FILE 
          GOTAST2 = (INDEX(FILPAT2,'*') > 0)
-         IS_MRC2 = ISMRCFILE(FILPAT2)
 
-!        !write(6,'(a,8i5)')'  out: nindx2,ngot2,maxim2,imgnum2: ',
-!     &                             nindx2,ngot2,maxim2,imgnum2
+C        IS THIS IS A BARE STACK OPERATION?  (OK FOR SPIDER & MRC)
+         CALL LUNGETISBARE(LUN2,IS_BARE2,IRTFLG)
+
+
+!        !write(6,'(a,8i5)')'  out: nindx2,ngot2,nstack2,imgnum2: ',
+!     &                             nindx2,ngot2,nstack2,imgnum2
 !         write(6,*) 'nextfiles2: l2,imgnum2,gotast2:',
 !     &                         lun2,imgnum2,gotast2
          IF (IMGNUM2 == -1 .AND. LUNXM2 > 0  ) THEN
 C           XMIPP SELFILE LISTED IMAGE
             NWANT2 = -1
 
-         ELSEIF (MAXIM2 >= 0 .AND. .NOT. GOTAST2 ) THEN
-C           MRC OR SPIDER BARE STACK OUTPUT   (NO LIST)
-            NWANT2 = NINDX2
+         ELSEIF (LUN1 > 0 .AND. IS_BARE1 ) THEN
+C           NON-STACK IMAGE WITH/WITHOUT TEMPLATE LIST 
+C           MRC OR SPIDER BARE STACK INPUT   (NO LIST AVAILABLE)
+C           BARE STACK INPUT , USE SAME  OUTPUT IMAGE NUMBER
+            NWANT2 = IMGNUM1
 
-            IF (LUN1 > 0) THEN
-C              BARE STACK, OUTPUT IMAGE HAS SAME # AS INPUT ALWAYS
-               !NWANT2 = IMGNUM1
-C              BARE STACK, INCREMENT OUTPUT IMAGE NUMBER
-               NWANT2 = IMGNUM2 + 1
+            !write(3,*)'In nextfiles, :',isbare,nstack2,nwant2
+
+         ELSEIF (IS_BARE2 ) THEN
+C           MRC OR SPIDER BARE STACK OUTPUT   (NO LIST)
+            IF (IMGNUM2 < 0) IMGNUM2 = 1
+            NWANT2 = IMGNUM2 + 1
+
+            IF (LUN1 > 0 .AND. IS_BARE1) THEN
+C              BARE STACK INPUT , USE SAME  OUTPUT IMAGE NUMBER
+                NWANT2 = IMGNUM1
             ENDIF
 
-            !write(3,*)'In nextfiles, :',isbare,maxim2,nwant2
+            !write(3,*)'In nextfiles, :',isbare,nstack2,nwant2
 
-         ELSEIF (MAXIM2 == -2  .OR.
-     &           MAXIM2 == -1  .OR.
-     &           MAXIM2  >  0 ) THEN
+
+         ELSEIF (NSTACK2 == -2  .OR.
+     &           NSTACK2 == -1  .OR.
+     &           NSTACK2  >  0 ) THEN
 
 C           NON-STACK IMAGE WITH/WITHOUT TEMPLATE LIST 
-            IF (NINDX2 > NGOT2) THEN
+            IF (NINDX2 > NLIST2) THEN
 C               OVERUN OUTPUT LIST
-                !write(6,*) 'NINDX2 > NGOT2',NINDX2,NGOT2
+                !write(6,*) 'nindx2 > nlist2',nindx2,nlist2
                 IRTFLG = -99
                 RETURN
             ENDIF
@@ -1303,21 +1337,22 @@ C           OPEN NEXT OUTPUT FILE
 
          !write(3,*)' In nextfiles, nwant2,nindx2:',nwant2,nindx2
          !write(6,'(a,8i5)') 
-         !& ' Calling getnew,nwant2,imgnum2,maxim2:',nwant2,imgnum2,maxim2
+         !& ' Calling getnew,nwant2,imgnum2,nstack2:',
+         !                   nwant2,imgnum2,nstack2
 
          CALL GETNEWIMG(LUNCP,LUN2,LUNXM2,FILPAT2,NWANT2,
      &                  SAYIT,IMGNUM2,IRTFLG)
 
-         !write(3,'(a,8i5)') ' Getnew,nwant2,imgnum2,maxim2,irtflg:',
-      !&                               nwant2,imgnum2,maxim2,irtflg
+         !write(3,'(a,8i5)') ' Getnew,nwant2,imgnum2,nstack2,irtflg:',
+      !&                              nwant2,imgnum2,nstack2,irtflg
 
          IF (IRTFLG .NE. 0) RETURN     ! ERROR
 
       ENDIF
-      !write(3,'(a,5i5)')' In nextfiles, ngot1,maxim1,imgnum1:',
-      !&                                     ngot1,maxim1,imgnum1
-      !   write(3,'(a,5i5)')' In nextfiles, ngot2,maxim2,imgnum2:',
-      !&                                     ngot2,maxim2,imgnum2
+      !write(3,'(a,5i5)')' In nextfiles, nlist1,nstack1,imgnum1:',
+      !&                                 nlist1,nstack1,imgnum1
+      !write(3,'(a,5i5)')' In nextfiles, ngot2,nstack2,imgnum2:',
+      !&                                 ngot2,nstack2,imgnum2
 
       END
 
@@ -1330,7 +1365,7 @@ C               MRC SUPPORT                       8/22/19 ArDean Leith
 C
 C **********************************************************************
 C
-C NEXTFILE(NINDX1, INUMBR1, FOUROK, LUNXM1, NGOT1,   MAXIM1,   
+C NEXTFILE(NINDX1, INUMBR1, FOUROK, LUNXM1, NLIST1,   NSTACK1,   
 C          LUN1,   LUNCP,   FILPAT1,  DISP, IMGNUM1, IRTFLG)  
 C
 C PURPOSE:  GETS NEXT INPUT OR OUTPUT FILE FOR BARE STACK INPUT,
@@ -1338,12 +1373,12 @@ C           A NON STACKED IMAGE WITH/WITHOUT TEMPLATED LIST,
 C           OR A  STACKED IMAGE WITH/WITHOUT LIST
 C           STACKS MUST BE OPENED WITH OPFILES!!!
 C
-C PARAMETERS: NINDX1         LIST INDICES                  (SENT/RET.)
-C             INUMBR1        IMAGE NUMBER LISTS                 (SENT)
+C PARAMETERS: NINDX1         LIST INDEX                    (SENT/RET.)
+C             INUMBR1        IMAGE NUMBER LIST                  (SENT)
 C             FOUROK         FOURIER INPUT IS OK                (SENT)
 C             LUNXM1         LUN FOR SELFILE INPUT              (SENT)
-C             NGOT1          # OF IMAGES WANTED                 (SENT)
-C             MAXIM1         MAXIM VALUES                       (SENT)
+C             NLIST1         NUMBER OF IMAGES IN LIST           (SENT)
+C             NSTACK1        HIGHEST IMAGE IN STACK             (SENT)
 C             LUN1           LUN FOR I/0                        (SENT)
 C             LUNCP          LUN FOR OUTPUT HEADER COPY         (SENT)
 C             FILPAT1        FILE NAME PATTERN                  (SENT)
@@ -1391,7 +1426,7 @@ C--*********************************************************************
  
       SUBROUTINE NEXTFILE(NINDX1,   INUMBR1, 
      &                    FOUROK,   LUNXM1,
-     &                    NGOT1,    MAXIM1,   
+     &                    NLIST1,   NSTACK1,   
      &                    LUN1,     LUNCP, 
      &                    FILPAT1,  DISP,
      &                    IMGNUM1,  IRTFLG) 
@@ -1399,11 +1434,11 @@ C--*********************************************************************
       IMPLICIT NONE
 
       INTEGER           :: NINDX1 
-      INTEGER           :: INUMBR1(NGOT1) 
+      INTEGER           :: INUMBR1(NLIST1) 
       LOGICAL           :: FOUROK
       INTEGER           :: LUNXM1 
-      INTEGER           :: NGOT1 
-      INTEGER           :: MAXIM1, LUN1,LUNCP 
+      INTEGER           :: NLIST1 
+      INTEGER           :: NSTACK1, LUN1,LUNCP 
       CHARACTER(LEN=*)  :: FILPAT1
       CHARACTER(LEN=1)  :: DISP
       INTEGER           :: IMGNUM1
@@ -1411,63 +1446,50 @@ C--*********************************************************************
 
       INTEGER           :: NWANT1, it
       LOGICAL           :: SAYIT = .TRUE.
-      LOGICAL           :: GOTAT,GOTAST,IS_MRC,IS_BARE
+      LOGICAL           :: GOTAST,IS_BARE1
 
       LOGICAL           :: ISMRCFILE    ! FUNCTION
       
       NINDX1 = NINDX1 + 1
 
-      GOTAT  = (INDEX(FILPAT1,'@@') > 0)
       GOTAST = (INDEX(FILPAT1,'*') > 0)
-      IS_MRC = ISMRCFILE(FILPAT1)
 
 C     IS THIS IS A BARE STACK OPERATION?
-      CALL LUNGETISBARE(LUN1,IS_BARE,IRTFLG)
+      CALL LUNGETISBARE(LUN1,IS_BARE1,IRTFLG)
       IF (IRTFLG .NE. 0) RETURN
 
-      !write(3,*)' In nextfile, gotast, filpat1:  ', gotast,filpat1
-      !write(6,*)' In nextfile, nindx1,isbare:    ',nindx1,is_bare
-      !write(6,*)' In nextfile, ngot1,imgnum1,nwant1,maxim1 1: ',
-      !&                        ngot1,imgnum1,nwant1,maxim1
-      !write(3,*)' In nextfile, nindx1,ngot1: ', nindx1,ngot1
+C      write(3,*)' In nextfile, gotast, filpat1:  ', gotast,filpat1
+C      write(6,*)' In nextfile, nindx1,isbare:    ',nindx1,is_bare1
+C      write(3,*)' In nextfile, ----------------------: '
+C      write(3,'(A,5i6)')
+C     &         '  In nextfile, num1,nindx1,nlist1,nwant1,nstack1: ',
+C     &                      imgnum1,nindx1,nlist1,nwant1,nstack1
 
       IF (IMGNUM1 == -1  .AND. LUNXM1 > 0 ) THEN
 C        XMIPP SELFILE LISTED IMAGE
          NWANT1 = -1
 
-      ELSEIF (IS_MRC .AND. .NOT. IS_BARE .AND. NINDX1 > NGOT1) THEN
-C        MRC STACKED IMAGE I/O , OVERUN I/O LIST
-         IRTFLG = -1
-         RETURN
-          
-      ELSEIF (IS_MRC .AND. IS_BARE .AND. MAXIM1 >= 0 .AND.
-     &        .NOT. GOTAST ) THEN
-C        MRC BARE STACK I/O   (NO LIST)
-         NWANT1 = IMGNUM1 + 1
-          
-         IF (NWANT1 > MAXIM1) THEN
-C           FINISHED THE WHOLE MRC BARE STACK
-            IRTFLG = -1
-            RETURN
-         ENDIF
+      ELSEIF ( IS_BARE1 ) THEN
+C        MRC OR SPIDER BARE STACK INPUT   (NO LIST)
 
-      ELSEIF (MAXIM1 >= 0 .AND. .NOT. GOTAST ) THEN
-C        BARE STACK I/O (NO LIST)
-
+         IF (IMGNUM1 < 0) IMGNUM1 = 1
          NWANT1 = IMGNUM1 + 1
-         IF (NWANT1 > NGOT1) THEN
+
+C        write(3,'(A,5i6)')'  In nextfile, nwant1,nstack1: ',
+C       &                                  nwant1,nstack1
+
+        IF (NWANT1 > NSTACK1) THEN
 C           FINISHED THE WHOLE STACK
             IRTFLG = -1
             RETURN
          ENDIF
-         !write(3,*' In nextfile, nindx1,nwant1: ', nindx1,nwant1
-
-      ELSEIF (MAXIM1 == -2  .OR.
-     &        MAXIM1 == -1  .OR.
-     &        MAXIM1  >    0 ) THEN
+          
+      ELSEIF (NSTACK1 == -2  .OR.
+     &        NSTACK1 == -1  .OR.
+     &        NSTACK1  >    0 ) THEN
 C        NON STACKED IMAGE WITH/WITHOUT TEMPLATED LIST
-C        STACKED IMAGE WITH/WITHOUT LIST
-         IF (NINDX1 > NGOT1) THEN
+C        STACKED     IMAGE WITH/WITHOUT LIST
+         IF (NINDX1 > NLIST1) THEN
 C           OVERUN I/O LIST
             IRTFLG = -1
             RETURN
@@ -1478,10 +1500,10 @@ C        OPEN NEXT I/O FILE
 
       ENDIF
 
-      !write(3,*)' In nextfile, nindx1,ngot1,maxim1,imgnum1: ',
-      !     &                   nindx1,ngot1,maxim1,imgnum1
-      !write(3,*) 'In nextfile, Calling Get, nwant1,imgnum1,maxim1:',
-      ! &                                    nwant1,imgnum1,maxim1
+      !write(3,*)' In nextfile, nindx1,nlist1,nstack1,imgnum1: ',
+      !     &                   nindx1,nlist1,nstack1,imgnum1
+      !write(3,*)'  In nextfile, calling get, nwant1,imgnum1,nstack1:',
+      !&                                      nwant1,imgnum1,nstack1
 
       IF (DISP == 'O' .OR. DISP == 'B' .OR. 
      &    DISP == 'Z' .OR. DISP == 'E') THEN 
@@ -1491,10 +1513,10 @@ C        OPEN NEXT INPUT FILE
          CALL GETOLDIMG(LUN1,LUNXM1,FILPAT1,NWANT1,SAYIT, 
      &                  FOUROK,IMGNUM1,IRTFLG)
 
-         !write(3,*)' Gotoldimg, ngot1,nwant1,imgnum1: ',
-         !&                      ngot1,nwant1,imgnum1,irtflg,maxim1
+         !write(3,*)' Gotoldimg, nlist1,nwant1,imgnum1: ',
+         !&                      nlist1,nwant1,imgnum1,irtflg,nstack1
 
-         IF (IRTFLG .LT. 0) RETURN    ! END OF WHOLE-STACK
+         IF (IRTFLG    < 0) RETURN    ! END OF WHOLE-STACK
          IF (IRTFLG .NE. 0) RETURN    ! ERROR
 
       ELSE   
@@ -1504,22 +1526,296 @@ C        OPEN NEXT OUTPUT FILE
          CALL GETNEWIMG(LUNCP,LUN1,LUNXM1,FILPAT1,NWANT1,
      &                  SAYIT,IMGNUM1,IRTFLG)
 
-         !write(3,*) ' Getnewimg, nwant1,imgnum1,maxim1,irtflg:',
-         !     &                  nwant1,imgnum1,maxim1,irtflg
+         !write(3,*) ' Getnewimg, nwant1,imgnum1,nstack1,irtflg:',
+         !     &                  nwant1,imgnum1,nstack1,irtflg
          IF (IRTFLG .NE. 0) RETURN   ! ERROR
 
       ENDIF
 
-      IF (MAXIM1 > 0 .AND. .NOT. GOTAST) THEN
+      IF (IS_BARE1) THEN
 C        BARE STACK, OUTPUT IMAGE HAS SAME # AS INPUT ALWAYS
          NINDX1 = IMGNUM1
       ENDIF
 
-      !   write(3,'(a,5i5)')' In nextfile, ngot1,maxim1,imgnum1:',
-      !&                                    ngot1,maxim1,imgnum1
+      !   write(3,'(a,5i5)')' In nextfile, nlist1,nstack1,imgnum1:',
+      !&                                   nlist1,nstack1,imgnum1
       END
 
 
+@
+
+
+1.36
+log
+@removed debug output
+@
+text
+@d13 1
+d40 3
+a42 2
+C          ITYPE,NX,NY,NZ,MAXIM, PROMPT,FOUROK,
+C          ILIST,NIMAXT, NTOT,IMGNUM, IRTFLG)
+d79 3
+a81 4
+C                       -2 NON-STACK IMAGE                
+C                       -1 STACKED IMAGE                  
+C                     >= 0 IS CURRENT MAX. IMAGE NO. FOR STACK             
+C
+d97 9
+a105 1
+C        UNUSED     UNUSED                                          (?)
+a107 3
+C        IMGNUM     IMAGE NUMBER THAT IS CURRENTLY OPEN      (SENT/RET)
+C                   ON INPUT: IF (BARESTACK) IS # WANTED
+C                   ON OUTPUT:   <0 IS SELFILE IN USE 
+d190 1
+a190 1
+       LOGICAL                   :: IS_MRC
+d197 2
+d235 1
+d237 2
+a238 2
+       ASKLIST = (NIMAXT >= 0)
+       NIMAXP  = ABS(NIMAXT)
+d240 6
+d253 11
+a263 7
+C         START WITH FIRST FILE IN STACK SERIES
+          IMGWANT  = ILIST(1)
+          IF (IMGWANT < 0 .OR. IMGWANT > 10000000) THEN
+             CALL ERRT(102,'INVALID IMAGE NUMBER',IMGWANT)
+             IRTFLG = 1
+             RETURN
+          ENDIF
+d269 10
+a278 3
+       IMGNUMIN = IMGNUM
+       IMGNUM   = 0 
+       !write(6,*) ' In opfiles - imgnum 0: ',imgnum
+d283 1
+d289 1
+a289 2
+     &                     FOUROK,ILIST,NIMAXT, 
+     &                     NTOT,IMGWANT, IRTFLG) 
+a290 1
+          !write(3,*)' In opfiles, maxim,ntot,imgwant: ',maxim,ntot,imgwant
+d296 4
+d956 2
+a957 2
+C           FOUROK,NGOT1,NGOT2,   
+C           MAXIM1,MAXIM2,   
+d968 2
+a969 2
+C             NGOT1,NGOT2      # OF IMAGES                       (SENT)
+C             MAXIM1,MAXIM2    MAXIM VALUES                      (SENT)
+d992 1
+a992 1
+     &                     NGOT1,NGOT2,     MAXIM1,MAXIM2,   
+d994 1
+a994 1
+     &                     IMGNUM1,IMGNUM2,IRTFLG) 
+d999 1
+a999 1
+      INTEGER           :: INUMBR1(NGOT1),INUMBR2(NGOT2)
+d1002 2
+a1003 2
+      INTEGER           :: NGOT1,NGOT2
+      INTEGER           :: MAXIM1,MAXIM2,LUN1,LUNCP,LUN2
+d1009 2
+a1010 3
+      LOGICAL           :: GOTAST1,GOTAST2,IS_MRC1,IS_MRC2,IS_BARE1    
+
+      LOGICAL           :: ISMRCFILE    ! FUNCTION
+a1017 1
+         IS_MRC1 = ISMRCFILE(FILPAT1)
+d1019 1
+a1019 1
+C        IS THIS IS A BARE STACK OPERATION?  (OK FOR SPIDER & MRC)
+d1026 2
+a1027 14
+         ELSEIF (IS_MRC1 .AND. IS_BARE1 .AND. MAXIM1 >= 0 .AND. 
+     &           .NOT. GOTAST1 ) THEN
+C           MRC BARE STACK INPUT   (NO LIST)
+            NWANT1 = IMGNUM1 + 1
+            !write(3,*) 'In nextfiles, :',is_mrc1,isbare,maxim1,nwant1
+
+            IF (NWANT1 > MAXIM1) THEN
+C              FINISHED THE WHOLE MRC BARE STACK
+               IRTFLG = -1
+               RETURN
+            ENDIF
+
+         ELSEIF (MAXIM1 >= 0 .AND. .NOT. GOTAST1 ) THEN
+C           BARE STACK INPUT (NO LIST)
+d1029 1
+d1031 1
+a1031 1
+            IF (NWANT1 > NGOT1) THEN
+d1037 3
+a1039 3
+         ELSEIF (MAXIM1 == -2  .OR.
+     &           MAXIM1 == -1  .OR.
+     &           MAXIM1  >    0 ) THEN
+d1043 1
+a1043 1
+            IF (NINDX1 > NGOT1) THEN
+d1055 2
+a1056 2
+         !write(6,'(a,8i5)')' In nextfiles, nwant1: ',nwant1
+         !&                                   lun1,nwant1,imgnum1
+d1060 1
+a1060 1
+         !write(3,*)' gotoldimg, maximi1,gotast1: ',maxim1,gotast1
+d1065 1
+a1065 1
+         IF (MAXIM1 > 0 .AND. .NOT. GOTAST1) THEN
+d1071 2
+a1072 1
+           ! write(6,*) 'nextfiles1: l1,l2,irtflg:',lun1,lun2,irtflg
+a1076 1
+         IS_MRC2 = ISMRCFILE(FILPAT2)
+d1078 6
+a1083 2
+!        !write(6,'(a,8i5)')'  out: nindx2,ngot2,maxim2,imgnum2: ',
+!     &                             nindx2,ngot2,maxim2,imgnum2
+d1090 9
+a1098 1
+         ELSEIF (MAXIM2 >= 0 .AND. .NOT. GOTAST2 ) THEN
+d1100 2
+a1101 1
+            NWANT2 = NINDX2
+d1103 3
+a1105 5
+            IF (LUN1 > 0) THEN
+C              BARE STACK, OUTPUT IMAGE HAS SAME # AS INPUT ALWAYS
+               !NWANT2 = IMGNUM1
+C              BARE STACK, INCREMENT OUTPUT IMAGE NUMBER
+               NWANT2 = IMGNUM2 + 1
+d1108 2
+a1109 1
+            !write(3,*)'In nextfiles, :',isbare,maxim2,nwant2
+d1111 3
+a1113 3
+         ELSEIF (MAXIM2 == -2  .OR.
+     &           MAXIM2 == -1  .OR.
+     &           MAXIM2  >  0 ) THEN
+d1116 1
+a1116 1
+            IF (NINDX2 > NGOT2) THEN
+d1118 1
+a1118 1
+                !write(6,*) 'NINDX2 > NGOT2',NINDX2,NGOT2
+d1128 2
+a1129 1
+         !& ' Calling getnew,nwant2,imgnum2,maxim2:',nwant2,imgnum2,maxim2
+d1134 2
+a1135 2
+         !write(3,'(a,8i5)') ' Getnew,nwant2,imgnum2,maxim2,irtflg:',
+      !&                               nwant2,imgnum2,maxim2,irtflg
+d1140 4
+a1143 4
+      !write(3,'(a,5i5)')' In nextfiles, ngot1,maxim1,imgnum1:',
+      !&                                     ngot1,maxim1,imgnum1
+      !   write(3,'(a,5i5)')' In nextfiles, ngot2,maxim2,imgnum2:',
+      !&                                     ngot2,maxim2,imgnum2
+d1156 1
+a1156 1
+C NEXTFILE(NINDX1, INUMBR1, FOUROK, LUNXM1, NGOT1,   MAXIM1,   
+d1164 2
+a1165 2
+C PARAMETERS: NINDX1         LIST INDICES                  (SENT/RET.)
+C             INUMBR1        IMAGE NUMBER LISTS                 (SENT)
+d1168 2
+a1169 2
+C             NGOT1          # OF IMAGES WANTED                 (SENT)
+C             MAXIM1         MAXIM VALUES                       (SENT)
+d1217 1
+a1217 1
+     &                    NGOT1,    MAXIM1,   
+d1225 1
+a1225 1
+      INTEGER           :: INUMBR1(NGOT1) 
+d1228 2
+a1229 2
+      INTEGER           :: NGOT1 
+      INTEGER           :: MAXIM1, LUN1,LUNCP 
+d1237 1
+a1237 1
+      LOGICAL           :: GOTAT,GOTAST,IS_MRC,IS_BARE
+a1242 1
+      GOTAT  = (INDEX(FILPAT1,'@@') > 0)
+a1243 1
+      IS_MRC = ISMRCFILE(FILPAT1)
+d1246 1
+a1246 1
+      CALL LUNGETISBARE(LUN1,IS_BARE,IRTFLG)
+d1249 6
+a1254 5
+      !write(3,*)' In nextfile, gotast, filpat1:  ', gotast,filpat1
+      !write(6,*)' In nextfile, nindx1,isbare:    ',nindx1,is_bare
+      !write(6,*)' In nextfile, ngot1,imgnum1,nwant1,maxim1 1: ',
+      !&                        ngot1,imgnum1,nwant1,maxim1
+      !write(3,*)' In nextfile, nindx1,ngot1: ', nindx1,ngot1
+d1260 4
+a1263 8
+      ELSEIF (IS_MRC .AND. .NOT. IS_BARE .AND. NINDX1 > NGOT1) THEN
+C        MRC STACKED IMAGE I/O , OVERUN I/O LIST
+         IRTFLG = -1
+         RETURN
+          
+      ELSEIF (IS_MRC .AND. IS_BARE .AND. MAXIM1 >= 0 .AND.
+     &        .NOT. GOTAST ) THEN
+C        MRC BARE STACK I/O   (NO LIST)
+a1264 6
+          
+         IF (NWANT1 > MAXIM1) THEN
+C           FINISHED THE WHOLE MRC BARE STACK
+            IRTFLG = -1
+            RETURN
+         ENDIF
+d1266 2
+a1267 2
+      ELSEIF (MAXIM1 >= 0 .AND. .NOT. GOTAST ) THEN
+C        BARE STACK I/O (NO LIST)
+d1269 1
+a1269 2
+         NWANT1 = IMGNUM1 + 1
+         IF (NWANT1 > NGOT1) THEN
+d1274 4
+a1277 5
+         !write(3,*' In nextfile, nindx1,nwant1: ', nindx1,nwant1
+
+      ELSEIF (MAXIM1 == -2  .OR.
+     &        MAXIM1 == -1  .OR.
+     &        MAXIM1  >    0 ) THEN
+d1279 2
+a1280 2
+C        STACKED IMAGE WITH/WITHOUT LIST
+         IF (NINDX1 > NGOT1) THEN
+d1291 4
+a1294 4
+      !write(3,*)' In nextfile, nindx1,ngot1,maxim1,imgnum1: ',
+      !     &                   nindx1,ngot1,maxim1,imgnum1
+      !write(3,*) 'In nextfile, Calling Get, nwant1,imgnum1,maxim1:',
+      ! &                                    nwant1,imgnum1,maxim1
+d1304 2
+a1305 2
+         !write(3,*)' Gotoldimg, ngot1,nwant1,imgnum1: ',
+         !&                      ngot1,nwant1,imgnum1,irtflg,maxim1
+d1307 1
+a1307 1
+         IF (IRTFLG .LT. 0) RETURN    ! END OF WHOLE-STACK
+d1317 2
+a1318 2
+         !write(3,*) ' Getnewimg, nwant1,imgnum1,maxim1,irtflg:',
+         !     &                  nwant1,imgnum1,maxim1,irtflg
+d1323 1
+a1323 1
+      IF (MAXIM1 > 0 .AND. .NOT. GOTAST) THEN
+d1328 2
+a1329 2
+      !   write(3,'(a,5i5)')' In nextfile, ngot1,maxim1,imgnum1:',
+      !&                                    ngot1,maxim1,imgnum1
 @
 
 

@@ -1,0 +1,320 @@
+C++*********************************************************************
+C
+C UTIL_11.F     MOVED FROM UTIL2                 ArDean Leith  1/27/20
+C 
+C **********************************************************************
+C=*                                                                    *
+C=* Author: ArDean Leith                                               *                                                            *
+C=* This file is part of:   SPIDER - Modular Image Processing System.  *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* Copyright 1985-2020  Health Research Inc.,                         *
+C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
+C=* Email: spider@health.ny.gov                                        *
+C=*                                                                    *
+C=* SPIDER is free software; you can redistribute it and/or            *
+C=* modify it under the terms of the GNU General Public License as     *
+C=* published by the Free Software Foundation; either version 2 of the *
+C=* License, or (at your option) any later version.                    *
+C=*                                                                    *
+C=* SPIDER is distributed in the hope that it will be useful,          *
+C=* but WITHOUT ANY WARRANTY; without even the implied warranty of     *
+C=* merchantability or fitness for a particular purpose.  See the GNU  *
+C=* General Public License for more details.                           *
+C=* You should have received a copy of the GNU General Public License  *
+C=* along with this program. If not, see <http://www.gnu.org/licenses> *
+C=*                                                                    *
+C **********************************************************************
+C
+C  UTIL_11
+C
+C  PARAMETERS:  NONE  
+C
+C  PURPOSE: CAN OPERATE ON IMAGE, STACK SERIES OR BARE STACK
+C           CAN USE A SELECTION DOC FILE OR XMIPP SELFILE
+C           HANDLES BARE STACK AND TEMPLATED I/0 ROUTINES
+C           HAVING ONE INPUT AND ONE OUTPUT SPIDER OR MRC FILE
+C
+C  NOTES:   HANDLES OPERATIONS 'AR',     'AR IF', 'AR SCA', 
+C                              'DN AD' & 'CE AD' 
+CC
+C23456789012345678901234567890123456789012345678901234567890123456789012
+C--*********************************************************************
+
+      SUBROUTINE UTIL_11()
+
+      IMPLICIT NONE
+
+      INCLUDE 'CMBLOCK.INC'
+      INCLUDE 'CMLIMIT.INC'
+
+      REAL, ALLOCATABLE      :: BUF(:)
+      INTEGER, ALLOCATABLE   :: ILIST1(:),ILIST2(:)
+      CHARACTER(LEN=MAXNAM)  :: FILPAT1,FILPAT2 
+      CHARACTER(LEN=MAXNAM)  :: FILNAM1,FILNAM2 
+      CHARACTER(LEN=MAXNAM)  :: EXPR
+      CHARACTER(LEN=1)       :: NULL = CHAR(0)
+      CHARACTER(LEN=1)       :: ANS
+      CHARACTER(LEN=83)      :: PROMPT2
+      LOGICAL                :: FOUROK   = .FALSE. 
+      LOGICAL                :: ASKNAME1 = .TRUE.
+      LOGICAL                :: ASKNAME2 = .TRUE.
+      REAL                   :: FMIN1,FMAX1,FLOW,FHI,AV1
+      REAL                   :: HT,SIGMA,FLAMBDA,W
+      REAL                   :: SIG1
+
+      INTEGER                :: IRTFLG,ITER
+      INTEGER                :: NILMAX, NILMAX2,NOT_USED,LUNCP
+      INTEGER                :: NLET,   NLET1,  NLET2,IMAMI1 
+      INTEGER                :: LOCAT1, LOCAT2 
+      INTEGER                :: LOCAST1,LOCAST2 
+      INTEGER                :: NSTACK1,NSTACK2 
+      INTEGER                :: NINDX1, NINDX2 
+      INTEGER                :: NLIST1, NLIST2 
+      INTEGER                :: IMGNUM1,IMGNUM2 ! CURRENTLY OPEN IMAGE
+      INTEGER                :: ITYPE1, ITYPE2
+      INTEGER                :: NX1,NY1,NZ1
+
+      LOGICAL                :: IS_BARE1, IS_BARE2 
+      LOGICAL                :: IS_STACK1,IS_STACK2 
+      LOGICAL                :: NEEDSTATS1  
+
+      INTEGER, PARAMETER     :: LUN1      = 21
+      INTEGER, PARAMETER     :: LUN2      = 22
+      INTEGER, PARAMETER     :: LUN3      = 23
+ 
+      INTEGER, PARAMETER     :: LUNDOCSEL = 81
+      INTEGER, PARAMETER     :: LUNXM1    = 84
+      INTEGER, PARAMETER     :: LUNXM2    = 85
+
+
+      IF (FCHAR(4:5) == 'IF') THEN
+C       AR IF      ---------- ARITHMETIC IF OPERATION ------- 'AR IF' 
+        CALL ARITHL()
+        RETURN
+      ENDIF
+
+      NILMAX  = NIMAXPLUS      ! FROM CMLIMIT
+      ALLOCATE(ILIST1(NILMAX),
+     &         ILIST2(NILMAX),
+     &         STAT=IRTFLG)
+      IF (IRTFLG .NE. 0) THEN
+          CALL ERRT(46,'util_11; ILIST1,ILIST2',2*NILMAX)
+          RETURN
+      ENDIF
+
+      !write(3,*)' In util_11, nilmax:',nilmax
+
+      IRTFLG = 0   ! UNAPPLICABLE RARE INPUT FLAG FOR FILERD IN OPFILES
+
+C     OPEN FIRST INPUT IMAGE(S) (NOT FOURIER). RETURNS:
+C        NSTACK1:  -2 A NON-STACK IMAGE                
+C                  -1 A SINGLE STACKED IMAGE                  
+C                  >= 0 STACK NUMBER IS CURRENT MAX. IMAGE NO. IN STACK             
+C        NLIST1:   # OF IMAGES IN IMAGE NUMBER LIST              
+C                  ZERO FOR SINGLE IMAGE AND NO * 
+C        IMGNUM1:  IMAGE NUMBER THAT IS CURRENTLY OPEN
+C                  ON INPUT: IF (BARESTACK) IS IMAGE # WANTED
+
+      CALL OPFILES(0,LUN1,LUNDOCSEL,LUNXM1, ASKNAME1,
+     &             FILPAT1,NLET1, 'O',
+     &             ITYPE1,NX1,NY1,NZ1,NSTACK1,
+     &             NULL,
+     &             FOUROK, ILIST1,NILMAX, 
+     &             NOT_USED,NLIST1,IMGNUM1, IRTFLG) 
+      IF (IRTFLG .NE. 0) RETURN
+
+      LOCAT1    = INDEX(FILPAT1,'@')
+      LOCAST1   = INDEX(FILPAT1,'*')
+
+      IS_STACK1 = (NSTACK1 > 0)                   ! INPUT IS A STACK
+      IS_BARE1  = (LOCAT1 > 0 .AND. LOCAST1 == 0) ! INPUT IS BARE STACK
+      !write(6,*)'In util_11 1 same1:',locast1,is_bare1
+
+C     COPY STACK FOR ILIST2 IF USING TEMPLATED STACK
+      IF (NLIST1 > 0) ILIST2 = ILIST1          ! COPY STACK FOR ILIST2
+
+c      write(3,'(A,5i6)')'  In util_11, num1,nlist1,nindx1,nstack1:',
+c     &                              imgnum1,nlist1,nindx1,nstack1
+
+C     NOTE: PRESERVE STATS HERE IF NEEDED 
+      !write(3,*)' fmin,fmax:',fmin,fmax
+
+C     FLAG FOR SINGLE IMAGE OPERATION 
+      IF (IS_BARE1) THEN
+C         BARE STACK FOR INPUT
+          IMGNUM1 = 1
+      ELSEIF (NLIST1 <= 1) THEN
+C         SINGLE IMAGE/VOLUME      
+          IMGNUM1 = 0
+      ENDIF
+
+c      write(6,*)' nstack1,nlist1,num1: ',nstack1,nlist1,imgnum1
+c      write(6,*)' In util_11, opened lun1:',lun1,filpat1(1:20)
+
+C     OPEN NEW OUTPUT IMAGE(S)
+      PROMPT2 = 'OUTPUT FILE NAME OR TEMPLATE (E.G. IMG@****)~'
+      IF (LOCAST1 == 0) PROMPT2 = 'OUTPUT'
+      IF (IS_BARE1)     PROMPT2 = 'OUTPUT STACK'
+
+      LUNCP   = LUN1
+      ITYPE2  = ITYPE1       ! OUTPUT IMAGE TYPE
+      NSTACK2 = -1           ! ALLOW BARE STACK
+      IMGNUM2 = IMGNUM1      ! IMAGE # WANTED
+
+C     FLAG FOR SINGLE IMAGE OPERATION 
+      IF (IS_BARE1) THEN
+C         BARE STACK FOR INPUT
+          NILMAX2 = 0        ! NO LIST1
+      ELSEIF (NLIST1 <= 1) THEN
+C         SINGLE IMAGE/VOLUME      
+          NILMAX2 = 0        ! NO LIST1
+      ELSE
+          NILMAX2 = -NLIST1  ! USE FIRST LIST FOR OUTPUT FILES ALSO
+      ENDIF
+
+
+c      write(3,*)' In util_11, num2,nstack2,nilmax2: ',
+c     &                     imgnum2,nstack2,nilmax2
+
+      CALL OPFILES(LUNCP,LUN2,LUNDOCSEL,LUNXM2, ASKNAME2,
+     &             FILPAT2,NLET2, 'U',
+     &             ITYPE2,NX1,NY1,NZ1,NSTACK2,
+     &             PROMPT2,
+     &             FOUROK, ILIST2,NILMAX2, 
+     &             NOT_USED,NLIST2,IMGNUM2, IRTFLG) 
+      IF (IRTFLG .NE. 0) GOTO 9000
+
+      LOCAT2    = INDEX(FILPAT2,'@')
+      LOCAST2   = INDEX(FILPAT2,'*')
+      IS_STACK2 = (NSTACK2 > 0)                    ! OUTPUT IS A STACK
+      IS_BARE2  = (LOCAT2 > 0 .AND. LOCAST2 == 0)  ! OUTPUT IS A BARE STACK
+
+
+C     GET OPERATION SPECIFIC INPUTS
+      SELECT CASE(FCHAR(4:5))
+
+      CASE ('AD') !----------------------------------------- 'DN AD' 
+C        ANISOTROPIC DIFFUSION
+	 CALL ANISO_PAR(ANS,ITER,HT,SIGMA,FLAMBDA,IRTFLG)
+         IF (ANS .NE. 'H') THEN
+            ALLOCATE(BUF(NX1*NY1*NZ1), STAT=IRTFLG)
+            IF (IRTFLG .NE. 0) THEN 
+               CALL ERRT(46,'ANISO, BUF...',NX1*NY1*NZ1)
+               RETURN
+            ENDIF
+         ENDIF
+         NEEDSTATS1 = (ANS .NE. 'H')
+
+
+      CASE ('SC') !----------------------------------------- 'AR SC' 
+C        RESCALE BETWEEN LIMITS
+         CALL RDPRM2S(FLOW,FHI,NOT_USED,
+     &                  'NEW IMAGE MIN. & MAX.',IRTFLG)
+         NEEDSTATS1 = .TRUE.
+
+      CASE DEFAULT !---------------------------------------- 'AR'
+C        USES FORMULA INVOLVING CURRENT PIXEL VALUES 
+         IRTFLG = -999     ! DO NOT CHANGE INPUT STRING TO UPPER CASE
+         CALL RDPRMC(EXPR,NLET,.TRUE.,
+     &               'FORMULA: P2=',NULL,IRTFLG)
+
+         NEEDSTATS1 = .FALSE.
+      END SELECT
+      IF (IRTFLG .NE. 0) GOTO 9000
+
+
+      NINDX1  = 1
+      NINDX2  = 1
+      IMGNUM1 = -3   
+
+c      write(3,'(A,5i6)')'  In util_11, num1,nlist1,nindx1,nstack1:',
+c     &                              imgnum1,nlist1,nindx1,nstack1
+c      write(3,'(A,5i6)')'  In util_11, num2,nlist2,nindx2,nstack2:',
+c     &                              imgnum2,nlist2,nindx2,nstack2
+
+
+      write(3,*)' In util_11 loop ----------------------------'
+
+C     DO WHILE (IMGNUM1 <= NSTACK1) 
+
+      DO WHILE (IMGNUM1 < 0 .OR. NINDX1 <= NLIST1 .OR. 
+     &         (IS_BARE1   .AND. NINDX1 <= NSTACK1)) 
+
+c       write(3,*) ' In util_11 ----:',imgnum1,nindx1,nlist1
+
+        IF (NEEDSTATS1) THEN
+C          GET CURRENT IMAGE RANGE FMIN1...FMAX1  
+           CALL LUNGETSTAT(LUN1,IMAMI1,FMIN1,FMAX1,AV1,SIG1,IRTFLG)
+           IF (IMAMI1 .NE. 1) THEN
+               CALL NORM3(LUN1,NX1,NY1,NZ1,FMAX1,FMIN1,AV1)
+               !SIG1 = SIG   ! FROM COMMON /MASTER/  (UNUSED)
+           ENDIF
+        ENDIF
+        !write(3,*)' In util_11 fmin1...:',fmin1,fmax1,av1,sig1
+
+
+        SELECT CASE(FCHAR(4:5))
+
+         CASE ('AD') !-------------------------------- 'CE AD', 'DN AD' 
+C           ANISOTROPIC DIFFUSION
+
+            IF (FMIN1 >= FMAX1) THEN
+               WRITE(NOUT,*) ' WARNING:  BLANK FILE SKIPPED'
+            ELSE 
+	       CALL ANISO_RUN(ANS,LUN1,LUN2,NX1,NY1,NZ1,ITER,BUF,
+     &                       FMIN1,FMAX1,HT,SIGMA,FLAMBDA,W, IRTFLG)
+            ENDIF
+
+         CASE ('SC') !----------------------------------------- 'AR SC' 
+C           RESCALE DENSITIES BETWEEN LIMITS
+
+            IF (FMIN1 >= FMAX1) THEN
+               WRITE(NOUT,*) 'WARNING:  BLANK FILE SKIPPED'
+            ELSE 
+               CALL ARITHSCA(LUN1,LUN2,NX1,NY1,NZ1,
+     &                    FMIN1,FMAX1,FLOW,FHI,IRTFLG)
+            ENDIF
+
+         CASE DEFAULT !---------------------------------------- 'AR'
+C           ALTER DENSITIES USING FUNCTION
+            CALL ARITH(LUN1,LUN2,NX1,NY1,NZ1, EXPR(1:NLET))
+
+         END SELECT
+
+C        OPEN NEXT SET OF INPUT AND OUTPUT FILES 
+         CALL NEXTFILES(NINDX1, NINDX2, ILIST1,ILIST2, 
+     &               FOUROK,LUNXM1,LUNXM2,
+     &               NLIST1,NLIST2,   NSTACK1,NSTACK2,   
+     &               LUN1,LUNCP,LUN2, FILPAT1,FILPAT2,
+     &               IMGNUM1,IMGNUM2, IRTFLG) 
+
+c        write(3,'(A,6i6)')
+c     &           '  In util_11, num1,nlist1,nindx1,nstack1,irtflg:',
+c     &                       imgnum1,nlist1,nindx1,nstack1,irtflg
+c        write(3,'(A,5i6)')
+c     &           '  In util_11, num2,nlist2,nindx2,nstack2,irtflg:',
+c     &                       imgnum2,nlist2,nindx2,nstack2,irtflg
+
+         IF (IRTFLG == -99) THEN
+            CALL ERRT(102,'INSUFFICIENT OUTPUT FILE NAMES',NINDX2)
+            EXIT         
+         ELSEIF (IRTFLG < 0) THEN
+            EXIT         ! END OF INPUT FILES
+         ENDIF
+         IF (IRTFLG .NE. 0) EXIT    ! ERROR
+
+      ENDDO
+
+9000  IF (ALLOCATED(ILIST1))  DEALLOCATE(ILIST1)
+      IF (ALLOCATED(ILIST2))  DEALLOCATE(ILIST2)
+      IF (ALLOCATED(BUF))     DEALLOCATE(BUF)
+
+      IF (VERBOSE) WRITE(NOUT,*) ' '
+
+      CLOSE(LUN1)
+      CLOSE(LUN2)
+      CLOSE(LUNDOCSEL)
+      CLOSE(LUNXM1)
+      CLOSE(LUNXM2)
+
+      END

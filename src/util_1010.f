@@ -1,15 +1,15 @@
 
 C++*********************************************************************
 C
-C  UTIL_1010.F  FROM UTIL_1110                   SEP 2012 ARDEAN LEITH 
-
+C  UTIL_1010.F  FROM UTIL_1110                   SEP 2012 ArDean Leith 
+C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
 C=* Copyright 1985-2012  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
+C=* Email: spider@health.ny.gov                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -26,6 +26,9 @@ C=*                                                                    *
 C **********************************************************************
 C
 C   UTIL_1010()
+C
+C   INPUT/OUTPUT:  INPUT FILE, OPTIONAL SEL FILE,
+C                  OPTIONAL INPUT MASK FILE, OUTPUT FILE
 C
 C   PURPOSE:  NORMALIZE IMAGES/VOLUMES BY FINDING AVG AND STD.
 C             DEVIATION OUTSIDE MASK (OR OVERALL)
@@ -89,6 +92,8 @@ C     DOC FILE POINTER
           RETURN
       ENDIF
 
+      IRTFLG = 0   ! UNAPPLICABLE RARE INPUT FLAG FOR FILERD IN OPFILES
+
 C     OPEN INPUT IMAGE(S) (NOT FOURIER)
       CALL OPFILES(0,LUNIN,LUNDOCSEL,LUNXM1, 
      &             .TRUE.,FILPATIN,NLET, 'O',
@@ -109,16 +114,17 @@ C     OPEN INPUT IMAGE(S) (NOT FOURIER)
       ENDIF
       OVERALL = .FALSE.
 
-C     SINGLE IMAGE OPERATION 
+C     FLAG FOR SINGLE IMAGE OPERATION 
       IF (NIMG <= 1) IMGNUM = 0
  
+
 C     OPEN MASK INPUT IMAGE (USED FOR ALL INPUT IMAGES) 
       MAXIM = 0
       CALL OPFILEC(0,.TRUE.,FILMASK,LUNMSK,'O',ITYPE,
      &             LX,LY,LZ,
      &             MAXIM,'MASK (* IF NO MASK)',.FALSE.,IRTFLG)
 
-      IF (IRTFLG .EQ. -1 .AND. FILMASK(1:1) == '*') THEN
+      IF (IRTFLG == -1 .AND. FILMASK(1:1) == '*') THEN
          OVERALL = .TRUE.
       ELSE
          IF (IRTFLG .NE. 0) GOTO 9999
@@ -148,8 +154,8 @@ C        READ MASK IMAGE.  EXTRACT LOGICAL MASK IMAGE
       ENDIF
 
 C     OPEN OUTPUT IMAGE(S)
-      PROMPT    = 'OUTPUT FILE NAME OR TEMPLATE (E.G. IMG@****)~'
-      IF (LOCAST == 0)  PROMPT = 'OUTPUT'
+      PROMPT = 'OUTPUT FILE NAME OR TEMPLATE (E.G. IMG@****)~'
+      IF (LOCAST == 0)                  PROMPT = 'OUTPUT'
       IF (LOCAST == 0 .AND. LOCAT > 0)  PROMPT = 'OUTPUT STACK'
  
       MAXIMOUT  = -1           ! ALLOW BARE STACK
@@ -287,7 +293,7 @@ C           FLOAT(DOUBLE PRECISION) call...
 
 C end dgm mod
 	 
-C        SET OPERTION LINE REGISTERS
+C        SET OPERATION LINE REGISTERS
          CALL REG_SET_NSEL(1,5, 
      &        FLOAT(NO),dgm_1,dgm_2,
      &                  dgm_3,dgm_4, IRTFLG)

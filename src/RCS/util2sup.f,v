@@ -1,4 +1,4 @@
-head	1.27;
+head	1.29;
 access;
 symbols
 	pre_mrcs:1.24
@@ -23,6 +23,16 @@ symbols
 locks; strict;
 comment	@c @;
 
+
+1.29
+date	2020.02.24.17.01.05;	author leith;	state Exp;
+branches;
+next	1.28;
+
+1.28
+date	2020.02.06.14.57.42;	author leith;	state Exp;
+branches;
+next	1.27;
 
 1.27
 date	2020.01.23.16.10.03;	author leith;	state Exp;
@@ -165,9 +175,9 @@ desc
 @
 
 
-1.27
+1.29
 log
-@IF (BARE3) IMGNUM3  bug
+@changes when removed getstack... ops
 @
 text
 @
@@ -181,12 +191,15 @@ C              ADDFAC                           MAR 2003  ArDean Leith
 C              GETNEWSTAK PARAMS.               OCT 2010  ArDean Leith
 C              REAL * FOURIER ALLOWED           JUL 2011  ArDean Leith
 C              LUN23 != 23 CLOSURE              APR 2014  ArDean Leith
+C              IMGNUM3 CHANGES FOR NEXTFILES    JAN 2020  ArDean Leith
+C              GETOLDSTACK REMOVED              FEB 2020  ArDean Leith
 C
 C **********************************************************************
 C=*                                                                    *
+C=* Author: ArDean Leith                                               *                                                            *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2014  Health Research Inc.,                         *
+C=* Copyright 1985-2020  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@@health.ny.gov                                        *
 C=*                                                                    *
@@ -204,259 +217,147 @@ C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
 C **********************************************************************
 C
-C  UTIL2SUP (PROMPT1,PROMPT2,PROMPT3, LUN1,LUN2,LUN3, SIGN)
-C  UTIL2SUPL(PROMPT1,PROMPT2,PROMPT3, SIGN) 
+C  CONTAINS: 
+C     UTIL2SUP(PROMPT1,PROMPT2,PROMPT3, LUN1,LUN2,LUN3, SIGN)
+C     PURPOSE:    HANDLES OPS: 'ADD' = 'AD',   'MU D' == 'DIV'
+C                             'MU'        ,   'SU'
 C
-C  PARAMETERS:      
+C     UTIL2SUPL(PROMPT1,PROMPT2,PROMPT3, SIGN) 
+C     PURPOSE:    HANDLES OPS: 'AD 2',   'DI 2' 
+C                              'MU 2 ,   'SU 2'
 C
 C23456789012345678901234567890123456789012345678901234567890123456789012
 C--*********************************************************************
 
-        SUBROUTINE UTIL2SUP(PROMPT1,PROMPT2,PROMPT3,
-     &                      LUN1,LUN2,LUN3,
-     &                      SIGN) 
+      SUBROUTINE UTIL2SUP(PROMPT1,PROMPT2,PROMPT3, SIGN) 
 
-	INCLUDE 'CMBLOCK.INC'
-        INCLUDE 'CMLIMIT.INC' 
+      IMPLICIT NONE
 
-        CHARACTER (LEN=*)      :: PROMPT1,PROMPT2,PROMPT3
-        INTEGER                :: LUN1,LUN2,LUN3
-        REAL                   :: SIGN
+      INCLUDE 'CMBLOCK.INC'
+      INCLUDE 'CMLIMIT.INC' 
 
-        INTEGER                :: LUNA,LUNB,LUNOUT
-        CHARACTER(LEN=MAXNAM)  :: FILNAM1,FILNAM2,FILNAM3
+      CHARACTER (LEN=*)      :: PROMPT1,PROMPT2,PROMPT3
+      REAL                   :: SIGN
 
-        CHARACTER (LEN=1)      :: NULL = CHAR(0)
-        REAL, ALLOCATABLE      :: VOLBUF(:)
-        LOGICAL                :: ASKNAME,MUSTGET,WANTNEXT
-        LOGICAL                :: BARE1,BARE2,ISBARE
+      REAL, ALLOCATABLE      :: VOLBUF(:)
+      REAL                   :: FACT1,FACT2
 
-C       IN CASE LUN1,... ARE CONSTANTS
+      INTEGER                :: LUNA,LUNB,LUNOUT
+      INTEGER                :: NLETI,IRTFLG,NOT_USED
+      INTEGER                :: MAXIM1,MAXIM2,MAXIM3
+      INTEGER                :: IFORM1,IFORM2,IFORM3,IFORMT
+      INTEGER                :: NX,NY,NZ,NXT,NYT,NZT,NWANT,ITER,MWANT
 
-        LUNA   = LUN1
-        LUNB   = LUN2
-        LUNOUT = LUN3
+      CHARACTER(LEN=MAXNAM)  :: FILNAM1,FILNAM2,FILNAM3
+      CHARACTER (LEN=1)      :: NULL = CHAR(0)
 
-        IPVOL  = 0
+      LOGICAL                :: ASKNAME
 
-        CALL FILERD(FILNAM1,NLETI,NULL,PROMPT1,IRTFLG)
-        IF (IRTFLG .NE. 0) GOTO 9999
+      INTEGER, PARAMETER     :: LUN1    = 21
+      INTEGER, PARAMETER     :: LUN2    = 22
+      INTEGER                :: LUN3    = 23
 
-        CALL FILERD(FILNAM2,NLETI,NULL,PROMPT2,IRTFLG)
-        IF (IRTFLG .NE. 0) GOTO 9999
+C     SINCE LUN1,... ARE CONSTANTS
+      LUNA   = LUN1
+      LUNB   = LUN2
+      LUNOUT = LUN3
 
-        BARE1 = ISBARE(FILNAM1)
-        BARE2 = ISBARE(FILNAM2)
+      CALL FILERD(FILNAM1,NLETI,NULL,PROMPT1,IRTFLG)
+      IF (IRTFLG .NE. 0) GOTO 9999
 
-          
-        IF (SIGN >= 1000) THEN
-           CALL RDPRM2S(FACT1,FACT2,NOT_USED,
+      CALL FILERD(FILNAM2,NLETI,NULL,PROMPT2,IRTFLG)
+      IF (IRTFLG .NE. 0) GOTO 9999
+
+      IF (SIGN >= 1000) THEN
+         CALL RDPRM2S(FACT1,FACT2,NOT_USED,
      &                  'FACTORS FOR FIRST & SECOND FILES',IRTFLG)
-	   IF (IRTFLG .NE. 0) GOTO 9999
-        ENDIF
+        IF (IRTFLG .NE. 0) GOTO 9999
+      ENDIF
 
-        IF (.NOT.(BARE1 .OR. BARE2)) THEN
+C     BARE STACKS NO LONGER SUPPORTED HERE
+      MAXIM1 = 0
+      MAXIM2 = 0
+      MAXIM3 = 0
 
-           MAXIM1 = 0
-           MAXIM2 = 0
-           MAXIM3 = 0
+C     OPEN FIRST INPUT FILE ON LUNA
+      CALL OPFILEC(0,.FALSE.,FILNAM1,LUNA,'O',IFORM1,
+     &             NX,NY,NZ,
+     &             MAXIM1,PROMPT1,.TRUE.,IRTFLG)
+      IF (IRTFLG .NE. 0) GOTO 9998
 
-C          NOT A STACKS OPERATION, OPEN FIRST INPUT FILE ON LUNA
-           CALL OPFILEC(0,.FALSE.,FILNAM1,LUNA,'O',IFORM1,
-     &                  NX,NY,NZ,
-     &                 MAXIM1,PROMPT1,.TRUE.,IRTFLG)
-           IF (IRTFLG .NE. 0) GOTO 9998
+C     ALLOCATE SPACE IN VOLBUF
+      ALLOCATE(VOLBUF(NX*NY*NZ), STAT=IRTFLG)
+      IF (IRTFLG .NE. 0) THEN
+         MWANT = NX*NY*NZ
+         CALL ERRT(46,'UTIL2SUP; VOLBUF',MWANT)
+         GOTO 9999
+      ENDIF
 
-C          ALLOCATE SPACE IN VOLBUF
-           ALLOCATE(VOLBUF(NX*NY*NZ), STAT=IRTFLGT)
-           IF (IRTFLGT .NE. 0) THEN
-              MWANT = NX*NY*NZ
-              CALL ERRT(46,'UTIL2SUP; VOLBUF',MWANT)
-              GOTO 9999
-           ENDIF
+C     LOAD VOLUME FROM FIRST FILE INTO VOLBUF
+      CALL REDVOL(LUNA,NX,NY,1,NZ,VOLBUF,IRTFLG)
+      IF (IRTFLG .NE. 0) GOTO 9998
 
-C          LOAD VOLUME FROM FIRST FILE INTO VOLBUF
-           CALL REDVOL(LUNA,NX,NY,1,NZ,VOLBUF,IRTFLG)
-           IF (IRTFLG .NE. 0) GOTO 9998
+      CLOSE(LUNA)
+      ITER = 0
 
-           CLOSE(LUNA)
-           ITER = 0
 
-C          OPEN 2ND... INPUT FILE ON LUNB
 
-10         ITER    = ITER + 1
-           ASKNAME = (ITER > 1)
-           CALL OPFILEC(0,ASKNAME,FILNAM2,LUNB,'O',IFORM2,
-     &                NXT,NYT,NZT,MAXIM2,PROMPT2,.TRUE.,IRTFLG)
-           IF (IRTFLG .NE. 0) GOTO 9998
-           
-           CALL SIZCHK(NULL,NXT,NYT,NZT, 0,
-     &                      NX ,NY ,NZ , 0, IRTFLG)
-           IF (IRTFLG .NE. 0) GOTO 9998
+C     OPEN 2ND... INPUT FILE ON LUNB  ---- LOOP -----------
 
-           !IF (IFORM2 .NE. IFORM1) CALL ERRT(40,'UTIL2SUP',NE)
+10    ITER    = ITER + 1
+      ASKNAME = (ITER > 1)
+      CALL OPFILEC(0,ASKNAME,FILNAM2,LUNB,'O',IFORM2,
+     &             NXT,NYT,NZT,MAXIM2,PROMPT2,.TRUE.,IRTFLG)
+      IF (IRTFLG .NE. 0) GOTO 9998
 
-           ! KLUDGE TO ALLOW MANIPULATION OF FOURIER FILES
-           IFORMT = IFORM1
-           IF ( IFORM1 .NE. IFORM2 .AND.
-     &        ((IFORM1 < 0 .AND. IFORM2 > 0) .OR.
-     &         (IFORM1 > 0 .AND. IFORM2 < 0))) THEN
-              IFORMT = MAX(IFORM1,IFORM2)
-           ENDIF
+C     MUST BE SAME SIZE           
+      CALL SIZCHK(NULL,NXT,NYT,NZT, 0,
+     &                 NX ,NY ,NZ , 0, IRTFLG)
+      IF (IRTFLG .NE. 0) GOTO 9998
+
+C     KLUDGE TO ALLOW MANIPULATION OF FOURIER FILES
+      IFORMT = IFORM1
+      IF ( IFORM1 .NE. IFORM2 .AND.
+     &   ((IFORM1 < 0 .AND. IFORM2 > 0) .OR.
+     &    (IFORM1 > 0 .AND. IFORM2 < 0))) THEN
+           IFORMT = MAX(IFORM1,IFORM2)
+      ENDIF
        
-           IF (SIGN < 1000) THEN
-C             ADD, ETC SECOND FILE TO STORED VOLUME
-              CALL ADD(VOLBUF,LUNB,IFORMT,NX,NY,NZ,SIGN)
-           ELSE
-C             CARRY OUT ADDITION, ETC
-              CALL ADDFAC(VOLBUF,LUNB,IFORMT,NX,NY,NZ,SIGN,
-     &                    FACT1,FACT2)
-           ENDIF
+      IF (SIGN < 1000) THEN
+C        ADD, ETC SECOND FILE TO STORED VOLUME
+         CALL ADD(VOLBUF,LUNB,IFORMT,NX,NY,NZ,SIGN)
+      ELSE
+C        CARRY OUT ADDITION, ETC
+         CALL ADDFAC(VOLBUF,LUNB,IFORMT,NX,NY,NZ,SIGN,
+     &               FACT1,FACT2)
+      ENDIF
 
-C          CLOSE SECOND FILE (IN CASE OUTPUT IS SAME FILE)
-           CLOSE(LUNB)
+C     CLOSE SECOND FILE (IN CASE OUTPUT IS SAME FILE)
+      CLOSE(LUNB)
 
-C          OPEN OUTPUT FILE ON LUNOUT
-           ASKNAME = (ITER <= 1)
-           CALL OPFILEC(LUNA,ASKNAME,FILNAM3,LUNOUT,'U',IFORM1,
-     &                  NX,NY,NZ,MAXIM3,PROMPT3,.TRUE.,IRTFLG)
-           IF (IRTFLG .NE. 0) GOTO 9998
+C     OPEN OUTPUT FILE ON LUNOUT
+      ASKNAME = (ITER <= 1)
+      CALL OPFILEC(LUNA,ASKNAME,FILNAM3,LUNOUT,'U',IFORM1,
+     &             NX,NY,NZ,MAXIM3,PROMPT3,.TRUE.,IRTFLG)
+      IF (IRTFLG .NE. 0) GOTO 9998
 
-C          PUT SUM,ETC. IN OUTPUT FILE ON LUNOUT
-           CALL WRTVOL(LUNOUT,NX,NY, 1,NZ,VOLBUF,IRTFLG)
+C     PUT SUM ETC. IN OUTPUT FILE ON LUNOUT
+      CALL WRTVOL(LUNOUT,NX,NY, 1,NZ,VOLBUF,IRTFLG)
 
-           CLOSE(LUNOUT)
+      CLOSE(LUNOUT)
 
-C          CONTINUE UNTIL '*' IS INPUT
-           IF (SIGN < 1000) GOTO 10 
-
-        ELSE
-C          STACKS OPERATION
-
-           MAXIM1 = -1
-           MAXIM2 = -1
-           MAXIM3 = -1
-           IMGNUM = 0
-
-C          OPEN FIRST INPUT FILE ON LUNA
-           CALL OPFILEC(0,.FALSE.,FILNAM1,LUNA,'O',IFORM1,
-     &                 NX,NY,NZ,
-     &                 MAXIM1,PROMPT1,.TRUE.,IRTFLG)
-           IF (IRTFLG .NE. 0) GOTO 9998
-
-C          ALLOCATE SPACE IN VOLBUF
-           ALLOCATE(VOLBUF(NX*NY*NZ), STAT=IRTFLGT)
-           IF (IRTFLGT .NE. 0) THEN
-              CALL ERRT(46,'UTIL2SUP; VOLBUF',NX*NY*NZ)
-              GOTO 9999
-           ENDIF
-
-C          OPEN SECOND INPUT FILE ON LUNB (IF NECESSARY)
-           IF (FILNAM2 == FILNAM1) THEN
-              LUNB = LUNA
-           ELSE
-              CALL OPFILEC(0,.FALSE.,FILNAM2,LUNB,'O',IFORM2,
-     &              NXT,NYT,NZT,MAXIM2,PROMPT2,.TRUE.,IRTFLG)
-              IF (IRTFLG .NE. 0) GOTO 9998
-
-              CALL SIZCHK(NULL,NXT,NYT,NZT, 0,
-     &                         NX ,NY ,NZ , 0, IRTFLG)
-              IF (IRTFLG .NE. 0) GOTO 9998
-
-              !IF (IFORM2 .NE. IFORM1)  CALL ERRT(40,'UTIL2SUP',NE)
-           ENDIF
-
-C          FIND TOTAL NUMBER OF COMMON IMAGES IN STACKS
-           IF (MAXIM1 > 0) NIMAGE = MAXIM1
-           IF (MAXIM2 > 0) NIMAGE = MAXIM2
-           IF (MAXIM1 > 0 .AND. MAXIM2 > 0)
-     &         NIMAGE = MIN(MAXIM1,MAXIM2)
- 
-C          FIND OUTPUT STACK NAME
-           CALL FILERD(FILNAM3,NLETI,NULL,PROMPT2,IRTFLG)
-           IF (IRTFLG .NE. 0) GOTO 9998
-
-C          OPEN OUTPUT STACK ON LUNOUT (IF NECESSARY)
-           IF (FILNAM3 == FILNAM2) THEN
-              LUNOUT = LUNB
-           ELSEIF (FILNAM3 == FILNAM1) THEN
-              LUNOUT = LUNA
-           ELSE
-C             OUTPUT IS DIFFERENT STACK FROM EITHER INPUT
-              CALL OPFILEC(LUNA,.FALSE.,FILNAM3,LUNOUT,'U',IFORM1,
-     &              NX,NY,NZ,MAXIM3,PROMPT3,.TRUE.,IRTFLG)
-              IF (IRTFLG .NE. 0) GOTO 9998
-           ENDIF
-
-C          IF FIRST FILE IS NOT A STACK CAN SKIP TO NEXTIMAGE
-           WANTNEXT = (MAXIM1 < 0)
- 
-C          IF FIRST FILE IS STACK MUSTGET SPECIFIED IMGNUM
-           MUSTGET = .NOT. WANTNEXT 
-
- 
-20         IMGNUM = IMGNUM + 1
-           IF (VERBOSE) WRITE(NOUT,*) ' '
-
-C          GET IMGNUM FROM FIRST INPUT
-           CALL GETOLDSTACK(LUNA,NX,IMGNUM,.TRUE.,.FALSE.,
-     &                     .TRUE.,IRTFLG)
-           IF (IRTFLG > 0 .AND. IMGNUM <= 1) GOTO 9998
-           IF (IRTFLG > 0) GOTO 9998
-        
-C          LOAD VOLUME FROM FIRST INPUT FILE INTO VOLBUF 
-           CALL REDVOL(LUNA,NX,NY,1,NZ,VOLBUF,IRTFLG)
-           IF (IRTFLG .NE. 0) GOTO 9998
-
-C          WHAT HAPPENS IF STACK + STACK BUT ONE STACKED IMAGE
-C          NOT PRESENT?? CURRENTLY PART OF STACK COULD BE 
-C          INCONSISTENT WITH PREVIOUS PART OF STACK SINCE IT WILL
-C          HALT ON ERROR!!!!!!!!!!!!!!al
-
-           CALL GETOLDSTACK(LUNB,NX,IMGNUM,WANTNEXT,MUSTGET,
-     &                     .TRUE.,IRTFLG)
-           IF (IRTFLG > 0) GOTO 9998
-
-           ! KLUDGE TO ALLOW MANIPULATION OF FOURIER FILES
-           IFORMT = IFORM1
-           IF ( IFORM1 .NE. IFORM2 .AND.
-     &        ((IFORM1 < 0 .AND. IFORM2 > 0) .OR.
-     &         (IFORM1 > 0 .AND. IFORM2 < 0))) THEN
-              IFORMT = MAX(IFORM1,IFORM2)
-           ENDIF
-
-           IF (SIGN < 1000) THEN
-C             CARRY OUT ADDITION, ETC
-              CALL ADD(VOLBUF,LUNB,IFORMT,NX,NY,NZ,SIGN)
-           ELSE
-C             CARRY OUT ADDITION, ETC
-              CALL ADDFAC(VOLBUF,LUNB,IFORMT,NX,NY,NZ,SIGN,
-     &                    FACT1,FACT2)
-           ENDIF
-
-c          STACK OPERATION, POINT TO NEXT STACKED IMAGE
-           CALL GETNEWSTACK(LUNA,LUNOUT,.FALSE.,NX,IMGNUM,IRTFLG)
-           IF (IRTFLG .GT. 0) GOTO 9998
-
-C          PUT SUM,ETC. IN OUTPUT FILE ON LUNOUT
-           CALL WRTVOL(LUNOUT,NX,NY, 1,NZ,VOLBUF,IRTFLG)
-
-C          CONTINUE UNTIL LAST STACKED IMAGE REACHED, DO NOT CLOSE 
-
-           IF (IMGNUM < NIMAGE) GOTO 20
-        ENDIF
+C     CONTINUE UNTIL '*' IS INPUT
+      IF (SIGN < 1000) GOTO 10  !--------- LOOP -----------
 
 
-C       DEALLOCATE VOLBUF
-9998    IF (ALLOCATED(VOLBUF)) DEALLOCATE(VOLBUF)
+C     DEALLOCATE VOLBUF
+9998  IF (ALLOCATED(VOLBUF)) DEALLOCATE(VOLBUF)
 
-9999    CLOSE(LUN1)
-        CLOSE(LUN2)
-        CLOSE(LUN3)
+9999  CLOSE(LUN1)
+      CLOSE(LUN2)
+      CLOSE(LUN3)
 
-
-        RETURN
-        END
+      END
 
 
 C++*********************************************************************
@@ -474,8 +375,7 @@ C
 C23456789012345678901234567890123456789012345678901234567890123456789012
 C--*********************************************************************
 
-      SUBROUTINE UTIL2SUPL(PROMPT1,PROMPT2,PROMPT3,
-     &                     SIGN) 
+      SUBROUTINE UTIL2SUPL(PROMPT1,PROMPT2,PROMPT3, SIGN) 
 
       IMPLICIT NONE
       INCLUDE 'CMBLOCK.INC'
@@ -787,6 +687,7 @@ C       PUT SUM, ETC. IN OUTPUT FILE ON LUN3
 
         IF ((NINDX1 >= NLIST1 .AND. NINDX2 >= NLIST2)) then
            !write(3,*)' nindx1 >= nlist1:', nindx1,' >= ',nlist1
+           !write(3,*)' nindx1 >= nlist1:', nindx1,' >= ',nlist1
            !write(3,*)' nindx2 >= nlist2:', nindx2,' >= ',nlist2
            EXIT      ! END OF INPUT LIST
         ENDIF
@@ -801,9 +702,9 @@ C          OPEN NEXT FIRST INPUT FILE
      &                   LUN1,LUNCP,
      &                   FILPAT1,'O',
      &                   IMGNUM1, IRTFLG) 
-c           write(3,'(A,5i6)')
-c     &         ' In util2supl 1, num1,list1,indx1,irtflg:',
-c     &                         imgnum1,nlist1,nindx1,irtflg
+           write(3,'(A,5i6)')
+     &         '  In util2sup 1, num1,nlist1,nindx1,irtflg:',
+     &                         imgnum1,nlist1,nindx1,irtflg
            IF (IRTFLG < 0)  EXIT      ! END OF INPUT FILES
         ENDIF
 
@@ -833,18 +734,42 @@ c     &                        imgnum2,nlist2,nindx2,irtflg
      &      .NOT. OVERWRITE2) THEN
 
 C          OPEN NEXT OUTPUT FILE 
+c           write(3,'(A,5i6)')
+c     &         '  In util2sup 9  nindx1,nindx1,nindx3:',
+c     &                           nindx1,nindx2,nindx3,irtflg
+c           write(3,*)
+c     &         '  In util2sup 9  bares:',bare1,bare2,bare3
+
+
+C          NEED THIS TO ACCEPT OVERWRITING AND THE OTHER COMPLEX 
+C          NUMBERING REQUIREMENTS SPECIFIC TO THIS OPERATION
            IF (BARE3) THEN
+C             OUTPUT TO BARE STACK, KEEP SAME IMAGE # AS INPUT
+              IF (BARE1) THEN
+                 IMGNUM3 = IMGNUM1 - 1
+              ELSEIF (BARE2) THEN
+                 IMGNUM3 = IMGNUM2 - 1
+              ELSEIF (.NOT. BARE1) THEN
+C                TEMPLATED SERIES
+                 IMGNUM3 = ILIST1(NINDX1 - 1)
+              ELSEIF (.NOT. BARE2) THEN
+C                TEMPLATED SERIES
+                IMGNUM3 = ILIST2(NINDX2 - 1)
+              ENDIF
+
               NLIST3  = NLIST1
               IF (BARE2) NLIST3 = MAX(NLIST1,NLIST2)
+              MAXIM3 = MAX(MAXIM1,MAXIM2,NLIST1,NLIST2)
            ENDIF
 
 c          write(3,*)' In util2sup 3, bare3,nindx3,nlist3: ',
 c     &                               bare3,nindx3,nlist3
-c          write(3,*)' In util2sup, nlist3,ilist3(1..),maxim3,imgnum3:',
-c     &                            nlist3,ilist3(1:nlist3),maxim3,imgnum3
+c          write(3,*)' In util2sup 3, num3,nlist3,maxim3:',
+c     &                            imgnum3,nlist3,maxim3
 c          write(3,*)' In util2sup,filpat3: ',filpat3(1:10)
-c          !!if (nindx1 > ngot1 == nlist3) then overflow
+c          if (nindx1 > ngot1 == nlist3) then overflow
 
+           
            CALL NEXTFILE(NINDX3, ILIST3, 
      &                   FOUROK,LUNXM1,
      &                   NLIST3,MAXIM3,   
@@ -853,10 +778,8 @@ c          !!if (nindx1 > ngot1 == nlist3) then overflow
      &                   IMGNUM3, IRTFLG) 
 
 c           write(3,'(A,5i6)')
-c     &         ' In util2supl 3  num3,nlist3,nindx3,irtflg:',
+c     &         '  In util2sup 4  num3,nlist3,nindx3,irtflg:',
 c     &                        imgnum3,nlist3,nindx3,irtflg
-
-           IF (BARE3) IMGNUM3 = IMGNUM3 + 1   
 
          ENDIF
 
@@ -894,6 +817,321 @@ c     &                        imgnum3,nlist3,nindx3,irtflg
 #endif
 
 
+@
+
+
+1.28
+log
+@IMGNUM3 CHANGES FOR NEXTFILES
+@
+text
+@d13 1
+d17 1
+d38 8
+a45 4
+C  UTIL2SUP (PROMPT1,PROMPT2,PROMPT3, LUN1,LUN2,LUN3, SIGN)
+C  UTIL2SUPL(PROMPT1,PROMPT2,PROMPT3, SIGN) 
+C
+C  PARAMETERS:      
+d50 3
+a52 3
+        SUBROUTINE UTIL2SUP(PROMPT1,PROMPT2,PROMPT3,
+     &                      LUN1,LUN2,LUN3,
+     &                      SIGN) 
+d54 2
+a55 2
+	INCLUDE 'CMBLOCK.INC'
+        INCLUDE 'CMLIMIT.INC' 
+d57 2
+a58 3
+        CHARACTER (LEN=*)      :: PROMPT1,PROMPT2,PROMPT3
+        INTEGER                :: LUN1,LUN2,LUN3
+        REAL                   :: SIGN
+d60 2
+a61 2
+        INTEGER                :: LUNA,LUNB,LUNOUT
+        CHARACTER(LEN=MAXNAM)  :: FILNAM1,FILNAM2,FILNAM3
+d63 5
+a67 4
+        CHARACTER (LEN=1)      :: NULL = CHAR(0)
+        REAL, ALLOCATABLE      :: VOLBUF(:)
+        LOGICAL                :: ASKNAME,MUSTGET,WANTNEXT
+        LOGICAL                :: BARE1,BARE2,ISBARE
+d69 2
+a70 1
+C       IN CASE LUN1,... ARE CONSTANTS
+d72 1
+a72 3
+        LUNA   = LUN1
+        LUNB   = LUN2
+        LUNOUT = LUN3
+d74 3
+a76 1
+        IPVOL  = 0
+d78 10
+a87 2
+        CALL FILERD(FILNAM1,NLETI,NULL,PROMPT1,IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 9999
+d89 3
+a91 1
+        CALL FILERD(FILNAM2,NLETI,NULL,PROMPT2,IRTFLG)
+d93 1
+d95 25
+a119 2
+        BARE1 = ISBARE(FILNAM1)
+        BARE2 = ISBARE(FILNAM2)
+a120 6
+          
+        IF (SIGN >= 1000) THEN
+           CALL RDPRM2S(FACT1,FACT2,NOT_USED,
+     &                  'FACTORS FOR FIRST & SECOND FILES',IRTFLG)
+	   IF (IRTFLG .NE. 0) GOTO 9999
+        ENDIF
+a121 1
+        IF (.NOT.(BARE1 .OR. BARE2)) THEN
+d123 20
+a142 46
+           MAXIM1 = 0
+           MAXIM2 = 0
+           MAXIM3 = 0
+
+C          NOT A STACKS OPERATION, OPEN FIRST INPUT FILE ON LUNA
+           CALL OPFILEC(0,.FALSE.,FILNAM1,LUNA,'O',IFORM1,
+     &                  NX,NY,NZ,
+     &                 MAXIM1,PROMPT1,.TRUE.,IRTFLG)
+           IF (IRTFLG .NE. 0) GOTO 9998
+
+C          ALLOCATE SPACE IN VOLBUF
+           ALLOCATE(VOLBUF(NX*NY*NZ), STAT=IRTFLGT)
+           IF (IRTFLGT .NE. 0) THEN
+              MWANT = NX*NY*NZ
+              CALL ERRT(46,'UTIL2SUP; VOLBUF',MWANT)
+              GOTO 9999
+           ENDIF
+
+C          LOAD VOLUME FROM FIRST FILE INTO VOLBUF
+           CALL REDVOL(LUNA,NX,NY,1,NZ,VOLBUF,IRTFLG)
+           IF (IRTFLG .NE. 0) GOTO 9998
+
+           CLOSE(LUNA)
+           ITER = 0
+
+C          OPEN 2ND... INPUT FILE ON LUNB
+
+10         ITER    = ITER + 1
+           ASKNAME = (ITER > 1)
+           CALL OPFILEC(0,ASKNAME,FILNAM2,LUNB,'O',IFORM2,
+     &                NXT,NYT,NZT,MAXIM2,PROMPT2,.TRUE.,IRTFLG)
+           IF (IRTFLG .NE. 0) GOTO 9998
+           
+           CALL SIZCHK(NULL,NXT,NYT,NZT, 0,
+     &                      NX ,NY ,NZ , 0, IRTFLG)
+           IF (IRTFLG .NE. 0) GOTO 9998
+
+           !IF (IFORM2 .NE. IFORM1) CALL ERRT(40,'UTIL2SUP',NE)
+
+           ! KLUDGE TO ALLOW MANIPULATION OF FOURIER FILES
+           IFORMT = IFORM1
+           IF ( IFORM1 .NE. IFORM2 .AND.
+     &        ((IFORM1 < 0 .AND. IFORM2 > 0) .OR.
+     &         (IFORM1 > 0 .AND. IFORM2 < 0))) THEN
+              IFORMT = MAX(IFORM1,IFORM2)
+           ENDIF
+d144 29
+a172 149
+           IF (SIGN < 1000) THEN
+C             ADD, ETC SECOND FILE TO STORED VOLUME
+              CALL ADD(VOLBUF,LUNB,IFORMT,NX,NY,NZ,SIGN)
+           ELSE
+C             CARRY OUT ADDITION, ETC
+              CALL ADDFAC(VOLBUF,LUNB,IFORMT,NX,NY,NZ,SIGN,
+     &                    FACT1,FACT2)
+           ENDIF
+
+C          CLOSE SECOND FILE (IN CASE OUTPUT IS SAME FILE)
+           CLOSE(LUNB)
+
+C          OPEN OUTPUT FILE ON LUNOUT
+           ASKNAME = (ITER <= 1)
+           CALL OPFILEC(LUNA,ASKNAME,FILNAM3,LUNOUT,'U',IFORM1,
+     &                  NX,NY,NZ,MAXIM3,PROMPT3,.TRUE.,IRTFLG)
+           IF (IRTFLG .NE. 0) GOTO 9998
+
+C          PUT SUM,ETC. IN OUTPUT FILE ON LUNOUT
+           CALL WRTVOL(LUNOUT,NX,NY, 1,NZ,VOLBUF,IRTFLG)
+
+           CLOSE(LUNOUT)
+
+C          CONTINUE UNTIL '*' IS INPUT
+           IF (SIGN < 1000) GOTO 10 
+
+        ELSE
+C          STACKS OPERATION
+
+           MAXIM1 = -1
+           MAXIM2 = -1
+           MAXIM3 = -1
+           IMGNUM = 0
+
+C          OPEN FIRST INPUT FILE ON LUNA
+           CALL OPFILEC(0,.FALSE.,FILNAM1,LUNA,'O',IFORM1,
+     &                 NX,NY,NZ,
+     &                 MAXIM1,PROMPT1,.TRUE.,IRTFLG)
+           IF (IRTFLG .NE. 0) GOTO 9998
+
+C          ALLOCATE SPACE IN VOLBUF
+           ALLOCATE(VOLBUF(NX*NY*NZ), STAT=IRTFLGT)
+           IF (IRTFLGT .NE. 0) THEN
+              CALL ERRT(46,'UTIL2SUP; VOLBUF',NX*NY*NZ)
+              GOTO 9999
+           ENDIF
+
+C          OPEN SECOND INPUT FILE ON LUNB (IF NECESSARY)
+           IF (FILNAM2 == FILNAM1) THEN
+              LUNB = LUNA
+           ELSE
+              CALL OPFILEC(0,.FALSE.,FILNAM2,LUNB,'O',IFORM2,
+     &              NXT,NYT,NZT,MAXIM2,PROMPT2,.TRUE.,IRTFLG)
+              IF (IRTFLG .NE. 0) GOTO 9998
+
+              CALL SIZCHK(NULL,NXT,NYT,NZT, 0,
+     &                         NX ,NY ,NZ , 0, IRTFLG)
+              IF (IRTFLG .NE. 0) GOTO 9998
+
+              !IF (IFORM2 .NE. IFORM1)  CALL ERRT(40,'UTIL2SUP',NE)
+           ENDIF
+
+C          FIND TOTAL NUMBER OF COMMON IMAGES IN STACKS
+           IF (MAXIM1 > 0) NIMAGE = MAXIM1
+           IF (MAXIM2 > 0) NIMAGE = MAXIM2
+           IF (MAXIM1 > 0 .AND. MAXIM2 > 0)
+     &         NIMAGE = MIN(MAXIM1,MAXIM2)
+ 
+C          FIND OUTPUT STACK NAME
+           CALL FILERD(FILNAM3,NLETI,NULL,PROMPT2,IRTFLG)
+           IF (IRTFLG .NE. 0) GOTO 9998
+
+C          OPEN OUTPUT STACK ON LUNOUT (IF NECESSARY)
+           IF (FILNAM3 == FILNAM2) THEN
+              LUNOUT = LUNB
+           ELSEIF (FILNAM3 == FILNAM1) THEN
+              LUNOUT = LUNA
+           ELSE
+C             OUTPUT IS DIFFERENT STACK FROM EITHER INPUT
+              CALL OPFILEC(LUNA,.FALSE.,FILNAM3,LUNOUT,'U',IFORM1,
+     &              NX,NY,NZ,MAXIM3,PROMPT3,.TRUE.,IRTFLG)
+              IF (IRTFLG .NE. 0) GOTO 9998
+           ENDIF
+
+C          IF FIRST FILE IS NOT A STACK CAN SKIP TO NEXTIMAGE
+           WANTNEXT = (MAXIM1 < 0)
+ 
+C          IF FIRST FILE IS STACK MUSTGET SPECIFIED IMGNUM
+           MUSTGET = .NOT. WANTNEXT 
+
+ 
+20         IMGNUM = IMGNUM + 1
+           IF (VERBOSE) WRITE(NOUT,*) ' '
+
+C          GET IMGNUM FROM FIRST INPUT
+           CALL GETOLDSTACK(LUNA,NX,IMGNUM,.TRUE.,.FALSE.,
+     &                     .TRUE.,IRTFLG)
+           IF (IRTFLG > 0 .AND. IMGNUM <= 1) GOTO 9998
+           IF (IRTFLG > 0) GOTO 9998
+        
+C          LOAD VOLUME FROM FIRST INPUT FILE INTO VOLBUF 
+           CALL REDVOL(LUNA,NX,NY,1,NZ,VOLBUF,IRTFLG)
+           IF (IRTFLG .NE. 0) GOTO 9998
+
+C          WHAT HAPPENS IF STACK + STACK BUT ONE STACKED IMAGE
+C          NOT PRESENT?? CURRENTLY PART OF STACK COULD BE 
+C          INCONSISTENT WITH PREVIOUS PART OF STACK SINCE IT WILL
+C          HALT ON ERROR!!!!!!!!!!!!!!al
+
+           CALL GETOLDSTACK(LUNB,NX,IMGNUM,WANTNEXT,MUSTGET,
+     &                     .TRUE.,IRTFLG)
+           IF (IRTFLG > 0) GOTO 9998
+
+           ! KLUDGE TO ALLOW MANIPULATION OF FOURIER FILES
+           IFORMT = IFORM1
+           IF ( IFORM1 .NE. IFORM2 .AND.
+     &        ((IFORM1 < 0 .AND. IFORM2 > 0) .OR.
+     &         (IFORM1 > 0 .AND. IFORM2 < 0))) THEN
+              IFORMT = MAX(IFORM1,IFORM2)
+           ENDIF
+
+           IF (SIGN < 1000) THEN
+C             CARRY OUT ADDITION, ETC
+              CALL ADD(VOLBUF,LUNB,IFORMT,NX,NY,NZ,SIGN)
+           ELSE
+C             CARRY OUT ADDITION, ETC
+              CALL ADDFAC(VOLBUF,LUNB,IFORMT,NX,NY,NZ,SIGN,
+     &                    FACT1,FACT2)
+           ENDIF
+
+c          STACK OPERATION, POINT TO NEXT STACKED IMAGE
+           CALL GETNEWSTACK(LUNA,LUNOUT,.FALSE.,NX,IMGNUM,IRTFLG)
+           IF (IRTFLG .GT. 0) GOTO 9998
+
+C          PUT SUM,ETC. IN OUTPUT FILE ON LUNOUT
+           CALL WRTVOL(LUNOUT,NX,NY, 1,NZ,VOLBUF,IRTFLG)
+
+C          CONTINUE UNTIL LAST STACKED IMAGE REACHED, DO NOT CLOSE 
+
+           IF (IMGNUM < NIMAGE) GOTO 20
+        ENDIF
+
+
+C       DEALLOCATE VOLBUF
+9998    IF (ALLOCATED(VOLBUF)) DEALLOCATE(VOLBUF)
+
+9999    CLOSE(LUN1)
+        CLOSE(LUN2)
+        CLOSE(LUN3)
+d174 3
+d178 1
+a178 2
+        RETURN
+        END
+d196 1
+a196 2
+      SUBROUTINE UTIL2SUPL(PROMPT1,PROMPT2,PROMPT3,
+     &                     SIGN) 
+@
+
+
+1.27
+log
+@IF (BARE3) IMGNUM3  bug
+@
+text
+@d12 1
+d18 1
+a18 1
+C=* Copyright 1985-2014  Health Research Inc.,                         *
+d619 1
+d634 3
+a636 3
+c           write(3,'(A,5i6)')
+c     &         ' In util2supl 1, num1,list1,indx1,irtflg:',
+c     &                         imgnum1,nlist1,nindx1,irtflg
+d666 9
+d676 13
+d691 1
+d696 2
+a697 2
+c          write(3,*)' In util2sup, nlist3,ilist3(1..),maxim3,imgnum3:',
+c     &                            nlist3,ilist3(1:nlist3),maxim3,imgnum3
+d699 1
+a699 1
+c          !!if (nindx1 > ngot1 == nlist3) then overflow
+d701 1
+d710 1
+a710 1
+c     &         ' In util2supl 3  num3,nlist3,nindx3,irtflg:',
+a711 2
+
+           IF (BARE3) IMGNUM3 = IMGNUM3 + 1   
 @
 
 

@@ -10,7 +10,7 @@ C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
 C=* Copyright 1985-2014  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
+C=* Email: spider@health.ny.gov                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -27,6 +27,9 @@ C=*                                                                    *
 C **********************************************************************
 C
 C   UTIL_1011()
+C
+C   INPUT/OUTPUT:  INPUT FILE,  OPTIONAl SEL FILE, 
+C                  OUTPUT FILE, OPTIONAL OUTPUT DOC FILE
 C
 C   PURPOSE:  CENTER IMAGES
 C             DRIVER FOR OPERATIONS WHICH BOTH READ AND WRITE FILES

@@ -12,11 +12,13 @@ C                  MPI HEADER NEEDED               MAR 11 ArDean Leith
 C                  STACK@ ACCEPTED                 MAR 12 ArDean Leith
 C                  FORMATTING                      SEP 13 ArDean Leith
 C                  MRC SUPPORT                     SEP 19 ArDean Leith
+C                  REMOVED GETOLDSTACK             FEB 20 ArDean Leith
 C **********************************************************************
 C=*                                                                    *
+C=* Author: ArDean Leith                                               *                                                            *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2013  Health Research Inc.,                         *
+C=* Copyright 1985-2020  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@health.ny.gov                                        *
 C=*                                                                    *
@@ -57,7 +59,8 @@ C **********************************************************************
         CHARACTER(LEN=MAXNAM+20)     :: MESG
         CHARACTER(LEN=1)             :: NULL = CHAR(0)
 
-        LOGICAL                      :: GOT_SPI_STK_IMAGE,ISDIGI,IS_MRC
+        LOGICAL                      :: GOT_MRC_STK_IMAGE,IS_MRC
+        LOGICAL                      :: GOT_SPI_STK_IMAGE,ISDIGI
         INTEGER                      :: ICOMM,MYPID,MPIERR,NLET,IRTFLG
         INTEGER                      :: IFILE,IDIG,IFIRST,NLETA,NOFIND
         INTEGER                      :: LOCAT,MAXIM,NX,NY,NZ,LASTFI,IGO
@@ -123,9 +126,23 @@ C          ADD EXTENSION TO FILNAM --> FILN
 20      LOCAT  = INDEX(FILNAM,'@')    ! STACK INDICATOR 
 
 C       SEE IF STACKED SPIDER IMAGE     
+        GOT_MRC_STK_IMAGE = (IS_MRC .AND. 
+     &                       LOCAT > 1 .AND. 
+     &                       ISDIGI(FILNAM(LOCAT-1:LOCAT-1)))
+
+C       SEE IF STACKED SPIDER IMAGE     
         GOT_SPI_STK_IMAGE = (.NOT. IS_MRC .AND. LOCAT > 0 .AND. 
      &                       LOCAT < NLET .AND. 
      &                       ISDIGI(FILNAM(LOCAT+1:LOCAT+1)))
+
+        IF (GOT_MRC_STK_IMAGE) THEN
+C          MRC STACKED IMAGE
+           CALL ERRT(101,'CAN NOT DELETE AN IMAGE FROM MRC STACK',IDUM)
+           IRTFLG = 1
+           RETURN
+        ENDIF
+
+        
 
         IF (GOT_SPI_STK_IMAGE) THEN
 C          DELETE IMAGE FROM IMAGE STACK
@@ -141,6 +158,8 @@ C          UPDATE IMAGE IN-USE VARIABLE
 
 C          FIND MAXIM IN OVERALL HEADER
            CALL LUNGETMAXIM(LUN,MAXIM,IRTFLG)
+           !write(3,*) '  In deletf; imgnum,maxim:',imgnum,maxim
+
 
            IF (IMGNUM == MAXIM) THEN
 C             DELETED IMAGE IS MAXIM, MUST FIND NEW MAXIM
@@ -233,34 +252,53 @@ C        -------------------- FINDMAXIM ----------------------------
 
          SUBROUTINE FINDMAXIM(LUN,NX,MAXIMOLD,MAXIMNEW,IRTFLG)
 
-C        FIND HIGHEST NUMBER IMAGE STILL IN THIS STACK
+         IMPLICIT NONE
+
+         INTEGER   :: LUN,NX,MAXIMOLD,MAXIMNEW,IRTFLG
+
+         INTEGER   :: NDUM,IMGNUM,IMUSED
+         LOGICAL   :: IS_MRC
+
+C        PURPOSE:  FIND HIGHEST NUMBER IMAGE STILL IN THIS STACK
 
 C        SET ERROR RETURN
          IRTFLG = 1
 
-C        MUST SET ISBARE FOR GETOLDSTACK TO WORK
-         CALL LUNSETISBARE(LUN,.TRUE.,IRTFLG)
+C        DETERMINE IF MRC OR SPIDER 
+         CALL LUNGETIS_MRC(LUN,IS_MRC,IRTFLG)
+
+         IF (IS_MRC) THEN
+C          MRC STACK
+           CALL ERRT(101,'THIS SUBROUTINE DOES NOT ACCEPT MRC',NDUM)
+           IRTFLG = 1
+           RETURN
+         ENDIF
 
 C        START WITH MAXIMOLD IMAGE
          IMGNUM = MAXIMOLD - 1
 
          DO WHILE (IMGNUM > 0)
 C           GET NEXT IMAGE FROM STACK
-            CALL GETOLDSTACK(LUN,NX,IMGNUM,
-     &                      .FALSE.,.FALSE.,.FALSE.,IRTFLGT)
-            IF (IRTFLGT > 0) GOTO 999
 
-            IF (IRTFLGT == 0) EXIT  !FOUND NEW MAXIM
+C           GET SPECIFIED IMAGE HEADER FROM STACK FILE LOCATION
+            CALL LUNREDHED(LUN,NX,0,     .FALSE.,IRTFLG)
+            CALL LUNREDHED(LUN,NX,IMGNUM,.FALSE.,IRTFLG)
+            !write(3,*) '  In findmax 1, imgnum,irtflg:',imgnum,irtflg
+
+
+            IF (IRTFLG .NE. 0) EXIT  
+ 
+C           NEED IMUSED FROM THIS STACKED IMAGE
+            CALL LUNGETINUSE(LUN,IMUSED,IRTFLG)
+            !write(3,*) '  In findmax 2, imgnum,irtflg:',imgnum,irtflg
+
+            IF (IRTFLG == 0 .AND. IMUSED > 0 ) EXIT  !FOUND NEW MAXIM
 
 C           TRY NEXT IMAGE DOWN
             IMGNUM = IMGNUM - 1
          ENDDO
 
-100      MAXIMNEW = IMGNUM
+         MAXIMNEW = IMGNUM
          IRTFLG   = 0
-
-999      CONTINUE
-C        MUST SET ISBARE FOR GETOLDSTACK TO WORK
-         CALL LUNSETISBARE(LUN,.FALSE.,IRTFLG)
 
          END
