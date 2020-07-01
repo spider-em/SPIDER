@@ -6,7 +6,7 @@ C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2019  Health Research Inc.,                         *
+C=* Copyright 1985-2020  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@health.ny.gov                                        *
 C=*                                                                    *
@@ -139,12 +139,8 @@ C        OPEN AN ALREADY EXISTING MRC FILE
          CALL OPENFIL_O_MRC(LUN,FILNAM,NLET,DSP,IMGNUM,
      &                      NX,NY,NZ,NSTACK,  IRTFLG)
 
-C        HACK TO HANDLE .mrcs files with bad NZ
-         IF (LOCAT > 1 .AND. FILNAM_AT(LOCAT-1:LOCAT-1) .NE. '/' .AND.
-     &      (INDEX(FILNAM_AT,'.mrcs') > 0) .AND.
-     &      (IMGNUM > 0)) NSTACK = -1
+C        HACK TO HANDLE .mrcs files with bad NZ (REMOVED 6/30/20) al
     
-
          !write(3,*)' In openfil_mrc, after openfil_o_mrc irtflg:',irtflg
          !write(3,*)' In openfil_mrc, after openfil_o_mrc filnam:',filnam
          !write(3,*)' In openfil_mrc, after openfil_o_mrc imgnum:',imgnum

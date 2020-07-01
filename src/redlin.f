@@ -7,12 +7,13 @@ C                MPI CHANGES                    OCT 2008  ArDean Leith
 C                REDLIN_SEL                     NOV 2011  ArDean Leith
 C                MRC SUPPORT                    MAY 2019  ArDean Leith
 C                MORE MRC SUPPORT               DEC 2019  ArDean Leith
+C                REDLIN_SEL HANDLES MRC NOW     JUN 2020  ArDean Leith
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2019  Health Research Inc.,                         *
+C=* Copyright 1985-2020  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email: spider@health.ny.gov                                        *
 C=*                                                                    *
@@ -222,6 +223,8 @@ c     &            '  In redlin, i1buf,buf:',i1buf(1),buf(1)
 C     ----------------------------- REDLIN1P  ------------------------
 
 C     SHOULD REPLACE THIS WITH: REDLIN_SEL!!!
+C     CALLED BY: BP32F.F, BPCG.F, BPRP3.F, BPRP.F, READV.F, REDVOL.F
+
 
 #ifdef USE_MPI
 C     THE SAME AS REDLIN EXCEPT NO MPI_BCAST CALLED DEPRECATED!!! USE
@@ -234,10 +237,9 @@ C     USE INLINE BUFFER COMMON AREA
       INGEGER         :: LUNT,NB,IREC
       REAL            :: BUF(NB)
 
-      INTEGER         :: LUNC,NIN,NOUT,NECHO,IFOUND,NPROC,NDAT,IERR
+      INTEGER         :: IERR
+      COMMON /IOERR/     IERR
       INTEGER         :: LUNARA,LUNSTK,LUNARB,LUNFLIP
-      COMMON /IOERR/  IERR
-      COMMON /UNITS/  LUNC,NIN,NOUT,NECHO,IFOUND,NPROC,NDAT
       COMMON /LUNARA/ LUNARA(100),LUNSTK(100),LUNARB(100),LUNFLIP(100)
 
 C     INCLUSION FOR OPTIONAL MPI INITIALIZATION.  
@@ -272,50 +274,22 @@ C     ----------------------------- REDLIN_SEL  ------------------------
 C     USE INLINE BUFFER COMMON AREA
       INCLUDE 'INLN_INFO.INC'
 
-      INTEGER    :: LUNT,NB,IREC
+      INTEGER    :: LUNT,NB,IREC,IRTFLG
       REAL       :: BUF(NB)
       LOGICAL    :: MPIBCAST
 
-      INTEGER    :: LUNC,NIN,NOUT,NECHO,IFOUND,NPROC,NDAT,IERR
-      INTEGER    :: LUNARA(100),LUNSTK(100),LUNARB(100),LUNFLIP(100)
-
-      COMMON /IOERR/  IERR
-      COMMON /UNITS/  LUNC,NIN,NOUT,NECHO,IFOUND,NPROC,NDAT
-      COMMON /LUNARA/ LUNARA,LUNSTK,LUNARB,LUNFLIP
-
-      INTEGER    :: LUN,I,IRTFLG
+      INTEGER    ::  IERR
+      COMMON /IOERR/ IERR
 
 C     INCLUSION FOR OPTIONAL MPI INITIALIZATION.  
       INTEGER    :: MYPID = -1
 #include "MPI_INIT.INC"
 
-      IF (ISINLINE(LUNT)) THEN
-C        USE INLINED BUFFER FOR I/O (SEE OPENINLN.F)
-         CALL INLN_REDLIN(LUNT,BUF,NB,IREC)
-         IRTFLG = 0
-         RETURN
-      ENDIF
-
-      LUN = LUNARB(LUNT)
-
-C     ADD LUNARA(LUN) (FOR LABEL REC) AND LUNSTK (FOR STACK OFFSET)
-C     TO IREC TO GET THE CORRECT RECORD NUMBER
-      I = IREC + LUNARA(LUN) + LUNSTK(LUNT)
-
-C     USING IOSTAT; IERR IS SET TO ZERO ON EACH SUCCESSFUL READ. DEC 97 al
-C     IF USING MPI .AND. ONLYONE_RED IS .FALSE. IT ALWAYS READS
-C     OTHERWISE, USING MPI, READS ONLY ON PROCESSOR MYPID = 0 
-      IF (MYPID <= 0) READ(LUN,REC=I,IOSTAT=IERR) BUF
-      
-      IF (IERR .NE. 0) THEN
-         IRTFLG = IERR
-         RETURN
-      ENDIF
-
-      IF (LUNFLIP(LUN) == 1) CALL FLIPBYTESI(BUF,NB,IRTFLG)
+C     USE REDLIN FOR BOTH SPIDER AND MRC FILES
+      CALL REDLIN(LUNT,BUF,NB,IREC)
 
 #ifdef USE_MPI
-      IF (ONLYONE_RED .OR. MPIBCAST) THEN
+      IF (MPIBCAST .AND. .NOT. ONLYONE_RED) THEN
 C        ALWAYS BROADCASTS IF ONLYONE_RED IS .TRUE. WHEN USING MPI
          CALL BCAST_MPI('REDLIN','BUF', BUF,NB,'R', ICOMM,IRTFLG)
          IF (IRTFLG .NE. 0) RETURN
@@ -324,5 +298,11 @@ C        ALWAYS BROADCASTS IF ONLYONE_RED IS .TRUE. WHEN USING MPI
       ENDIF
 #endif
 
-      IRTFLG = 0
+      IRTFLG = IERR
       END
+
+
+
+
+
+
