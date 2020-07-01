@@ -7,7 +7,7 @@ is an image processing system for electron microscopy, especially usefull for si
 over 210,000 lines of Fortran code and 7400 files. The lastest release from July 2020 (which will probably be the 
 final release) contains  support for reading/writing MRC files.  
 
-This latest release is available here or can be downloaded from the 
+This latest release is available [here](http://github.com/spider-em/SPIDER/releases)  or can be downloaded from the 
 [Wadsworth Center](http://spider.wadsworth.org/spider_doc/spider/docs/spi-register.html). 
 
 * Uses:
