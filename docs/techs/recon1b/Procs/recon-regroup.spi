@@ -21,38 +21,37 @@
 
  [wantDalaYN]     = 1     ; Want aligned image  files also? (0 == no)
 
+ ; Get reconstruction parameters & file names
+ @recon-settings([pixsiz],[ang-step],[r2],[alignsh],[prj-radius],[winsiz],[incore-yn],[bp-type],[qsub],[masterCPUs],[groupCPUs])
+ 
  ; -------------------------- Inputs --------------------------
  ; INPUTS:  (Where ### denotes view   *** denotes group)
  
- [avg_dir]        = '../Averages'                        ; Input dir                  (one)
+ [avg_dir]        = '../Averages'                   ; Input selection doc dir    (one)
 
- [old_sel_grp]    = '[avg_dir]/sel_group_best'           ; Old group selection list   (one)
+ [old_sel_grp]    = '[avg_dir]/sel_group_best'      ; Old group selection list   (one)
 
- [old_sel_part]   = '[avg_dir]/sel_part_best_***'        ; Old particle selection lists (one/group)
+ [old_sel_part]   = '[avg_dir]/sel_part_best_***'   ; Old particle selection lists (one/group)
  ;  WIN  MIC_NUM     MIC_WIN  GLOBAL_NUM  GRP
 
+ [init_dir]       = 'iter_0'                     ; Input alignment dir (will override recon-settings)
 
- [old_rec_dir]    = '../rec_0'                           ; Alignment dir               (one)
-
- [old_align_doc]  = '[old_rec_dir]/align_01_***'    ; Old alignment doc files     (one/group)
-
- [old_aligned]    = '[old_rec_dir]/dala_01_***'     ; Old aligned   images stacks (one-stack/group)
-
- 
- [old_win_dir]    = '../win_0'                      ; Old windowed data dir       (one)
-
- [old_unaligned]  = '[old_win_dir]/data_***'        ; Old unaligned image stacks  (one-stack/group)
+ ; Defined in recon-settings.spi: ([init_dir] denotes input directory)
+ ;   [out_align_doc] [init_dir]/align_01_***    Old alignment doc files     (one/group)
+ ;   [init_unaligned] [init_dir]/data_***       Old particle stacks         (one/group)
+ ;   [aligned_images] [init_dir]/dala_***@      Rotationally aligned particle images (one/group)
+ ;   [out_aligned]    [init_dir]/dala_01_***    Old aligned   images stacks (one-stack/group)
 
  ; ------------------------- Outputs -------------------------
  ;
- ; Set in: recon-settings according to [steptype]
- ; OUTPUTS:  (Where [win_dir] denotes input directory,  ### denotes view   *** denotes group) 
- ;  [unaligned_images] [win_dir]/data_***           New particle stacks           (one/group)
- ;  [sel_group]        [win_dir]/sel_group          New group selection file      (one)  
- ;  [sel_parts]        [win_dir]/sel_part_***       New particle selection files  (one/group) 
- ;  [part2global]      [win_dir]/part2glonum_****   Global particle lookup tables (one/new-group)       (OPTIONAL)
- ;  [aligned_images]   [rec_dir]/dala_01_***        New aligned images            (one-stack/new-group) (OPTIONAL)
- ;  [align_doc]        [rec_dir]/align_01_***       New alignment parameter files (one/group)           (OPTIONAL)
+ ; Set in: recon-settings
+ ; OUTPUTS:  (Where [rec_dir] denotes output directory,  ### denotes view   *** denotes group) 
+ ;  [rec_unaligned]    [rec_dir]/data_***           New particle stacks           (one/group)
+ ;  [sel_group]        [rec_dir]/sel_group          New group selection file      (one)  
+ ;  [rec_sel_part]     [rec_dir]/sel_part_***       New particle selection files  (one/group) 
+ ;  [rec_part2global]  [rec_dir]/part2glonum_****   Global particle lookup tables (one/new-group)       (OPTIONAL)
+ ;  [rec_aligned]      [rec_dir]/dala_01_***        New aligned images            (one-stack/new-group) (OPTIONAL)
+ ;  [rec_align_doc]    [rec_dir]/align_01_***       New alignment parameter files (one/group)           (OPTIONAL)
  ;
  ; --------------------- END BATCH HEADER ---------------------
 
@@ -61,14 +60,17 @@
  MD                                 ; Skip unnecessary output 
    TR OFF
 
- ; Get reconstruction parameters & file names
- [steptype] = 2                     ; Reconstruction restacking step
- @recon-settings([steptype],[pixsiz],[ang-step],[r2],[alignsh],[prj-radius],[winsiz],[incore-yn],[bp-type],[qsub])
+; ; Get reconstruction parameters & file names
+; @recon-settings([pixsiz],[ang-step],[r2],[alignsh],[prj-radius],[winsiz],[incore-yn],[bp-type],[qsub],[masterCPUs],[groupCPUs])
  [iter]      = 0
  [next-iter] = [iter] + 1
 
- SYS                                ; Create output directory if needed
-    mkdir -p [win_dir] [rec_dir]
+@backup-dir                         ; Back up pre-existing directory
+  [init_dir]                        ; Directory to check
+  9                                 ; Maximum number of versions to back up
+ 
+ SYS                                ; Create output directory
+    mkdir -p [rec_dir]
 
  UD N [old-num-grps]                ; Find number of old groups (usually micrographs)
    [old_sel_grp]                    ; Old group (micrograph) selection file (input)
@@ -84,30 +86,30 @@
 
    ; Link group selection doc file
    SYS
-     ln -sf  ../[old_sel_grp].$DATEXT  [sel_group].$DATEXT
+     ln -sf  ../[old_sel_grp].$DATEXT  [sel_group] .$DATEXT
 
    ; Loop through old groups
    DO [old-grp] = 1,[old-num-grps]  ; Loop through old groups ----------------------
-     [grp] = [old-grp]   ; part of variables {[sel_parts], [next_group_align], [unaligned_images], [aligned_images]}
+     [grp] = [old-grp]   ; part of variables {[rec_sel_part], [rec_align_doc], [rec_unaligned], [rec_aligned]}
 
      ; Link particle selection doc files
      SYS
-       ln -sf ../[old_sel_part][old-grp].$DATEXT      [sel_parts].$DATEXT
+       ln -sf ../[old_sel_part][old-grp].$DATEXT      [rec_sel_part][grp].$DATEXT
 
      ; Link alignment doc files
      SYS
-       ln -sf ../[old_align_doc][old-grp].$DATEXT     [next_group_align].$DATEXT
+       ln -sf ../[out_align_doc][old-grp].$DATEXT     [rec_align_doc][grp].$DATEXT
 
      IF ( [wantStacksYN] > 0 ) THEN
        ; Stacks requested, link stack files
        SYS
-         ln -sf  ../[old_unaligned][old-grp].$DATEXT    [unaligned_images].$DATEXT
+         ln -sf  ../[init_unaligned][old-grp].$DATEXT    [rec_unaligned][grp].$DATEXT
      ENDIF
 
      IF ( [wantDalaYN] > 0 ) THEN
        ; Want aligned images (dala files), link aligned image files
        SYS
-         ln -sf  ../[old_aligned][old-grp].$DATEXT    [aligned_images].$DATEXT
+         ln -sf  ../[out_aligned][old-grp].$DATEXT    [rec_aligned][grp].$DATEXT
      ENDIF
      
    ENDDO                            ; End group loop -----------------------------
@@ -177,18 +179,18 @@
    [sel_group]                             ; Group selection doc file      (output)
  [grp] = 1
  DE A
-   [sel_parts][grp]
+   [rec_sel_part][grp]
  DE A                 
-   [part2global][grp]
+   [rec_part2global][grp]
  DE A                 
-   [align_doc][grp]
+   [rec_align_doc][grp]
  IF ( [wantStacksYN] > 0 ) THEN
    DE A                 
-     [aligned_images]
+     [rec_aligned][grp]
  ENDIF
  IF ( [wantDalaYN] > 0 ) THEN
    DE A                 
-     [aligned_images]
+     [rec_aligned][grp]
  ENDIF
 
  [outgrp]  = 0                             ; Initialize output group number
@@ -203,7 +205,7 @@
 
      IF ( [wantAlignYN] > 0) THEN
        UD ICE                              ; Close doc file
-         [old_align_doc][ingrp]            ; Old alignment doc file (closed)
+         [out_align_doc][ingrp]            ; Old alignment doc file (closed)
      ENDIF
      UD NEXT E                             ; Close doc file
          [old_sel_part][ingrp]             ; Finished with this particle selection file (closed)
@@ -232,11 +234,11 @@
          echo " New group: {%I3%[outgrp]} has:{%I6%[outpart]} particles."
 
        SD E                                ; Close doc file
-         [sel_parts][outgrp]               ; Finished with this particle selection file (closed)
+         [rec_sel_part][outgrp]            ; Finished with this particle selection file (closed)
        SD E                                ; Close doc file
-         [align_doc][outgrp]               ; Finished with alignment file (closed)
+         [rec_align_doc][outgrp]           ; Finished with alignment file (closed)
        SD E                                ; Close doc file
-         [part2global][outgrp]             ; Global number doc file     (closed)
+         [rec_part2global][outgrp]         ; Global number doc file     (closed)
 
        SD [outgrp], [outgrp],[outpart]     ; Place group # in group selection file
          [sel_group]                       ; Group selection file        (output)
@@ -249,32 +251,38 @@
      [outgrp]    = [outgrp] + 1            ; New output group #
      [grp]       = [outgrp]
 
-     [align_doc] = '[next_group_align]' 
+;;;     [rec_align_doc] = '[next_group_align]' 
 
      IF ( [outgrp] <= [newnumgrps] ) THEN
 
        ; Delete pre-existing files and label new doc files
 
        DE                                    ; Remove existing particle selection file 
-         [sel_parts]                         ; Particle selection  file    (removed)
+         [rec_sel_part][outgrp]              ; Particle selection  file    (removed)
        SD /          WIN        MIC_NUM       MIC_WIN    GLOBAL_NUM        GRP
-         [sel_parts]                         ; particle selection file (output)
+         [rec_sel_part][outgrp]              ; particle selection file (output)
 
        DE                                    ; Remove existing output stack
-         [unaligned_images]                     ; Particle stack file    (removed)            
+         [rec_unaligned][outgrp]             ; Particle stack file    (removed)            
 
        IF ( [wantGlobalYN] > 0) THEN
          DE                                  ; Remove existing global lookup file 
-           [part2global]                     ; Existing global number lookup file (removed)
+           [rec_part2global][outgrp]         ; Existing global number lookup file (removed)
          SD / KEY: WIN-NUM     REG: GLOBAL-NUM  MICROGRAPH   
-           [part2global]                     ; Label for global lookup doc file (output)
+           [rec_part2global][outgrp]         ; Label for global lookup doc file (output)
        ENDIF
 
        IF ( [wantAlignYN] > 0) THEN
-         DE                                  ; Remove existing alignment file 
-           [align_doc]                       ; Existing global alignment file (removed)
+;;        DE                                   ; Remove existing alignment file 
+;;         [new_align][outgrp]                 ; Existing global alignment file (removed)
+        IQ FI [alignExistsYN]
+          [new_align][outgrp]                  ; Existing global alignment file
+        IF ( [alignExistsYN] .EQ. 1) THEN
+          SYS
+            \mv -v [new_align][outgrp].$DATEXT [new_align][outgrp].$DATEXT.bak
+        ENDIF
          SD /  KEY       PSI,    THE,    PHI,   REF#,    EXP#,  CUM.{ROT,   SX,    SY},  NPROJ,   DIFF,  CCROT,     ROT,     SX,     SY,   MIR-CC
-           [align_doc]                       ; New global number doc file (output)
+           [rec_align_doc][outgrp]             ; New global number doc file (output)
        ENDIF
 
      ENDIF
@@ -299,33 +307,33 @@
    ; Restacking
    [grp] = [outgrp]  ; HACK
    CP
-     [old_unaligned][ingrp]@******[inpart]       ; Existing particle stack  (input)
-     [unaligned_images]@******[outpart]          ; New particle stack       (output)
+     [init_unaligned][ingrp]@******[inpart]      ; Existing particle stack  (input)
+     [rec_unaligned][outgrp]@******[outpart]     ; New particle stack       (output)
 
    SD [outpart], [outpart],[mic],[micwin],[glonum],[outgrp]  ; Save new particle data
-     [sel_parts]                              ; New particle selection file   (output)
+     [rec_sel_part][outgrp]                      ; New particle selection file   (output)
 
    IF ( [wantGlobalYN] > 0) THEN
      ; Want global look-up table
      SD [outpart],[glonum],[mic]              ; Save lookup table
-       [part2global][outgrp]                  ; New global llk-up doc file (output)
+       [rec_part2global][outgrp]              ; New global llk-up doc file (output)
    ENDIF
 
    IF ( [wantDalaYN] > 0) THEN
      ; Want old aligned images (dala files)
      CP
-       [old_aligned][ingrp]@******[inpart]       ; Existing aligned particle stack  (input)
-       [aligned_images][outgrp]@******[outpart]  ; New alignedparticle stack       (output)
+       [out_aligned][ingrp]@******[inpart]       ; Existing aligned particle stack  (input)
+       [rec_aligned][outgrp]@******[outpart]     ; New aligned particle stack       (output)
    ENDIF
 
    IF ( [wantAlignYN] > 0 ) THEN
 
      ; Want new alignment doc file
      UD IC [inpart], [r1],[r2],[r3],[r4],[r5],[r6],[r7],[r8],[r9],[r10],[r11],[r12],[r13],[r14],[r15]
-       [old_align_doc][ingrp]                  ; Old alignment doc file     (input)
+       [out_align_doc][ingrp]                  ; Old alignment doc file     (input)
 
      SD [outpart],[r1],[r2],[r3],[r4],[outpart],[r6],[r7],[r8],[r9],[r10],[r11],[r12],[r13],[r14],[r15]
-       [align_doc][outgrp]                     ; New alignment doc file     (output)
+       [rec_align_doc][outgrp]                 ; New alignment doc file     (output)
    ENDIF
  ENDDO
 
@@ -337,17 +345,17 @@
      echo " New group: {%I3%[outgrp]} has:{%I6%[outpart]} particles."
 
    SD E                                    ; Close doc file
-     [sel_parts][outgrp]                   ; Output particle selection file (closed)
+     [rec_sel_part][outgrp]                ; Output particle selection file (closed)
  ENDIF
 
  UD ICE                                    ; Close doc file
-   [old_align_doc][ingrp]                  ; Old alignment doc file    (closed)
+   [out_align_doc][ingrp]                  ; Old alignment doc file    (closed)
   [dummy] = -[newnumgrps]
  SD /          PARTSBEFORE   PARTS_AFTER
-   [sel_group]
+   [sel_group] 
  SD [dummy], [ntot],[part_counter]
-   [sel_group]
-;;UD NEXT E                                 ; Close doc file
+   [sel_group] 
+;;UD NEXT E                                  ; Close doc file
  SD E                                      ; Close doc file
    [sel_group]                             ; Group selection doc file  (closed)
 
@@ -356,9 +364,10 @@
 
  EN
 
- ; Modified 2016-10-13
+ ; Modified 2017-08-04
+ ;    2017-07-28 (trs) -- backs up output directory
  ;    2016-09-15 (trs) -- Estimates memory requirements
- ;    2016-07-07 (agl) -- [steptype] and file locations altered
+ ;    2016-07-07 (agl) -- file locations altered
  ;    2016-03-25 (agl) -- File locations
  ;    2013-12-02 (trs) -- Made numbering for each group consistent with RESTACK-N-CTF
  ;    2013-10-16 (agl) -- Modernized syntax, rewritten

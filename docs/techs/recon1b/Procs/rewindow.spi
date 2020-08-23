@@ -4,7 +4,7 @@
  ;
  ; ORIGIN:   Adapted from lfc_pick.spi, pickparticle.spi    
  ;
- ; PURPOSE:  Repicks particles from micrographs
+ ; PURPOSE: Repicks particles from micrographs
  ;
  ; REQUIRES: convert-p.spi
  ;
@@ -12,13 +12,17 @@
 
  ; ----------- Parameters --------------
 
- [deci] = 0  ; Decimation factor (0 = get value from  param file)
-
- ; [deci] = Decimation factor for 'DC S' operation
- ;      0 = Get value from param file
- ;      1 = full sized image
- ;      2 = 1/2 size
- ;      4 = 1/4 size
+ [noiseRefNum]    = -1   ; Noise-reference to use (-1: automatically selected image)
+ [excludeEdgesYN] = 1    ; Exclude particles on micrograph edge (0 == Keep)
+ [flipYN]         = 1    ; Flip coordinates? (1 == Yes)
+ [numProcs]       = 0    ; Number of processors to use (0 == All)
+ 
+ [decimate]       = 0    ; Decimation factor (0 = get value from  param file)
+ ; [decimate] = Decimation factor for 'DC S' operation
+ ;    0 = get value from param file
+ ;    1 = full sized image
+ ;    2 = 1/2 size
+ ;    4 = 1/4 size
 
  ; ----------- Input files --------------
 
@@ -26,19 +30,23 @@
 
  [sel_mic] = '../sel_micrograph'             ; Micrograph selection doc file  (one)    
 
- [micgr]   = '../Micrographs/mic{****[mic]}' ; Micrograph images
+ [micgr] = '../Micrographs/flip{****[mic]}'  ; Micrograph images
 
-![sndc]    = 'coords/sndc_{****[mic]}'       ; Window center coordinates doc file
- [sndc]    = 'coords/pkcoor_{****[mic]}'     ; Window center coordinates doc file
+ [sndc] = 'coords/pkcoor_{****[mic]}'        ; Window center coordinates doc file
 
- [noise]   = '../Particles/noise'            ; Noise file                    (one)
+ [noise_ref_random] = '../Particles/noise'   ; noise reference (see [noiseRefNum])
+
+ [noise_ref_stack] = 'tmpnoise/noi***'       ; noise-reference stack (if manually selected -- see [noiseRefNum])
 
  ; ----------- Output files --------------
 
- [win_dir] = 'win'                               ; Output directory for particle images
+ [win_dir]      = 'win'                                 ; Output directory for particle images
 
-![ser]     = '[win_dir]/winser_{****[mic]}@'     ; Particle image stacks
- [ser]     = '[win_dir]/data_bymic_{****[mic]}@' ; Particle image stacks
+ [mic_stack]    = '[win_dir]/data_bymic_{****[mic]}@'   ; Particle image stacks
+ 
+ [mic_part_doc] = 'win/sel_part_****'                   ; Particle selection file (one/micrograph)
+
+ [edge_parts]   = '[win_dir]/doc-edge-part'             ; Particles off edge      (one)
 
  ; ----------- END BATCH HEADER -----------
 
@@ -55,14 +63,14 @@
 
  MD                        ; Use all available processors
    SET MP
-   0 
+   [numProcs]
  MD                        ; Skip unnecessary output 
    VB OFF
  MD                        ; Skip unnecessary output 
    TR OFF
  MY FL
 
- [out] = 'out{****[mic]}'  ; Temp. SPIDER file for conversions
+;;; [out] = 'out{****[mic]}'  ; Temp. SPIDER file for conversions
 
 
  ; Get window size from parameter file
@@ -79,9 +87,28 @@
 
  ; Create directory if necessary
  SYS
-    echo mkdir -p [win_dir]
+    mkdir -p [win_dir]
  
+ IF ([excludeEdgesYN] .GE. 1) THEN
+    SYS
+      echo " Edge exclusion set to ON (Particles near edges will be skipped)" ; echo
+ ELSE
+    SYS
+      echo " Edge exclusion set to OFF (Particles near edges will be kept)" ; echo
+ ENDIF
 
+ IF ([flipYN] .GE. 1) THEN
+   SYS
+     echo " Flipping coordinates in y" ; echo
+ ENDIF
+ 
+ [offEdgeCounter] = 0
+ 
+ DE
+ [edge_parts]
+ SD /       MIC_NUM       MICPART      X_TOPLEFT     Y_TOPLEFT    X_BOT_RIGHT   Y_BOT_RIGHT
+ [edge_parts]
+ 
  MY FL
 
  ; Loop over all micrographs ----------------------------------------------------
@@ -90,10 +117,10 @@
      [sel_mic]
    IF ( [key] <= 0 ) EXIT
 
-   @convert-p([deci])
-     [params]          ; Parameter file
-     [micgr]           ; Input micrograph
-     [out]             ; Template for output SPIDER file
+;   @convert-p([decimate])
+;     [params]          ; Parameter file
+;     [micgr]           ; Input micrograph
+;     [out]             ; Template for output SPIDER file
 
    UD N  [n]           ; Get number of particles in this micrograph
      [sndc]
@@ -116,51 +143,125 @@
      [noise]
      [temp_noise_incore]
    
+   ; copy noise-reference into memory
+   IF ([noiseRefNum] .LE. 0) THEN
+     CP
+       [noise_ref_random]
+       [temp_noise_incore]
+   ELSE
+     CP
+       [noise_ref_stack][noiseRefNum]
+       [temp_noise_incore]
+   ENDIF
+
+   ; Get micrograph dimensions
+   FI H [micXDim],[micYDim]
+     [micgr]
+     NX,NY
+   
+   [micPartNum] = 0
+   
    ; Loop through particles
-   DO  [part-key] = 1,[n]
+   DO  [partKey] = 1,[n]
       ; read x-coord, y-coord
-      UD IC [part-key], [xcenter],[ycenter]   ; [mic-slice],[peak-height]   ; (last 2 not used)
+      UD IC [partKey], [xcenter],[ycenter]   ; [mic-slice],[peak-height]   ; (last 2 not used)
         [sndc]
       
-      [x-topleft] = [xcenter] - [half-xdim]
-      [y-topleft] = [ycenter] - [half-ydim]
+      IF ([flipYN] .GE. 1) [ycenter] = [micYDim] - [ycenter]
       
-      WI
-        [out]
-        [temp_windowed]
-        [sp_winsiz],[sp_winsiz]
-        [x-topleft],[y-topleft]  ; Top-left coordinates
+      [topLeftX] = [xcenter] - [half-xdim]
+      [topLeftY] = [ycenter] - [half-ydim]
+      [bottomRightX] = [xcenter] + [half-xdim]
+      [bottomRightY] = [ycenter] + [half-xdim]
       
-      RA
-        [temp_windowed]
-        [temp_ramp_corrected]
+      ; Check that coordinates are not off the edge
+      [offMicYN] = 0  ; initialize
+      IF ([topLeftX] .LT. 1) [offMicYN]=1
+      IF ([topLeftY] .LT. 1) [offMicYN]=1
+      IF ([bottomRightX] .GT. [micXDim]) [offMicYN]=1
+      IF ([bottomRightY] .GT. [micYDim]) [offMicYN]=1
+        
+      IF ([offMicYN] .EQ. 1) then
+         [offEdgeCounter] = [offEdgeCounter] + 1
+        
+         SD [offEdgeCounter], [mic],[partKey], [topLeftX],[topLeftY],[bottomRightX],[bottomRightY]
+           [edge_parts]
+      ENDIF
       
-      ; Normalize as per histogram
-      CE FIT
-        [temp_noise_incore]      ; (input)
-        [temp_ramp_corrected]    ; (input)
-        [temp_inverted_mask]     ; (input)
-        [ser]{******[part-key]}
+      [excludeParticleYN] = [excludeEdgesYN]*[offMicYN]
+      ; (The only condition where the value is 1 is if [excludeEdgesYN] AND [offMicYN] are 1.)
+      
+      IF ([excludeParticleYN]. EQ. 0) then
+      
+        ; increment particle-counters
+        [micPartNum] = [micPartNum] + 1
+        
+        WI
+          [micgr]   ; WAS [out]
+          [temp_windowed]
+          [sp_winsiz],[sp_winsiz]
+          [topLeftX],[topLeftY]  ; Top-left coordinates
+      
+        RA
+          [temp_windowed]
+          [temp_ramp_corrected]
+      
+        ; Normalize as per histogram
+        CE FIT
+          [temp_noise_incore]      ; (input)
+          [temp_ramp_corrected]    ; (input)
+          [temp_inverted_mask]     ; (input)
+          [mic_stack]{******[micPartNum]}
+        
+      ENDIF
    ENDDO
    
    UD ICE
      [sndc]
 
-   [part] = [part]+[n]  ; Increment the particle counter
+   ; Write selection doc
+   IF ([micPartNum] .GE. 1) THEN
+     DOC CREATE
+       [mic_part_doc][mic]
+       1                   ; Column # to populate
+       1-[micPartNum]
+   ENDIF
 
-   DE                 ; Delete the temporary SPIDER file
-     [out]
+   [part] = [part]+[micPartNum]  ; Increment the particle counter
+
+;;   DE                 ; Delete the temporary SPIDER file
+;;     [out]
 
    SYS
-     echo ' 'Picked:  {%I5%[n]} images from micrograph: {%I5%[mic]}
- ENDDO
+     echo ' 'Picked:  {%I5%[micPartNum]} images from micrograph: {%I5%[mic]}
+ 
+ ENDDO                  ; End micrograph loop
+ 
+ SD E
+ [edge_parts]
+
+ ; If any particles were off the edge...
+ IF ([offEdgeCounter] .GT. 0) then
+    IF ([excludeEdgesYN] .GE. 1) then
+        vm
+        echo ; echo "Found {****[offEdgeCounter]} particles off the edge of the micrograph and were not windowed" ; echo
+    ELSE
+        vm
+        echo ; echo "Found {****[offEdgeCounter]} particles off the edge of the micrograph and were windowed anyway" ; echo
+    ENDIF
+ ENDIF
 
  SYS
    echo ' 'Total picked particles:  {%I0%[part]}; echo ' '
 
- EN D
+ EN 
 
- ; Modified 2013-10-16
+ ; Modified 2016-11-09
+ ;    2016-11-09 (trs) -- error-checking in case no particles after edge exclusion
+ ;    2016-04-26 (trs) -- can choose another of the noise references from make-noise-img.spi
+ ;    2016-02-03 (trs) -- added option to flip coordinates
+ ;    2016-02-03 (trs) -- no longer converts micrograph, should exist in SPIDER format already
+ ;    2015-12-16 (trs) -- added sel_part output
  ;    2013-10-16 (agl) -- modernized
  ;    2012-07-19 (trs) -- creates output directory if needed
  ;    2012-05-03 (trs) -- convert-p no longer uses micrograph# as an input

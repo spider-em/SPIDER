@@ -63,17 +63,46 @@
  SYS
    echo    "  Projection radius: {%I0%[prj-radius]}" ; echo
 
- ; Show alignment and projection radii on center slice of reference volume
- !@refine-show-r2([r2],[alignsh],[prj-radius])
- !  final/vol_01_s1            ; Reference volume
+ SYS                         ; Create output directories if not present
+   mkdir -p [out_dir] [work_dir]
 
  SD /     ITERATION     MASKED-RES    RESOLUTION
-   [iter_resol]               ; Resolution doc file              (output)
+   [iter_resol]              ; Resolution doc file              (output)
  SD E     
-   [iter_resol]               ; Resolution doc file              (finished)
+   [iter_resol]              ; Resolution doc file              (finished)
 
- UD N [num-grps]              ; Find number of groups
-   [sel_group]                ; Group selection file      (input)
+ UD N [num-grps]             ; Find number of groups
+   [sel_group]               ; Group selection file      (input)
+
+ IF ( [iter1] == 1 ) THEN
+   ; Ensure that starting input files exist
+   [iter] = 1
+
+   DO [s] = 1,2
+     ; Create subset volumes from initial model 
+     CP 
+       [vol_orig]            ; Starting initial model == reference volume
+       [vol_s]               ; Starting subset reference volume  
+   ENDDO
+ 
+   DO [grp] = 1,[num-grps]
+     ; Must create odd and even particle selection lists for all groups
+     DE
+       [sel_parts]_s1        ; Odd  particle selection doc file    (removed)         
+     DE
+       [sel_parts]_s2        ; Even particle selection doc file    (removed)         
+
+     DOC SPLIT
+       [sel_parts]           ; Particle selection doc file         (input)
+       [sel_parts]_s1        ; Odd  particle selection doc file    (output)         
+       [sel_parts]_s2        ; Even particle selection doc file    (output)         
+   ENDDO
+ ENDIF
+
+ ; Show alignment and projection radii on center slice of reference volume
+ [s] = 1
+ !@refine-show-r2([r2],[alignsh],[prj-radius])
+ !  final/vol_01_s1            ; Reference volume
 
  IF ( [smallang-yn] == 1 ) THEN
    ; List desired offset angles for reference projections in a doc file.
@@ -90,20 +119,6 @@
      @pub-prjrefs([iter],1,[prj-radius],[qsub])
 
    ENDIF
-
-   DO [s] = 1,2               ; Loop over resolution subsets ------------------
-
-     SYS
-       echo  " Iteration: {%I0%[iter]}  Projecting: [vol_s]   From: {%I0%[num-ang]} angles" 
-
-     ; Create stacks holding angular reference projections from both current reference volumes.
-     PJ 3F                    ; Projection operation
-       [vol_s]                ; Vol from previous iteration      (input) 
-       [prj-radius]           ; Radius of object
-       1-[num-ang]            ; Number of ref. angles used    
-       [iter_refangs]         ; Ref. angles doc file             (input)
-       [ref_projs_s]@*****    ; Template for ref. projections    (output) 
-   ENDDO
 
    ; Process all groups serially one-by-one
 

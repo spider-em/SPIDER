@@ -18,37 +18,43 @@
  ;
  ; USAGE:   clean ; spider spi/mrf @make-noise-img
  
- ; ----------- Registers ------------------------
+ ; --------------- Registers ------------------------
 
- [v95] = 1000        ; Size of large window (area to be examined)
- [v98] = 1           ; 1 = delete temp doc files, 0 = don't delete
+ [viewYN]     = 2           ; Open viewer automatically? (1: final image, 2: all images)
+ [micNum]     = -1          ; Micrograph from which to window noise image (-1: automatic)
+ [micWinSize] = 2000        ; Size of large window (area to be examined)
+ [cleanYN]    = 1           ; Delete temp doc files? (1 = delete, 0 = don't delete)
 
- ; ----------- Input files --------------
+ ; ---------------- Input files -------------------
 
- [params]   = '../params'              ; Parameter file 
+ [params]   = '../params'                           ; Parameter file 
 
- [raw]      = '../Micrographs/raw0001' ; Raw micrograph
+ [mic]      = '../Micrographs/raw{****[micNum]}'    ; Raw micrograph
+ 
+ [mic_list] = '../Power_Spectra/defocus'            ; Micrograph list (optional, needed if micrograph chosen automatically)
+                                                    ; If a defocus doc file, will sort by 2nd column (defocus)
 
- ; ----------- Output files --------------
+ ; --------------- Output files ------------------
 
  [noise]    = 'noise'                  ; Selected output noise window
 
  [ndir]     = 'tmpnoise'               ; Directory for noise images
 
- [noisewin] = 'noi'                    ; Series of output noise windows
-
- [mic]      = 'jnktmpmic'              ; SPIDER format micrograph (deleted)
+ [output]   = '[ndir]/noi'             ; Series of output noise windows
 
  ; -------------- END BATCH HEADER --------------------------
 
  SYS
    mkdir -p [ndir] 
 
- [output]     = '[ndir]/[noisewin]'    ; Use this path for output files
- [docnoise]   = '[ndir]/docnoise'      ; Doc file of window statistics
- [docsort]    = '[ndir]/docsort'       ; Sorted doc file
- [docvar]     = '[ndir]/docvar'        ; Doc file of local variance
- [docvarsort] = '[ndir]/docvarsort'    ; Doc file of sorted local variance
+ ; Temporary files
+ [docnoise]            = '[ndir]/docnoise'      ; Doc file of window statistics
+ [docsort]             = '[ndir]/docsort'       ; Sorted doc file
+ [docvar]              = '[ndir]/docvar'        ; Doc file of local variance
+ [docvarsort]          = '[ndir]/docvarsort'    ; Doc file of sorted local variance
+ [temp_defocus_sorted] = 'tmpdocdefocus-sort'   ; Sorted defocus doc (can use sel_micrograph too)
+ [temp_noise_win]      = '_1'                   ; Windowed noise image
+ [temp_mic_win]        = '_2'                   ; Windowed micrograph
 
  ; Delete the doc files if they already exist
  DE
@@ -62,44 +68,79 @@
 
  UD 17,[sp_winsiz]     ; Get the window size
    [params]
+   
+ IF ([micNum] .LT. 1) THEN
+   ; Determine micrograph# to use
+   UD N x99,[ncols]
+     [mic_list]
+   
+   IF ([ncols] .GT. 2) THEN
+     [ncols] = 2
+   ELSE
+     [ncols] = 1
+   ENDIF
+   ; (Assuming 2nd column is defocus value, otherwise will sort by first column, assumed to be micrograph#)
+   
+   ; Sort defocus doc
+   DOC SORT
+     [mic_list]
+     [temp_defocus_sorted]
+     [ncols]                      ; Column# to sort
+     Y                            ; Renumber?
+     
+   [one] = 1
+   
+   ; Get first micrograph # if not specified
+   IF ( [micNum] <= 0 ) THEN
+     UD [one], [micNum]
+       [temp_defocus_sorted]
+     UD E
+    
+     SYS
+       echo ' Will pick noise reference from micrograph [mic]' ; echo
+    
+     DE
+       [temp_defocus_sorted]
+   ENDIF
+ ENDIF
 
  [deci] = 1
- @convert-p([deci])
-   [params]            ; Parameter file
-   [raw]               ; Micrograph                  (input)
-   [mic]               ; SPIDER file                 (output)
+; @convert-p([deci])
+;   [params]            ; Parameter file
+;   [raw]               ; Micrograph                  (input)
+;   [mic]               ; SPIDER file                 (output)
 
- [v30] = 30            ; Use the top (30) with smallest std_dev
- [v50] = 50            ; Percent overlap of the small windows
+ [lowest30sd]     = 30            ; Use the top (30) with smallest std_dev
+ [percentOverlap] = 50            ; Percent overlap of the small windows
 
  ; ----------------------------------------------------------
  ; The large window is at the center of the input image.
- ; [v91] =  X upper left corner of large window
- ; [v92] =  Y upper left corner of large window
+ ; [micTopLeftX] =  X upper left corner of large window
+ ; [micTopLeftY] =  Y upper left corner of large window
 
- FI H [v37],[v38]      ; Get file size
+ FI H [micXDim],[micYDim]      ; Get file size
    [mic]              ; Micrograph                 (input)
    NX,NY
 
- IF ([v95].GT.[v37]) [v95] = [v37]
- IF ([v95].GT.[v38]) [v95] = [v38]
+ IF ([micWinSize].GT.[micXDim]) [micWinSize] = [micXDim]
+ IF ([micWinSize].GT.[micYDim]) [micWinSize] = [micYDim]
 
- [v91] = ([v37] - [v95]) / 2
- [v92] = ([v38] - [v95]) / 2
- IF ([v91].LT.1) [v91] = 1
- IF ([v92].LT.1) [v92] = 1
+ [micTopLeftX] = ([micXDim] - [micWinSize]) / 2
+ [micTopLeftY] = ([micYDim] - [micWinSize]) / 2
+ IF ([micTopLeftX].LT.1) [micTopLeftX] = 1
+ IF ([micTopLeftY].LT.1) [micTopLeftY] = 1
 
  ; ----------------------------------------------------------
 
- ; [v81] = start x for each window 
- ; [v82] = start y for each window
+ ; [winTopLeftX] = start x for each window 
+ ; [winTopLeftY] = start y for each window
 
- [v51] = 100 / [v50]
- [v41] = ([v95]/[sp_winsiz]) * [v51]  ; Number of windows in X and Y
- [v41] = [v41] - 1
- [v97] = int([sp_winsiz] / [v51])     ; Increment for start window coords
+ [ratio] = 100 / [percentOverlap]
+ [numWin]    = ([micWinSize]/[sp_winsiz]) * [ratio]    ; Number of windows in X and Y
+ [numWin]    = [numWin] - 1
+ [increment] = int([sp_winsiz] / [ratio])              ; Increment for start window coords
 
- [v11] = 1                            ; A counter for incrementing keys
+ [counter] = 1                                         ; A counter for incrementing keys
 
  ; If the doc files already exist, delete them
  DE
@@ -113,25 +154,26 @@
 
  ; First Loop ------------------------------------------------
 
- DO [v22] = 1,[v41]    ; Y loop
-   DO [v21] = 1,[v41]    ; X loop
+ DO [xkey] = 1,[numWin]      ; Y loop
+   DO [ykey] = 1,[numWin]    ; X loop
 
-      [v81] = [v91] + [v97] * ([v21] - 1)  ; X UL corner of window
-      [v82] = [v92] + [v97] * ([v22] - 1)  ; Y UL corner of window
+      [winTopLeftX] = [micTopLeftX] + [increment] * ([ykey] - 1)    ; X UL corner of window
+      [winTopLeftY] = [micTopLeftY] + [increment] * ([xkey] - 1)    ; Y UL corner of window
 
       WI
         [mic]
-        _1
-        [sp_winsiz],[sp_winsiz]           ; Dimensions
-        [v81],[v82]                       ; Top left coords
+        [temp_noise_win]
+        [sp_winsiz],[sp_winsiz]                                     ; Dimensions
+        [winTopLeftX],[winTopLeftY]                                 ; Top left coords
 
-      FS [v71],[v72],[v73],[v74]
-        _1
+      ; Get standard deviation
+      FS [v71],[v72],[v73],[stdev]
+        [temp_noise_win]
 
-      SD [v11], [v74], [v81],[v82]        ; Save key,std_dev,x,y
+      SD [counter], [stdev], [winTopLeftX],[winTopLeftY]              ; Save key,std_dev,x,y
         [docnoise]
 
-      [v11] = [v11] + 1
+      [counter] = [counter] + 1
 
    ENDDO
  ENDDO
@@ -144,89 +186,104 @@
    1 
    Y
 
- UD N,[v75]                     ; Get the number of entries
+ UD N, [numEntries]            ; Get the number of entries
    [docsort]
 
 
- IF ([v75].LT.[v30]) [v30] = [v75]
+ IF ([numEntries].LT.[lowest30sd]) [lowest30sd] = [numEntries]
 
  ; ---------------------------------------------------------
  ; Local variance: ; get the images, measure average of each
  ; quadrant. Calculate mean,var of the 4 averages
 
- DO [v21] = 1,[v30]
+ DO [key] = 1,[lowest30sd]
 
-   UD [v21],[v80],[v81],[v82]   ; Get (key), std_dev, x coord, y coord
+   UD [key],[stdev],[winTopLeftX],[winTopLeftY]   ; Get (key), std_dev, x coord, y coord
      [docsort]
 
    WI 
      [mic]
-     _2
-     [sp_winsiz],[sp_winsiz]    ; Dimensions
-     [v81],[v82]                ; Top left coords
+     [temp_mic_win]
+     [sp_winsiz],[sp_winsiz]        ; Dimensions
+     [winTopLeftX],[winTopLeftY]    ; Top left coords
 
    ; Get data from the four subimages
-   [v93] = 1
-   [v94] = 1
-   [v95] = int([sp_winsiz]/2)
+   [v93] = 1    ; not used?
+   [v94] = 1    ; not used?
+   [micWinSize] = int([sp_winsiz]/2)
 
    ; ------------------------------ 1
 
    WI
-     _2
-     _1
-     [v95],[v95]
+     [temp_mic_win]
+     [temp_noise_win]
+     [micWinSize],[micWinSize]
      1, 1
 
-   FS [v71],[v72],[v73],[v74]
-     _1
+;   FS [v71],[v72],[v73],[v74]
+;     [temp_noise_win]
+;   
+;   [v61] = [v73] ; the average value
    
-   [v61] = [v73] ; the average value
+   FI H [avg1]
+     [temp_noise_win]
 
    ; ------------------------------ 2
    WI
-     _2
-     _1
-     [v95],[v95]
-     [v95]-1,1 
+     [temp_mic_win]
+     [temp_noise_win]
+     [micWinSize],[micWinSize]
+     [micWinSize]-1, 1 
 
-   FS [v71],[v72],[v73],[v74]
-     _1
+;   FS [v71],[v72],[v73],[v74]
+;     [temp_noise_win]
+;
+;   [v62] = [v73] ; the average value
 
-   [v62] = [v73] ; the average value
-
+   FI H [avg2]
+     [temp_noise_win]
+     
    ; ------------------------------ 3
    WI
-     _2
-     _1
-     [v95],[v95]
-     1, [v95]-1 
+     [temp_mic_win]
+     [temp_noise_win]
+     [micWinSize],[micWinSize]
+     1, [micWinSize]-1 
 
-   FS [v71],[v72],[v73],[v74]
-     _1
+;   FS [v71],[v72],[v73],[v74]
+;     [temp_noise_win]
+;
+;   [v63] = [v73]                      ; The average value
 
-   [v63] = [v73]                      ; The average value
-
+   FI H [avg3]
+     [temp_noise_win]
+     
    ; ------------------------------ 4
    WI
-     _2
-     _1
-     [v95],[v95]
-     [v95]-1,[v95]-1 
+     [temp_mic_win]
+     [temp_noise_win]
+     [micWinSize],[micWinSize]
+     [micWinSize]-1,[micWinSize]-1 
 
-   FS [v71],[v72],[v73],[v74]
-     _1
+;   FS [v71],[v72],[v73],[v74]
+;     [temp_noise_win]
+;
+;   [v64] = [v73]                     ; The average value
 
-   [v64] = [v73]                     ; The average value
+   FI H [avg4]
+     [temp_noise_win]
+     
+   ; mean
+   [avg] = ([avg1] + [avg2] + [avg3] + [avg4]) / 4
+   
+   ; sum (becomes variance of image averages)
+   [var] = 0
+   [var] = [var] + ([avg1] - [avg])**2
+   [var] = [var] + ([avg2] - [avg])**2
+   [var] = [var] + ([avg3] - [avg])**2
+   [var] = [var] + ([avg4] - [avg])**2
 
-   [v65] = ([v61] + [v62] + [v63] + [v64]) / 4.0   ; mean
-   [v68] = 0   ; sum  (becomes variance of averages)
-   [v68] = [v68] + (([v61] - [v65])*([v61] - [v65]))
-   [v68] = [v68] + (([v62] - [v65])*([v62] - [v65]))
-   [v68] = [v68] + (([v63] - [v65])*([v63] - [v65]))
-   [v68] = [v68] + (([v64] - [v65])*([v64] - [v65]))   
-
-   SD [v21], [v68],[v80],[v81],[v82]   ; Put (key), var, std_dev, x coord, y coord
+   SD [key], [var],[stdev],[winTopLeftX],[winTopLeftY]   ; Put (key), var, std_dev, x coord, y coord
      [docvar]
 
  ENDDO
@@ -239,19 +296,19 @@
    Y
 
  ; Get windows sorted by lowest variance
- DO [v21] = 1,[v30]
+ DO [key] = 1, [lowest30sd]
 
-   UD [v21],[v79], [v80],[v81],[v82]   ; Get (key), var, std_dev, x coord, y coord
+   UD [key],[v79], [stdev],[winTopLeftX],[winTopLeftY]   ; Get (key), var, std_dev, x coord, y coord
      [docvarsort]
 
    WI 
      [mic]
-     [output]{***[v21]}
+     [output]{***[key]}
      [sp_winsiz],[sp_winsiz]           ; Dimensions
-     [v81],[v82]                       ; Top left coords
+     [winTopLeftX],[winTopLeftY]                       ; Top left coords
  ENDDO
 
- IF ([v98].EQ.1) THEN
+ IF ([cleanYN].EQ.1) THEN
     DE
       [docnoise]
     DE
@@ -265,20 +322,33 @@
  ENDIF
 
  ; Select one at random
- [v21] = int(RAN(0) * [v30])
+ [randomNum] = int(RAN(0) * ([lowest30sd] - 1)) + 1
 
  CP
-   [output]{***[v21]}
+   [output]{***[randomNum]}
    [noise]
 
  SYS
-   echo '  'Selected: [output]{***[v21]}.$DATEXT  for the noise file ; echo 
+   echo ' 'Selected: [output]{***[randomNum]}.$DATEXT  for the noise file
+ SYS
+   echo ' '
 
- DIS
-   [output]{***[v21]}
-                              ; No options
- DE
-   [mic]
-
+ IF ([viewYN] .EQ. 1) THEN
+   SYS
+     qview [noise].$DATEXT &
+ ELSEIF ([viewYN] .GE. 2) THEN
+   SYS
+     montage-spi -a [output]*.$DATEXT
+ ENDIF
+ 
  EN
+
+ ; Modified 2016-11-09
+ ;    2016-11-09 (trs) -- micrograph list had been required
+ ;    2016-11-09 (trs) -- bug fixes: extra parentheses, random img number was sometimes 0
+ ;    2016-05-24 (trs) -- renamed previously unnamed register variables
+ ;    2016-02-03 (trs) -- added option to display all noise images
+ ;    2016-02-03 (trs) -- no longer converts micrograph, should exist in SPIDER format already
+ ;    2015-10-12 (trs) -- optionally chooses micrograph to choose from
+
  ; </pre></body></html>

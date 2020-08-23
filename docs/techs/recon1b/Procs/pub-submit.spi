@@ -1,4 +1,4 @@
- ([iter],[num-grps],[task],[qsub])
+ ([iter],[num-grps],[task],[qsub],[num-angs])
 
  ; <html><head><title>Runs jobs on parallel cluster</title></head><body><pre>
  ;
@@ -12,6 +12,7 @@
  ;   [num-grps]            Number of parallel groups 
  ;   [task]                Specifies task started by:  pub-refine-start
  ;   [qsub]                Specifies queing use (1 == PBS, 0 == PubSub)
+ ;   [num-angs]            Number of reference projections
  ;
  ; INPUT STRINGS:
  ;   ? Execution script ? [run1]  ; Script to be run by PubSub or PBS
@@ -59,16 +60,72 @@
    ELSE IF ( [qsub] == 2 ) THEN 
      ; Need memory estimate for qsub 
      @memforqsub([task],[grp],[num-angs],[incore-yn],[local-yn],[memMb])
+     
+     SYS
+       echo "Calculated memory estimate: {%i0%[memMb]} MB"
 
-;     IF ( [task] == 2) [memMb]=4500
-;     ; (memforqsub requests 44mb, but job dies at 1447mb.  Volume is 178mb.)
-;
-;     IF ( [task] == 0) [memMb]=171472
-;     ; (memforqsub requests 15293)
+     ; normal refinement
+     IF ( [task] == 0) THEN
+       IF ( [userMem] .LE. 0 ) [memMb]=[userMem]
+     ENDIF
   
+     ; small-angle refinement
+     IF ( [task] == 1) THEN
+       IF ( [smAngMem] .LE. 0 ) [memMb]=[smAngMem]
+     ENDIF
+  
+;     ; reference projections
+;     IF ( [task] == 2) THEN [memMb]=4500
+
+     ; spherical deconvolution
+     IF ( [task] == 3) THEN
+       IF ( [spdMem] .LE. 0 ) [memMb]=[spdMem]
+     ENDIF
+     
+     SYS
+       echo "Requested memory:           {%i0%[memMb]} MB"
+
      SYS                    ; Call qsub for PBS queing
-       qsub -l mem={%i0%[memMb]}mb -v run="[run1] [run2]" qsub.pbs 
-;;;       qsub -l mem={%i0%[memMb]}mb -v run="[run1] [run2] [run3]" qsub.pbs 
+       qsub [pbsFlags] -v run="[run1] [run2]" qsub.pbs 
+     SYS
+       echo qsub [pbsFlags] -v run="[run1] [run2]" qsub.pbs 
+    
+   ; PBSPro w/memory estimate
+   ELSE IF ( [qsub] == 3 ) THEN 
+     ; Need memory estimate for qsub 
+     @memforqsub([task],[grp],[num-angs],[incore-yn],[local-yn],[memMb])
+
+     SYS
+       echo "Calculated memory estimate: {%i0%[memMb]} MB"
+
+     ; normal refinement
+     IF ( [task] == 0) THEN
+       IF ( [userMem] .LE. 0 ) [memMb]=[userMem]
+       [moreFlags] = [proFlags]
+     ENDIF
+  
+     ; small-angle refinement
+     IF ( [task] == 1) THEN
+       IF ( [smAngMem] .LE. 0 ) [memMb]=[smAngMem]
+       [moreFlags] = [proFlags]
+     ENDIF
+  
+;     ; reference projections
+;     IF ( [task] == 2) THEN [memMb]=4500
+
+     ; spherical deconvolution
+     IF ( [task] == 3) THEN
+       IF ( [spdMem] .LE. 0 ) [memMb]=[spdMem]
+       [moreFlags] = [spdFlags]
+     ENDIF
+     
+     SYS
+       echo "Requested memory:           {%i0%[memMb]} MB"
+
+     SYS
+       echo qsub [moreFlags] -v run="[run1] [run2]" qsub.pbspro
+     SYS                    ; Call qsub for PBS queing
+       qsub [moreFlags] -v run="[run1] [run2]" qsub.pbspro
     
    ENDIF
 

@@ -1,4 +1,4 @@
-([task],[grp],[num-angs],[incore-yn],[local-yn],[memMb])
+([task],[grp],[num-angs],[incore-yn],[local-yn],[memMb],[incore-yn])
 
  ; <html><head><title>Estimates memory for parallel job.
  ;                    Creates memory request line for PBS </title></head><body><pre>
@@ -31,7 +31,14 @@
    [unaligned_images]@          ; File             (input)
    NX, MAXIM                    ; Header positions
 
- IF ( [task] < 2 ) THEN      
+; SYS
+;   echo "Task: {%i0%[task]}"
+; SYS
+;   echo "In-core: {%i0%[incore-yn]}"
+; SYS
+;   echo "Local: {%i0%[local-yn]}"
+
+ IF ( [task] < 1 ) THEN      
    ; Estimate memory requirements for refine loop  -----------------------------------
 
    IF ( [userGb] > 0 ) THEN
@@ -44,7 +51,7 @@
 
      [stackMb] = int(4*([winsiz]*[winsiz]*[maxim]) /1e+6) + 1
      [volMb]   = int(4*([winsiz]*[winsiz]*[winsiz])/1e+6) + 1
-     [memMb]   = [stackMb] + 6*[volMb]
+     [memMb]   = int([stackMb] + 6*[volMb]*1.2)
 
      ; Unused estimate from: bp-qsub.spi 
      ;[memMb]  = 1.1*[stackMb] + 3*4.0*[volMb]  ; Fudge factors come from ???
@@ -68,41 +75,36 @@
  ELSEIF ( [task] == 3 ) THEN     
    ; Estimate memory requirements for spherical deconvolution  ------------------------ 
 
-   ; !!!!!!!!  UNIMPLEMENTED 
+   ; Try 41X volume size (which may be upscaled)
+   [memMb]   = int(41*([winsiz]*[winsiz]*[winsiz])/1e+6) + 1
 
  ELSEIF ( [task] == 4 ) THEN     
    ; Estimate memory requirements for pub-align alignment  ---------------------------- 
 
-   IF ( [incore-yn] > 0) THEN
+   [numImgs] = [num-angs]*2
    
-       ; Stack + reference projections (4 bytes per pixel)
-       [memMb]   = 4*[winsiz]*[winsiz]*([maxim] + [num-angs]*2)/1e+6
-       
-       ; Add overhead for SPIDER
-       [memMb] = int([memMb]*1.2)
-       ; (May need to tweak this -- qsub will give an error/warning if limits are exceeded)
-
-       SYS
-         echo " Group: {%I3%[grp]}, estimated memory requirements:  {%i0%[memMb]} Mb"
-            
-   ELSE
-     
-     ; If copying to scratch
-     IF ( [local-yn] > 0) THEN
-     
-       [memMb] = 4*[winsiz]*[winsiz]*[maxim]/1e+6
-       [memMb] = int([memMb] + 1)
-       
-       SYS
-         echo " Group: {%I3%[grp]}, estimated scratch requirements: {%i0%[memMb]} Mb"
-            
-     ELSE
+   IF ( [incore-yn] > 0) [numImgs] = [numImgs] + [maxim]
    
-        ; Not specifying RAM or scratch. Default allocation == 400MB, should be plenty for ref projs(?).
-        [memMb]   = 400
-     ENDIF
-   ENDIF
+   ; Stack + reference projections (4 bytes per pixel)
+   [memMb]   = 4*[winsiz]*[winsiz]*[numImgs]/1e+6
+    
+   ; Add overhead for SPIDER
+   [memMb] = int([memMb]) + 35   
+   ; (May need to tweak this -- qsub will give an error/warning if limits are exceeded)
+   
+ ELSEIF ( [task] == 5 ) THEN     
+   ; Estimate memory requirements for reconstruction  ---------------------------- 
 
+   [numImgs] = [winsiz]*3   ; odd, even, and combined volumes
+   
+   IF ( [incore-yn] > 0) [numImgs] = [numImgs] + [maxim]
+   
+   ; Stack + reference projections (4 bytes per pixel)
+   [memMb]   = 4*[winsiz]*[winsiz]*[numImgs]/1e+6
+    
+   ; Add overhead for SPIDER
+   [memMb] = int([memMb]) + 35   
+   ; (May need to tweak this -- qsub will give an error/warning if limits are exceeded)
    
  ELSEIF ( [task] == 6 ) THEN
   

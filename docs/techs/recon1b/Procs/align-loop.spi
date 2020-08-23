@@ -9,25 +9,24 @@
  ;
  ; PURPOSE: Runs alignment for specified group     
  ;
- ; INPUT REGISTERS (Set on command line or globally):
- 
+ ; ------------------------ Parameter ------------------------------------------
  [numCPUs] = 10      ; Number of processors to use (0 == All)
                      ; Can be overridden from the command line with [numProcs]
- 
+                     
+ ; INPUT REGISTERS (Set on command line or globally):
  ;   [grp]               Current group number 
  ;   [alignsh]           Alignment shift distance
  ;   [r2]                Alignment outer radius
  ;   [incore-yn]         Incore images used
  ;
- ; INPUT FILES: ([win_dir] denotes window directory, '***' denotes group,  '%' denotes subset)
- ;   [sel_parts]         [win_dir]/sel_part_***  Group particle selection files (one/group)
- ;   [unaligned_images]  [win_dir]/data_***      Unaligned image stacks         (one/group)
- ;   [ref_projs]         [rec_dir]/projs_00      Reference projections          (one)
+ ; INPUT FILES: ([init_dir] denotes input directory, '***' denotes group,  '%' denotes subset)
+ ;   [init_sel_part]     [init_dir]/sel_part_***   Group particle selection files (one/group)
+ ;   [init_unaligned]    [init_dir]/data_***       Unaligned image stacks         (one/group)
  ;
- ; OUTPUT FILES: ([rec_dir] denotes recon directory, '$$$$' denotes sync number, and '***' denotes group)
- ;   [next_group_align]  [rec_dir]/align_01_***  Alignment parameter doc files     (one/group)
- ;   [aligned_images]    [rec_dir]/dala_***@     Rotationally aligned particle images (one/group)
- ;   [finished_file]     jnk_sync_$$$$_***       Created when this task is finished   (one)
+ ; OUTPUT FILES: ([init_dir] denotes output directory, '$$$$' denotes sync number, and '***' denotes group)
+ ;   [out_align_doc]     [init_dir]/align_01_***    Alignment parameter doc files     (one/group)
+ ;   [out_aligned]       [init_dir]/dala_***@       Rotationally aligned particle images (one/group)
+ ;   [finished_file]     jnk_sync_$$$$_***          Created when this task is finished   (one)
  ;
  ; -------------------- END BATCH HEADER ----------------------------------------
 
@@ -41,14 +40,15 @@
 
  IF ( [grp] > 0 ) THEN
    ; Get reconstruction parameters & file names
-   [steptype] = 0           ; Alignment step
-   @recon-settings([steptype],[pixsiz],[ang-step],[r2],[alignsh],[prj-radius],[winsiz],[incore-yn],[bp-type],[qsub])
+   @recon-settings([pixsiz],[ang-step],[r2],[alignsh],[prj-radius],[winsiz],[incore-yn],[bp-type],[qsub],[masterCPUs],[groupCPUs])
 
  ELSE
    ; Reconstruction file names already available 
 
    RR [grp]                 ; Input group from caller for inline use
      ? ENTER GROUP ?
+   RR [groupCPUs]           ; Input number of CPUs
+     ? ENTER NUMBER OF CPUS ?
 
    [qsub] = -1              ; For single group
  ENDIF
@@ -60,7 +60,7 @@
  ELSE
    MD                          
      SET MP                   ; Set OMP processors 
-     [numCPUs]
+     [groupCPUs]
  ENDIF
  
 ; IQ DIR [has-scratch]       ; See if there is a local scratch dir.
@@ -90,10 +90,10 @@
    GLO [temp_in_images]  = '_8@' 
 
    FI H [maxim]               ; Find total number of images (not [numparts])
-     [unaligned_images]@      ; Input file needed               (input)
+     [init_unaligned][grp]@     ; Input file needed               (input)
      MAXIM                    ; Max. image number, image size
    CP                         ; Copy unaligned images to inline stack
-     [unaligned_images]@      ; Input file needed                (input)
+     [init_unaligned][grp]@   ; Input file needed                (input)
      [temp_in_images]         ; Incore unaligned images stack    (output)
      [maxim]                  ; Number of images in stack _8@
 
@@ -101,15 +101,15 @@
 
  ELSE
    ; Use existing image stack for input & a temporary stack for output
-   GLO [temp_in_images] = [unaligned_images]@
-   GLO [temp_out_imgs]  = [aligned_images]@
+   GLO [temp_in_images] = [init_unaligned][grp]@
+   GLO [temp_out_imgs]  = [out_aligned][grp]@
  ENDIF
  
  !SYS                         ; Create copy wait time flag file  (unused)
  !   touch [wait_file].$DATEXT 
 
  DE                           ; Delete existing files  
-   [next_group_align]         ; Alignment parameter doc file     (deleted)
+   [out_align_doc]            ; Alignment parameter doc file     (deleted)
  
  ; Find reference projection matching current aligned image
 
@@ -123,28 +123,28 @@
    [r1],[r2],[rinc]           ; First, last radial ring, & Skip
    [iter_refangs]             ; Ref. angles file                 (input)
    [temp_in_images]******     ; Template for unaligned images    (input)
-   [sel_parts]                ; Particle selection files         (input)
+   [init_sel_part][grp]        ; Particle selection files         (input)
    *                          ; Alignment parameter doc file     (input)
    0, 0                       ; Angular search restriction
    Y, N, N                    ; Check mir, align first, denoise
-   [next_group_align]         ; Alignment parameter doc file     (output)
+   [out_align_doc]            ; Alignment parameter doc file     (output)
 
  SYS
    echo "  Found alignment parameters for iteration: {%I0%[iter]} Group: {%I3%[grp]}"
 
  ; Apply new rotational alignments to original particle images
- RT SF                        ; Rotate & shift operation
-   [unaligned_images]@******  ; Unaligned stacked image files     (input)
-   [sel_parts]                ; Particle selection file           (input) 
-   6,0,7,8                    ; Reg. #s for angle, scale, & shift
-   [next_group_align]         ; Alignment parameter doc file      (input)
-   [temp_out_imgs]******      ; Current aligned images            (output)
+ RT SF                             ; Rotate & shift operation
+   [init_unaligned][grp]@******    ; Unaligned stacked image files     (input)
+   [init_sel_part][grp]             ; Particle selection file           (input) 
+   6,0,7,8                         ; Reg. #s for angle, scale, & shift
+   [out_align_doc]                 ; Alignment parameter doc file      (input)
+   [temp_out_imgs]******           ; Current aligned images            (output)
  
  ; Save aligned images when doing reconstruction but not during refinement
  IF ( [iter] == 0 ) THEN
    CP                         ; Copy aligned images to file stack
      [temp_out_imgs]          ; Aligned images                    (input)
-     [aligned_images]@        ; Aligned images                    (output)
+     [out_aligned][grp]@      ; Aligned images                    (output)
    DE                         ; Delete stack                        
      [temp_out_imgs]          ; No longer needed                  (deleted)
  ENDIF
@@ -164,7 +164,7 @@
 
  RE                            ; Return to caller
  
- ; Modified 2016-05-25
+ ; Modified 2017-08-04
  ;    2016-05-25 (trs) -- made #CPUs user-defined
 
  ; </pre></body></html>
