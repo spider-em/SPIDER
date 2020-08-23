@@ -2,93 +2,118 @@
 ; FOR CORRESPONDENCE ANALYSIS
 
 ; ----------- Parameters -----------
-[filter-radius1]  = 0.1   ; Fourier radius for input image
-[sd-factor]       = 0.6   ; first threshold == image average plus this number * s.d.
-[filter-radius2]  = 0.1   ; Fourier radius for initial binary mask
-[mask-threshold2] = 0.01  ; threshold for filtered mask
+[sumalignAvgYN]  = -1    ; use sumalign average? (1==YES, 0==NO, -1==If_available)
+[filterRadius1]  = 0.1   ; Fourier radius for input image, absolute frequency
+[factorSD]       = 0.6   ; first threshold == image average plus this number * s.d.
+[filterRadius2]  = 0.1   ; Fourier radius for initial binary mask, absolute frequency
+[maskThreshold2] = 0.01  ; threshold for filtered mask
 
 ; ------------- Input -------------
-fr l
-[input_image]pairwise/rfreeavg001  ; image to binarize
+FR L
+[align_dir]Pairwise                   ; alignment directory
+
+; options for averages (will set [input_image])
+FR L
+[reffree_avg][align_dir]/rfreeavg001  ; reference-free average (see option [sumalignAvgYN])
+FR L
+[sumalign_avg][align_dir]/sumavg001   ; average after sumalign (see option [sumalignAvgYN])
 
 ; ------------- Output -------------
-fr l
-[output_mask]stkmask               ; mask stack (binary mask at slice #4)
+FR L
+[output_mask]stkmask                  ; mask stack (binary mask at slice #4)
 
 ; -------- END BATCH HEADER --------
 
-md
-tr on
+IF ([sumalignAvgYN] .EQ. -1) THEN
+    ; See if sumalign average exists
+    IQ FI [sumalignExists]
+    [sumalign_avg]
 
-; delete pre-existing stack
-de
+    IF ([sumalignExists] .EQ. 1) [sumalignAvgYN] = 1
+ENDIF
+
+IF ([sumalignAvgYN] .EQ. 1) THEN
+    SYS
+    echo "Masking sumalign average [sumalign_avg].$DATEXT" ; echo
+    FR L
+    [input_image][sumalign_avg]
+ELSE
+    SYS
+    echo "Masking reference-free average [reffree_avg].$DATEXT" ; echo
+    FR L
+    [input_image][reffree_avg]
+ENDIF
+
+; Delete pre-existing stack
+DE
 [output_mask]
 
-; filter input image
-fq
+; Filter input image
+FQ
 [input_image]
 [output_mask]@1
-(3)  ; filter type: Gaussian low-pass
-[filter-radius1]
+3  ; filter type: Gaussian low-pass
+[filterRadius1]
 
-; get image avg, s.d.
-fs
+; Get image avg, s.d.
+FS
 [input_image]
-fi [img-avg], [img-sd]
+FI [imgAvg], [imgSD]
 [input_image]
-(9,10)  ; header positions for avg, s.d.
+9,10  ; header positions for avg, s.d.
 
-; calculate threshold
-[img-threshold1] = [img-avg] + [img-sd]*[sd-factor]
+; Calculate threshold
+[imgThreshold1] = [imgAvg] + [imgSD]*[factorSD]
 
-; threshold image
-th m
+; Threshold image
+TH M
 [output_mask]@1  ; INPUT: filtered image
 [output_mask]@2  ; OUTPUT
 B                ; mask _B_elow threshold
-[img-threshold1]
+[imgThreshold1]
 
-; filter thresholded image
-fq
+; Filter thresholded image
+FQ
 [output_mask]@2  ; INPUT: thresholded image
 [output_mask]@3  ; OUTPUT
-(3)              ; filter type: Gaussian low-pass
-[filter-radius1]
+3                ; filter type: Gaussian low-pass
+[filterRadius1]
 
-; threshold filtered mask
-th m
+; Threshold filtered mask
+TH M
 [output_mask]@3  ; INPUT: filtered mask
 [output_mask]@4  ; OUTPUT
 B  ; mask _B_elow threshold
-[mask-threshold2]
+[maskThreshold2]
 
-; copy image to be masked
-cp
+; Copy image to be masked
+CP
 [input_image]
 [output_mask]@5
 
-; apply mask
-mm c
+; Apply mask
+MM C
 [output_mask]@4  ; INPUT: mask
 [output_mask]@5  ; OUTPUT: mask-multiplied image
 
-; invert mask
-ar
+; Invert mask
+AR
 [output_mask]@4  ; INPUT: mask
 [output_mask]@6
--1*(p1-1)
+-1*p1-1
 
-; copy image to be masked
-cp
+; Copy image to be masked
+CP
 [input_image]
 [output_mask]@7
 
-; apply inverted mask
-mm c
+; Apply inverted mask
+MM C
 [output_mask]@6  ; INPUT: inverted mask
 [output_mask]@7  ; OUTPUT: inverted-mask-multiplied image
 
-en d
+EN D
 
-; Modified 2012-04-19
+; Modified 2020-04-07
+;    TODO: change frequency units to Angstroms
 
