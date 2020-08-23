@@ -1,102 +1,121 @@
 ; SHRINKS MICROGRAPHS
 
 ; ------------ Parameters ------------
-[progress-interval]  = 2              ; progress message displayed every Nth micrograph
-[shrinkFactor]       = 5              ; downsampling factor
-[invert-yn]          = 0              ; reverse contrast? (1==yes)
-[filter-radius]      = 0              ; high-pass (Fermi) filter radius, Angstroms (0==no filtration)
-;[filter-radius]      = 1500           ; high-pass (Fermi) filter radius, Angstroms (0==no filtration)
-[temperature-factor] = 2500           ; Fermi filter temperature factor, Angstroms
+[progressInt]  = 2              ; progress message displayed every Nth micrograph
+[shrinkFactor] = 5              ; downsampling factor
+[invertYN]     = 0              ; reverse contrast? (1==yes)
+[hiPassStop]   = 2500           ; high-pass (Butterworth) stop band radius, Angstroms (0==none)
+[hiPassPass]   = 1000           ; high-pass pass band radius, Angstroms
+[loPassPass]   = 30             ; low-pass (Butterworth) pass-band radius, Angstroms (0==none)
+[loPassStop]   = 20             ; low-pass stop-band radius, Angstroms
 
 ; -------------- Inputs --------------
-fr l
+FR L
 [parameter_doc]params                 ; parameter doc file
-fr l
-[FILENUMS]filenums                    ; micrograph list
-fr l
-[input_micros]Micrographs/mic****     ; micrographs
+FR L
+[mic_list]filenums                    ; micrograph list
+FR L
+[input_micros]Micrographs/mic***      ; micrographs
 
 ; -------------- Output --------------
-fr l
-[small_micros]Micrographs/sm-mic****  ; reduced micrographs
+FR L
+[small_micros]Micrographs/sm-mic***   ; reduced micrographs
 
 ; --------- END BATCH HEADER ---------
 
 ; get pixel size
-ud 5,[pixel-size]
+UD 5,[pixelSize]
 [parameter_doc]
-ud e
+UD e
 
 ; convert filter parameters to px^-1
-if([filter-radius].gt.0) then
-    [radius-px]      = [pixel-size]*[shrinkFactor]/[filter-radius]
-    [temperature-px] = [pixel-size]*[shrinkFactor]/[temperature-factor]
-endif
+IF([hiPassStop].GT.0) THEN
+    [hiPassLo] = [pixelSize]*[shrinkFactor]/[hiPassStop]
+    [hiPassHi] = [pixelSize]*[shrinkFactor]/[hiPassPass]
+ENDIF
+
+IF([loPassPass].GT.0) THEN
+    [loPassLo] = [pixelSize]*[shrinkFactor]/[loPassPass]
+    [loPassHi] = [pixelSize]*[shrinkFactor]/[loPassStop]
+ENDIF
 
 ; get #micrographs
-ud n [num-micros]
-[FILENUMS]
+UD N [numMics]
+[mic_list]
 
-vm
+SYS
 echo "Shrinking micrographs by a factor of {%i2%[shrinkFactor]}"; date
 
-if([invert-yn].ge.1) then
-    vm
+IF([invertYN].GE.1) THEN
+    SYS
     echo ; echo "Reversing contrast" ; echo
-endif
+ENDIF
 
 ; loop through micrographs
-do lb1 [index] = 1,[num-micros]
+DO lb1 [index] = 1,[numMics]
     ; get micrograph#
-    ud ic [index], [micro-num]
-    [FILENUMS]
+    UD IC [index], [micNum]
+    [mic_list]
 
-    if (int([index]/[progress-interval]).eq.[index]/[progress-interval]) then
-        vm
-        echo "Working on micrograph #{****[micro-num]}, {****[index]} out of {****[num-micros]}"
-    endif
+    IF (int([index]/[progressInt]).EQ.[index]/[progressInt]) THEN
+        SYS
+        echo "Working on micrograph #{****[micNum]}, {****[index]} out of {****[numMics]}"
+    ENDIF
 
     ; reverse contrast if necessary
-    if([invert-yn].ge.1) then
-        neg
-        [input_micros][micro-num]
+    IF([invertYN].GE.1) THEN
+        NEG
+        [input_micros][micNum]
         _2  ; OUTPUT: inverted image
-    else
+    ELSE
         cp
-        [input_micros][micro-num]
+        [input_micros][micNum]
         _2  ; OUTPUT
-    endif
+    ENDIF
 
     ; shrink image
-    dc s
-    _2  ; WAS [input_micros][micro-num]
-    _1  ; OUTPUT: shrunken image  ; WAS [small_micros][micro-num]
+    DC S
+    _2  ; WAS [input_micros][micNum]
+    _1  ; OUTPUT: shrunken image  ; WAS [small_micros][micNum]
     [shrinkFactor],[shrinkFactor]
 
-    if([filter-radius].gt.0) then
+    IF([hiPassStop].GT.0) then
         ; high-pass filter
-        fq np
+        FQ NP
         _1   ; INPUT: shrunken image
-        [small_micros][micro-num]
-        (6)  ; filter type: Fermi high-pass
-        [radius-px]
-        [temperature-px]
-    else
+        _2   ; WAS [small_micros][micNum]
+        (8)  ; filter type: Butterworth high-pass
+        [hiPassLo],[hiPassHi]
+    ELSE
         cp
         _1   ; INPUT: shrunken image
-        [small_micros][micro-num]
-    endif
-lb1
+        _2   ; WAS [small_micros][micNum]
+    ENDIF
+
+    IF([loPassPass].GT.0) THEN
+        ; high-pass filter
+        FQ NP
+        _2   ; INPUT: shrunken image
+        [small_micros][micNum]
+        (7)  ; filter type: Butterworth low-pass
+        [loPassLo],[loPassHi]
+    ELSE
+        cp
+        _2   ; INPUT: shrunken image
+        [small_micros][micNum]
+    ENDIF
+LB1
 ; end micrograph-loop
 
-ud ice
-[FILENUMS]
+UD ICE
+[mic_list]
 
-vm
+SYS
 echo "Done"; date
 
-en d
+EN D
 
-; Modified 2014-03-12
+; Modified 2017-05-31
+;    2017-05-31 (trs) -- added low-pass option, changed to Butterworth filter
 ;    2014-02-14 (trs) -- added option to reverse contrast
 ;    2014-02-14 (trs) -- bug fix for unfiltered case

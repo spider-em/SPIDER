@@ -2,30 +2,39 @@
 ;
 ; Adapted from refproj.spi
 
-; ------------------- Parameters -------------------
+; -------------- Parameters --------------
 
-[single-class] = 1     ; class number to calculate projections (0==all)
-[dtheta]       = 15    ; angular increment for references (15==83 projections)
+[classNum]     = 1   ; class number to calculate projections (0==all)
+[multirefIter] = -1  ; iteration of multireference alignment to use as input (for multiple classes, <0==last)
+[dtheta]       = 15  ; angular increment for references (15==83 projections)
 
-; --------------------- Inputs ---------------------
-fr l
-[parameter_doc]params                     ; parameter doc file
-fr l
-[class_vol]Volumes/vcla{***[classNum]}    ; class volume template
-fr l
-[class_list]goodviews                     ; list of class volumes (required if multiple classes)
-
-; --------------------- Outputs ---------------------
-fr l
-[pocs_dir]Pocs                                       ; output directory
-fr l
-[ref_angles][pocs_dir]/refangles                     ; reference-angles doc file
-fr l
-[list_projs][pocs_dir]/projlist                      ; list of reference projections
-fr l
-[prj_stack][pocs_dir]/prj_{***[classNum]}@           ; reference-projection stack
+; ---------------- Inputs ----------------
 FR L
-[power_spectrum][pocs_dir]/stkpws_{***[classNum]}@   ; reference-projection stack
+[parameter_doc]params                        ; parameter doc file
+FR L
+[class_vol]Volumes/vcla***                   ; class volume template
+FR L
+[multiref_tracking_doc]Zerodegr/docmultiref  ; list of multireference alignment iterations (if reconstructing multiple classes)
+FR L
+[class_dir]Zerodegr/Multiref{*[iter]}        ; alignment directory (if reconstructing multiple classes)
+FR L
+[class_list][class_dir]/goodviews            ; list of classes (if reconstructing multiple classes)
+
+; ---------------- Outputs ----------------
+FR L
+[pocs_dir]Pocs                    ; output directory
+FR L
+[ref_angles][pocs_dir]/refangles  ; reference-angles doc file
+FR L
+[list_projs][pocs_dir]/projlist   ; list of reference projections
+FR L
+[prj_stack]prj_***                ; reference-projection stack (w/o "@"), in POCS_DIR
+FR L
+[last_prjs]prj-LAST               ; softlink to most recent stack of projections (for SPIRE)
+FR L
+[power_spectrum]stkpws_***        ; power-spectrum stack, in POCS_DIR
+FR L
+[last_pws]stkpws-LAST             ; softlink to most recent stack of power spectra (for SPIRE)
 
 ; ----------------- END BATCH HEADER -----------------
 
@@ -34,14 +43,14 @@ FR L
 [temp_stack] = '_2'
 
 ; get image-dimension
-ud 17,[img-dim]
+UD 17, [imgDim]
 [parameter_doc]
-ud e
+UD E
 
-vm
-echo "if(! -d [pocs_dir]) mkdir [pocs_dir]"|csh
+SYS
+mkdir [pocs_dir]
 
-de 
+DE 
 [ref_angles]
 
 ; compute projection angles
@@ -54,60 +63,78 @@ VO EA [numang]
 [numang] = [numang] - 1
 ; (Last projection is redundant with (0,0,0).)
 
-doc create
+DOC CREATE
 [list_projs]
-(1)           ; column# to fill
-(1-[numang])  ; values to enter
+1           ; column# to fill
+1-[numang]  ; values to enter
 
 ; check if all classes or single class specified
-if([single-class].eq.0) then
+IF ( [classNum] .EQ. 0 ) THEN
+    ; get iteration number
+
+    ; if input iteration-specified
+    IF ( [multirefIter] .GT. 0 ) THEN
+        [iter] = [multirefIter]
+
+    ; if input iteration not specified
+    ELSE
+        ; look for last iteration number
+        UD N [lastIterKey]
+        [multiref_tracking_doc]
+        
+        ; get iteration number
+        UD [lastIterKey], [iter]
+        [multiref_tracking_doc]
+        UD E  ; close doc
+    ENDIF
+
     ; get #classes
-    ud n [num-classes]
+    UD N [numClasses]
     [class_list]
     
-    vm
-    echo "Projecting all {***[num-classes]} classes listed in [class_list]" ; echo
-else
-    [num-classes] = 1
-    [classNum]   = [single-class]
-endif
+    SYS
+    echo "Projecting all {***[numClasses]} classes listed in [class_list]" ; echo
+ELSE
+    [numClasses] = 1
+    [currClass]  = [classNum]
+ENDIF
 
-[prj-radius] = [img-dim]/2 - 1
+[prjRadius] = [imgDim]/2 - 1
 
 ; loop through classes
-do lb3 [class-key] = 1,[num-classes]
+DO LB3 [classKey] = 1,[numClasses]
     ; get class# if not a single class
-    if([single-class].eq.0) then
-        ud ic [class-key], [classNum]
+    IF ([classNum] .EQ. 0) THEN
+        UD IC [classKey], [currClass]
         [class_list]
-    endif
-    ; (If single class, [classNum] will have been set above.)
+    ENDIF
+    ; (If single class, [currClass] will have been set above.)
     
-    de
-    [prj_stack]
     DE
-    [power_spectrum]
+    [pocs_dir]/[prj_stack][currClass]@
+    DE
+    [pocs_dir]/[power_spectrum][currClass]@
     
     MS
     [temp_stack]@
-    (160,160)
+    [imgDim],[imgDim]
     [numang]
 
-    vm
-    echo "Projecting [class_vol]"
+    SYS
+    echo "Projecting [class_vol][currClass]"
 
     ; project volume
     PJ 3Q
-    [class_vol]        ; Volume to be projected          (input)
-    [prj-radius]       ; Radius
-    (1-[numang])       ; List of file numbers
-    [ref_angles]       ; Proj. angles doc file           (input)
-    [prj_stack]@****   ; Template for projection stack   (output)
+    [class_vol][currClass]                  ; Volume to be projected          (input)
+    [prjRadius]                             ; Radius
+    1-[numang]                              ; List of file numbers
+    [ref_angles]                            ; Proj. angles doc file           (input)
+    [pocs_dir]/[prj_stack][currClass]@****  ; Template for projection stack   (output)
     
     ; Loop through projections
     DO LB2 [prjNum] = 1,[numang]
         PW
-        [prj_stack]{****[prjNum]}
+        [pocs_dir]/[prj_stack][currClass]@{****[prjNum]}
         [temp_pws]
         
         SQRT
@@ -116,14 +143,21 @@ do lb3 [class-key] = 1,[num-classes]
         ; (For some reason, writing directly to disk directly didn't work.)
     LB2
     ; End projection-loop
-lb3
+LB3
 ; end class-loop
 
 CP
 [temp_stack]@
-[power_spectrum]
+[pocs_dir]/[power_spectrum][currClass]@
 
-en d
+; create soft links of most recent stacks for SPIRE
+SYS
+cd [pocs_dir] && rm -f [last_prjs].$DATEXT && ln -sv [prj_stack][currClass].$DATEXT      [last_prjs].$DATEXT ; echo
+SYS
+cd [pocs_dir] && rm -f [last_pws].$DATEXT  && ln -sv [power_spectrum][currClass].$DATEXT [last_pws].$DATEXT  ; echo
 
-; Modified 2015-08-13
+EN D
+
+; Modified 2018-02-14
+;    2016-04-20 (trs) -- creates link to more recent projection stack for SPIRE
 ;    2015-08-13 (trs) -- writes (square root of) power spectrum of reference projection

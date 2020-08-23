@@ -1,94 +1,145 @@
 ; MAKE MASK TO ENVELOPE VOLUME
 
 ; --------------------- Parameters ---------------------
-x11 = 85   ; Fourier-filter radius (Angstroms, used multiple times)
-x12 = 0.0001   ; threshold for input volume (check volume stats)
-x13 = 0.02   ; threshold for final mask (range 0..1)
+[classNum]     = 1     ; class number of volume to mask (0==all)
+[multirefIter] = -1    ; iteration of multireference alignment to use as input (for multiple classes, <0==last)
+[filterRadius] = 85    ; Fourier-filter radius (Angstroms, used multiple times)
+[inputThresh]  = 10    ; threshold for input volume (check volume stats)
+[finalThresh]  = 0.02  ; threshold for final mask (range 0..1)
 
 ; ----------------------- Input -----------------------
-fr l
-[parameter_doc]params        ; parameter doc file
-fr l
-[input_vol]Volumes/vcla001   ; volume to mask
+FR L
+[parameter_doc]params                        ; parameter doc file
+FR L
+[input_vol]Volumes/vcla***                   ; volume to mask
+FR L
+[multiref_tracking_doc]Zerodegr/docmultiref  ; list of multireference alignment iterations (if reconstructing multiple classes)
+FR L
+[class_dir]Zerodegr/Multiref{*[iter]}        ; alignment directory (if reconstructing multiple classes)
+FR L
+[class_list][class_dir]/goodviews            ; list of classes (if reconstructing multiple classes)
 
 ; ---------------------- Outputs ----------------------
-fr l
-[unthresholded_mask]Volumes/mask-prethresh   ; unthresholded mask
-fr l
-[final_mask][input_vol]-mask                 ; mask
-fr l
-[masked_vol][input_vol]-masked               ; masked volume
+FR L
+[unthresholded_mask][input_vol]-maskprethresh  ; unthresholded mask
+FR L
+[final_mask][input_vol]-mask                   ; mask
+FR L
+[masked_vol][input_vol]-masked                 ; masked volume
 
 ; ------------------ END BATCH HEADER ------------------
 
 ; Temporary files
-fr l
-[temp_filtered_vol]_1   ; WAS tmpmask1_vol-filt  ; WAS
-fr l
-[thresholded_vol]_2  ; WAS tmpmask2_vol-thresh  ; WAS _2
+FR L
+[temp_filtered_vol]_1
+FR L
+[temp_thresholded_vol]_2
 
 ; get pixel-size
-ud 5, [pixel-size]
+UD 5, [pxsz]
 [parameter_doc]
-ud e
+UD E
 
 ; compute radius in px^-1
-x11 = [pixel-size]/x11
+[filterRadius] = [pxsz]/[filterRadius]
 
-; get initial statistics
-fs
-[input_vol]  ; INPUT
-fi x [fmin],[fmax],[favg]
-[input_vol]  ; INPUT
-8,7,9        ; header positions for min, max, avg
+; check if all classes or single class specified
+IF ( [classNum] .EQ. 0 ) THEN
+    ; get iteration number
 
-vm
-echo "Volume statistics -- FMIN:{%f8.5%[fmin]}, AVG:{%f8.5%[favg]}, FMAX:{%f8.5%[fmax]}"
+    ; if input iteration-specified
+    IF ( [multirefIter] .GT. 0 ) THEN
+        [iter] = [multirefIter]
 
-fq np
-[input_vol]  ; INPUT
-[temp_filtered_vol]
-(3)  ; Gaussian filter
-x11  ; filter radius
+    ; if input iteration not specified
+    ELSE
+        ; look for last iteration number
+        UD N [lastIterKey]
+        [multiref_tracking_doc]
+        
+        ; get iteration number
+        UD [lastIterKey], [iter]
+        [multiref_tracking_doc]
+        UD E  ; close doc
+    ENDIF
 
-th m
-[temp_filtered_vol]
-[thresholded_vol]
-B
-x12  ; first threshold for input volume
+    ; get #classes
+    UD N [numClasses]
+    [class_list]
+    
+    SYS
+    echo "Projecting all {***[numClasses]} classes listed in [class_list]" ; echo
+ELSE
+    [numClasses] = 1
+    [currClass]  = [classNum]
+ENDIF
 
-fq np
-[thresholded_vol]
-[unthresholded_mask]
-(3)  ; Gaussian filter
-x11  ; Fourier-filter radius
+; loop through classes
+DO LB3 [classKey] = 1,[numClasses]
+    ; get class# if not a single class
+    IF ( [classNum] .EQ. 0 ) THEN
+        UD IC [classKey], [currClass]
+        [class_list]
+    ENDIF
+    ; (If single class, [currClass] will have been set above.)
+    
+    ; get initial statistics
+    FS
+    [input_vol][currClass]  ; INPUT
+    FI [fmin],[fmax],[favg]
+    [input_vol][currClass]  ; INPUT
+    8,7,9                   ; header positions for min, max, avg
 
-th m
-[unthresholded_mask]
-[final_mask]  ; OUTPUT
-B
-x13  ; threshold
+    SYS
+    echo "Volume {***[currClass]} -- FMIN: {%f9.5%[fmin]}, AVG:{%f9.5%[favg]}, FMAX:{%f9.5%[fmax]}"
 
-; get #voxels in mask
-fs
-[final_mask]
-fi x [mavg],[xdim],[ydim],[zdim]
-[final_mask]
-9,12,2,1   ; header positions for avg,nsam,nrow,nslice
+    FQ NP
+    [input_vol][currClass]  ; INPUT
+    [temp_filtered_vol]
+    3                     ; Gaussian filter
+    [filterRadius] 
 
-[num-voxels] = [mavg]*[xdim]*[ydim]*[zdim]
+    TH M
+    [temp_filtered_vol]
+    [temp_thresholded_vol]
+    B
+    [inputThresh]  ; first threshold for input volume
 
-vm
-echo "Number of voxels in mask: {*******[num-voxels]}" ; echo
+    FQ NP
+    [temp_thresholded_vol]
+    [unthresholded_mask][currClass]
+    3  ; Gaussian filter
+    [filterRadius] 
 
-cp
-[input_vol]
-[masked_vol]
+    TH M
+    [unthresholded_mask][currClass]
+    [final_mask][currClass]  ; OUTPUT
+    B
+    [finalThresh]
 
-mm c
-[final_mask]
-[masked_vol]  ; OUTPUT
+    ; get #voxels in mask
+    FS
+    [final_mask][currClass]
+    FI [mavg],[xdim],[ydim],[zdim]
+    [final_mask][currClass]
+    9,12,2,1   ; header positions for avg,nsam,nrow,nslice
 
-en d
+    [num-voxels] = [mavg]*[xdim]*[ydim]*[zdim]
 
-; Modified 2015-08-06
+    SYS
+    echo "Volume {***[currClass]} -- Number of voxels in mask: {%i0%[num-voxels]}" ; echo
+
+    CP
+    [input_vol][currClass]
+    [masked_vol][currClass]
+
+    MM C
+    [final_mask][currClass]
+    [masked_vol][currClass]  ; OUTPUT
+LB3
+; End class-loop
+
+EN D
+
+; Modified 2018-02-09
+

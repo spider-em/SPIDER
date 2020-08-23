@@ -6,231 +6,238 @@
 
 [classNum]          = 1      ; volume number
 [numIter]           = 98     ; number of iterations of POCS
-[tilt-angle]        = 49     ; tilt angle
-[yprj-phi]          = 150    ; angle phi for y-projections (Euler angles will be (PHI,90,0))
-[docfileValuesYN]   = 1      ; override parameters below with (optional) filter docfile? (1==docfile, 0==header values)
-[header-type]       = 7      ; filter type (7==Butterworth, 5==Fermi, 3==Gaussian, 1==Tophat)
-[headerParam1]      = 40     ; Butterworth filter pass-band (Angstroms)
-[headerParam2]      = 30     ; Butterworth filter stop-band (Angstroms)
-[progress-interval] = 10     ; progress message written to screen every Nth iteration
+[tiltAngle]         = 49     ; maximum tilt angle
+[yprjPhi]           = 180    ; angle phi for y-projections (Euler angles will be (PHI,90,0))
+[docfileValuesYN]   = 0      ; override parameters below with (optional) filter docfile? (1==docfile, 0==header values)
+[headerType]        = 7      ; filter type (7==Butterworth, 5==Fermi, 3==Gaussian, 1==Tophat)
+[headerParam1]      = 30     ; Butterworth filter pass-band (Angstroms)
+[headerParam2]      = 20     ; Butterworth filter stop-band (Angstroms)
+[progressInterval]  = 10     ; progress message written to screen every Nth iteration
 
 ; ------------------------ Inputs ------------------------
-fr l
+FR L
 [parameter_doc]params                       ; parameter doc file
-fr l
+FR L
 [vol_dir]Volumes                            ; volume I/O directory
-fr l
+FR L
 [filter_doc][vol_dir]/docvolfilt            ; (optional) doc file with filter parameters
-fr l
+FR L
 [class_vol][vol_dir]/vcla{***[classNum]}    ; unaligned experimental volume template
-fr l
+FR L
 [mask][vol_dir]/vcla{***[classNum]}-mask    ; mask
 
 ; ----------------------- Outputs -----------------------
-fr l
+FR L
 [pocs_dir]Pocs                                          ; output directory
-fr l
-[y_projections][pocs_dir]/yprj_{***[classNum]}          ; projection stack
-fr l
+FR L
+[y_projections]yprj_{***[classNum]}                     ; projection stack, in POCS_DIR (w/o "@")
+FR L
+[last_link]yprj-LAST                                    ; softlink to most recent stack of projections (for SPIRE)
+FR L
 [pocs_stats_doc][pocs_dir]/docpocsstats                 ; volume statistcs for each iteration
-fr l
-[pocs_vol][vol_dir]/volpocs{***[classNum]}              ; POCS volume
-fr l
-[filt_pocs_vol][vol_dir]/volpocs{***[classNum]}-filt    ; filtered POCS volume
+FR L
+[pocs_vol][vol_dir]/vcla{***[classNum]}-pocs            ; POCS volume
+FR L
+[filt_pocs_vol][vol_dir]/vcla{***[classNum]}-pocs-filt  ; filtered POCS volume
 
 ; ------------------- END BATCH HEADER -------------------
 
 ; Temporary files
-fr l
+FR L
 [temp_vol_incore]_10
-fr l
+FR L
 [temp_vol_ft]_11
-fr l
+FR L
 [temp_masked_vol]_12
-fr l
+FR L
 [temp_masked_ft]_13
-fr l
+FR L
 [temp_filtered_ft]_14
-fr l
+FR L
 [temp_filtered_vol]_15
 
 ; get pixel-size
-ud 5, [pixel-size]
+UD 5, [pxsz]
 [parameter_doc]
-ud e
+UD E
 
 ; check if filter docfile exists
-iq fi [filterdoc-exists]
+IQ FI [filterdocExists]
 [filter_doc]
 
-if([filterdoc-exists].eq.1) then
-    vm
+IF ( [filterdocExists] .EQ. 1 ) THEN
+    SYS
     echo "[filter_doc].$DATEXT exists"
     
-    if([docfileValuesYN].eq.0) then
-        vm
+    IF ( [docfileValuesYN] .EQ. 0 ) THEN
+        SYS
         echo "Will use filter parameters specified in batch file"
-    else
-        vm
+    ELSE
+        SYS
         echo "Will use filter parameters specified in [filter_doc].$DATEXT"
-    endif
-endif
+    ENDIF
+ENDIF
 
-VM
+SYS
 echo
 
 ; (The only condition where we use the docfile parameters is if the docfile exists AND override=1)
-if([docfileValuesYN]*[filterdoc-exists].ne.0) then
-    ud find [docfileKey], [docfile-classnum],[docfile-filtertype],[docfile-param1],[docfile-param2]
+IF ( [docfileValuesYN]*[filterdocExists] .NE. 0 ) THEN
+    UD FIND [docfileKey], [docfileClassnum],[docfileFiltertype],[docfileParam1],[docfileParam2]
     [filter_doc]
-    (1,[classNum])   ; column# to search, value to search for
-    ud find e
+    1,[classNum]   ; column# to search, value to search for
+    UD FIND E
     [filter_doc]
     
     ; if parameters found, use those
-    if([docfileKey].eq.0) then
-        vm
+    IF ( [docfileKey] .EQ. 0 ) THEN
+        SYS
         echo "Couldn't find info for class #{***[classNum]} in [filter_doc].$DATEXT -- using values in batchfile header..."
         
-        [filter-type]  = [header-type]
+        [filterType]   = [headerType]
         [filterParam1] = [headerParam1]
         [filterParam2] = [headerParam2]
-    else
-        [filter-type]  = [docfile-filtertype]
-        [filterParam1] = [docfile-param1]
-        [filterParam2] = [docfile-param2]
-    endif
+    ELSE
+        [filterType]   = [docfileFiltertype]
+        [filterParam1] = [docfileParam1]
+        [filterParam2] = [docfileParam2]
+    ENDIF
 
 ; use filter parameters in header
-else
-    [filter-type]  = [header-type]
+ELSE
+    [filterType]   = [headerType]
     [filterParam1] = [headerParam1]
     [filterParam2] = [headerParam2]
-endif
+ENDIF
 
-vm
-echo "Class #{***[classNum]} -- Filter type: {*[filter-type]}, Parameter1: {%f6.2%[filterParam1]}, Parameter2: {%f6.2%[filterParam2]}" ; echo
+SYS
+echo "Class #{***[classNum]} -- Filter type: {*[filterType]}, Parameter1: {%f6.2%[filterParam1]}, Parameter2: {%f6.2%[filterParam2]}" ; echo
 
 ; convert filter radii from Angstroms to px^-1
-[filterParam1] = [pixel-size]/[filterParam1]
-[filterParam2] = [pixel-size]/[filterParam2]
+[filterParam1] = [pxsz]/[filterParam1]
+[filterParam2] = [pxsz]/[filterParam2]
 
-vm
+SYS
 echo "Running [class_vol].$DATEXT through {***[numIter]} iterations of POCS" ; date ; echo
 
-cp
+CP
 [class_vol]
 [temp_vol_incore]
 
 ; get volume dimension
-fi x [ydim]
+FI [ydim]
 [temp_vol_incore]
-(2)   ; header position for NROW
+2   ; header position for NROW
 
-[mid-y] = ([ydim]/2) + 1
+;;;[midY] = ([ydim]/2) + 1
 
-vm
-echo "if(! -d [pocs_dir]) mkdir [pocs_dir]"|csh
+SYS
+mkdir -p [pocs_dir]
 
-[sliceNum] = 1   ; WAS [iter]  = 0
+[sliceNum] = 1
 
 DE
-[y_projections]@
+[pocs_dir]/[y_projections]@
 
 ; project in y
-pj 3
+PJ 3
 [temp_vol_incore]
 [ydim],[ydim]
-[y_projections]@{***[sliceNum]}
-([yprj-phi],90,0)
+[pocs_dir]/[y_projections]@{***[sliceNum]}
+[yprjPhi],90,0
 
 ; Fourier transform
-ft
+FT
 [temp_vol_incore]
 [temp_vol_ft]
 
-de
+DE
 [pocs_stats_doc]
 
 ; loop through iterations
-do lb1 [iter] = 1,[numIter]
-    if (int([iter]/[progress-interval]).eq.[iter]/[progress-interval]) then
-        vm
+DO LB1 [iter] = 1,[numIter]
+    IF ( INT([iter]/[progressInterval]) .EQ. [iter]/[progressInterval] ) THEN
+        SYS
         echo "Working on iteration #{***[iter]} out of {***[numIter]}"
-    endif
+    ENDIF
     
     ; multiply by mask
-    mu
+    MU
     [temp_vol_incore]   ; initially input volume, will be overwritten by CV REPL
     [mask]
     [temp_masked_vol]   ; OUTPUT
     *                   ; no more files to multiply
 
     ; Fourier transform
-    ft
+    FT
     [temp_masked_vol]
     [temp_masked_ft]
     
     ; Fourier filter
-    ff
+    FF
     [temp_masked_ft]
     [temp_filtered_ft]
-    (7)   ; Butterworth low-pass
+    7   ; Butterworth low-pass
     [filterParam1],[filterParam2]
 
     ; convex sets, projector replace
-    cv repl
+    CV REPL
     [temp_filtered_ft]   ; INPUT (overwritten)
     [temp_vol_ft]        ; INPUT
     C                    ; _C_onical tilting
-    [tilt-angle]
+    [tiltAngle]
 
     ; inverse Fourier
-    ft
+    FT
     [temp_filtered_ft]
     [temp_vol_incore]
 
     ; find statistics
-    fs [fmax],[fmin],[favg],[stdev]
+    FS [fmax],[fmin],[favg],[stdev]
     [temp_vol_incore]
 
     [sliceNum] = [iter] + 1
     
     ; write to doc file
-    sd [iter], [fmax],[fmin],[favg],[stdev], [sliceNum]
+    SD [iter], [fmax],[fmin],[favg],[stdev], [sliceNum]
     [pocs_stats_doc]
 
     ; project in y
-    pj 3
+    PJ 3
     [temp_vol_incore]
     [ydim],[ydim]
-    [y_projections]@{***[sliceNum]}
-    ([yprj-phi],90,0)
-lb1
+    [pocs_dir]/[y_projections]@{***[sliceNum]}
+    [yprjPhi],90,0
+LB1
 ; end iteration-loop
+
+; create soft link of most recent projection stack for SPIRE
+SYS
+cd [pocs_dir] && rm -f [last_link].$DATEXT && ln -sv [y_projections].$DATEXT [last_link].$DATEXT ; echo
 
 ; close doc
 SD /        FMAX          FMIN          FAVG          S.D.
 [pocs_stats_doc]
-sd e
+SD E
 [pocs_stats_doc]
 ; copy to final
-cp
+CP
 [temp_vol_incore]
 [pocs_vol]
 
 ; filter
-fq np
+FQ NP
 [pocs_vol]
 [filt_pocs_vol]
-[filter-type]
+[filterType]
 [filterParam1],[filterParam2]
 
-vm
+SYS
 echo ; echo "Done" ; date
 
-en d
+EN D
 
-; Modified 2015-08-13
+; Modified 2018-02-07
 ;    TO DO: read filter parameters using subroutine
+;    2016-04-20 (trs) -- creates link to more recent projection stack for SPIRE
 ;    2015-08-06 (trs) -- diagnostic y-projections written as stack (numbered from 2 to [numIters]+1)
