@@ -26,8 +26,11 @@
  ; ----------------- Inputs -----------------
 
  [parameter_doc] = '../params'                                        ; Parameter doc file                   (one)
+ 
  [defocus_doc]   = 'defocus'                                          ; Defocus doc file lists defocus       (one/micrograph)
- [micgr]         = '../Micrographs/raw****'                           ; Micrograph images
+ 
+ [micgr]         = '../Micrographs/mic****'                           ; Micrograph images
+ 
  [calc_power]    = 'power/ctf_****'                                   ; Background-subtracted power spectrum (one/micrograph)
 ;       Sp.freq.       Back.noise   Back.subtr.PS
  
@@ -36,11 +39,17 @@
  ; ----------------- Outputs -----------------
 
  [flipped_mic]      = '../Micrographs/flip****'    ; CTF-corrected micrographs            (one/micrograph)
+ 
  [ctf_dir]          = 'power'                      ; Output directory                     (one)
+ 
  [flipped_ctf_doc]  = '[ctf_dir]/flipctf_****'     ; Phase-flipped CTF profile doc file   (one/micrograph)
+ 
  [straight_ctf_doc] = '[ctf_dir]/straightctf_****' ; Straight CTF profile doc file        (one/micrograph)
+
 ;;; [trapped_ctf_doc]  = '[ctf_dir]/trapctf_****'     ; Low-frequency preserving CTF profile doc file (one/micrograph)
+ 
  [first_min_doc]    = '[ctf_dir]/firstmin'         ; Doc file listing first extremum and first zero (one)
+ 
  [gnuplot_script]   = 'plotpw.gnu'                 ; Gnuplot script                         (one)
 
  ; ------------- END BATCH HEADER -------------
@@ -57,13 +66,13 @@
 
  ; Get parameters
  UD IC 1,[sp_zflag]           ; Get zip flag
-   [params]
+   [parameter_doc]
  UD IC 2,[sp_fflag]           ; Get tif flag
-   [params]
+   [parameter_doc]
  UD IC 3,[sp_nx]              ; X dimension 
-   [params]
+   [parameter_doc]
  UD IC 4,[sp_ny]              ; Y dimension        
-   [params]
+   [parameter_doc]
  UD IC 5,[pixelSize]
    [parameter_doc]
  UD IC 6,[voltage]
@@ -121,7 +130,7 @@
    [numProcs]
 
  ; Get number of micrographs
- UD N [numMics]                 ; Get number
+ UD N [numMics],[numCols]        ; Get number of micrographs, columns
    [temp_defocus_renumbered]     ; Renumbered: [defocus_doc]      (input)
 
  ; (If we have to convert, checking the dimensions will be too slow.)
@@ -156,8 +165,24 @@
  ; Loop through micrographs
  DO LB1 [micKey] = 1,[numMics]
     ; Get micrograph#, defocus value
-    UD IC [micKey], [micNum],[defocusAngs],[astig],[angle]
-      [temp_defocus_renumbered]   ; Renumbered: [defocus_doc]      (input)
+    IF ([numCols] .GE. 4) THEN
+      UD IC [micKey], [micNum],[defocusAngs],[astig],[angle]
+        [temp_defocus_renumbered]   ; Renumbered: [defocus_doc]      (input)
+      IF ([micKey] .EQ. 1) THEN
+        SYS
+          echo " Will read astigmatism data" ; echo
+      ENDIF
+    ELSE
+      UD IC [micKey], [micNum],[defocusAngs]
+        [temp_defocus_renumbered]   ; Renumbered: [defocus_doc]      (input)
+      IF ([micKey] .EQ. 1) THEN
+        SYS
+          echo " Not using astigmatism data" ; echo
+      ENDIF
+      
+      [astig] = 0
+      [angle] = 0
+    ENDIF
 
     IF ([convertYN] .GE. 1) THEN
       @load-mic([micNum],[sp_zflag],[sp_fflag],[decimate],[sp_nx],[sp_ny],[keepspi])
@@ -461,7 +486,8 @@
 
  EN
 
- ; Modified 2016-10-18
+ ; Modified 2016-11-09
+ ;    2016-11-09 (trs) -- can read 1D estimates from powdefocus.spi
  ;    2016-03-11 (trs) -- added Angstroms symbol encoding in Gnuplot script
  ;    2016-02-03 (trs) -- initially reports maximum image dimensions, but only if already in SPIDER format
  ;    2016-01-27 (trs) -- asks whether to convert micrographs (were probably converted previously)

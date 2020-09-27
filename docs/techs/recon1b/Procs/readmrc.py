@@ -66,14 +66,14 @@ for line in B:
     if string.find(line, "Final Values") > -1: break
 
 s = string.split(line)
-d1 = string.atof(s[1])
-d2 = string.atof(s[2])
-davg = (d1 + d2) / 2.0
+def1 = string.atof(s[1])
+def2 = string.atof(s[2])
+davg = (def1 + def2) / 2.0
 angle = string.atof(s[3]) - 45
 if angle < 0 : angle += 90
-astig = d1 - d2 # string.atof(s[5])
+astig = def1 - def2 # string.atof(s[5])
 res = string.atof(s[6])
 nitems = 7
 
-print "%5d%2d%12.3f%12.3f%12.3f%12.3f%12.3f%12.3f%12.3f" % (key, nitems, key, davg, d1, d2, angle, astig, res)
+print("%5d%2d%12.3f%12.3f%12.3f%12.3f%12.3f%12.3f%12.3f" % (key, nitems, key, davg, def1, def2, angle, astig, res))
 

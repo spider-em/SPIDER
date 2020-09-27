@@ -7,23 +7,21 @@
  ; INPUT REGISTERS:  From command line
  ;    [grp]                 group
  ;
- ; INPUT FILES: ([win_dir] denotes input directory, '***' denotes group,  '%' denotes subset)
- ;              ([rec_dir] denotes alignment/reconstruction output directory)
- ;    [sel_parts]          [win_dir]/sel_part_***    Group particle selection files (one/group)
- ;    [aligned_images]     [rec_dir]/dala_***        Aligned stacked image files    (one-stack/group)
- ;    [group_align]        [rec_dir]/align_##_***    Alignment parameter doc files  (one/group)    
+ ; INPUT FILES: ([rec_dir] denotes input/output directory, '***' denotes group,  '%' denotes subset)
+ ;    [rec_sel_part]       [rec_dir]/sel_part_***    Group particle selection files (one/group)
+ ;    [rec_aligned]        [rec_dir]/dala_***        Aligned stacked image files    (one-stack/group)
+ ;    [rec_align_doc]      [rec_dir]/align_##_***    Alignment parameter doc files  (one/group)    
  ;
  ; OUTPUT FILES: 
  ;    [next_group_vol]     [rec_dir]/vol_##+_***     Reconstructed group volumes    (one/group)
- ;    [next_group_vol]_s1  [rec_dir]/vol_##+_***_s1  Group subset volume            (one/group)
- ;    [next_group_vol]_s2  [rec_dir]/vol_##+_***_s2  Group subset volume            (one/group)
+ ;    [next_group_vol]_s%  [rec_dir]/vol_##+_***_s%  Group subset volume            (two/group)
  ;    [temp_images]        _8                    If [incore-yn] == 0, Created & deleted 
  ;    [finished_file]      jnk_sync_$$$$_***         Created & deleted 
  ;
- ; PARAMETERS:      Set seldom altered parameters here
+ ; PARAMETERS:      Set seldom-altered parameters here
  
- [numCPUs] = 10      ; Number of processors to use (0 == All)
-                     ; Can be overridden from the command line with [numProcs]
+;; [numCPUs] = 10      ; Number of processors to use (0 == All)
+;;                     ; Can be overridden from the command line with [numProcs]
  
  [rp-lam]    = 0.2e-7;  0.2e-5         ; BP RP: lambda
  [rp-cor]    = 0.0                     ; BP RP: correction limit
@@ -56,8 +54,7 @@
  
  ELSE
    ; Get reconstruction parameters & file names
-   [steptype] = 1           ; Reconstruction step
-   @recon-settings([steptype],[pixsiz],[ang-step],[r2],[alignsh],[prj-radius],[winsiz],[incore-yn],[bp-type],[qsub])
+   @recon-settings([pixsiz],[ang-step],[r2],[alignsh],[prjRadius],[winsiz],[incore-yn],[bp-type],[qsub],[masterCPUs],[groupCPUs])
  ENDIF
 
  IF ( [numProcs] > 0 ) THEN
@@ -67,27 +64,27 @@
  ELSE
    MD                          
      SET MP                   ; Set OMP processors 
-     [numCPUs]
+     [groupCPUs]
  ENDIF
  
  IF ( [incore-yn] == 0 ) THEN
    ; Use disk image stack
-   GLO [temp_images] = '[aligned_images]@'
+   GLO [temp_images] = '[rec_aligned][grp]@'
  
  ELSE
    ; Load input image stack into incore image stack first
    GLO [temp_images] = '_8@'
 
    FI H [numparts]           ; Get number of particles 
-     [aligned_images]@       ; Image stack                         (input)
+     [rec_aligned][grp]@     ; Image stack                         (input)
      MAXIM                   ; Max. image number in stack      
 
    SYS                       ; Echo progress
-      echo '  Copying:  [aligned_images]   Into: [temp_images] '  
+      echo '  Copying:  [rec_aligned]   Into: [temp_images] '  
    MY FL
 
    CP                        ; Load input images into incore stack
-     [aligned_images]@       ; Image stack                         (input)
+     [rec_aligned][grp]@     ; Image stack                         (input)
      [temp_images]           ; Incore stack                        (output)
      [numparts]              ; Stack size
  ENDIF
@@ -107,9 +104,9 @@
    ; Create group volumes using 'BP CG 3' .
    BP CG 3                   ; Back Projection - CG
      [temp_images]*****      ; Template for image files            (input)
-     [sel_parts][grp]        ; Group particle selection doc file   (input)
-     [rad-bp]                ; Radius of restored object
-     [next_group_align]      ; Alignment parameter doc file        (input)
+     [rec_sel_part][grp]     ; Group particle selection doc file   (input)
+     [prjRadius]             ; Radius of restored object
+     [rec_align_doc][grp]    ; Alignment parameter doc file        (input)
      F                       ; Fourier-based spline interpolation
      [next_group_vol]        ; Reconstructed group vol - overall   (output)
      [next_group_vol]_s1     ; Reconstructed group vol - subset 1  (output)
@@ -126,8 +123,8 @@
 
    BP 32F                    ; Back Projection - 3D Fourier
      [temp_images]*****      ; Template for image files            (input)
-     [sel_parts][grp]        ; Particle selection doc file         (input)
-     [next_group_align]      ; Alignment parameter doc file        (input)
+     [rec_sel_part][grp]     ; Particle selection doc file         (input)
+     [rec_align_doc][grp]    ; Alignment parameter doc file        (input)
      [symmetry_doc]          ; Symmetries doc file (* = none)      (input)
      [next_group_vol]        ; Reconstructed group vol - overall   (output)
      [next_group_vol]_s1     ; Reconstructed group vol - subset 1  (output)
@@ -142,9 +139,9 @@
    ; Compute the group subset reconstructions. --------------------------------
    BP RP 3 [niter]           ; [niter] returns # iterations used
      [temp_images]*****      ; Template for image files            (input)
-     [sel_parts][grp]        ; Particle selection doc file         (input)
+     [rec_sel_part][grp]     ; Particle selection doc file         (input)
      [r-bp]                  ; Radius of restored object
-     [next_group_align]      ; Alignment parameter doc file        (input)
+     [rec_align_doc][grp]    ; Alignment parameter doc file        (input)
      [symmetry_doc]          ; Symmetries doc file (* = none)      (input)
      [next_group_vol]        ; Reconstructed group vol - overall   (output)
      [next_group_vol]_s1     ; Reconstructed group vol - subset 1  (output)
@@ -162,31 +159,31 @@
 
    ; Split into odd and even selection lists
    DOC SPLIT
-     [sel_parts]             ; Particle selection doc file         (input)
-     [sel_parts]_s1          ; Odd  particle selection doc file    (output)         
-     [sel_parts]_s2          ; Even particle selection doc file    (output)         
+     [rec_sel_part][grp]     ; Particle selection doc file         (input)
+     [rec_sel_part]_s1       ; Odd  particle selection doc file    (output)         
+     [rec_sel_part]_s2       ; Even particle selection doc file    (output)         
 
    ; Reconstruct odd volume
    BP 3N
      [temp_images]******     ; Template for image files            (input)
-     [sel_parts]_s1          ; Odd  particle selection doc file    (output)         
-     [next_group_align]      ; Alignment parameter doc file        (input)
+     [rec_sel_part]_s1       ; Odd  particle selection doc file    (output)         
+     [rec_align_doc][grp]    ; Alignment parameter doc file        (input)
      [symmetry_doc]          ; Symmetries doc file (* = none)      (input)
      [next_group_vol]_s1     ; Reconstructed group vol - subset 1  (output)
 
    ; Reconstruct even volume
    BP 3N
      [temp_images]*****      ; Template for image files            (input)
-     [sel_parts]_s2          ; Even particle selection doc file    (output)
-     [next_group_align]      ; Alignment parameter doc file        (input)
+     [rec_sel_part]_s2       ; Even particle selection doc file    (output)
+     [rec_align_doc][grp]    ; Alignment parameter doc file        (input)
      [symmetry_doc]          ; Symmetries doc file (* = none)      (input)
      [next_group_vol]_s1     ; Reconstructed group vol - subset 2  (output)
 
    ; Reconstruct combined volume
    BP 3N
      [temp_images]*****      ; Template for image files            (input)
-     [sel_parts]             ; Particle selection doc file         (input)
-     [next_group_align]      ; Alignment parameter doc file        (input)
+     [rec_sel_part][grp]     ; Particle selection doc file         (input)
+     [rec_align_doc][grp]    ; Alignment parameter doc file        (input)
      [symmetry_doc]          ; Symmetries doc file (* = none)      (input)
      [next_group_vol]        ; Reconstructed group vol - overall   (output)
  ENDIF
@@ -205,5 +202,7 @@
  ENDIF
 
  RE
+
+ ; Modified 2017-08-04
 
  ; </pre></body></html>
