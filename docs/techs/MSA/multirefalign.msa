@@ -1,18 +1,12 @@
 ; PERFORMS MULTI-REFERENCE ALIGNMENT
 ;
-; USAGE: spider msa/spi @multirefalign
-; 
-; TO USE PRE-EXISTING REFERENCES:
-;        spider msa/spi @multirefalign 0 useRefs=1
-;
-; NOTE: Requires backup.msa, center1.msa, apsh.msa
+; NOTE: Requires backup.rct, center1.rct, apsh.rct
 
 ; --------------------------------- Parameters ---------------------------------
-[multirefIterNum]  = -1    ; iteration of multireference alignment to use as input (0 == initial classes, -1 == last, -2 == existing references)
-[makeRefsYN]       = 1     ; generate references from aligned images? (0 == already exist, can override with command-line parameter useRefs=1)
-[cgOption]         = 3     ; center-of-gravity option (1==None, 2==CG PH, 3=RT180)
+[multirefIterNum]  = -1    ; iteration of multireference alignment to use as input (0 == initial classes, <0 == last)
+[cgOption]         = 2     ; center-of-gravity option (0==None, 1==CG PH, 2=RT180)
 [reffreeYN]        = 0     ; perform additional reference-free alignment within each class? (0==None, 1==pairwise, 2==AP SR)
-[verifiedYN]       = 0     ; use individually verified particles? (0==NO, 1==YES (follows combinegoodclasses.msa))
+[verifiedYN]       = 0     ; use individually verified particles? (0==NO, 1==YES (follows combinegoodclasses.rct))
 [lastRing]         = -1    ; outer radius (<0 == automatic)
 [firstRing]        = 1     ; inner radius for orientation alignment, pixels
 [searchRange]      = 8     ; maximum translational shift, pixels
@@ -67,9 +61,6 @@ FR L
 FR L
 [next_multiref_dir]Multiref{*[nextIterNum]}                  ; alignment directory
 FR L
-[multiref_dir_link]Multiref-CURRENT                          ; soft link to multi-reference alignment directory
-;                                                            ; (so that you dont need to increment directory number)
-FR L
 [new_ref_views][next_multiref_dir]/listviews                 ; reference-view list
 FR L
 [reference_stack][next_multiref_dir]/stkref                  ; reference stack (w/o "@")
@@ -107,6 +98,8 @@ FR L
 ; (also modify label [view_select] and [sorted_select] if >=1000 references)
 
 ; Temporary files
+FR L
+[temp_class_list]tmpclasslist
 FR L
 [temp_uncentered_avg]_11
 FR L
@@ -158,9 +151,6 @@ ENDIF
 
 ; CHECK IF ITERATION# IS SPECIFIED
 
-SYS
-echo
-
 ; if iteration# specified to be zero, then start from initial classes
 IF ( [multirefIterNum] .EQ. 0 ) THEN
     ; use initial classification
@@ -200,7 +190,7 @@ ELSE
     ; if iteration-track doesn't exist OR last key was zero, delete doc file and start over
     IF ( [lastIterKey]*[trackerExists] .EQ. 0 ) THEN
         SYS
-        echo "Multiref tracking doc empty, starting with iteration #1"
+        echo "Multiref tracking doc empty, starting with iteration #1" ; echo
         
         DE
         [multiref_tracking_doc]
@@ -210,6 +200,9 @@ ELSE
         [old_aligned_images] = [master_aligned_images]
     ENDIF
 ENDIF
+
+SYS
+echo "Input class docs assumed to be in toplevel of [old_class_dir]" ; echo
 
 
 ; CHECK WHICH PARTICLE LIST TO USE, i.e., before or after verification
@@ -245,7 +238,7 @@ ELSE
 ENDIF
 
 SYS
-echo "Using particles listed in [selection_list].$DATEXT"
+echo "Using particles listed in [selection_list].$DATEXT" ; echo
 
 
 ; CHECK WHETHER DOWNSAMPLED
@@ -279,7 +272,7 @@ IF ( [idimParams] .NE. [idimFirst] ) THEN
         SYS M
         echo "WARNING:" ;
         echo "Image dimension from [parameter_doc], {***[idimParams]}, {*[ratio]} times that from [unaligned_images][firstParticle]" ;
-        echo "Reducing object diameter by a factor of {*[ratio]} also, to {***[lastRing]}"
+        echo "Reducing object diameter by a factor of {*[ratio]} also, to {***[lastRing]}" ; echo
 .    
     ; if ratio is not an integer, then I don't know what to do
     ELSE
@@ -310,7 +303,7 @@ IF ( [checkRadius] .LT. 2) THEN
 ENDIF
 
 SYS
-echo "Using outer alignment radius of {***[lastRing]} pixels"
+echo "Using outer alignment radius of {***[lastRing]} pixels" ; echo
 
 UD ICE
 [parameter_doc]
@@ -325,41 +318,26 @@ UD ICE
 ; PREPARE OUTPUT DIRECTORY
 
 SYS
-echo "Working on multireference iteration #{*[nextIterNum]}"
+echo "Working on multireference iteration #{*[nextIterNum]}" ; echo
+SYS
+mkdir -v [next_multiref_dir]
 
-IQ DIR [multirefDirExists]
-[next_multiref_dir]
+DE
+[reference_stack]@
 
-IF ( [multirefDirExists] .EQ. 0 ) THEN
-    SYS
-    mkdir -v [next_multiref_dir]
-ENDIF
 
 ; GENERATE REFERENCES
 
-; Override header if necessary
-IF ( [useRefs] .EQ. 1) [makeRefsYN] = 0
-
-IF ( [makeRefsYN] .EQ. 0 ) THEN
-    SYS
-    echo "Using existing references [reference_stack]"
-ELSEIF ( [multirefIterNum] .GT. 0 ) THEN
-    SYS
-    echo "Input class docs assumed to be in [old_class_dir]"
+IF ( [multirefIterNum] .GT. 0 ) THEN
     SYS
     echo "Generating references from specific iteration [old_aligned_images]"
-
-    DE
-    [reference_stack]@
 ELSE
     SYS
-    echo "Input class docs assumed to be in [old_class_dir]"
-    SYS
     echo "Generating references from master aligned images [old_aligned_images]"
-
-    DE
-    [reference_stack]@
 ENDIF
+
+SYS
+date
 
 DE
 [new_ref_views]
@@ -378,7 +356,7 @@ ENDIF
 
 IF ( [toplevelGoodClassesYN]*[numGoodClasses] .GE. 1 ) THEN
     SYS
-    echo "List of references found in toplevel [old_class_dir]"
+    echo ; echo "List of references found in toplevel [old_class_dir]"
 
 ; Will try to generate from by-view good-classes
 ELSE
@@ -388,14 +366,19 @@ ELSE
     [toplevel_good_classes]
 
     SYS
-    echo "List of references generated in toplevel [old_class_dir] from combined views"
+    echo ; echo "List of references generated in toplevel [old_class_dir] from combined views"
 ENDIF
 
 [good_class_list] = [toplevel_good_classes]
 
+; Renumber in case of gaps
+DOC REN
+[good_class_list]
+[temp_class_list]
+
 ; get #references
 UD N [numRefs]
-[good_class_list]
+[temp_class_list]  ; WAS [good_class_list]
 
 IF ( [numRefs] .GT. 999 ) THEN
     SYS
@@ -407,86 +390,74 @@ echo
 
 ; loop through references
 DO LB1 [refKey] = 1,[numRefs]
-    ; if existing references
-    IF ( [makeRefsYN] .EQ. 0 ) THEN
-        [refCounter] = [refCounter] + 1
-        [classNum]   = [refCounter]
-        [numParts]   = 1  ; to distinguish from empty views
-        
-    ; generate references anew
+    ; get class#
+    UD IC [refKey], [classNum]
+    [temp_class_list]  ; WAS [good_class_list]
+
+    ; get #particles (check for empty classes)
+    UD N [numParts]
+    [class_doc]
+    
+    IF ( [numParts] .EQ. 0 ) THEN
+        SYS
+        echo "Skipping  (empty)   [class_doc]"
     ELSE
-        ; get class#
-        UD IC [refKey], [classNum]
-        [good_class_list]
+        ; increment reference-counter
+        [refCounter] = [refCounter] + 1
 
-        ; get #particles (check for empty classes)
-        UD N [numParts]
+        ; generate average
+        AS R
+        [old_aligned_images]
         [class_doc]
-        
-        IF ( [numParts] .EQ. 0 ) THEN
-            SYS
-            echo "Skipping  (empty)   [class_doc]"
-        ELSE
-            ; increment reference-counter
-            [refCounter] = [refCounter] + 1
+        A                      ; _A_ll images
+        [temp_uncentered_avg]  ; OUTPUT: class-average
+        [temp_uncentered_var]  ; OUTPUT: class-variance (not saved)
 
-            ; generate average
-            AS R
-            [old_aligned_images]
-            [class_doc]
-            A                      ; _A_ll images
-            [temp_uncentered_avg]  ; OUTPUT: class-average
-            [temp_uncentered_var]  ; OUTPUT: class-variance (not saved)
-
-            IF ( [cgOption] .EQ. 2 ) THEN
-                IF ( [refCounter] .EQ. 1 ) THEN
-                    SYS
-                    echo "Centering references using CG PH"
-                ENDIF
-                
-                ; center reference
-                CG PH x21,x22,[xshift],[yshift]
-                [temp_uncentered_avg]  ; INPUT: unshifted class-average
-
-                ; shift
-                SH
-                [temp_uncentered_avg]  ; INPUT: unshifted class-average
-                [centered_refs][refCounter]
-                -[xshift],-[yshift]
-                
-            ELSEIF ( [cgOption] .EQ. 3 ) THEN
-                IF ( [refCounter] .EQ. 1 ) THEN
-                    SYS
-                    echo "Centering average by rotating 180 degrees and aligning"
-                ENDIF
-                
-                ; center by rotating by 180 degrees and self-alignment
-                @center1(x21,x22)
-                [temp_uncentered_avg]  ; INPUT: uncentered class-average
-                [temp_centered_avg]    ; OUTPUT
-                
-                CP
-                [temp_centered_avg]
-                [centered_refs][refCounter]
-                
-            ELSE
-                IF ( [refCounter] .EQ. 1 ) THEN
-                    SYS
-                    echo "Not centering references"
-                ENDIF
-                
-                CP
-                [temp_uncentered_avg]  ; INPUT: uncentered class-average
-                [centered_refs][refCounter]
+        IF ( [cgOption] .EQ. 1 ) THEN
+            IF ( [refCounter] .EQ. 1 ) THEN
+                SYS
+                echo "Centering references using CG PH"
             ENDIF
-            ; end center-of-gravity IF-THEN
+            
+            ; center reference
+            CG PH x21,x22,[xshift],[yshift]
+            [temp_uncentered_avg]  ; INPUT: unshifted class-average
 
-            SYS
-            echo "Reference #{***[refCounter]} from [class_doc]"
+            ; shift
+            SH
+            [temp_uncentered_avg]  ; INPUT: unshifted class-average
+            [centered_refs][refCounter]
+            -[xshift],-[yshift]
+            
+        ELSEIF ( [cgOption] .EQ. 2 ) THEN
+            IF ( [refCounter] .EQ. 1 ) THEN
+                SYS
+                echo "Centering average by rotating 180 degrees and aligning"
+            ENDIF
+            
+            ; center by rotating by 180 degrees and self-alignment
+            @center1(x21,x22)
+            [temp_uncentered_avg]  ; INPUT: uncentered class-average
+            [temp_centered_avg]    ; OUTPUT
+            
+            CP
+            [temp_centered_avg]
+            [centered_refs][refCounter]
+            
+        ELSE
+            IF ( [refCounter] .EQ. 1 ) THEN
+                SYS
+                echo "Not centering references"
+            ENDIF
+            
+            CP
+            [temp_uncentered_avg]  ; INPUT: uncentered class-average
+            [centered_refs][refCounter]
         ENDIF
-        ; end empty-class IF-THEN
+
+        SYS
+        echo "Reference #{***[refCounter]} from [class_doc]"
     ENDIF
-    ; end existing-references IF-THEN
     
     ; write to doc
     IF ( [numParts] .GT. 0 ) THEN
@@ -498,7 +469,7 @@ LB1
 
 ; close doc
 UD ICE
-[good_class_list]
+[temp_class_list]  ; WAS [good_class_list]
 
 ; close doc
 SD /       REFNUM      VIEW_NUM     CLASSNUM
@@ -506,12 +477,9 @@ SD /       REFNUM      VIEW_NUM     CLASSNUM
 SD E
 [new_ref_views]
 
-; create softlink to fixed directory name so that SPIRE can more easily monitor centering of references
-SYS
-\rm -f [multiref_dir_link] && ln -sv [next_multiref_dir] [multiref_dir_link] ; echo
 
 SYS
-echo "Running multireference-alignment using {***[refCounter]} references" ; date ; echo
+echo ; echo "Running multireference-alignment using {***[refCounter]} references"
 
 ; if alignment doc exists, output directory might mistakenly be same as input directory
 IQ FI [alignExists]
@@ -661,16 +629,18 @@ DOC REN
 [multiref_tracking_doc]
 [multiref_tracking_doc]
 
+DE
+[temp_class_list]
+
 SYS
 echo ; echo "Done" ; date
 
-EN 
+EN D
 
-; Modified 2018-02-23
+; Modified 2020-07-04
 ;    TO DO: split off AP SR into subroutine
-;    2018-02-21 (trs) -- can override makeRefsYN from command line
-;    2018-02-19 (trs) -- can use pre-existing references (not averaged on the fly)
-;    2018-02-16 (trs) -- renumbered center-of-gravity options for consistency with pairwise.msa
+;    TO DO: use averages as references directly, rather than recompute from aligned images
+;    2020-07-04 (trs) -- renumbers list of good classes in case of gaps
 ;    2015-08-27 (trs) -- split off AP SH into subroutine
 ;    2015-08-26 (trs) -- optional reference-free alignment within each view
 ;    2015-08-10 (trs) -- centers output averages (using same scheme as for input references)
