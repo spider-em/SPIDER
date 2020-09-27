@@ -12,9 +12,8 @@
 ;
 ; Inputs:
 ;   input image (in spider format)
-;   [large-window-size] : size of the large window (area to be examined)
-;   [small-window-size] : size of the small windows (can be particle-sized)
-;   [delete-yn]         : delete flag. If [delete-yn] = 1, temporaray doc files are deleted.
+;   [largeWindowSize] : size of the large window (area to be examined)
+;   [deleteYN]        : delete flag. If [deleteYN] = 1, temporaray doc files are deleted.
 ;
 ; Outputs:
 ;   noise image
@@ -22,9 +21,12 @@
 
 ; ----------- Parameters ------------
 
-[micnum]            = -1            ; micrograph number to find noise image (-1 == last)
-[large-window-size] = 1000          ; diameter of the large window from which noise will be windowed
-[delete-yn]         = 1             ; 1 = delete temp doc files, 0 = don't delete
+[revContrastYN]    = 0             ; reverse contrast? (1==Yes)
+[micnum]           = -1            ; micrograph number to find noise image (-1 == last)
+[userNumNoiseImgs] = 30            ; number of noise images to window
+;                                 ; (use the top (30) with smallest std_dev)
+[largeWindowSize]  = 1000          ; diameter of the large window from which noise will be windowed
+[deleteYN]         = 1             ; 1 = delete temp doc files, 0 = don't delete
 
 ; ----------- Input files -----------
 FR G
@@ -32,35 +34,39 @@ FR G
 FR G
 [mic_pair_doc]docmicpairs           ; micrograph-pairing list
 FR G
-[mic]Micrographs/mic{****[micnum]}  ; micrograph filename template
+[mic]Micrographs/mic{***[micnum]}   ; micrograph filename template
 
 ; ---------- Output files ----------
 FR G
 [noise]noise                        ; selected output noise window
 FR G
 [ndir]tmpnoise                      ; directory for noise images
+;;FR G
+;;[noisewin]noi@                      ; stack of output noise windows, in NDIR
 FR G
-[noisewin]noi@                      ; stack of output noise windows, in NDIR
+[output][ndir]/noi@                 ; use this path for output files
+FR G
+[docnoise][ndir]/docnoise           ; (optional) doc file of window statistics
+FR G
+[docsort][ndir]/docsort             ; (optional) sorted doc file
+FR G
+[docvar][ndir]/docvar               ; (optional) doc file of local variance
+FR G
+[docvarsort][ndir]/docvarsort       ; (optional) doc file of sorted local variance
 
 ; -------- END BATCH HEADER --------
 
-VM
-mkdir -p [ndir] 
-DE
-[noisewin]
+; Temporary files
+[temp_mic]      = '_4'
+[temp_win]      = '_11'
+[temp_subimage] = '_12'
 
-FR G
-[output] [ndir]/[noisewin]     ; use this path for output files
-FR G
-[docnoise] [ndir]/docnoise  ; doc file of window statistics
-FR G
-[docsort] [ndir]/docsort    ; sorted doc file
-FR G
-[docvar] [ndir]/docvar      ; doc file of local variance
-FR G
-[docvarsort] [ndir]/docvarsort ; doc file of sorted local variance
+SYS
+mkdir -p [ndir] 
 
 ; delete the doc files if they already exist
+;;DE
+;;[noisewin]
 DE
 [docnoise]
 DE
@@ -69,108 +75,113 @@ DE
 [docvar]
 DE
 [docvarsort]
+DE
+[output]
 
 ; get the window size
-UD 17,[small-window-size]
+UD 17, [smallWindowSize]
 [params]
 UD E
 
 ; get last micrograph# if default is chosen
 if([micnum].lt.0) then
-    UD N [num-mics]
+    UD N [numMics]
     [mic_pair_doc]
     
-    UD [num-mics], [micnum]
+    UD [numMics], [micnum]
     [mic_pair_doc]
     UD E
 endif
 
 
-x30 = 30 ; use the top (30) with smallest std_dev
-x50 = 50 ; percent overlap of the small windows
+[percentOverlap] = 50 ; percent overlap of the small windows
 
 ; ----------------------------------------------------------
 ; The large window is at the center of the input image.
-; x91 =  X upper left corner of large window
-; x92 =  Y upper left corner of large window
+
+; invert contrast, if necessary
+IF ( [revContrastYN] .GE. 0.5 ) THEN
+    NEG
+    [mic]
+    [temp_mic]
+ELSE
+    CP
+    [mic]
+    [temp_mic]
+ENDIF
 
 ; get file size
-FI x37,x38
-[mic]
-(12,2)
+FI [micXDim],[micYDim]
+[temp_mic]
+12,2
 
-IF ([large-window-size].GT.x37) [large-window-size] = x37
-IF ([large-window-size].GT.x38) [large-window-size] = x38
+IF ( [largeWindowSize] .GT. [micXDim] ) [largeWindowSize] = [micXDim]
+IF ( [largeWindowSize] .GT. [micYDim] ) [largeWindowSize] = [micYDim]
 
-x91 = (x37 - [large-window-size]) / 2
-x92 = (x38 - [large-window-size]) / 2
-IF (x91.LT.1) x91 = 1
-IF (x92.LT.1) x92 = 1
+[largeTopLeftX] = ([micXDim] - [largeWindowSize]) / 2
+[largeTopLeftY] = ([micYDim] - [largeWindowSize]) / 2
+IF ( [largeTopLeftX] .LT. 1 ) [largeTopLeftX] = 1
+IF ( [largeTopLeftY] .LT. 1 ) [largeTopLeftY] = 1
 
 ; ----------------------------------------------------------
 
-; x81 = start x for each window 
-; x82 = start y for each window
+x51       = 100 / [percentOverlap]
+[numWin]  = ([largeWindowSize]/[smallWindowSize]) * x51 - 1  ; number of windows in X and Y
+[winIncr] = int([smallWindowSize] / x51)                     ; increment for start window coords
 
-x51 = 100 / x50
-x41 = ([large-window-size]/[small-window-size]) * x51  ; number of windows in X and Y
-x41 = x41 - 1
-x97 = int([small-window-size] / x51)        ; increment for start window coords
-
-x11 = 1 ; a counter for incrementing keys
+[counter] = 1 ; a counter for incrementing keys
 
 ; if the doc files already exist, delete them
-IQ FI x88
+IQ FI [exists]
 [docnoise]
-IF (x88.EQ.1) THEN
+IF ( [exists] .EQ. 1 ) THEN
    DE
    [docnoise]
 ENDIF
 
-IQ FI x88
+IQ FI [exists]
 [docsort]
-IF (x88.EQ.1) THEN
+IF ( [exists] .EQ. 1 ) THEN
    DE
    [docsort]
 ENDIF
 
-IQ FI x88
+IQ FI [exists]
 [docvar]
-IF (x88.EQ.1) THEN
+IF ( [exists] .EQ. 1 ) THEN
    DE
    [docvar]
 ENDIF
 
-IQ FI x88
+IQ FI [exists]
 [docvarsort]
-IF (x88.EQ.1) THEN
+IF ( [exists] .EQ. 1 ) THEN
    DE
    [docvarsort]
 ENDIF
 
 ; First Loop ------------------------------------------------
 
-DO LB1 x22 = 1,x41    ; Y loop
-DO LB2 x21 = 1,x41    ; X loop
+DO LB1 [ykey] = 1,[numWin]    ; y loop
+    DO LB2 [xkey] = 1,[numWin]    ; x loop
+        [noiseTopLeftX] = [largeTopLeftX] + [winIncr] * ([xkey] - 1)  ; x UL corner of window
+        [noiseTopLeftY] = [largeTopLeftY] + [winIncr] * ([ykey] - 1)  ; y UL corner of window
 
-   x81 = x91 + x97 * (x21 - 1)  ; x UL corner of window
-   x82 = x92 + x97 * (x22 - 1)  ; y UL corner of window
+        WI
+        [temp_mic]
+        [temp_win]
+        [smallWindowSize],[smallWindowSize]
+        [noiseTopLeftX],[noiseTopLeftY]    ; top left coords
 
-   WI
-   [mic]
-   _1
-   [small-window-size],[small-window-size]
-   x81,x82    ; top left coords
+        ; get st.dev.
+        FS x71,x72,x73,[stdev]
+        [temp_win]
 
-   FS x71,x72,x73,x74
-   _1
+        SD [counter], [stdev], [noiseTopLeftX],[noiseTopLeftY]   ; save key,std_dev,x,y
+        [docnoise]
 
-   SD x11, x74, x81,x82   ; save key,std_dev,x,y
-   [docnoise]
-
-   x11 = x11 + 1
-
-LB2
+        [counter] = [counter] + 1
+    LB2
 LB1
 
 ; -----------------------------------------------
@@ -179,120 +190,121 @@ LB1
 DOC SORT
 [docnoise]
 [docsort]
-(1)
+1
 Y
 
-UD N,x75     ; get the number of entries
+UD N [measNumNoiseImgs]     ; get the number of entries
 [docsort]
 
 
-IF (x75.LT.x30) x30 = x75
+IF ([measNumNoiseImgs].LT.[userNumNoiseImgs]) [userNumNoiseImgs] = [measNumNoiseImgs]
 
 ; ---------------------------------------------------------
 ; Local variance: ; get the images, measure average of each
 ; quadrant. Calculate mean,var of the 4 averages
 
-DO LB3 x21 = 1,x30
+; Loop through noise images
+DO LB3 [noiseKey3] = 1,[userNumNoiseImgs]
+    UD [noiseKey3],[stdev],[noiseTopLeftX],[noiseTopLeftY]   ; get (key), std_dev, x coord, y coord
+    [docsort]
 
-UD x21,x80,x81,x82   ; get (key), std_dev, x coord, y coord
-[docsort]
+    WI 
+    [temp_mic]
+    [temp_win]
+    [smallWindowSize],[smallWindowSize]
+    [noiseTopLeftX],[noiseTopLeftY]    ; top left coords
 
-WI 
-[mic]
-_2
-[small-window-size],[small-window-size]
-x81,x82    ; top left coords
+    ; get data from the four subimages
+;;    x93 = 1
+;;    x94 = 1
+    [subimageSize] = INT([smallWindowSize]/2)
 
-; get data from the four subimages
-x93 = 1
-x94 = 1
-[large-window-size] = int([small-window-size]/2)
+    ; ------------------------------ 1
 
-; ------------------------------ 1
+    WI
+    [temp_win]
+    [temp_subimage]
+    [subimageSize],[subimageSize]
+    1,1
 
-WI
-_2
-_1
-[large-window-size],[large-window-size]
-(1,1)
+    FS x71,x72,[avg],x74
+    [temp_subimage]
 
-FS x71,x72,x73,x74
-_1
+    [avg1] = [avg] ; the average value
 
-x61 = x73 ; the average value
+    ; ------------------------------ 2
+    WI
+    [temp_win]
+    [temp_subimage]
+    [subimageSize],[subimageSize]
+    [subimageSize]-1,1
 
-; ------------------------------ 2
-WI
-_2
-_1
-[large-window-size],[large-window-size]
-([large-window-size]-1,1)
+    FS x71,x72,[avg],x74
+    [temp_subimage]
 
-FS x71,x72,x73,x74
-_1
+    [avg2] = [avg] ; the average value
 
-x62 = x73 ; the average value
+    ; ------------------------------ 3
+    WI
+    [temp_win]
+    [temp_subimage]
+    [subimageSize],[subimageSize]
+    1, [subimageSize]-1
 
-; ------------------------------ 3
-WI
-_2
-_1
-[large-window-size],[large-window-size]
-(1, [large-window-size]-1)
+    FS x71,x72,[avg],x74
+    [temp_subimage]
 
-FS x71,x72,x73,x74
-_1
+    [avg3] = [avg] ; the average value
 
-x63 = x73 ; the average value
+    ; ------------------------------ 4
+    WI
+    [temp_win]
+    [temp_subimage]
+    [subimageSize],[subimageSize]
+    [subimageSize]-1,[subimageSize]-1
 
-; ------------------------------ 4
-WI
-_2
-_1
-[large-window-size],[large-window-size]
-([large-window-size]-1,[large-window-size]-1)
+    FS x71,x72,[avg],x74
+    [temp_subimage]
 
-FS x71,x72,x73,x74
-_1
-
-x64 = x73 ; the average value
+    [avg4] = [avg] ; the average value
 
 
-x65 = (x61 + x62 + x63 + x64) / 4.0   ; mean
-x68 = 0   ; sum  (becomes variance of averages)
-x68 = x68 + ((x61 - x65)*(x61 - x65))
-x68 = x68 + ((x62 - x65)*(x62 - x65))
-x68 = x68 + ((x63 - x65)*(x63 - x65))
-x68 = x68 + ((x64 - x65)*(x64 - x65))   
+    [avgAvgs]  = ([avg1] + [avg2] + [avg3] + [avg4]) / 4.0   ; mean
+    [variance] = 0   ; sum  (becomes variance of averages)
+    [variance] = [variance] + (([avg1] - [avgAvgs])*([avg1] - [avgAvgs]))
+    [variance] = [variance] + (([avg2] - [avgAvgs])*([avg2] - [avgAvgs]))
+    [variance] = [variance] + (([avg3] - [avgAvgs])*([avg3] - [avgAvgs]))
+    [variance] = [variance] + (([avg4] - [avgAvgs])*([avg4] - [avgAvgs]))   
 
-SD x21, x68,x80,x81,x82   ; put (key), var, std_dev, x coord, y coord
-[docvar]
-
+    SD [noiseKey3], [variance],[stdev],[noiseTopLeftX],[noiseTopLeftY]   ; put (key), var, std_dev, x coord, y coord
+    [docvar]
 LB3
+; End noise-loop
 
 ; --------------------------------------------------------
 ; sort docfile according to std_dev (column 1)
 DOC SORT
 [docvar]
 [docvarsort]
-(1)
+1
 Y
 
 ; get windows sorted by lowest variance
-DO LB4 x21 = 1,x30
 
-   UD x21,x79, x80,x81,x82   ; get (key), var, std_dev, x coord, y coord
+; Loop through noise images
+DO LB4 [noiseKey4] = 1,[userNumNoiseImgs]
+   UD [noiseKey4],x79, x80,[noiseTopLeftX],[noiseTopLeftY]   ; get (key), var, std_dev, x coord, y coord
    [docvarsort]
 
    WI 
-   [mic]
-   [output]{***x21}
-   [small-window-size],[small-window-size]
-   x81,x82    ; top left coords
-
+   [temp_mic]
+   [output]{***[noiseKey4]}
+   [smallWindowSize],[smallWindowSize]
+   [noiseTopLeftX],[noiseTopLeftY]    ; top left coords
 LB4
+; End noise-loop
 
-IF ([delete-yn].EQ.1) THEN
+IF ( [deleteYN] .EQ. 1 ) THEN
    DE
    [docnoise]
    DE
@@ -306,18 +318,19 @@ IF ([delete-yn].EQ.1) THEN
 ENDIF
 
 ; select one at random
-x21 = int(RAN(x14) * x30)
+[random] = int(RAN(x14) * [userNumNoiseImgs])
 
 CP
-[output]{***x21}
+[output]{***[random]}
 [noise]
 
-VM
-echo selected [output]{***x21} for the noise file
+SYS
+echo selected [output]{***[random]} for the noise file
 
 EN D
 
-; Modified 2014-03-05
+; Modified 2018-02-12
+;    2018-02-07 (trs) -- added option to invert contrast, modernized a bit
 ;    2014-03-05 (trs) -- writing images in stacks
 ;    2014-02-31 (trs) -- reads last untilted micrograph by default
 ;    2012-08-31 (trs) -- adapted from noise.spi

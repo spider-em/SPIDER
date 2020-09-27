@@ -5,59 +5,84 @@
 
 ; ---------------- Parameters ----------------
 
+[filteredImgsYN] = -1    ; use low-pass filtered images? (1==YES, 0==NO, -1==If_Available)
 [numFactors]     = 27    ; number of factors to calculate
-[cas-option]     = 1     ; correspondence analysis (1), PCA (2), IPCA (3)
+[casOption]      = 1     ; correspondence analysis (1), PCA (2), IPCA (3)
 [reconstCoeffs]  = 0     ; coefficients for reconstituted images, in multiples of st.dev. (0 == min & max)
-                         ; (for example, if -2, then reconstituted images will be at -2*stdev and +2*stdev)
+                         ; (for example, if 2, then reconstituted images will be at -2*stdev and +2*stdev)
 [radius]         = -1    ; particle radius (pixels, used if no custom mask, <0==IDIM/2)
-[add-constant]   = 0     ; additive constant if using correspondence analysis (0 == Automatic)
-[factormapRange] = 3.0   ; range in factor map, as a multiple of st.dev.
+[addConstant]    = 0     ; additive constant if using correspondence analysis (0 == Automatic)
+[factormapRange] = 3.0   ; range in factor map, as a multiple of st.dev. (0 == don't generate)
                          ; (SPIDER sometimes crashes if this number is too small)
 [numCPUs]        = 0     ; number of CPUs to use (0 == All)
 
 ; ------------------ Inputs ------------------
-fr l
+FR L
 [selection_doc]listparticles             ; selection doc file
-fr l
-[particles]Zerodegr/stkfiltered@*****    ; particle file-pattern
-fr l
+FR L
 [custom_mask]stkmask@4                   ; (optional) custom mask
+
+; aligned images (will set [particles])
+FR L 
+[fullsized_stack]Zerodegr/stk3-aligned   ; unfiltered-particle stack (w/o "@", see option [filteredImgsYN])
+FR L 
+[filtered_stack]Zerodegr/stkfiltered     ; filtered-particle stack (w/o "@", see option [filteredImgsYN])
 
 ; ------------------ Outputs ------------------
 
-fr l
+FR L
 [ca_dir]Zerodegr/MSA                           ; output directory
-fr l
+FR L
 [cas_prefix][ca_dir]/cas                       ; correspondence-analysis output prefix
-fr l
+FR L
 [ps_eigenvalue_hist][ca_dir]/ps_eigenvalues    ; eigenvalue histogram, encapsulated PostScript
-fr l
+FR L
 [eigen_img][ca_dir]/stkeigenimg                ; eigenimage stack (w/o "@")
-fr l
+FR L
 [reconstituted_img][ca_dir]/stkreconst         ; reconstituted image stack (w/o "@")
-fr l
+FR L
 [ps_factor_map][ca_dir]/factormap              ; eigenvalue factor map, PostScript format
 
 ; -------------- END BATCH HEADER --------------
 
 ; Temporary files
-fr l
+FR L
 [temp_mask]_6
-fr l
+FR L
 [temp_gnuplot]tmp2.gnu
-fr l
+FR L
 [temp_eigenvalues_text]eigenvalues.txt
-fr l
-[sdc_doc]tmpdoccorrmap                   ; eigenvalue (1-9) document file (for WEB->CorrMap)
-fr l
+FR L
+[temp_corrmap]tmpdoccorrmap                   ; eigenvalue (1-9) document file (for WEB->CorrMap)
+FR L
 [temp_rec_stack]tmpstkreconst
 
-vm
-echo "if(! -d [ca_dir]) mkdir -p [ca_dir]"|csh
+SYS
+mkdir -p [ca_dir]
 
-md
-set mp
+MD
+SET MP
 [numCPUs]
+
+IF ( [filteredImgsYN] .EQ. -1 ) THEN
+    ; See if filtered images exist
+    IQ FI [filteredExist]
+    [filtered_stack]
+
+    IF ( [filteredExist] .EQ. 1 ) [filteredImgsYN]=1
+ENDIF
+
+IF ( [filteredImgsYN] .EQ. 1 ) THEN
+    SYS
+    echo "Using filtered/shrunken images [filtered_stack].$DATEXT" ; echo
+    FR L
+    [particles][filtered_stack]@*****
+ELSE
+    SYS
+    echo "Using fullsize images [fullsized_stack].$DATEXT" ; echo
+    FR L
+    [particles][fullsized_stack]@*****
+ENDIF
 
 ; get first particle#
 [one] = 1
@@ -69,153 +94,154 @@ FI H [idim]
 [particles][firstPart]
 NY
 
-VM
+SYS
 echo "Using window dimension of {%i0%[idim]} pixels"; echo
 
 ; check if custom mask present
-iq fi [mask-exists]
+IQ FI [maskExists]
 [custom_mask]
 
 ; if custom mask present, copy it into memory
-if([mask-exists].eq.1) then
-    cp
+IF ( [maskExists] .EQ. 1 ) THEN
+    CP
     [custom_mask]  ; INPUT
     [temp_mask]    ; OUTPUT
 
     ; check dimensions
-    fi [mask-ydim]
+    FI [maskYDim]
     [temp_mask]
-    (2)  ; header position for NROW
+    2  ; header position for NROW
 
     ; compare dimensions
-    if([mask-ydim].ne.[idim]) then
-        [ydim-quotient] = [mask-ydim]/[idim]
+    IF ( [maskYDim] .NE. [idim] ) THEN
+        [ydimQuotient] = [maskYDim]/[idim]
 
         ; check if integer downsampling factor
-        if([ydim-quotient].eq.int([ydim-quotient])) then
-            vm
-            echo "Mask [custom_mask] is {*[ydim-quotient]} times bigger than images.  Shrinking mask..."
+        IF ( [ydimQuotient] .EQ. INT([ydimQuotient]) ) THEN
+            SYS
+            echo "Mask [custom_mask] is {*[ydimQuotient]} times bigger than images.  Shrinking mask..."
 
-            dc s
+            DC S
             [custom_mask]
             [temp_mask]
-            [ydim-quotient],[ydim-quotient]
-        else
-            vm
-            echo "ERROR: Mask dimension {***[mask-ydim]} different from image dimension {***[idim]}.  Exiting..."
+            [ydimQuotient],[ydimQuotient]
+        ELSE
+            SYS
+            echo "ERROR: Mask dimension {***[maskYDim]} different from image dimension {***[idim]}.  Exiting..."
 
-            en
-        endif
-    endif
+            EN
+        ENDIF
+    ENDIF
+
 ; if custom mask not present, make circular mask
-else
+ELSE
     ; check if radius undefined
-    if([radius].le.0) [radius] = int(([idim]-1)/2)
+    IF ( [radius] .LE. 0 ) [radius] = INT(([idim]-1)/2)
 
-    VM
-    echo "Using radius {%i0%[radius]} pixels" ; echo
+    SYS
+    echo "Using mask radius {%i0%[radius]} pixels" ; echo
     
-    mo  
+    MO  
     [temp_mask]    ; output mask file
     [idim],[idim]  ; dimensions
     C              ; _C_ircle
     [radius]
-endif
+ENDIF
 
 ; if CA selected: check for small intensities
-if([cas-option].eq.1) then
-    VM
+IF ( [casOption] .EQ. 1 ) THEN
+    SYS
     echo "Finding statistics" ; date
     
     ; initialize minimum
-    [global-min] = 999999
+    [globalMin] = 999999
 
     ; get #particles
-    ud n [numParts]
+    UD N [numParts]
     [selection_doc]
 
     ; loop through particles
-    do lb5 [part-key] = 1,[numParts]
+    DO LB5 [partKey] = 1,[numParts]
         ; get particle number
-        ud ic [part-key],[part-num]
+        UD IC [partKey], [partNum]
         [selection_doc]
 
         ; get image-minimum
-        fs
-        [particles][part-num]
-        fi [img-min]
-        [particles][part-num]
-        (8)  ; header location for minimum intensity
+        FS
+        [particles][partNum]
+        FI [imgMin]
+        [particles][partNum]
+        8  ; header location for minimum intensity
 
         ; update if necessary
-        if([img-min].lt.[global-min]) then
-            [global-min] = [img-min]
-            [min-part] = [part-num]  ; particle#
-        endif
-    lb5
+        IF ( [imgMin] .LT. [globalMin] ) THEN
+            [globalMin] = [imgMin]
+            [minPart] = [partNum]  ; particle#
+        ENDIF
+    LB5
     ; end particle-loop
 
-    ud ice  ; close document
+    UD ICE  ; close document
     [selection_doc]
 
     ; if additive constant set to automatic, set it
-    if ([global-min].lt.0.05) then
-        if([add-constant].eq.0) [add-constant] = 0.05-[global-min]
-    endif
+    IF ( [globalMin] .LT. 0.05 ) THEN
+        IF ( [addConstant] .EQ. 0 ) [addConstant] = 0.05-[globalMin]
+    ENDIF
 
-    vm
-    echo "Minimum intensity: {%f10.4%[global-min]} (image #{******[min-part]}), additive constant: {%f5.3%[add-constant]}"; echo
-endif
+    SYS
+    echo "Minimum intensity: {%f11.4%[globalMin]} (image #{******[minPart]}), additive constant: {%f11.4%[addConstant]}"; echo
+ENDIF
 
-if([cas-option].eq.1) then
-    vm
+IF ( [casOption] .EQ. 1 ) THEN
+    SYS
     echo "Running correspondence analysis"; date
 
     ; run correspondence analysis
-    ca s
+    CA S
     [particles]
     [selection_doc]
     [temp_mask]
     [numFactors]
     C             ; _C_orrespondence analysis
-    [add-constant]
+    [addConstant]
     [cas_prefix]  ; OUTPUT: file prefix
-endif
+ENDIF
 
-if([cas-option].eq.2) then
-    vm
+IF ( [casOption] .EQ. 2 ) THEN
+    SYS
     echo "Running principal component analysis"; date
 
     ; run principal component analysis
-    ca s
+    CA S
     [particles]
     [selection_doc]
     [temp_mask]
     [numFactors]
     P             ; _P_rinciple component analysis
     [cas_prefix]  ; OUTPUT: file prefix
-endif
+ENDIF
 
-if([cas-option].eq.3) then
-    vm
+IF ( [casOption] .EQ. 3 ) THEN
+    SYS
     echo "Running iterative principal component analysis"; date
 
     ; run iterative principal component analysis
-    ca s
+    CA S
     [particles]
     [selection_doc]
     [temp_mask]
     [numFactors]
     I             ; _I_terative PCA
     [cas_prefix]  ; OUTPUT: file prefix
-endif
+ENDIF
 
-vm m
+SYS M
 echo ; echo "Preparing eigenvalue plot" ; echo ;
 rm -f [temp_gnuplot] [temp_eigenvalues_text] ;
 python eigendoc.py [cas_prefix]_EIG.$DATEXT > [temp_eigenvalues_text]
 .
-vm m
+SYS M
 echo ' 'set terminal postscript eps enhanced monochrome \"Times-Roman\" 24 > [temp_gnuplot] ;
 echo ' 'set encoding iso_8859_1 >> [temp_gnuplot] ;
 echo ' 'set xlabel \"Eigenvalue number\"   >> [temp_gnuplot] ; 
@@ -229,38 +255,38 @@ rm -f [temp_gnuplot] [temp_eigenvalues_text]
 .
 
 ; delete pre-existing files
-de
+DE
 [eigen_img]@
-de
+DE
 [reconstituted_img]@
 DE
-[sdc_doc]
+[temp_corrmap]
 
 
 ; RECONSTITUTE EIGENIMAGES
 
-vm
+SYS
 echo "Reconstituting eigenimages"; date
 
 DE
 [temp_rec_stack]@
 
-[double-dim] = [idim]*2  ; double image-dimension
-[idim-plus1] = [idim]+1
+;;[doubleDim] = [idim]*2  ; double image-dimension
+;;[idimPlus1] = [idim]+1
 
 ; loop through factors
-do lb9 [factorNum] = 1,[numFactors]
-        sd c
+DO LB9 [factorNum] = 1,[numFactors]
+        SD C
         [cas_prefix]
         [factorNum]  ; factor range 
-        [sdc_doc]
+        [temp_corrmap]
         
         ; Get factor statistics
         DOC STAT [nval],[min],[max],[sum],[avg],[stdev]
-        [sdc_doc]
-        (1)  ; WAS [factorNum]
+        [temp_corrmap]
+        1  ; WAS [factorNum]
 
-        IF ([reconstCoeffs] .LE. 0) THEN
+        IF ( [reconstCoeffs] .LE. 0 ) THEN
             [lowEnd]  = [min]
             [highEnd] = [max]
 
@@ -270,39 +296,39 @@ do lb9 [factorNum] = 1,[numFactors]
             [highEnd] = [reconstCoeffs]*[stdev]
         ENDIF
 
-    ; syntax is different for CA ([cas-option]=1) than for (I)PCA
-    if([cas-option].eq.1) then
+    ; syntax is different for CA ([casOption]=1) than for (I)PCA
+    IF ( [casOption] .EQ. 1 ) THEN
         ; generate eigenimage
-        ca sre
+        CA SRE
         [cas_prefix]
         [factorNum]
         [eigen_img]@{***[factorNum]}
 
         ; generate positive reconstituted image
-        ca sra
+        CA SRA
         [cas_prefix]
         [factorNum]
         [highEnd]  ; coefficient
         [temp_rec_stack]@1  ; WAS _1   ; WAS [temp_posrec]   ; OUTPUT
 
         ; generate negative reconstituted image
-        ca sra
+        CA SRA
         [cas_prefix]
         [factorNum]
         [lowEnd]  ; coefficient
         [temp_rec_stack]@2  ; WAS _3   ; WAS [temp_negrec]   ; OUTPUT
 
-    ; syntax for PCA/IPCA ([cas-option]={2,3})
-    else
+    ; syntax for PCA/IPCA ([casOption]={2,3})
+    ELSE
         ; generate eigenimage
-        ca sre
+        CA SRE
         [cas_prefix]
         Y            ; subtract average?
         [factorNum]  ; eigenvector
         [eigen_img]@{***[factorNum]}
 
         ; generate positive reconstituted image
-        ca sra
+        CA SRA
         [cas_prefix]
         N          ; subtract average?
         [factorNum]
@@ -310,72 +336,75 @@ do lb9 [factorNum] = 1,[numFactors]
         [temp_rec_stack]@1  ; WAS _1   ; WAS [temp_posrec]
 
         ; generate negative reconstituted image
-        ca sra
+        CA SRA
         [cas_prefix]
         N         ; subtract average?
         [factorNum]
         [lowEnd]  ; WAS (-0.2)  ; eigenvalue
         [temp_rec_stack]@2  ; WAS _3   ; WAS [temp_negrec]
-
-    endif
+    ENDIF
     
     ; montage positive and negative reconstituted image
-    mn s
+    MN S
     [temp_rec_stack]@*  ; input template
-    (1,2)   ; image #s
-    (1,1)   ; images/row, margin-width
-    (0)     ; margin value
+    1,2   ; image #s
+    1,1   ; images/row, margin-width
+    0     ; margin value
     [reconstituted_img]@{***[factorNum]}
         
     DE
     [temp_rec_stack]@
-lb9
+LB9
 ; End factor-loop
 
 DE
-[sdc_doc]
+[temp_corrmap]
 
 ; PREPARE FACTOR MAPS
 
-vm
-echo "Generating factor maps"; date
+IF ([factormapRange] .GE. 0) THEN
+    SYS
+    echo "Generating factor maps"; date
 
-[num-pairs] = [numFactors] - 1  ; number of eigenfactor-pairs to plot
+    [numPairs] = [numFactors] - 1  ; number of factor-pairs to plot
 
-; loop through eigenfactor-pairs
-do lb2 [factor1] = 1,[num-pairs]
-    [factor2] = [factor1] + 1  ; second factor to plot
+    ; loop through factor-pairs
+    DO LB2 [factor1] = 1,[numPairs]
+        [factor2] = [factor1] + 1  ; second factor to plot
 
-    ; generate factor map
-    ca sm
-    I        ; plot _I_mage coordinates
-    [cas_prefix]  ; INPUT
-    (0)      ; #horizontal patches
-    [factor1],[factor2]  ; factors to plot
-    S        ; plot _S_ymbol
-    +        ; symbol to plot
-    Y        ; output to PostScript?
-    [factormapRange] ; #standard devations to plot
-    (0)      ; no axis-flip
-    [ps_factor_map]{**[factor1]}{**[factor2]}  ; OUTPUT
-             ; TEXT SIZE FOR AXIS AND DATA
-             ; X AXIS OFFSET
-             ; LOWER, UPPER AXIS BOUNDS
-             ; AXIS LABEL UNIT AND TICKS / LABEL
-             ; LABEL NO. TO EDIT
-             ; Y AXIS OFFSET
-             ; LOWER, UPPER AXIS BOUNDS
-             ; AXIS LABEL UNIT AND TICKS / LABEL
-             ; LABEL NO. TO EDIT
-lb2
-; end pair-loop
+        ; generate factor map
+        CA SM
+        I        ; plot _I_mage coordinates
+        [cas_prefix]  ; INPUT
+        0        ; #horizontal patches
+        [factor1],[factor2]  ; factors to plot
+        S        ; plot _S_ymbol
+        +        ; symbol to plot
+        Y        ; output to PostScript?
+        [factormapRange] ; #standard devations to plot
+        0        ; no axis-flip
+        [ps_factor_map]{**[factor1]}{**[factor2]}  ; OUTPUT
+                 ; TEXT SIZE FOR AXIS AND DATA
+                 ; X AXIS OFFSET
+                 ; LOWER, UPPER AXIS BOUNDS
+                 ; AXIS LABEL UNIT AND TICKS / LABEL
+                 ; LABEL NO. TO EDIT
+                 ; Y AXIS OFFSET
+                 ; LOWER, UPPER AXIS BOUNDS
+                 ; AXIS LABEL UNIT AND TICKS / LABEL
+                 ; LABEL NO. TO EDIT
+    LB2
+    ; end pair-loop
+ENDIF
 
-vm
+SYS
 echo "Done"; date
 
-en d
+EN D
 
-; Modified 2015-07-31
+; Modified 2018-02-12
+;    2016-05-10 (trs) -- added option to skip factor map (CA SM crashes if too many point on margin)
+;    2016-04-08 (trs) -- can use either filtered or unfiltered particles
 ;    2015-07-31 (trs) -- gets image dimension from first particle rather than PARAMS
 ;    2014-04-03 (trs) -- no longer saves correlation doc file -- SD C was crashing too much
 ;    2014-04-03 (trs) -- generates reconstituted images more intelligently
@@ -389,5 +418,5 @@ en d
 ;    2010-02-09 (trs) -- CA SR* asks extra question if using PCA/IPCA
 ;    2008-11-26 (trs) -- now a parameter to specify CA, PCA, or IPCA
 ;    2007-11-02 (trs) -- added reconstituted images
-;    2006-05-11 (trs) -- bug fix if more than nine eigenfactors
+;    2006-05-11 (trs) -- bug fix if more than nine factors
 ;    2005-08-23 (trs) -- factor maps adapted from jsl's casm.bat
