@@ -4,11 +4,12 @@
 
 ; ----------------- Parameters -----------------
 [filteredImgsYN] = -1    ; use low-pass filtered images? (1==YES, 0==NO, -1==If_Available)
-[startDepth]     = 1     ; starting depth (TO DO: be able to start from >1)
-[endDepth]       = 9     ; ending depth (--> 2**[endDepth] class averages)
+[startDepth] = 1    ; starting depth (TO DO: be able to start from >1)
+[endDepth]   = 9    ; ending depth (--> 2**[endDepth] class averages)
 
-[topBranch]      = 100   ; height of top two branches in dendrogram
-;                        ; (Starting with version 17.13 it's 100.  Previously it was 1.)
+[debug]     = 0     ; debug flag (1==ON)
+[topBranch] = 100   ; height of top two branches in dendrogram
+;                   ; (Starting with version 17.13 it's 100.  Previously it was 1.)
 
 ; --------------------- Inputs ---------------------
 FR L 
@@ -58,7 +59,7 @@ UD N [numTermini]
 
 ; add number of digits in highest class# and in biggest class (node #1)
 [maxClassDigits] = INT(LOG(2**[endDepth])) + 1
-[maxClassDigits]  ; diagnostic
+[maxClassDigits]   ; diagnostic
 IF ( [maxClassDigits] .LT. 3 ) [maxClassDigits] = 3
 
 [maxPartsDigits] = INT(LOG([numTermini])) + 1
@@ -97,6 +98,7 @@ DE
 [class_list]
 
 
+; Set [particles]
 IF ( [filteredImgsYN] .EQ. -1) THEN
     ; See if filtered images exist
     IQ FI [filteredExist]
@@ -216,23 +218,19 @@ DO LB2 [currentDepth] = 3,[endDepth]
 
         [lastSearchTerminus] = [lastParentTerminus] - 1
 
-;        ; diagnostic
-;        SYS
-;        echo "Parent node {***[parentNode]}, searching termini {***[firstParentTerminus]} through {***[lastSearchTerminus]}"
-
         [numSearchTermini] = [lastParentTerminus] - [firstParentTerminus] + 1
 
         ; if parent node has only one particle, write dummy entries to lookup table and skip
         IF ( [numSearchTermini] .LT. 1 ) THEN
             ; write empty left-hand node
             @update_lut([nodeNum])
-            0     ; PARAMETER: first terminus
-            0     ; PARAMETER: last terminus
+            0   ; PARAMETER: first terminus
+            0   ; PARAMETER: last terminus
 
             ; write empty right-hand node
             @update_lut([nodeNum])
-            0     ; PARAMETER: first terminus
-            0     ; PARAMETER: last terminus
+            0   ; PARAMETER: first terminus
+            0   ; PARAMETER: last terminus
 
             GOTO LB3  ; loop to next parent node
         ENDIF
@@ -259,7 +257,7 @@ DO LB2 [currentDepth] = 3,[endDepth]
             ENDIF
         LB4
         ; end terminus-loop
-
+        
         [rightFirstTerminus] = [maxHeightTerminus] + 1
         ; first terminus of eventual rightward branch
 
@@ -290,32 +288,63 @@ DO LB2 [currentDepth] = 3,[endDepth]
         [firstParentTerminus]  ; PARAMETER: first terminus
         [maxHeightTerminus]    ; PARAMETER: last terminus
 
+        IF ( [debug] .GE. 0.5 ) THEN
+            SYS M
+            echo "DEBUG left: depth {**[currentDepth]}, firstParentTerminus {%i0%[firstParentTerminus]}" ;
+            echo "DEBUG left: depth {**[currentDepth]}, maxHeightTerminus {%i0%[maxHeightTerminus]}" ;
+.
+        ENDIF
+        
 
         ; RIGHT-BRANCH CHILD NODE
 
-        ; loop through right-branch termini
-        DO LB6 [rightKey] = [rightFirstTerminus],[lastParentTerminus]
-            ; read particle#
-            UD IC [rightKey], [partNum],[dendrogramHeight]
-            [dendro_doc]
+        ; Sanity check
+        IF ( [rightFirstTerminus] .GT. [numTermini] ) THEN
+            SYS M
+            echo "" ;
+            echo "WARNING!" ;
+            echo "Program trying to extend past end of dendrogram." ;
+            echo "New trap (2020-12-13) attempts workaround." ; 
+            echo "If binarytree et al., show odd behavior, let developers know." ;
+            echo "depth: {**[currentDepth]}" ;
+            echo "firstParentTerminus: {%i0%[firstParentTerminus]}" ;
+            echo "rightFirstTerminus (requested, to be skipped): {%i0%[rightFirstTerminus]}" ;
+.
+        ELSE
+            ; loop through right-branch termini
+            DO LB6 [rightKey] = [rightFirstTerminus],[lastParentTerminus]
+                ; read particle#
+                UD IC [rightKey], [partNum],[dendrogramHeight]
+                [dendro_doc]
 
-            [terminusCounter] = [rightKey] - [rightFirstTerminus] + 1
+                [terminusCounter] = [rightKey] - [rightFirstTerminus] + 1
 
-            ; write particle#
-            SD [terminusCounter], [partNum],[dendrogramKey]
-            [node_doc][nodeNum]
-        LB6
-        ; end right-loop
+                ; write particle#
+                SD [terminusCounter], [partNum],[dendrogramKey]
+                [node_doc][nodeNum]
+            LB6
+            ; end right-loop
 
-        ; average images
-        @averagenode([nodeNum],[maxClassDigits],[maxPartsDigits])
-        [rightFirstTerminus]  ; PARAMETER: first terminus
-        [lastParentTerminus]  ; PARAMETER: last terminus
-        [labelDim]            ; PARAMETER: temporary dimension for labelling
+            ; average images
+            @averagenode([nodeNum],[maxClassDigits],[maxPartsDigits])
+            [rightFirstTerminus]  ; PARAMETER: first terminus
+            [lastParentTerminus]  ; PARAMETER: last terminus
+            [labelDim]            ; PARAMETER: temporary dimension for labelling
 
-        @update_lut([nodeNum])
-        [rightFirstTerminus]  ; PARAMETER: first terminus
-        [lastParentTerminus]  ; PARAMETER: last terminus
+            @update_lut([nodeNum])
+            [rightFirstTerminus]  ; PARAMETER: first terminus
+            [lastParentTerminus]  ; PARAMETER: last terminus
+            
+            IF ( [debug] .GE. 0.5 ) THEN
+                SYS M
+                echo "DEBUG right: depth {**[currentDepth]}, rightFirstTerminus {%i0%[rightFirstTerminus]}" ;
+                echo "DEBUG right: depth {**[currentDepth]}, lastParentTerminus {%i0%[lastParentTerminus]}" ;
+                echo "" ;
+    .
+            ENDIF
+            ; end debug if-then
+        ENDIF
+        ; end sanity if-then
     LB3
     ; end parent-loop
 
@@ -355,10 +384,10 @@ echo "Depth completed: {**[currentDepth]}" ; echo
 
 EN D
 
-; Modified 2018-02-12
+; Modified 2020-12-13
 ;    TO DO: add ability to start correctly from depth >1
 ;    TO DO: change TEMP_LUT to in-core file
-;    2016-04-08 (trs) -- can use either filtered or unfiltered particles
+;    2020-12-13 (trs & dq) -- workaround when trying to extend past end of dendrogram
 ;    2015-09-09 (trs) -- added case for >10,000 particles
 ;    2015-07-30 (trs) -- LISTCLASSES keys now numbered consecutively -- was crashing verifybyview
 ;    2014-03-06 (trs) -- reading images from stacks
