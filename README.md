@@ -7,8 +7,7 @@ is an image processing system for electron microscopy, especially usefull for si
 over 210,000 lines of Fortran code and 7400 files. The lastest release from July 2020 (which will probably be the 
 final release) contains  support for reading/writing MRC files.  
 
-This latest release is available [here](http://github.com/spider-em/SPIDER/releases)  or can be downloaded from the 
-[Wadsworth Center](http://spider.wadsworth.org/spider_doc/spider/docs/spi-register.html). 
+This latest release is available [here](http://github.com/spider-em/SPIDER/releases). 
 
 * Uses:
                
@@ -57,12 +56,16 @@ This latest release is available [here](http://github.com/spider-em/SPIDER/relea
           T. Shaikh,   J. Sengupta,  J. LeBarron,    N. Boisset,   H. Gao,       G. Kishchenko, J. M. Kennedy, A. Gunggong. 
                 
           In addition SPIDER is dependent on the Fourier package [FFTW](http://www.fftw.org) by M. Frigo and SG Johnson.  
-               
-   3.   Maintained since 2007 by: ArDean Leith & Tanvir Shaikh. During these 13 years they added numerous 
+
+   3.   SPIDER has often been used in conjunction with other software e.g. the often  cited methods developed by Edward H. Egelman. See:  [The iterative helical real space reconstruction method: Surmounting the problems posed by real polymers](http://doi.org/10.1016/j.jsb.2006.05.015).
+             
+   4.   Maintained since 2007 by: ArDean Leith & Tanvir Shaikh. During these 16 years they added numerous 
         operations, procedures, parallelizations, and over 500 pages of documentation.  There have been no 
         significant contributors other than Leith, Shaikh, Kischenko, and Kennedy since 2007.
 
+  5.    In 2023 we are happy to see that citations of the use of SPIDER continue to occur in the methodology sections of significant new research publications. 
+
 -----------------------------------------------------
 
-[Copyright under GPL](http://spider.wadsworth.org/spider_doc/spider/docs/copyright.html).   
+[Copyright under GPL].   
 
