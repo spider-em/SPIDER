@@ -15,7 +15,7 @@ This latest release is available [here](http://github.com/spider-em/SPIDER/relea
   
    2.  Multivariate statistical analysis.
    
-   3.  3D reconstruction.
+   3.  3D reconstruction from projections.
    
    4.  Electron tomography.
    
@@ -39,7 +39,7 @@ This latest release is available [here](http://github.com/spider-em/SPIDER/relea
 * History:
 
    1.   Originated in by 
-           [Joachim Frank](http://franklab.cpmc.columbia.edu/franklab) who
+           [Joachim Frank](http://joachimfranklab.org) who
            shared the 2017 Nobel Prize in Chemistry for his pioneering cryo-em research done at the 
            [Wadsworth Center](http://www.wadsworth.org) in Albany, NY.
        
