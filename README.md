@@ -5,7 +5,7 @@
 is an image processing system for electron microscopy, especially usefull for single-particle reconstruction. 
 **SPIDER** has been in use since 1978 and contains 
 over 210,000 lines of Fortran code and 7400 files. The lastest release from July 2020 (which will probably be the 
-final release) contains  support for reading/writing MRC files.  
+final release) contains support for reading/writing MRC files.  
 
 This latest release is available [here](http://github.com/spider-em/SPIDER/releases). 
 
@@ -27,7 +27,7 @@ This latest release is available [here](http://github.com/spider-em/SPIDER/relea
       
    3.   Hierarchical modular design for scripting.  
 
-   4.   Graphical user interface, [*Web*](http://github.com/spider-em/web/README.md) 
+   4.   Graphical user interface, [*Web*](http://github.com/spider-em/web) 
         for  visualizing and interacting with images.  
 
    6.   Uses a File format which is interchangeable with other electron microscopy imaging systems.  
