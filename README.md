@@ -27,7 +27,7 @@ This latest release is available [here](http://github.com/spider-em/SPIDER/relea
       
    3.   Hierarchical modular design for scripting.  
 
-   4.   Graphical user interface, [*Web*](http://github.com/spider-em/web/README) 
+   4.   Graphical user interface, [*Web*](http://github.com/spider-em/web/README.md) 
         for  visualizing and interacting with images.  
 
    6.   Uses a File format which is interchangeable with other electron microscopy imaging systems.  
