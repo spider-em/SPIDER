@@ -33,7 +33,7 @@ SPIRE_LIB_DIR=$SPIRE_DIR/lib
 #echo " SPIRE_BIN_DIR is:  $SPIRE_BIN_DIR";  
 
 # Ensure that user has extracted the spire.tar archive"
-if [ -a ${SPIRE_DIR}/spire.tar ] 
+if [ -e ${SPIRE_DIR}/spire.tar ] 
    then  echo " Already unpacked: spire.tar " 
 else
    echo " Unpacking: spire.tar.gz  please wait" 
