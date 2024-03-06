@@ -47,7 +47,7 @@
  [FC]        = 1
  [ED]        = 1
  [CE_WATER]  = 1
- [ER_WA]     = 1
+ [ER_WA]     = 0
  [CE_RIDGE]  = 1
  [ER_EDM]    = 1
  [CE_TOP]    = 1             ; Usefull for particles only
@@ -55,7 +55,7 @@
  ; -----------------------------------  INPUT VOLUME  
 
 ![volin] = 'bzvol'    
- [volin] = 'win_bzvol'    
+ [volin] = 'win_bzvol'
 
  ; -----------------------------------  OUTPUT FILES  
 
@@ -135,7 +135,7 @@
 
 
  ; Extract relevant slice from input volume
- PS Z                          ; Pick relevant slice
+ @pick_z([dtype])
    _2                          ; Input volume
    _3                          ; Output slice 
    [zsl]                       ; Slice number 
@@ -178,36 +178,62 @@
  SYS  
    echo "  N: {***[imgnum]} Original" 
 
+
  ; ----------------------------------------- CE AD
- 
- CE AD                         ; Anisotropic Diffusion 
-   _2                          ; Input volume 
-   _4                          ; Output volume 
-   HEG                         ; AD filter type
-   [aditer]                    ; Iterations 
-   [time]                      ; Time step 
-   [sigma],[lambda]            ; Sigma & Lambda 
- 
- PS Z                          ; Pick relevant slice
-   _4                          ; Input volume 
-   _5                          ; Output slice 
-   [zsl]                       ; Slice number 
- 
- ; Increment image stack pointer 
- [imgnum]=[imgnum]+1           ; Increment stack pointer 
- LA                            ; Label the image 
-   _5                          ; Input stack image 
-   [stkout]@{****[imgnum]}     ; Output stack 
-   CE AD ORIGINAL
+ ; Large images seem to crash CE AD
+ [do_cead] = 1
 
- SYS  
-   echo "  N: {***[imgnum]} CE AD Denoised Original" 
+ IF ( [dtype] .EQ. 1 ) THEN
+   ; Get image dimension
+   FI H [xdim]
+     _2
+     NX
 
+   IF ( [xdim] .GE. 1024 ) THEN
+     SYS
+       echo "  WARNING! Image dimension ({%i0%[xdim]}) too big for CE AD, skipping..."
+     [do_cead] = 0
+   ELSEIF ( [xdim] .GT. 682 ) THEN
+     SYS
+       echo "  WARNING! Image dimension ({%i0%[xdim]}) untested, may crash..."
+   ENDIF
+ ENDIF
 
+ IF ( [do_cead] .EQ. 1 ) THEN
+   CE AD                         ; Anisotropic Diffusion
+     _2                          ; Input volume
+     _4                          ; Output volume
+     HEG                         ; AD filter type
+     [aditer]                    ; Iterations
+     [time]                      ; Time step
+     [sigma],[lambda]            ; Sigma & Lambda
+
+   @pick_z([dtype])              ; Pick relevant slice
+     _4                          ; Input volume
+     _5                          ; Output slice
+     [zsl]                       ; Slice number
+
+   ; Increment image stack pointer
+   [imgnum]=[imgnum]+1           ; Increment stack pointer
+   LA                            ; Label the image
+     _5                          ; Input stack image
+     [stkout]@{****[imgnum]}     ; Output stack
+     CE AD ORIGINAL
+
+   SYS
+     echo "  N: {***[imgnum]} CE AD Denoised Original"
+ ELSE
+   CP
+     _2                          ; Input volume
+     _4                          ; Output volume
+   CP
+     _2                          ; Input volume
+     _5                          ; Output volume
+ ENDIF
+
+ ; ----------------------------------- CE -- Median
  IF ([CE_MED] == 1) THEN
-   ; ----------------------------------- CE -- Median 
-    
-   DO  [iter]=1,3 
+   DO  [iter]=1,3
       [radius] = [iter] * 2 + 1 
       CE MED                    ; Median 
         _2                      ; Original Input volume 
@@ -215,7 +241,7 @@
         [radius]                ; Length 
         BOX                     ; Box shape 
    
-      PS Z                      ; Pick relevant slice
+      @pick_z([dtype])          ; Pick relevant slice
         _6                      ; Input volume 
         _7                      ; Output slice 
         [zsl]                   ; Slice number 
@@ -284,12 +310,12 @@ ENDIF
       [radius] = [iter] * 2 + 1 
     
       CE LAH                     ; Local area histogram equalization 
-      _4                         ; Input volume 
+      _4                         ; Input volume
       _6                         ; Output volume 
       [radius],[radius],[radius] ; Neighborhood 
       [bins]                     ; Number of bins 
    
-      PS Z                       ; Pick relevant slice
+      @pick_z([dtype])           ; Pick relevant slice
       _6                         ; Input volume 
       _7                         ; Output slice 
       [zsl]                      ; Slice number 
@@ -315,7 +341,7 @@ IF ([CE_HAR] == 1) THEN
          [radius] = 9 + [iter] * 6 
     
          CE HAR                  ; Haralick 
-         _5                      ; Input slice 
+         _5                      ; Input slice
          _7                      ; Output slice 
          [radius],[radius]       ; Neighborhood 
          (32)                    ; Intensity Levels 
@@ -340,7 +366,7 @@ IF ([CE_HAR] == 1) THEN
          [radius] = 11 + [iter] * 6 
     
          CE HAR                  ; Haralick 
-         _5                      ; Input slice 
+         _5                      ; Input slice
          _7                      ; Output slice 
          [radius],[radius]       ; Neighborhood 
          (32)                    ; Intensity Levels 
@@ -366,11 +392,11 @@ IF ([CE_HAR] == 1) THEN
       [radius] =1  + [iter] * 2 
    
       CE HURST                   ; Hurst 
-      _4                         ; Input volume 
+      _4                         ; Input volume
       _6                         ; Output volume 
       [radius]                   ; Radius 
    
-      PS Z                       ; Pick relevant slice
+      @pick_z([dtype])           ; Pick relevant slice
       _6                         ; Input volume 
       _7                         ; Output slice 
       [zsl]                      ; Slice number 
@@ -393,11 +419,11 @@ IF ([CE_MAX] == 1) THEN
       [radius] = 1  + [iter] * 2 
    
       CE MAX                  ; Maximum 
-      _4                      ; Input volume 
+      _4                      ; Input volume
       _6                      ; Output volume 
       [radius]                ; Radius 
    
-      PS Z                    ; Pick relevant slice
+      @pick_z([dtype])        ; Pick relevant slice
       _6                      ; Input volume 
       _7                      ; Output slice 
       [zsl]                   ; Slice number 
@@ -420,11 +446,11 @@ IF ([CE_VAR] == 1) THEN
       [radius] = 1  + [iter] * 2 
    
       CE VAR                  ; Variance 
-      _4                      ; Input volume 
+      _4                      ; Input volume
       _6                      ; Output volume 
       [radius]                ; Radius 
    
-      PS Z                    ; Pick relevant slice
+      @pick_z([dtype])        ; Pick relevant slice
       _6                      ; Input volume 
       _7                      ; Output slice 
       [zsl]                   ; Slice number 
@@ -447,11 +473,11 @@ IF ([CE_RANGE] == 1) THEN
       [radius] = 1  + [iter] * 2 
    
       CE RANGE                ; Hurst 
-      _4                      ; Input volume 
+      _4                      ; Input volume
       _6                      ; Output volume 
       [radius]                ; Radius 
    
-      PS Z                    ; Pick relevant slice
+      @pick_z([dtype])        ; Pick relevant slice
       _6                      ; Input volume 
       _7                      ; Output slice 
       [zsl]                   ; Slice number 
@@ -471,10 +497,10 @@ IF ([CE_G] == 1) THEN
    ;------------------------------ CE -- Gradient 
    
    CE G                       ; Gradient 
-   _4                         ; Input volume 
+   _4                         ; Input volume
    _6                         ; Output volume 
    
-   PS Z                       ; Pick relevant slice
+   @pick_z([dtype])           ; Pick relevant slice
    _6                         ; Input volume 
    _7                         ; Output slice 
    [zsl]                      ; Slice number 
@@ -496,11 +522,11 @@ IF ([CE_LAP] == 1) THEN
       [radius] = 3  + [iter] * 4 
    
       CE L                    ;  
-      _4                      ; Input volume 
+      _4                      ; Input volume
       _6                      ; Output volume 
       [radius]                ; Radius 
    
-      PS Z                    ; Pick relevant slice
+      @pick_z([dtype])        ; Pick relevant slice
       _6                      ; Input volume 
       _7                      ; Output slice 
       [zsl]                   ; Slice number 
@@ -520,10 +546,10 @@ IF ([CE_SO] == 1) THEN
    ;------------------------------ CE -- Sobel 
    
    CE S                      ;  
-   _4                        ; Input volume 
+   _4                        ; Input volume
    _6                        ; Output volume 
    
-   PS Z                      ; Pick relevant slice
+   @pick_z([dtype])          ; Pick relevant slice
    _6                        ; Input volume 
    _7                        ; Output slice 
    [zsl]                     ; Slice number 
@@ -542,7 +568,7 @@ IF ([CE_FREI] == 1) THEN
    ;------------------------------ CE -- Frei Chen 
    
    CE F                       ; Frei Chen 
-   _5                         ; Input slice 
+   _5                         ; Input slice
    _7                         ; Output volume 
    
    [imgnum]=[imgnum]+1        ; Increment stack pointer 
@@ -559,10 +585,10 @@ IF ([CE_PR] == 1) THEN
    ;------------------------------ CE -- Prewitt 
    
    CE PR                      ; Prewitt  
-   _4                         ; Input volume 
+   _4                         ; Input volume
    _6                         ; Output volume 
    
-   PS Z                       ; Pick relevant slice
+   @pick_z([dtype])           ; Pick relevant slice
    _6                         ; Input volume 
    _7                         ; Output slice 
    [zsl]                      ; Slice number 
@@ -583,7 +609,7 @@ IF ([CE_PR] == 1) THEN
    [levels] = 4
    
    FC                         ; Contouring 
-   _5                         ; Input slice  
+   _5                         ; Input slice
    _7                         ; Output slice  
    [levels]                   ; Number of Contours
    NO                         ; No overwrite
@@ -605,7 +631,7 @@ IF ([CE_PR] == 1) THEN
       DO  [mode]=1,4 
    
          ED                      ; Edge Detection (Wiener) 
-         _5                      ; Input slice 
+         _5                      ; Input slice
          _7                      ; Output slice 
          [mode]                  ; Filter number 
          [Thresh]                ; Relative Threshold 
@@ -626,7 +652,7 @@ IF ([CE_PR] == 1) THEN
    ;------------------------------ CE WATER
    
    CE WATER                   ;  
-   _5                         ; Input slice 
+   _5                         ; Input slice
    _7                         ; Output slice 
    
    [imgnum]=[imgnum]+1        ; Increment stack pointer 
@@ -645,7 +671,7 @@ IF ([ER_WA] == 1) THEN
    ; ----------------------------------- ER -- Watershed 
 
    ER WA                      ; Erode to Watershed Skeleton 
-   _5                         ; Input Slice 
+   _5                         ; Input Slice
    _7                         ; Output slice 
 
    [imgnum]=[imgnum]+1        ; Increment stack pointer 
@@ -662,10 +688,10 @@ IF ([CE_RIDGE] == 1) THEN
    ; ----------------------------------- CE -- Ridge 
    
    CE RIDGE                ; Erode to Watershed Skeleton 
-   _4                      ; Input volume  
+   _4                      ; Input volume
    _6                      ; Output volume  
 
-   PS Z                    ; Pick relevant slice from volume
+   @pick_z([dtype])        ; Pick relevant slice
    _6                      ; Input volume 
    _7                      ; Output slice 
    [zsl]                   ; Slice number 
@@ -686,7 +712,7 @@ IF ([ER_EDM] == 1) THEN
    [level] = 100
    
    ER EDM                  ;  
-   _5                      ; Input slice 
+   _5                      ; Input slice
    _7                      ; Output slice  
    [level]                 ; Background Threshold
    
@@ -708,11 +734,11 @@ IF ([ER_EDM] == 1) THEN
       [radius1] = [radius] + 2 
    
       CE TOP                  ; TopHat 
-      _4                      ; Input volume 
+      _4                      ; Input volume
       _6                      ; Output volume 
       [radius],[radius1]      ; Radii 
    
-      PS Z                    ; Pick relevant slice
+      @pick_z([dtype])        ; Pick relevant slice
       _6                      ; Input volume 
       _7                      ; Output slice 
       [zsl]                   ; Slice number 
