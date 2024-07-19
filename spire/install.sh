@@ -25,9 +25,9 @@ if [ -z ${SPIDER_DIR} ];
    then echo "set ENVIRONMENT VARIABLE: SPIDER_DIR to location of your SPIDER distribution"; exit ;
 else echo " SPIDER_DIR is:  $SPIDER_DIR";  fi
 
-SPIRE_DIR=$SPIDER_DIR/spire-dist
+#SPIRE_DIR=$SPIDER_DIR/spire-dist
 
-#SPIRE_DIR=`pwd`
+SPIRE_DIR=`pwd`
 SPIRE_BIN_DIR=$SPIRE_DIR/bin
 SPIRE_LIB_DIR=$SPIRE_DIR/lib
 #echo " SPIRE_BIN_DIR is:  $SPIRE_BIN_DIR";  
