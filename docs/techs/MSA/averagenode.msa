@@ -1,179 +1,160 @@
-([node-num],[max-class-digits],[max-parts-digits])
-;([node-num])
-;;([node-num],[first-terminus],[last-terminus],[label-dim])
+([node_num],[max_class_digits],[max_parts_digits])
 
-rr [first-terminus]
+FR
+?particle template?[particles]
+FR
+?list of particle in each node?[node_doc]
+
+RR [first_terminus]
 ?first terminus?
 
-rr [last-terminus]
+RR [last_terminus]
 ?last terminus?
 
-md
-results off
-
-rr [label-dim]
+RR [label_dim]
 ?temporary dimension of labelling?
 
+FR
+?output class list?[class_list]
+FR
+?output average template?[node_avg]
+FR
+?labeled average template (2D only)?[labeled_avg]
+
+MD
+RESULTS OFF
+
 ; --- Input Parameters ---
-; [node-num]        node number
-; [label-dim]       minimum width for labeling
-; [first-terminus]  first terminus
-; [last-terminus]   last terminus
+; [node_num]        node number
+; [label_dim]       minimum width for labeling
+; [first_terminus]  first terminus
+; [last_terminus]   last terminus
 ; -------- Input --------
 ; [particles]       particle template
 ; [node_doc]        list of particle in each node (modified/labelled)
 ; ------- Outputs -------
-; [node_avg]        output average
 ; [class_list]      class list
+; [node_avg]        output average template
+; [labeled_avg]     labeled average template
+
+; -- END BATCH HEADER --
+
+; Temporary files
+[temp_big] = '_1'
+[temp_var] = '_2'
+[temp_lab] = '_4'
 
 ; label node doc (at bottom)
-if([node-num].eq.1) then
-    ; is a copy of the dendrogram
-    SD /        PARTNUM   DENDRO_HEIGHT
-    [node_doc][node-num]
-else
-    SD /       PARTNUM      DENDROKEY
-    [node_doc][node-num]
-endif
+IF ( [node_num] .EQ. 1 ) THEN
+  ; Is a copy of the dendrogram
+  SD /        PARTNUM   DENDRO_HEIGHT
+  [node_doc][node_num]
+ELSE
+  SD /       PARTNUM      DENDROKEY
+  [node_doc][node_num]
+ENDIF
 
-sd e  ; close doc
-[node_doc][node-num]
+SD E  ; close doc
+[node_doc][node_num]
 
-; get number of particles
-ud n,[num-parts-node]
-[node_doc][node-num]
+; Get number of particles
+UD N [num_parts_node]
+[node_doc][node_num]
 
 ; update class list
-sd [node-num], [node-num],[num-parts-node]
+SD [node_num], [node_num],[num_parts_node]
 [class_list]
 
 ; average images
-as r
+AS R
 [particles]
-[node_doc][node-num]
+[node_doc][node_num]
 A                     ; _A_ll
-[node_avg][node-num]  ; OUTPUT
-_2                    ; dummy file: variance
+[node_avg][node_num]  ; OUTPUT
+[temp_var]
 
 
 ; CHECK IF AVERAGE NEEDS TO BE RESIZED FOR LABELING
 
-; get image dimension
-fi [orig-img-dim]
-_2    ; INPUT: variance
-(12)  ; header position for x-dim
+; Get image dimension
+FI H [orig_img_dim],[iform]
+[temp_var]
+NX, IFORM
 
-; if smaller than minimum, interpolate
-if([orig-img-dim].lt.[label-dim]) then
-    ip
-    [node_avg][node-num]
-    _1
-    [label-dim],[label-dim]
-else
-    cp
-    [node_avg][node-num]
-    _1
-endif
+; Only label 2D averages
+IF ( [iform] .EQ. 1 ) THEN
+  ; If smaller than minimum, interpolate
+  IF ( [orig_img_dim] .LT. [label_dim] ) THEN
+    IP
+    [node_avg][node_num]
+    [temp_big]
+    [label_dim],[label_dim]
+  ELSE
+    CP
+    [node_avg][node_num]
+    [temp_big]
+  ENDIF
 
+  MD
+  RESULTS ON
 
-md
-results on
+  ; LABEL
 
-; LABEL
+  ; Get #particles
+  [num_particles] = [last_terminus] - [first_terminus] + 1
+  ; (*Should* be the same as [num_parts_node], but...)
 
-; get #particles
-[num-particles] = [last-terminus] - [first-terminus] + 1
-; *should* be the same as [num-parts-node], but...
+  ; DETERMINE FORMAT OF LABEL
 
-; DETERMINE FORMAT OF LABEL
+  IF ( [max_class_digits] .LE. 3 ) THEN
+    IF ( [max_parts_digits] .LE. 3 ) THEN
+      LA B
+      [temp_big]  ; INPUT: average
+      [temp_lab]
+      {***[node_num]},n={%i0%[num_particles]}
+    ENDIF
 
-if([max-class-digits].le.3) then
-    if([max-parts-digits].le.3) then
-	la b
-	_1  ; INPUT: average
-	_4
-	{***[node-num]},n={***[num-particles]}
-    endif
+  ; If #class-digits is >=4
+  ELSE
+    IF ( [max_parts_digits] .LE. 3 ) THEN
+      LA B
+      [temp_big]  ; INPUT: average
+      [temp_lab]
+      {%i0%[node_num]},n={%i0%[num_particles]}
+    ENDIF
+  ENDIF
+  ; End class-digits IF-THEN (not considering 10,000+ classes)
 
-    if([max-parts-digits].eq.4) then
-	la b
-	_1  ; INPUT: average
-	_4
-	{***[node-num]},n={****[num-particles]}
-    endif
+  ; if average was resized, then re-resize
+  IF ( [orig_img_dim] .LT. [label_dim] ) THEN
+    ; Get new y-dimension (should be +36)
+    FI H [labeled_ydim]
+    [temp_lab]
+    NY
 
-    if([max-parts-digits].eq.5) then
-	la b
-	_1  ; INPUT: average
-	_4
-	{***[node-num]},n={*****[num-particles]}
-    endif
+    ; Calculate new y-dimension
+    [new_ydim] = [labeled_ydim] * [orig_img_dim] / [label_dim]
 
-    if([max-parts-digits].ge.6) then
-	la b
-	_1  ; INPUT: average
-	_4
-	{***[node-num]},n={******[num-particles]}
-    endif
-    ; (Not considering 100,000+ particles)
+    ; Interpolate back to original width
+    IP
+    [temp_lab]  ; INPUT: labelled average
+    [labeled_avg][node_num]
+    [orig_img_dim],[new_ydim]
+  ELSE
+    CP
+    [temp_lab]
+    [labeled_avg][node_num]
+  ENDIF
+ELSE
+  MD
+  RESULTS ON
+ENDIF
+; End 2D IF-THEN
 
-; if #class-digits is 4
-else
-    if([max-parts-digits].le.3) then
-	la b
-	_1  ; INPUT: average
-	_4
-	{****[node-num]},n={***[num-particles]}
-    endif
+RE
 
-    if([max-parts-digits].eq.4) then
-	la b
-	_1  ; INPUT: average
-	_4
-	{****[node-num]},n={****[num-particles]}
-    endif
-
-    if([max-parts-digits].eq.5) then
-	la b
-	_1  ; INPUT: average
-	_4
-	{****[node-num]},n={*****[num-particles]}
-    endif
-    ; (Not considering 100,000+ particles)
-endif
-; (Not considering 10,000+ classes)
-
-;; label average w/#particles
-;la b
-;_1  ; INPUT: average
-;_4
-;{****[node-num]},n={****[num-particles]}
-;;{***[node-num]},n={*****[num-particles]}
-
-; if average was resized, then re-resize
-if([orig-img-dim].lt.[label-dim]) then
-    ; get new y-dimension (should be +36)
-    fi [labeled-ydim]
-    _4
-    (2)  ; header position for y-dim
-
-    ; calculate new y-dimension
-    [new-ydim] = [labeled-ydim] * [orig-img-dim] / [label-dim] 
-
-    ; interpolate back to original width
-    ip
-    _4  ; INPUT: labelled average
-    [labeled_avg][node-num]
-    [orig-img-dim],[new-ydim]
-else
-    cp
-    _4
-    [labeled_avg][node-num]
-endif
-
-re
-
-; Modified 2015-09-09
+; Modified 2025-02-24
+;    2025-02-20 (trs) -- works on 3D averages, skips labelling
 ;    2015-09-09 (trs) -- added case for >10,000 particles
 ;    2012-12-14 (trs) -- intelligent label-dimension
 ;    2012-12-14 (trs) -- writes to class list
