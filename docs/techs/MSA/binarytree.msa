@@ -3,88 +3,83 @@
 ; REQUIRES averagenode.rct and update_lut.rct
 
 ; ----------------- Parameters -----------------
-[startDepth] = 1    ; starting depth (TO DO: be able to start from >1)
-[endDepth]   = 9    ; ending depth (--> 2**[endDepth] class averages)
+[start_depth] = 1    ; starting depth (TO DO: be able to start from >1)
+[end_depth]   = 9    ; ending depth (--> 2**[end_depth] class averages)
 
-[debug]     = 0     ; debug flag (1==ON)
-[topBranch] = 100   ; height of top two branches in dendrogram
-;                   ; (Starting with version 17.13 it's 100.  Previously it was 1.)
+[debug]      = 0     ; debug flag (1==ON)
+[top_branch] = 100   ; height of top two branches in dendrogram
+;                    ; (Starting with version 17.13 it's 100.  Previously it was 1.)
 
 ; --------------------- Inputs ---------------------
-FR L 
-[dendro_doc]Hierarchical/docdendro   ; dendrogram document
-FR G
-[particles]stkfiltered@*****         ; particle template
+
+[dendro_doc] = 'Hierarchical/docdendro'   ; dendrogram document
+[particles]  = 'stkfiltered@*****'        ; particle template
 
 ; -------------------- Outputs --------------------
-FR G
-[binary_dir]Tree                       ; output directory
-FR G
-[node_lut][binary_dir]/node2termini    ; node-to-particle lookup table
-FR G
-[node_doc][binary_dir]/docclass***     ; particles-per-node list template
-FR G
-[node_avg][binary_dir]/classavg***     ; node average
-FR G
-[labeled_avg][binary_dir]/labeled***   ; labeled node average
-FR G
-[class_list][binary_dir]/listclasses   ; list of classes
+
+[binary_dir]  = 'Tree'                       ; output directory
+[node_lut]    = '[binary_dir]/node2termini'  ; node-to-particle lookup table
+[node_doc]    = '[binary_dir]/docclass***'   ; particles-per-node list template
+[node_avg]    = '[binary_dir]/classavg***'   ; node average
+[labeled_avg] = '[binary_dir]/labeled***'    ; labeled node average (2D only)
+[class_list]  = '[binary_dir]/listclasses'   ; list of classes
 
 ; --------------- END BATCH HEADER ---------------
 
-SYS
-mkdir [binary_dir]
+IQ DIR [dir_exists]
+[binary_dir]
 
-FR G
-[temp_lut][node_lut]_unrenum
+IF ( [dir_exists] .EQ. 0 ) THEN
+  SYS
+  echo ; mkdir -pv [binary_dir] | sed 's/^/  /'
+ENDIF
+
+; Temporary files
+[temp_lut] = '[node_lut]_unrenum'
 
 
 ; DETERMINE LABEL-DIMENSION
 
-IF ( [endDepth] .GE. 10 ) THEN
-    SYS
-    echo " WARNING: Requested tree depth, {**[endDepth]}, may require more than the default 3-digit filenumbers for the outputs of this batch file."
-    SYS
-    echo "          Also, for the next step, multiref.rct, the input template [node_doc] will need to be updated."
+IF ( [end_depth] .GE. 10 ) THEN
+  SYS M
+  echo "   WARNING: Requested tree depth, {**[end_depth]}, may require more than the default 3-digit filenumbers for the outputs of this batch file." ;
+  echo "            Also, for the next step, multiref.rct, the input template [node_doc] will need to be updated."
+.
 ENDIF
 
-; get number of termini
-UD N [numTermini]
+; Get number of termini
+UD N [num_termini]
 [dendro_doc]
 
-; add number of digits in highest class# and in biggest class (node #1)
-[maxClassDigits] = INT(LOG(2**[endDepth])) + 1
-[maxClassDigits]   ; diagnostic
-IF ( [maxClassDigits] .LT. 3 ) [maxClassDigits] = 3
+; Add number of digits in highest class# and in biggest class (node #1)
+[max_class_digits] = INT(LOG(2**[end_depth])) + 1
+[max_class_digits]   ; diagnostic
+IF ( [max_class_digits] .LT. 3 ) [max_class_digits] = 3
 
-[maxPartsDigits] = INT(LOG([numTermini])) + 1
-[maxPartsDigits]   ; diagnostic
-IF ( [maxPartsDigits] .LT. 3 ) [maxPartsDigits] = 3
+[max_parts_digits] = INT(LOG([num_termini])) + 1
+[max_parts_digits]   ; diagnostic
+IF ( [max_parts_digits] .LT. 3 ) [max_parts_digits] = 3
 
-[numDigits] = [maxClassDigits] + [maxPartsDigits]
+[num_digits] = [max_class_digits] + [max_parts_digits]
 
-IF ( [numDigits] .LE. 6 ) [labelDim] = 115
-IF ( [numDigits] .EQ. 7 ) [labelDim] = 128
-IF ( [numDigits] .EQ. 8 ) [labelDim] = 136
-IF ( [numDigits] .GE. 9 ) [labelDim] = 144
+IF ( [num_digits] .LE. 6 ) [label_dim] = 115
+IF ( [num_digits] .EQ. 7 ) [label_dim] = 128
+IF ( [num_digits] .EQ. 8 ) [label_dim] = 136
+IF ( [num_digits] .GE. 9 ) [label_dim] = 144
 ; (If there are more than 100,000 particles or 10,000 classes, things are going to break.)
 
-;; diagnostic
-;SYS
-;echo "num-digits: {***[numDigits]}, label-dim: {***[labelDim]}" ; echo
 
+; Initialize
+[node_num]       = 2**([start_depth]-1)
+[first_terminus] = 1
 
-; initialize
-[nodeNum]       = 2**([startDepth]-1)
-[firstTerminus] = 1
-
-; clean up pre-existing files
+; Clean up pre-existing files
 DE A
-[node_doc][nodeNum]
+[node_doc][node_num]
 DE A
-[node_avg][nodeNum]
+[node_avg][node_num]
 DE A
-[labeled_avg][nodeNum]
+[labeled_avg][node_num]
 DE
 [node_lut]
 DE
@@ -94,237 +89,275 @@ DE
 
 ; WHOLE DENDROGRAM==CLASS #1, DEPTH==1
 
-IF ( [startDepth] .EQ. 1 ) THEN
-    SYS
-    echo "Depth 01"; date
+IF ( [start_depth] .EQ. 1 ) THEN
+  SYS
+  echo "  Depth 01"; date | sed 's/^/  /'
 
-    ; copy dendrogram to first node doc
-    DOC REN
-    [dendro_doc]
-    [node_doc][nodeNum]
+  ; Copy dendrogram to first node doc
+  DOC REN
+  [dendro_doc]
+  [node_doc][node_num]
 
-    ; average images
-    @averagenode([nodeNum],[maxClassDigits],[maxPartsDigits])
-    1             ; PARAMETER: first terminus
-    [numTermini]  ; PARAMETER: last terminus
-    [labelDim]    ; PARAMETER: temporary dimension for labelling
+  ; Average images
+  @averagenode([node_num],[max_class_digits],[max_parts_digits])
+  [particles]    ; INPUT: particle template
+  [node_doc]     ; INPUT: list of particles in each node
+  1              ; PARAMETER: first terminus
+  [num_termini]  ; PARAMETER: last terminus
+  [label_dim]    ; PARAMETER: temporary dimension for labelling
+  [class_list]   ; OUTPUT: class list
+  [node_avg]     ; OUTPUT: output average template
+  [labeled_avg]  ; OUTPUT: labeled average template (2D only)
 
-    ; update node-to-terminus lookup-table
-    @update_lut([nodeNum])
-    1             ; PARAMETER: first terminus
-    [numTermini]  ; PARAMETER: last terminus
+  ; Update node-to-terminus lookup-table
+  @update_lut([node_num])
+  [temp_lut]     ; INPUT: node-to-particle lookup table
+  [node_avg]     ; INPUT: node-average template
+  [labeled_avg]  ; INPUT: labeled-average template
+  1              ; PARAMETER: first terminus
+  [num_termini]  ; PARAMETER: last terminus
+  [node_avg]     ; OUTPUT: average
 ENDIF
 
 
 ; LOOK FOR TWO PRIMARY BRANCHES, DEPTH==2
 
 SYS
-echo "Depth 02"; date
+echo "  Depth 02"; date | sed 's/^/  /'
 
-; initialize
-[terminusCounter] = 0
-[firstTerminus]   = 1
+; Initialize
+[terminus_counter] = 0
+[first_terminus]   = 1
 
-IF ( [startDepth] .LE. 2 ) THEN
-    ; loop through termini
-    DO LB7 [dendrogramKey] = 1,[numTermini]
-        ; get particle#, height
-        UD IC [dendrogramKey], [partNum],[dendrogramHeight]
-        [dendro_doc]
+IF ( [start_depth] .LE. 2 ) THEN
+  ; Loop through termini
+  DO LB7 [dendrogram_key] = 1,[num_termini]
+    ; get particle#, height
+    UD IC [dendrogram_key], [part_num],[dendrogram_height]
+    [dendro_doc]
 
-        ; increment terminus-counter
-        [terminusCounter] = [terminusCounter] + 1
+    ; Increment terminus counter
+    [terminus_counter] = [terminus_counter] + 1
 
-        ; save particle# to node doc
-        SD [terminusCounter], [partNum],[dendrogramKey]
-        [node_doc][nodeNum]
+    ; Save particle# to node doc
+    SD [terminus_counter], [part_num],[dendrogram_key]
+    [node_doc][node_num]
 
-        ; check for top two branches in dendrogram
-        ; (Height used to be 1, but now is 100.)
-        IF ( [dendrogramHeight] .EQ. [topBranch] ) THEN
-            ; average images & update counters
-            @averagenode([nodeNum],[maxClassDigits],[maxPartsDigits])
-            [firstTerminus]  ; PARAMETER: first terminus
-            [dendrogramKey]  ; PARAMETER: last terminus
-            [labelDim]       ; PARAMETER: temporary dimension for labelling
+    ; Check for top two branches in dendrogram
+    ; (Height used to be 1, but now is 100.)
+    IF ( [dendrogram_height] .EQ. [top_branch] ) THEN
+      ; Average images & update counters
+      @averagenode([node_num],[max_class_digits],[max_parts_digits])
+      [particles]       ; INPUT: particle template
+      [node_doc]        ; INPUT: list of particles in each node
+      [first_terminus]  ; PARAMETER: first terminus
+      [dendrogram_key]  ; PARAMETER: last terminus
+      [label_dim]       ; PARAMETER: temporary dimension for labelling
+      [class_list]      ; OUTPUT: class list
+      [node_avg]        ; OUTPUT: output average template
+      [labeled_avg]     ; OUTPUT: labeled average template (2D only)
 
-            @update_lut([nodeNum])
-            [firstTerminus]  ; PARAMETER: first terminus
-            [dendrogramKey]  ; PARAMETER: last terminus
+      @update_lut([node_num])
+      [temp_lut]        ; INPUT: node-to-particle lookup table
+      [node_avg]        ; INPUT: node-average template
+      [labeled_avg]     ; INPUT: labeled-average template
+      [first_terminus]  ; PARAMETER: first terminus
+      [dendrogram_key]  ; PARAMETER: last terminus
 
-            ; reset terminus-counter, first-terminus
-            [terminusCounter] = 0
-            [firstTerminus]   = [dendrogramKey] + 1
-        ENDIF
-    LB7
-    ; end terminus-loop
+      ; Reset terminus-counter, first-terminus
+      [terminus_counter] = 0
+      [first_terminus]   = [dendrogram_key] + 1
+    ENDIF
+  LB7
+  ; End terminus loop
 ENDIF
 
 
 ; GENERATE BRANCHES FOR DEPTH>=3
 
-IF ( [startDepth] .LT. 3 ) [startDepth] = 3  ; start at depth at least 3
+IF ( [start_depth] .LT. 3 ) [start_depth] = 3  ; start at depth at least 3
 
-; loop through node-depths
-DO LB2 [currentDepth] = 3,[endDepth]
-    [continueYN] = 0  ; will be set to 1 if there are splittable nodes remaining
-    ; This will be the case if any parents' nodes at a given depth have at least 3 particles.
+; Loop through node-depths
+DO LB2 [current_depth] = 3,[end_depth]
+  [do_continue] = 0  ; Will be set to 1 if there are splittable nodes remaining
+  ; This will be the case if any parents' nodes at a given depth have at least 3 particles.
 
-    ; calculate first and last parents nodes to split
-    [firstParent] = 2**([currentDepth]-2)      ; first node at next highest depth
-    [lastParent]  = 2**([currentDepth]-1) - 1  ; last node at next highest depth
+  ; Calculate first and last parents nodes to split
+  [first_parent] = 2**([current_depth]-2)      ; first node at next highest depth
+  [last_parent]  = 2**([current_depth]-1) - 1  ; last node at next highest depth
 
-    SYS
-    echo "Depth {**[currentDepth]}"; date
+  SYS
+  echo "  Depth {**[current_depth]}"; date | sed 's/^/  /'
 
-    ; loop through parent nodes
-    DO LB3 [parentNode] = [firstParent],[lastParent]
-        ; initialize maximum height, corresponding terminus
-        [maxHeight]         = -9
-        [maxHeightTerminus] = 0
+  ; Loop through parent nodes
+  DO LB3 [parent_node] = [first_parent],[last_parent]
+    ; Initialize maximum height, corresponding terminus
+    [max_height]          = -9
+    [max_height_terminus] = 0
 
-        ; read first, last termini under parent node
-        UD [parentNode], [firstParentTerminus],[lastParentTerminus]
-        [temp_lut]
-        UD E
+    ; Read first, last termini under parent node
+    UD [parent_node], [first_parent_terminus],[last_parent_terminus]
+    [temp_lut]
+    UD E
 
-        [lastSearchTerminus] = [lastParentTerminus] - 1
+    [last_search_terminus] = [last_parent_terminus] - 1
+    [num_search_termini]   = [last_parent_terminus] - [first_parent_terminus] + 1
 
-        [numSearchTermini] = [lastParentTerminus] - [firstParentTerminus] + 1
+    ; If parent node has only one particle, write dummy entries to lookup table and skip
+    IF ( [num_search_termini] .LT. 1 ) THEN
+      ; Write empty left-hand node
+      @update_lut([node_num])
+      [temp_lut]     ; INPUT: node-to-particle lookup table
+      [node_avg]     ; INPUT: node-average template
+      [labeled_avg]  ; INPUT: labeled-average template
+      0              ; PARAMETER: first terminus
+      0              ; PARAMETER: last terminus
 
-        ; if parent node has only one particle, write dummy entries to lookup table and skip
-        IF ( [numSearchTermini] .LT. 1 ) THEN
-            ; write empty left-hand node
-            @update_lut([nodeNum])
-            0   ; PARAMETER: first terminus
-            0   ; PARAMETER: last terminus
+      ; Write empty right-hand node
+      @update_lut([node_num])
+      [temp_lut]     ; INPUT: node-to-particle lookup table
+      [node_avg]     ; INPUT: node-average template
+      [labeled_avg]  ; INPUT: labeled-average template
+      0              ; PARAMETER: first terminus
+      0              ; PARAMETER: last terminus
 
-            ; write empty right-hand node
-            @update_lut([nodeNum])
-            0   ; PARAMETER: first terminus
-            0   ; PARAMETER: last terminus
+      GOTO LB3  ; loop to next parent node
+    ENDIF
 
-            GOTO LB3  ; loop to next parent node
-        ENDIF
-
-        IF ( [numSearchTermini] .GE. 3 ) [continueYN] = 1
-        ; If any parents at this depth have at least 3 particles, at least one child can be split further.
-
-
-        ; SEARCH FOR BRANCH POINT IN PARENT
-
-        ; loop through termini
-        DO LB4 [parentTerminus] = [firstParentTerminus],[lastSearchTerminus]
-            ; read height
-            UD IC [parentTerminus], [partNum],[dendrogramHeight]
-            [dendro_doc]
-
-            ; if height greater than maximum...
-            IF ( [dendrogramHeight] .GT. [maxHeight] ) THEN
-                ; update maximum
-                [maxHeight] = [dendrogramHeight]
-
-                ; update corresponding terminus
-                [maxHeightTerminus] = [parentTerminus]
-            ENDIF
-        LB4
-        ; end terminus-loop
-        
-        [rightFirstTerminus] = [maxHeightTerminus] + 1
-        ; first terminus of eventual rightward branch
+    IF ( [num_search_termini] .GE. 3 ) [do_continue] = 1
+    ; If any parents at this depth have at least 3 particles, at least one child can be split further.
 
 
-        ; LEFT-BRANCH CHILD NODE
+    ; SEARCH FOR BRANCH POINT IN PARENT
 
-        ; loop through left-branch termini
-        DO LB5 [leftKey] = [firstParentTerminus],[maxHeightTerminus]
-            ; read particle#
-            UD IC [leftKey], [partNum],[dendrogramHeight]
-            [dendro_doc]
+    ; Loop through termini
+    DO LB4 [parent_terminus] = [first_parent_terminus],[last_search_terminus]
+      ; Read height
+      UD IC [parent_terminus], [part_num],[dendrogram_height]
+      [dendro_doc]
 
-            [terminusCounter] = [leftKey] - [firstParentTerminus] + 1
+      ; If height greater than maximum...
+      IF ( [dendrogram_height] .GT. [max_height] ) THEN
+        ; update maximum
+        [max_height] = [dendrogram_height]
 
-            ; write particle#
-            SD [terminusCounter],[partNum],[dendrogramKey]
-            [node_doc][nodeNum]
-        LB5
-        ; end left-loop
+        ; Update corresponding terminus
+        [max_height_terminus] = [parent_terminus]
+      ENDIF
+    LB4
+    ; End terminus loop
 
-        ; average images
-        @averagenode([nodeNum],[maxClassDigits],[maxPartsDigits])
-        [firstParentTerminus]  ; PARAMETER: first terminus
-        [maxHeightTerminus]    ; PARAMETER: last terminus
-        [labelDim]             ; PARAMETER: temporary dimension for labelling
+    [right_first_terminus] = [max_height_terminus] + 1
+    ; First terminus of eventual rightward branch
 
-        @update_lut([nodeNum])
-        [firstParentTerminus]  ; PARAMETER: first terminus
-        [maxHeightTerminus]    ; PARAMETER: last terminus
 
-        IF ( [debug] .GE. 0.5 ) THEN
-            SYS M
-            echo "DEBUG left: depth {**[currentDepth]}, firstParentTerminus {%i0%[firstParentTerminus]}" ;
-            echo "DEBUG left: depth {**[currentDepth]}, maxHeightTerminus {%i0%[maxHeightTerminus]}" ;
+    ; LEFT-BRANCH CHILD NODE
+
+    ; Loop through left-branch termini
+    DO LB5 [left_key] = [first_parent_terminus],[max_height_terminus]
+      ; Read particle#
+      UD IC [left_key], [part_num],[dendrogram_height]
+      [dendro_doc]
+
+      [terminus_counter] = [left_key] - [first_parent_terminus] + 1
+
+      ; Write particle#
+      SD [terminus_counter],[part_num],[dendrogram_key]
+      [node_doc][node_num]
+    LB5
+    ; End left loop
+
+    ; Average images
+    @averagenode([node_num],[max_class_digits],[max_parts_digits])
+    [particles]              ; INPUT: particle template
+    [node_doc]               ; INPUT: list of particles in each node
+    [first_parent_terminus]  ; PARAMETER: first terminus
+    [max_height_terminus]    ; PARAMETER: last terminus
+    [label_dim]              ; PARAMETER: temporary dimension for labelling
+    [class_list]             ; OUTPUT: class list
+    [node_avg]               ; OUTPUT: output average template
+    [labeled_avg]            ; OUTPUT: labeled average template (2D only)
+
+    @update_lut([node_num])
+    [temp_lut]               ; INPUT: node-to-particle lookup table
+    [node_avg]               ; INPUT: node-average template
+    [labeled_avg]            ; INPUT: labeled-average template
+    [first_parent_terminus]  ; PARAMETER: first terminus
+    [max_height_terminus]    ; PARAMETER: last terminus
+
+    IF ( [debug] .GE. 0.5 ) THEN
+      SYS M
+      echo "  DEBUG left: depth {**[current_depth]}, firstParentTerminus {%i0%[first_parent_terminus]}" ;
+      echo "  DEBUG left: depth {**[current_depth]}, maxHeightTerminus {%i0%[max_height_terminus]}" ;
 .
-        ENDIF
-        
+    ENDIF
 
-        ; RIGHT-BRANCH CHILD NODE
 
-        ; Sanity check
-        IF ( [rightFirstTerminus] .GT. [numTermini] ) THEN
-            SYS M
-            echo "" ;
-            echo "WARNING!" ;
-            echo "Program trying to extend past end of dendrogram." ;
-            echo "New trap (2020-12-13) attempts workaround." ; 
-            echo "If binarytree et al., show odd behavior, let developers know." ;
-            echo "depth: {**[currentDepth]}" ;
-            echo "firstParentTerminus: {%i0%[firstParentTerminus]}" ;
-            echo "rightFirstTerminus (requested, to be skipped): {%i0%[rightFirstTerminus]}" ;
+    ; RIGHT-BRANCH CHILD NODE
+
+    ; Sanity check
+    IF ( [right_first_terminus] .GT. [num_termini] ) THEN
+      SYS M
+      echo ;
+      echo "  WARNING!" ;
+      echo "    Program trying to extend past end of dendrogram." ;
+      echo "    New trap (2020-12-13) attempts workaround." ;
+      echo "    If binarytree et al., show odd behavior, let developers know." ;
+      echo "    depth: {**[current_depth]}" ;
+      echo "    firstParentTerminus: {%i0%[first_parent_terminus]}" ;
+      echo "    rightFirstTerminus (requested, to be skipped): {%i0%[right_first_terminus]}" ;
 .
-        ELSE
-            ; loop through right-branch termini
-            DO LB6 [rightKey] = [rightFirstTerminus],[lastParentTerminus]
-                ; read particle#
-                UD IC [rightKey], [partNum],[dendrogramHeight]
-                [dendro_doc]
+    ELSE
+      ; Loop through right-branch termini
+      DO LB6 [right_key] = [right_first_terminus],[last_parent_terminus]
+          ; read particle#
+          UD IC [right_key], [part_num],[dendrogram_height]
+          [dendro_doc]
 
-                [terminusCounter] = [rightKey] - [rightFirstTerminus] + 1
+          [terminus_counter] = [right_key] - [right_first_terminus] + 1
 
-                ; write particle#
-                SD [terminusCounter], [partNum],[dendrogramKey]
-                [node_doc][nodeNum]
-            LB6
-            ; end right-loop
+          ; Write particle#
+          SD [terminus_counter], [part_num],[dendrogram_key]
+          [node_doc][node_num]
+      LB6
+      ; End right loop
 
-            ; average images
-            @averagenode([nodeNum],[maxClassDigits],[maxPartsDigits])
-            [rightFirstTerminus]  ; PARAMETER: first terminus
-            [lastParentTerminus]  ; PARAMETER: last terminus
-            [labelDim]            ; PARAMETER: temporary dimension for labelling
+      ; Average images
+      @averagenode([node_num],[max_class_digits],[max_parts_digits])
+      [particles]             ; INPUT: particle template
+      [node_doc]              ; INPUT: list of particles in each node
+      [right_first_terminus]  ; PARAMETER: first terminus
+      [last_parent_terminus]  ; PARAMETER: last terminus
+      [label_dim]             ; PARAMETER: temporary dimension for labelling
+      [class_list]            ; OUTPUT: class list
+      [node_avg]              ; OUTPUT: output average template
+      [labeled_avg]           ; OUTPUT: labeled average template (2D only)
 
-            @update_lut([nodeNum])
-            [rightFirstTerminus]  ; PARAMETER: first terminus
-            [lastParentTerminus]  ; PARAMETER: last terminus
-            
-            IF ( [debug] .GE. 0.5 ) THEN
-                SYS M
-                echo "DEBUG right: depth {**[currentDepth]}, rightFirstTerminus {%i0%[rightFirstTerminus]}" ;
-                echo "DEBUG right: depth {**[currentDepth]}, lastParentTerminus {%i0%[lastParentTerminus]}" ;
-                echo "" ;
-    .
-            ENDIF
-            ; end debug if-then
-        ENDIF
-        ; end sanity if-then
-    LB3
-    ; end parent-loop
+      @update_lut([node_num])
+      [temp_lut]              ; INPUT: node-to-particle lookup table
+      [node_avg]              ; INPUT: node-average template
+      [labeled_avg]           ; INPUT: labeled-average template
+      [right_first_terminus]  ; PARAMETER: first terminus
+      [last_parent_terminus]  ; PARAMETER: last terminus
 
-    IF ( [continueYN] .EQ. 0 ) GOTO LB9
+      IF ( [debug] .GE. 0.5 ) THEN
+        SYS M
+        echo "  DEBUG right: depth {**[current_depth]}, rightFirstTerminus {%i0%[right_first_terminus]}" ;
+        echo "  DEBUG right: depth {**[current_depth]}, lastParentTerminus {%i0%[last_parent_terminus]}" ;
+        echo
+.
+      ENDIF
+      ; End debug if-then
+    ENDIF
+    ; End sanity if-then
+  LB3
+  ; End parent-loop
+
+  IF ( [do_continue] .EQ. 0 ) GOTO LB9
 LB2
-; end depth-loop
+; End depth-loop
 
-LB9  ; jump here if parent node can't be split further
+LB9  ; Jump here if parent node can't be split further
 
 ; CLEAN UP
 
@@ -340,6 +373,8 @@ DE
 [temp_lut]
 UD ICE
 [dendro_doc]
+SD E
+[class_list]
 DOC REN
 [class_list]
 [class_list]
@@ -349,16 +384,17 @@ SD E
 [class_list]
 
 SYS M
-echo ; echo "Done"; date ;
-echo "Depth requested: {**[endDepth]}" ; 
-echo "Depth completed: {**[currentDepth]}" ; echo
+echo ; echo "  Done!" ; date | sed 's/^/  /' ;
+echo "  Depth requested: {**[end_depth]}" ;
+echo "  Depth completed: {**[current_depth]}" ; echo
 .
 
 EN D
 
-; Modified 2020-12-13
+; Modified 2025-02-24
 ;    TO DO: add ability to start correctly from depth >1
 ;    TO DO: change TEMP_LUT to in-core file
+;    2025-02-21 (trs) -- can operate on volumes
 ;    2020-12-13 (trs & dq) -- workaround when trying to extend past end of dendrogram
 ;    2015-09-09 (trs) -- added case for >10,000 particles
 ;    2015-07-30 (trs) -- LISTCLASSES keys now numbered consecutively -- was crashing verifybyview
