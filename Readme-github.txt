@@ -13,7 +13,6 @@ This latest release is available here.
         Object segmentation from volumes.
  
     Features:
-
         Interactive command line interface
         Hierarchical modular design for scripting.
         Graphical user interface, Web, for visualizing and interacting with images.
