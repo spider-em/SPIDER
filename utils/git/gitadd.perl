@@ -1,0 +1,67 @@
+#!/usr/bin/perl            
+#                                
+# SOURCE:  gitadd.perl  
+# PURPOSE: perl script to add spider rcs files to git repository
+# USAGE:   gitadd.perl                                
+# AUTHOR:  ArDean Leith   Mar 2015                            
+# NOTE:    shipra can not run SPIRE's python!!!!!                            
+
+ $spidir   = '/usr8/spider';
+ $gitdir   = '/usr14/spider/git/spider';
+ $rcsdirs  = '/usr8/spider/git/filelist.txt';
+
+ # Open file for list of RCS containing directories
+ open(RCSDIRS,"+<$rcsdirs") ||  die "Can't open $rcsdirs \n";
+   
+ while (<RCSDIRS>)
+    {   #Read each line of the dir list file
+
+    if (/\s*#/)      # Skip comment lines (#)
+       {
+       #print(" Skipping: $_  \n");  
+       next;                            
+       }                                
+
+    if (/\s*EOF/)    # Stop on: EOF
+       { 
+       print(" Stopping on EOF: $_  \n");  
+       exit;                            
+       }                                
+  
+    $srcdir = $_;
+    chomp($srcdir);
+    print(" Source dir: $srcdir \n")  ;
+    
+    $rcsdir = $srcdir . '/RCS'  ;
+    print(" RCS dir: $rcsdir \n")  ;
+
+    system( "mkdir -p $gitdir/$rcsdir")  ;
+
+    system( "cp -rp $spidir/$rcsdir  $gitdir/$srcdir")  ;
+
+    system( "/usr14/spider/git/rcs-fast-export.rb --skip-branches --log-filename $rcsdir | git fast-import ; git reset")  ; 
+
+    system( "cp -p $spidir/$srcdir/*  $gitdir/$srcdir")  ;
+
+    system( "\\rm -rf $gitdir/$rcsdir")  ;
+    system( "\\rm -f $gitdir/$srcdir/*.pdf $gitdir/$srcdir/*.xbm $gitdir/$srcdir/*.gif $gitdir/$srcdir/*.tif $gitdir/$srcdir/*.brix") ;
+    system( "\\rm -f $gitdir/$srcdir/*.png $gitdir/$srcdir/*.jpg $gitdir/$srcdir/*.dat $gitdir/$srcdir/*.img $gitdir/$srcdir/*.mrc")  ;
+    system( "\\rm -f $gitdir/$srcdir/*.tar $gitdir/$srcdir/*.a   $gitdir/$srcdir/*.gz  $gitdir/$srcdir/*.mod $gitdir/$srcdir/*.pdb")  ;
+
+    #system( "ssh shipra 'cd $gitdir ; git add $srcdir ; hostname' " ) ;
+    system( "cd $gitdir ; git add $srcdir" ) ;
+    
+    #system( "ssh shipra 'cd $gitdir ; git commit -m \" Copied from old RCS controlled code\"'")  ;
+    system( "cd $gitdir ; git commit -m \" Copied from old RCS controlled code\"")  ;
+
+    #system( "git ls-tree -r master") ;
+    }
+
+ close(RCSDIRS)         || die "Can't close $rcsdirs \n";
+ 
+ 
+  #ssh shipra 'cd /usr14/spider/git/spider ; git add docs/techs/icos'
+
+  #echo ssh shipra:/usr14/spider/git/spider 'git add $srcdir '
+
+  #ssh shipra 'cd /usr14/spider/git/spider ; git add docs/techs/icos '
