@@ -1,11 +1,11 @@
 #!/usr/bin/env perl
 #
-# SOURCE: /home/dean/Software/spider-2020-2025/utils/file-redate.perl
+# SOURCE:  /home/dean/Software/spider-2020-2025/utils/file-edit.perl
 #
-# PURPOSE:  Edite all files in a directory to fix buttons & remove trailer
+# PURPOSE:  Edit all files in a directory to fix buttons & remove trailer
 #
-# CHANGES:     Author:    ArDean Leith Feb 2025
-# USAGE:       /home/dean/Software/file-edit.perl 
+# CHANGES:  Author:    ArDean Leith Feb 2025
+# USAGE:    /home/dean/Software/file-edit.perl 
 
 
 #------- active
@@ -20,12 +20,13 @@
  #$old_dir = qq(old_docs);      # Bad  input dir
  #$new_dir = qq(new_docs);      # Good output dir
  
- #$old_dir = qq(old_mans);    # Bad  input dir
- #$new_dir = qq(new_mans);    # Good output dir
-
- $old_dir = qq(old_exa);    # Bad  input dir
- $new_dir = qq(new_exa);    # Good output dir
+ #$old_dir = qq(old_exa);     # Bad  input dir
+ #$new_dir = qq(new_exa);     # Good output dir
  
+ $old_dir = qq(old_mans);    # Bad  input dir
+ $new_dir = qq(new_mans);    # Good output dir
+
+
  $tips    = qq(/tips/);
  $webadd  = qq(../../web/docs/web.html);
  $newweb  = qq(  <td><a href="https://spider-em.github.io/Web" id="web"> </a></td>); 
