@@ -19,7 +19,7 @@ See the [SPIDER Github Website](https://spider-em.github.io/SPIDER)  for complet
 * Features:            
    1. Interactive command line interface.    
    2. Hierarchical modular design for scripting.  
-   3. Graphical user interface, [*Web*](http://github.com/spider-em/web) 
+   3. Graphical user interface, [*Web*](http://spider-em.github.io/Web)  
       for  visualizing and interacting with images.  
    4. Data file format interchangeable with other electron microscopy imaging systems.  
    5. Extensive documentation of  operations and techniques.                
