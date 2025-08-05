@@ -61,9 +61,9 @@ C--*********************************************************************
       CHARACTER (LEN=3)             :: ANSW
 
 #ifndef SP_32
-      INTEGER *8                    :: NVOX,IOK8,MWANT
+      INTEGER *8                    :: NVOX,IOK8
 #else
-      INTEGER *4                    :: NVOX,IOK8,MWANT
+      INTEGER *4                    :: NVOX,IOK8
 #endif
 
       INTEGER,PARAMETER             :: LUNIN     = 21 
@@ -81,6 +81,7 @@ C--*********************************************************************
       LOGICAL,PARAMETER             :: FOUROK    = .TRUE.
 
       CHARACTER (LEN=1)             :: NULL = CHAR(0)
+      INTEGER                       :: NE,MWANT
 
       NILMAX  = NIMAXPLUS      ! FROM CMLIMIT
       ALLOCATE(ILIST(NILMAX),  STAT=IRTFLG)
@@ -123,7 +124,8 @@ C     COMPLAIN IF EXCESSIVE ALLOCATION
       ALLOCATE(BUFIN  (NVOX), 
      &         AVGARAY(NVOX), STAT=IRTFLG)
       IF (IRTFLG .NE. 0) THEN
-          CALL ERRT(46,'ADDS_N; BUFIN..',2*NVOX)
+          NE = 2*NVOX
+          CALL ERRT(46,'ADDS_N; BUFIN..',NE)
           GOTO 9999
       ENDIF
 
@@ -177,7 +179,8 @@ C        OPEN NEW VARIANCE OUTPUT FILE
 
          ALLOCATE(VARARAY(NVOX), STAT=IRTFLG)
          IF (IRTFLG .NE. 0) THEN
-            CALL ERRT(46,'ADDS; VARARAY',NVOX)
+            NE = NVOX
+            CALL ERRT(46,'ADDS; VARARAY',NE)
             GOTO 9999
          ENDIF
 

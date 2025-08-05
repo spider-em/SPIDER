@@ -40,7 +40,7 @@ C--*********************************************************************
 
         INTEGER, ALLOCATABLE   :: IMGLST(:)
         INTEGER, ALLOCATABLE   :: NUMR(:,:)
-        REAL,    ALLOCATABLE   :: CIRCREF(:,:)
+        COMPLEX, ALLOCATABLE   :: CIRCREF(:,:)
 
         CHARACTER (LEN=MAXNAM) :: FILNAM,REFANGDOC,REFPAT,EXPPAT,OUTANG
 

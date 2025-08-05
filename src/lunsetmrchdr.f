@@ -1897,12 +1897,12 @@ C     ------------------------- LUNSAYINFO_MRC ------------------------
       CHARACTER(LEN=5)     :: DTP
       CHARACTER(LEN=104)   :: CSTRING
       CHARACTER(LEN=11)    :: TYPEF
-      CHARACTER(LEN=80)    :: LABEL1
+      CHARACTER(LEN=800)   :: LABEL1
       CHARACTER(LEN=4)     :: CAXIS
       CHARACTER(LEN=1)     :: MODE_STR
 
       IRTFLG = 0
-      IF (.NOT. SAYIT) RETURN
+      IF (SAYIT == 0) RETURN
 
 C     SET ICOMM AND MYPID
       CALL SET_MPI(ICOMM,MYPID,MPIERR) 
