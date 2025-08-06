@@ -199,11 +199,11 @@ C       NEEDED BY PGI 2013.10 COMPILER
 #ifndef __APPLE__
 #if defined(SP_IFC) || defined(__INTEL_COMPILER)
         isiz1 = kmp_get_stacksize()
-        CALL kmp_set_stacksize(65536)
+        CALL kmp_set_stacksize(65536)  ! only 64KB
         isiz2 = kmp_get_stacksize()
-#elif defined(__PGI)
+#elif defined(__OPENMP)
         isiz1 = omp_get_stack_size()
-        CALL omp_set_stack_size(65536)
+        CALL omp_set_stack_size(65536)  ! only 64KB
         isiz2 = omp_get_stack_size()
 #endif
         !write(6,*) ' OMP Stack size: ',isiz1,' -->',isiz2
