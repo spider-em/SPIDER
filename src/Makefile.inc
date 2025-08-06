@@ -7,8 +7,8 @@
 ELEMENTS =  \
  $(LIB)(spider.o)    \
  $(LIB)(openinln.o)  \
- $(LIB)(lunsetmrchdr.o) \
  $(LIB)(lunsethdr.o) \
+ $(LIB)(lunsetmrchdr.o) \
  $(LIB)(fftw3.o)     \
  $(LIB)(lundoc.o)    \
  $(LIB)(apsh_tool.o) \
