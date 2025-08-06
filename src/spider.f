@@ -201,10 +201,10 @@ C       NEEDED BY PGI 2013.10 COMPILER
         isiz1 = kmp_get_stacksize()
         CALL kmp_set_stacksize(65536)
         isiz2 = kmp_get_stacksize()
-#else
-	isiz1 = omp_get_stack_size()
-	CALL omp_set_stack_size(65536)
-	isiz2 = omp_get_stack_size()
+#elif defined(__PGI)
+        isiz1 = omp_get_stack_size()
+        CALL omp_set_stack_size(65536)
+        isiz2 = omp_get_stack_size()
 #endif
         !write(6,*) ' OMP Stack size: ',isiz1,' -->',isiz2
 #endif

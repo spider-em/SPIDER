@@ -341,6 +341,7 @@ ELEMENTS =  \
  $(LIB)(getdocdat.o)  \
  $(LIB)(getdoclist.o) \
  $(LIB)(getfilenum.o) \
+ $(LIB)(gethedccp4.o) \
  $(LIB)(getima_q.o) \
  $(LIB)(getlbno.o)  \
  $(LIB)(getlab.o)   \
