@@ -1,0 +1,63 @@
+# 
+# PURPOSE:   MAKEFILE FOR GNU/Linux SPIDER using FFTW3 with MPI on Opteron 64 
+# 
+# COMPILER:  Portland Group F95 compiler  & OpenMPI
+# TARGET:    AMD Opteron 64 (x86_64) running GNU/Linux 
+# IMAGES:    Optimal SPIDER image byte order:   Big-endian (SGI) (Non-native) 
+# USAGE:     make -f Makefile_linux_mpi_opt64 
+#
+# NOTE:     !!nvfortran NEEDS TO BE IN YOUR PATH!!
+#
+# NOTE:     Uses FFTW3 configured with: --enable-float --enable-type-prefix --enable-openmp
+# NOTE:     You may ignore any undefined QFFLAGS, QLFLAGS & SUFFIX
+#
+# WARNING: Using 'gethostbyname'  & 'getpwuid' from MPI in statically linked applications 
+#          requires runtime shared libraries from the glibc version used for linking
+
+# nVidia HPC compile/link flags
+# -mp             : Invokes multi processor support
+# -tp znver4      : Targets AMD Zen 4 architecture (Ryzen 4)
+# -fast           : Selects an appropriate set of optimization flags usually including -O2 -Munroll -Mnoframe
+# -O2             : Invokes level 2 optimization (-O3 causes some run time problems with PGI compiler on SPIDER code)
+# -mcmodel=medium : Allows use of >2GB data area
+# -Kieee          : Invokes strict IEEE floating calculations
+# -Bstatic        : Static link
+
+SHELL    = /bin/sh
+
+AFLAGS   = r
+
+# Location of compiler for use with openmpi (OpenMPI sets link to PGI compiler when OpenMPI installed) 
+# LAM-MPI does not provide a separate mpif90.  When installing LAM-MPI
+# one has to specify either pgf90 or ifc as the backend compiler for mpif77.
+COMP    = /opt/nvidia/hpc_sdk/Linux_x86_64/25.7/comm_libs/openmpi4/bin/mpif90
+
+PGM      = spider
+
+WHICH    = ompi_ryzen4_nvhpc
+
+EXE      = $(PGM)_linux_$(WHICH)$(SUFFIX)
+
+LIB      = $(EXE).a
+
+FFLAGS   = -DUSE_MPI -tp znver4 -fast -mcmodel=medium -Mpreprocess -Kieee -Minfo=accel,lre,par,stdpar -byteswapio -DSP_LIBFFTW3  -c
+
+LF       = -tp znver4 -fast -mcmodel=medium $(QLFLAGS)
+
+# FFTW3 static library location
+FFTWLIBDIR   = ../fftw/fftw-3.3.10/lib
+
+# MPI library location
+MPILIBDIR = /usr/lib/x86_64-linux-gnu
+
+# '-Bstatic' resulted in conflict between multiple definitions of various components
+LINKLIBS  =  -L$(FFTWLIBDIR) -lfftw3f -lfftw3f_threads -L$(MPILIBDIR) -lmpi -lm
+
+.PRECIOUS :  ../bin/$(EXE) $(LIB)
+
+include Makefile.inc
+
+include Makebody.inc
+
+clean:
+	rm -f *.mod *.MOD *.a
