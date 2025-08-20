@@ -91,7 +91,7 @@ C     WANT TO OPEN OLD OR NEW MRC FILE FOR STREAM ACCESS
 
 C     ALL MRC STACKS WILL HAVE AN @ IN NAME
       LOCAT = INDEX(FILNAM_AT,'@')
-      PRINT *, "opfil_mrc.f : 94: OPENFIL_MRC: LOCAT=", LOCAT
+C     PRINT *, "opfil_mrc.f : 94: OPENFIL_MRC: LOCAT=", LOCAT
 
       IF (LOCAT <= 0) THEN
 C        NOT SPECIFIED AS A STACK
@@ -104,7 +104,7 @@ C        OUTPUTS IMGNUM    0 : BARE STACK
 C                         -1 : NOT A STACK   (NO @)
 C                         >1 : STACKED IMAGE NUMBER
 
-         PRINT *, "opfil_mrc.f : 107: OPENFIL_MRC: Calling GETMRCIMGNUM"
+C        PRINT *, "opfil_mrc.f : 107: OPENFIL_MRC: Calling GETMRCIMGNUM"
          CALL GETMRCIMGNUM(FILNAM_AT,LOCAT, FILNAM,IMGNUM,IRTFLG)
          IF (IRTFLG .NE. 0) RETURN
 
@@ -113,8 +113,8 @@ C                         >1 : STACKED IMAGE NUMBER
          !write(3,*)' In openfil_mrc - imgnum,nstack:',imgnum,nstack
 
       ENDIF
-      PRINT *, "opfil_mrc.f : 116: OPENFIL_MRC: NSTACK=", NSTACK
-      PRINT *, "opfil_mrc.f : 117: OPENFIL_MRC: IMGNUM=", IMGNUM
+C     PRINT *, "opfil_mrc.f : 116: OPENFIL_MRC: NSTACK=", NSTACK
+C     PRINT *, "opfil_mrc.f : 117: OPENFIL_MRC: IMGNUM=", IMGNUM
       !write(3,*)' In openfil_mrc, filnam :',filnam
       
 C     CREATE A MRC HEADER OBJECT FOR THIS LUN (CAN REUSE EXISTING)
@@ -139,10 +139,10 @@ C        SEE IF THE MRC STACK ALREADY EXISTS
 
       IF (DSP == 'O' .OR. (DSP == 'N' .AND. EX)) THEN
 C        OPEN AN ALREADY EXISTING MRC FILE
-         PRINT *, "opfil_mrc.f : 142: Calling OPENFIL_O_MRC"
+C        PRINT *, "opfil_mrc.f : 142: Calling OPENFIL_O_MRC"
          CALL OPENFIL_O_MRC(LUN,FILNAM,NLET,DSP,IMGNUM,
      &                      NX,NY,NZ,NSTACK,  IRTFLG)
-         PRINT *, "opfil_mrc.f : 145: OPENFIL_MRC: NSTACK",NSTACK
+C        PRINT *, "opfil_mrc.f : 145: OPENFIL_MRC: NSTACK",NSTACK
 
 C        HACK TO HANDLE .mrcs files with bad NZ (REMOVED 6/30/20) al
     
@@ -160,12 +160,12 @@ C        OPEN AND INITIALIZE A NEW MRC FILE
          SCALEZ  = 1.0
          MRCMODE = 2      ! USE 32 BIT REALS ALWAYS FOR NOW???
          
-         PRINT *, "opfil_mrc.f : 162: Calling OPENFIL_N_MRC"
+C        PRINT *, "opfil_mrc.f : 162: Calling OPENFIL_N_MRC"
          CALL OPENFIL_N_MRC(LUN,FILNAM,
      &                      MRCMODE,
      &                      NX,NY,NZ,NSTACK,
      &                      SCALEX,SCALEY,SCALEZ,IRTFLG)
-         PRINT *, "opfil_mrc.f : 167: OPENFIL_MRC: NSTACK",NSTACK
+C        PRINT *, "opfil_mrc.f : 167: OPENFIL_MRC: NSTACK",NSTACK
       ENDIF
       IF (IRTFLG .NE. 0) RETURN
 
@@ -251,7 +251,7 @@ C        EXTRACT IMAGE NUMBER WITHIN STACK FILE
          IGO      = 1 
          IF (LOCSLASH > 0) IGO = LOCSLASH + 1
 
-         PRINT *, "opfil_mrc.f : 249: GETMRCIMGNUM: Calling GETFILENUM"
+C        PRINT *, "opfil_mrc.f : 249: GETMRCIMGNUM: Calling GETFILENUM"
          CALL GETFILENUM(FILNAM_AT(IGO:LOCAT-1),IMGNUM,
      &                   NDIGITS,.TRUE.,IRTFLG)
          IF (IRTFLG .NE. 0) RETURN

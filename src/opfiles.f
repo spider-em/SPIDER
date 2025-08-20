@@ -242,14 +242,6 @@ C         USE FILENAME SENT IN: PROMPT
        !write(3,*)' In opfiles, imgnum: ',imgnum
 
        IMGWANT = MAX(1,IMGNUM)   ! DEFAULT IMAGE NUMBER     
-C      PRINT *, "opfiles.f : 245: OPFILES: IMGWANT=", IMGWANT
-C      PRINT *, "opfiles.f : 246: OPFILES: IMGNUM=", IMGNUM
-C      PRINT *, "opfiles.f : 247: OPFILES: LOCAST=", LOCAST
-C      PRINT *, "opfiles.f : 248: OPFILES: ASKLIST=", ASKLIST
-C      PRINT *, "opfiles.f : 249: OPFILES: NIMAXT=", NIMAXT
-C      PRINT *, "opfiles.f : 250: OPFILES: LOCAT=", LOCAT
-C      PRINT *, "opfiles.f : 251: OPFILES: NLET=", NLET
-C      PRINT *, "opfiles.f : 252: OPFILES: FILPAT=", FILPAT
 
        IF (LOCAST > 0 .AND. ASKLIST) THEN
 C         GET LIST OF IMAGES FROM DOC. FILE OR INPUT LINE
@@ -260,7 +252,7 @@ C         GET LIST OF IMAGES FROM DOC. FILE OR INPUT LINE
 
 C         START WITH FIRST FILE IN SERIES
           IMGWANT = ILIST(1)
-          PRINT *, "opfiles.f : 262: OPFILES: IMGWANT=", IMGWANT
+C          PRINT *, "opfiles.f : 262: OPFILES: IMGWANT=", IMGWANT
           !write(3,*)' In opfiles, imgwant aa: ',imgwant
 
        ELSEIF (LOCAST > 0 .AND. NIMAXT < 0) THEN
@@ -276,7 +268,7 @@ C         START WITH FIRST FILE IN THIS SERIES
        ENDIF
 
        IF (IMGWANT < 0 .OR. IMGWANT > 10000000) THEN
-          PRINT *, "opfiles.f : 273: OPFILES: IMGWANT=", IMGWANT
+C          PRINT *, "opfiles.f : 273: OPFILES: IMGWANT=", IMGWANT
           CALL ERRT(102,'INVALID IMAGE NUMBER',IMGWANT)
           IRTFLG = 1
           RETURN
@@ -309,7 +301,7 @@ C         OPEN MRC FILE
 
        IF (LOCAT > 0 .AND. LOCAST > LOCAT) THEN
 C         TEMPLATED STACKED FILE: STK@**** -------------- _9@* or STK@**
-          PRINT *, "opfiles.f : 313: TEMPLATED STACKED FILE"
+C          PRINT *, "opfiles.f : 313: TEMPLATED STACKED FILE"
 
           FILNAM = FILPAT(1:LOCAT)
             
@@ -344,7 +336,7 @@ C         OPEN THE STACK FILE HEADER
 C         OPEN FIRST FILE IN STACK SERIES
           IMGWANT  = ILIST(1)
           IF (IMGWANT < 0 .OR. IMGWANT > 10000000) THEN
-              PRINT *, "opfiles.f : 338: OPFILES: IMGWANT=", IMGWANT
+C              PRINT *, "opfiles.f : 338: OPFILES: IMGWANT=", IMGWANT
               CALL ERRT(102,'INVALID IMAGE NUMBER',IMGWANT)
               IRTFLG = 1
               GOTO 9000
@@ -381,7 +373,7 @@ C         RETRIEVE CURRENT MAXIMUM IMAGE NUMBER FROM OVERALL HEADER
 
        ELSEIF (LOCAT == NLET) THEN
 C         WHOLE BARESTACK:  STK@  --------------------------_9@ or STK@
-          PRINT *, "opfiles.f : 384: WHOLE BARESTACK"
+C          PRINT *, "opfiles.f : 384: WHOLE BARESTACK"
           DISPT = DISP
           IF (DISP == 'I') THEN
 C             OPEN NEW BARE INDEXED STACK 
@@ -415,22 +407,22 @@ C         OPEN FIRST FILE IN STACK, UNLESS SPECIFIED FOR NEW BARE STACK
           IMGWANT = 1
           SAYIT   = .TRUE.
 
-          PRINT *, "opfiles.f : 418: OPFILES: DISP=",DISP
+C          PRINT *, "opfiles.f : 418: OPFILES: DISP=",DISP
           IF (DISP == 'U' .OR. 
      &        DISP == 'I' .OR.
      &        DISP == 'N') THEN
 C            NEW BARE STACK, OPEN REQUESTED FILE IN STACK
-             PRINT *, "opfiles.f : OPFILES: 423: NEW BARE STACK"
+C             PRINT *, "opfiles.f : OPFILES: 423: NEW BARE STACK"
 
              IF (IMGNUMIN > 0) IMGWANT = IMGNUMIN
-             PRINT *, "opfiles.f : 426: GETNEWIMG, IMGWANT=",IMGWANT
+C             PRINT *, "opfiles.f : 426: GETNEWIMG, IMGWANT=",IMGWANT
              CALL GETNEWIMG(LUNCP,LUNIMG,LUNDOC,FILPAT,IMGWANT,
      &                      SAYIT,IMGNUM,IRTFLG)
              IF (IRTFLG .NE. 0) GOTO 9000
          
           ELSE
 C            EXISTING BARE STACK, OPEN FIRST FILE IN STACK
-             PRINT *, "opfiles.f : 432: EXISTING BARE STACK"
+C             PRINT *, "opfiles.f : 432: EXISTING BARE STACK"
              CALL GETOLDIMG(LUNIMG,LUNDOC,FILPAT, IMGWANT,
      &                      SAYIT,FOUROK,IMGNUM,IRTFLG)
              IF (IRTFLG .NE. 0) GOTO 9000
@@ -438,7 +430,7 @@ C            EXISTING BARE STACK, OPEN FIRST FILE IN STACK
 C            CREATE IMAGE NUMBER LIST IN: ILIST
              NTOT = 0
              DO I= 1,MAXIM
-                PRINT *, "opfiles.f : 440: image number:",I
+C                PRINT *, "opfiles.f : 440: image number:",I
                 NTOT = NTOT + 1
                 IF (NTOT > NIMAXP) THEN
                    CALL ERRT(102,'IMAGE # LIST OVERFLOW AT IMAGE',NTOT)
@@ -454,13 +446,13 @@ C            CREATE IMAGE NUMBER LIST IN: ILIST
 
        ELSEIF (LOCAST > 0) THEN
 C         A SIMPLE FILE TEMPLATE: IMG*** ----------------------- IMG***
-          PRINT *, "opfiles.f : 452: SIMPLE FILE TEMPLATE"
+C          PRINT *, "opfiles.f : 452: SIMPLE FILE TEMPLATE"
 
 C         FIND IMGNUM FOR FIRST FILE IN THE SERIES
 
           IMGNUM = ILIST(1)
           IF (IMGNUM < 0 .OR. IMGNUM > 10000000) THEN
-              PRINT *, "opfiles.f : 446: OPFILES: IMGNUM=", IMGNUM
+C              PRINT *, "opfiles.f : 446: OPFILES: IMGNUM=", IMGNUM
               CALL ERRT(102,'INVALID IMAGE NUMBER',IMGNUM)
               IRTFLG = 1
               GOTO 9000
@@ -484,7 +476,8 @@ C         OPEN FIRST FILE IN THE SERIES
 C         SINGLE SIMPLE INPUT FILE: IMG001 -------------------- IMG001
 C         OR XMIPP SELFILE LISTING FILE: SELX ----------------- SELFILE
 C         OR TRYING TO COPY NON-SPIDER FILE   ----------------- NONSPIFILE
-          PRINT *, "opfiles.f : 482: SINGLE SIMPLE FILE"
+C          PRINT *, "opfiles.f : 487: SINGLE SIMPLE FILE"
+C          PRINT *, "opfiles.f : 488: LUNCP=",LUNCP
 
 C         CHECK FOR XMIPP SELFILE LIST
           IF (LUNXM > 0 .AND. .NOT. ISMRCFILE(FILPAT) ) THEN
@@ -580,7 +573,7 @@ C
 C23456789 123456789 123456789 123456789 123456789 123456789 123456789 12
 C--*********************************************************************
  
-	SUBROUTINE GETOLDIMG(LUN,LUNXM,FILPAT,NWANT, SAYIT,
+        SUBROUTINE GETOLDIMG(LUN,LUNXM,FILPAT,NWANT, SAYIT,
      &                       FOUROK,NGOT,IRTFLG)
 
         INCLUDE 'CMLIMIT.INC'
@@ -612,9 +605,14 @@ C       IS THIS A MRC FILE SET
         !write(6,*)' locast,locat:',locast,locat,nlet,filpat(1:nlet)
         !write(6,*)' getoldimg, nwant,: ',nwant,':',filpat(1:nlet)
         
+C        PRINT *, __FILE__," : 615: GETOLDIMG: NWANT=",NWANT
+C        PRINT *, __FILE__," : 616: GETOLDIMG: LOCAST=",LOCAST
+C        PRINT *, __FILE__," : 617: GETOLDIMG: LOCAT=",LOCAT
+C        PRINT *, __FILE__," : 618: GETOLDIMG: IS_MRC=",IS_MRC
+C        PRINT *, __FILE__," : 619: GETOLDIMG: NLET=",NLET
         IF (NWANT < 0) THEN
 C          XMIPP SELFILE SIMPLE IMAGE ------------------------- SELAAA
-
+C           PRINT *, __FILE__," : 623: GETOLDIMG: SIMPLE IMAGE"
 C          RECOVER EXISTING IMAGE SIZE & TYPE
            CALL LUNGETSIZE(LUN,NX1,NY1,NZ1,IRTFLG)
            CALL LUNGETTYPE(LUN,ITYPE1,IRTFLG)
@@ -622,19 +620,19 @@ C          RECOVER EXISTING IMAGE SIZE & TYPE
  
 C          LOAD FILNAM FROM SELFILE
            CALL GETNEXT_XMSEL(LUNXM,.TRUE.,FILNAM,NLET,IRTFLG)
-	   IF (IRTFLG .NE. 0) RETURN 
+           IF (IRTFLG .NE. 0) RETURN
 
 C          OPEN EXISTING FILE: FILNAM  (HAS EXTENSION)
            MAXIM = 0  
-	   CALL OPFILEC(0,.FALSE.,FILNAM(:NLET),LUN,'O',ITYPE,
+           CALL OPFILEC(0,.FALSE.,FILNAM(:NLET),LUN,'O',ITYPE,
      &                 NX,NY,NZ, 
-     & 		       MAXIM,'~9',FOUROK,IRTFLG) 
-	   IF (IRTFLG .NE. 0) RETURN 
+     &                 MAXIM,'~9',FOUROK,IRTFLG)
+           IF (IRTFLG .NE. 0) RETURN
 
 C          NEW IMAGE SIZE SHOULD BE SAME AS PREVIOUS FILE
            CALL SIZCHK(NULL,NX1,NY1,NZ1,ITYPE1,
      &                      NX ,NY, NZ, ITYPE, IRTFLG)
-	   IF (IRTFLG .NE. 0) RETURN 
+           IF (IRTFLG .NE. 0) RETURN
  
            !write(6,*)' Opened old xmipp selfile file: ',filnam(1:nlet)
 
@@ -650,18 +648,18 @@ C          TEMPLATED SIMPLE IMAGE --------------------------- IMG***
            CLOSE(LUN)    ! USUALLY STILL OPEN
  
            CALL  FILGET(FILPAT,FILNAM,NLET,NWANT,IRTFLG)
-	   IF (IRTFLG .NE. 0) RETURN 
+           IF (IRTFLG .NE. 0) RETURN
 
            MAXIM = 0  
-	   CALL OPFILEC(0,.FALSE.,FILNAM,LUN,'O',ITYPE,
+           CALL OPFILEC(0,.FALSE.,FILNAM,LUN,'O',ITYPE,
      &                 NX,NY,NZ, 
-     & 		       MAXIM,' ',FOUROK,IRTFLG) 
-	   IF (IRTFLG .NE. 0) RETURN 
+     &                 MAXIM,' ',FOUROK,IRTFLG)
+           IF (IRTFLG .NE. 0) RETURN
 
 C          IMAGE SIZE SHOULD BE SAME
            CALL SIZCHK(NULL,NX1,NY1,NZ1,ITYPE1,
      &                      NX ,NY, NZ, ITYPE, IRTFLG)
-	   IF (IRTFLG .NE. 0) RETURN 
+           IF (IRTFLG .NE. 0) RETURN
 
            !write(6,*)' Opened old templated file: ',filnam(1:nlet),maxim
 
@@ -749,6 +747,8 @@ C             INCREMENT NGOT AND TRY AGAIN
 
            !write(6,*)' Opened old bare stacked file: ',FILNAM(1:NLET)
            !write(6,*)' ngot,NX:',ngot,NX,lun,imused,irtflg
+        ELSE
+           PRINT *, __FILE__," : 751: GETOLDIMG: Unknown case"
         ENDIF
 
 C       SET OFFSETS FOR REDLIN/WRTLIN ON THIS LUN
@@ -761,7 +761,7 @@ C       SET COMMON BLOCK VARIABLES
         CALL LUNSETCOMMON(LUN,IRTFLG)
 
 
-	END
+        END
 
 
 C **********************************************************************
@@ -836,10 +836,10 @@ C **********************************************************************
 
         !write(3,*)' In getnewimg - nwant,locat:',nwant,locat,filpat
 
-        PRINT *, __FILE__," : 838: GETNEWIMG: NWANT=",NWANT
+C        PRINT *, __FILE__," : 838: GETNEWIMG: NWANT=",NWANT
         IF (NWANT < 0) THEN
 C          XMIPP SELFILE SIMPLE IMAGE ----------------------- SELAAA
-           PRINT *, __FILE__," : 844: XMIPP SELFILE SIMPLE IMAGE"
+C           PRINT *, __FILE__," : 844: XMIPP SELFILE SIMPLE IMAGE"
 
 C          GET PREVIOUS FILE SIZE AND TYPE (SHOULD BE SAME)
            CALL LUNGETSIZE(LUN,NX1,NY1,NZ1,IRTFLG)
@@ -864,7 +864,7 @@ C          OPEN FILNAM
 
         ELSEIF (LOCAT <= 0 .AND. LOCAST > 1) THEN
 C          TEMPLATED SIMPLE IMAGE --------------------------- IMG***
-           PRINT *, __FILE__," : 869: TEMPLATED SIMPLE IMAGE"
+C           PRINT *, __FILE__," : 869: TEMPLATED SIMPLE IMAGE"
 
 C          NEW IMAGE, NEEDS TO KNOW: ITYPE,NX,NY,NZ!
 C          GET IT FROM OPFILES OR PREVIOUS CALL
@@ -893,7 +893,7 @@ C          CREATE FILE NAME
 
 C          TEMPLATED STACKED MRC IMAGE ---------------------- **@STK.mrc
 C          BARE MRC IMAGE ------------------------------------ @STK.mrc
-           PRINT *, __FILE__," : 898: MRC IMAGE"
+C           PRINT *, __FILE__," : 898: MRC IMAGE"
 
            CALL GETNEWIMG_MRC(LUN,FILPAT,NWANT,SAYIT,
      &                        FILNAM,NGOT,IRTFLG)
@@ -902,7 +902,6 @@ C          BARE MRC IMAGE ------------------------------------ @STK.mrc
 
         ELSEIF (LOCAT > 0) THEN
 C          STACKED IMAGE ------------------------------- STK@*  or STK@
-C           PRINT *, __FILE__," : 907: STACKED IMAGE"
 
            CALL LUNGETISBARE(LUN,ISBARE,IRTFLG)
 
@@ -913,7 +912,7 @@ C          LOAD OVERALL HEADER FIRST FOR LUNREDHED (MAY BE MT NOW!)
 C          RETRIEVE CURRENT MAXIMUM IMAGE NUMBER FROM OVERALL HEADER
            CALL LUNGETMAXIM(LUN,MAXIM,IRTFLG)
 
-           PRINT *, __FILE__," : 916: GETNEWIMG: MAXIM=",MAXIM
+C           PRINT *, __FILE__," : 916: GETNEWIMG: MAXIM=",MAXIM
            IF (NWANT > MAXIM) THEN
 C             UPDATE OVERALL HEADER WITH MAXIMUM IMAGE NUMBER
               CALL LUNSETMAXIM(LUN,NWANT,IRTFLG)
@@ -922,13 +921,13 @@ C             UPDATE OVERALL HEADER WITH MAXIMUM IMAGE NUMBER
 
 C          NEED ISTACK 
            CALL LUNCOPYSTK(LUN,ISTACK,IRTFLGT)
-           PRINT *, __FILE__," : 925: GETNEWIMG: ISTACK=",ISTACK
+C           PRINT *, __FILE__," : 925: GETNEWIMG: ISTACK=",ISTACK
 
            !write(6,*)' In getnewimg - isbare,filpat: ',isbare, filpat
            !write(6,*)' In getnewimg -nwant,maxim,istak: ',nwant,maxim,istack
 
 
-          IF (ISTACK < 0) THEN
+           IF (ISTACK < 0) THEN
 C             MAKING A NEW INDEXED STACKED FILE, UPDATE INDX LOCATION
               CALL LUNWRTINDX(LUN,NWANT,NX,IRTFLGT)
               IF (IRTFLGT .NE. 0) RETURN
@@ -1040,7 +1039,12 @@ C--*********************************************************************
       NINDX1 = NINDX2 + 1
       NINDX2 = NINDX2 + 1
 
-      IF (LUN1 > 0) THEN  
+C      PRINT *, __FILE__," : 1051: NEXTFILES: LUN1=",LUN1
+C      PRINT *, __FILE__," : 1053: NEXTFILES: IMGNUM1=",IMGNUM1
+C      PRINT *, __FILE__," : 1054: NEXTFILES: LUNXM1=",LUNXM1
+C      PRINT *, __FILE__," : 1055: NEXTFILES: IS_BARE1=",IS_BARE1
+C      PRINT *, __FILE__," : 1056: NEXTFILES: NSTACK1=",NSTACK1
+      IF (LUN1 > 0) THEN
 C        OPEN NEXT INPUT FILE 
          GOTAST1 = (INDEX(FILPAT1,'*') > 0)
 
@@ -1068,6 +1072,8 @@ C              FINISHED THE WHOLE STACK
 C           NON STACKED IMAGE WITH/WITHOUT TEMPLATED LIST
 C           STACKED     IMAGE WITH/WITHOUT LIST         
 
+C            PRINT *, __FILE__," : 1085: NEXTFILES: NINDX1=",NINDX1
+C            PRINT *, __FILE__," : 1086: NEXTFILES: NLIST1=",NLIST1
             IF (NINDX1 > NLIST1) THEN
 C              OVERUN INPUT LIST
                IRTFLG = -1
@@ -1076,14 +1082,18 @@ C              OVERUN INPUT LIST
 
 C           OPEN NEXT INPUT FILE 
             NWANT1 = INUMBR1(NINDX1)
-
+C            PRINT *, __FILE__," : 1095: NEXTFILES: NWANT1=",NWANT1
          ENDIF
 
          !write(3,*)' In nextfiles, nwant1: ',nwant1
          !write(6,'(a,8i5)')' In nextfiles, nwant1: ',
          !                                  nwant1,lun1,nwant1,imgnum1
+C         PRINT *, __FILE__," : 1100: Calling GETOLDIMG"
+C         PRINT *, __FILE__," : 1101: NEXTFILES: NWANT1=",NWANT1
          CALL GETOLDIMG(LUN1,LUNXM1,FILPAT1,NWANT1,SAYIT, 
      &                  FOUROK,IMGNUM1,IRTFLG)
+C         PRINT *, __FILE__," : 1104: Returned from GETOLDIMG"
+C         PRINT *, __FILE__," : 1105: NEXTFILES: IRTFLG=",IRTFLG
 
          !write(3,*)' gotoldimg, nstacki1,gotast1: ',nstack1,gotast1
 
@@ -1098,12 +1108,13 @@ C           INPUT FROM A BARE STACK
       ENDIF
       ! write(6,*) 'In nextfiles1: l1,l2,irtflg:',lun1,lun2,irtflg
 
-
-      IF (LUN2 > 0) THEN  
+C      PRINT *, __FILE__," : 1119: NEXTFILES: LUN2=",LUN2
+      IF (LUN2 > 0) THEN
 C        OPEN NEXT OUTPUT FILE 
          GOTAST2 = (INDEX(FILPAT2,'*') > 0)
 
 C        IS THIS IS A BARE STACK OPERATION?  (OK FOR SPIDER & MRC)
+C         PRINT *, __FILE__," : 1125: Calling LUNGETISBARE"
          CALL LUNGETISBARE(LUN2,IS_BARE2,IRTFLG)
 
 
@@ -1156,6 +1167,7 @@ C           OPEN NEXT OUTPUT FILE
          !& ' Calling getnew,nwant2,imgnum2,nstack2:',
          !                   nwant2,imgnum2,nstack2
 
+C         PRINT *, __FILE__," : 1164: Calling GETNEWIMG"
          CALL GETNEWIMG(LUNCP,LUN2,LUNXM2,FILPAT2,NWANT2,
      &                  SAYIT,IMGNUM2,IRTFLG)
 
@@ -1198,7 +1210,7 @@ C             NSTACK1        HIGHEST IMAGE IN STACK             (SENT)
 C             LUN1           LUN FOR I/0                        (SENT)
 C             LUNCP          LUN FOR OUTPUT HEADER COPY         (SENT)
 C             FILPAT1        FILE NAME PATTERN                  (SENT)
-C             DISP           IMAGE EXISTANCE                    (SENT)
+C             DISP           IMAGE EXISTENCE                    (SENT)
 C             IMGNUM1        IMAGE NUMBER                  (SENT/RET.)
 C             IRTFLG         ERROR (0 IS OK, -1 IS END STACK)   (RET.)
 C

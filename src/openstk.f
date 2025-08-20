@@ -175,8 +175,8 @@ C                 CLEAR STACK INDEX IN NEW FILE
                   CALL LUNCLRINDX(LUN,NX,IRTFLGT)
               ENDIF
 
-             PRINT *, __FILE__," : 178: IMGNUM=",IMGNUM
-             PRINT *, __FILE__," : 179: NSTACK=",NSTACK
+C            PRINT *, __FILE__," : 178: IMGNUM=",IMGNUM
+C            PRINT *, __FILE__," : 179: NSTACK=",NSTACK
               IF (IMGNUM <= 0) THEN
 C                ONLY WANT TO OPEN NEW BARE STACK
                  IRTFLG  = 0
@@ -189,7 +189,7 @@ C             OPEN EXISTING STACK FILE TO APPEND A NEW STACKED IMAGE
               CALL OPENFIL(0,FILNOAT,LUN, NXF,NYF,NZF,NSTACK,
      &                     ITYPE,'O',.FALSE.,IRTFLGT)
               IF (IRTFLGT .NE. 0)  RETURN
-             PRINT *, __FILE__," : 191: NSTACK=",NSTACK
+C            PRINT *, __FILE__," : 191: NSTACK=",NSTACK
 
 C             OPENFIL WILL RETURN NUMBER OF IMAGES IN STACK, OR -1
 C             IF THIS IS A SPECIFIC IMAGE WITHIN THE STACK, -2 IS
@@ -264,8 +264,8 @@ C -------------------------------- OLD --------------------------------
      &          DISP(1:1) == 'E' .OR. DISP(1:1) ==  'M') THEN
 C          WANT AN EXISTING IMAGE FROM EXISTING STACK OR AN
 C          EXISTING BARE STACK HEADER
-           PRINT *, __FILE__," : 266: EXISTING STACK"
-           PRINT *, __FILE__," : 267: IMGNUM=",IMGNUM
+C          PRINT *, __FILE__," : 266: EXISTING STACK"
+C          PRINT *, __FILE__," : 267: IMGNUM=",IMGNUM
 
            IF (.NOT. EX) THEN
 C             STACK FILE DOES NOT EXIST YET, ERROR

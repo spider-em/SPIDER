@@ -455,7 +455,7 @@ C              PROBABLY NOT A SPIDER IMAGE
                ENDIF
                IRTFLG = 5   ! RETURN ERROR FLAG FOR NON-SPIDER IMAGE
 
-             ELSEIF (NY > 1000000) THEN
+            ELSEIF (NY > 1000000) THEN
 C              PROBABLY NOT A SPIDER IMAGE
                IF (CALLERRT) THEN
                  CALL ERRT(102,
@@ -463,7 +463,7 @@ C              PROBABLY NOT A SPIDER IMAGE
                ENDIF
                IRTFLG = 5   !RETURN ERROR FLAG FOR NON-SPIDER IMAGE
 
-             ELSEIF (NZ > 1000000) THEN
+            ELSEIF (NZ > 1000000) THEN
 C              PROBABLY NOT A SPIDER IMAGE
                IF (CALLERRT) THEN
                  CALL ERRT(102,

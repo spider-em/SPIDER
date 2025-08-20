@@ -114,15 +114,16 @@ C       APPEND .mrc IF NEEDED
         NSTACK1 =  1   ! PARAMETER UNUSED ON INPUT
         DISP    = 'E'  ! DISP = 'E' DOES NOT STOP ON ERROR
         ASKNAM  = .FALSE.  
-C       PRINT *, "copyfrommrc.f : 117: Calling OPFILES"
         IMG1 = 0    ! Passing uninitialized variable may result in 'INVALID IMAGE NUMBER'
+        NGOT1 = 0   ! Passing uninitialized variable may result in 'INVALID IMAGE NUMBER'
+C       PRINT *, "copyfrommrc.f : 118: COPYFROMMRC: Calling OPFILES"
         CALL OPFILES(0,LUN1,LUNDOC,LUNXM1,
      &               ASKNAM,FILNAM1,NLET1, DISP,
      &               IFORM1,NX1,NY1,NZ1,NSTACK1,
      &               FILNAM1,
      &               FOUROK, ILIST1,NILMAX, 
      &               NDUM,NGOT1,IMG1, IRTFLG) 
-        PRINT *, "copyfrommrc.f : 124: OPFILES: NSTACK1:", NSTACK1
+C       PRINT *, "copyfrommrc.f : 126: OPFILES: NSTACK1:", NSTACK1
         IF (IRTFLG .NE. 0) RETURN
 
 C       NSTACK1 RET:  -2   IS NON-STACK IMAGE,  -1 IS STACKED IMG,                  
@@ -183,12 +184,15 @@ C           TREAT THIS IMAGE AS A VOLUME NOT A STACK
         ENDIF
 
         ASKNAM = .FALSE.
+C       PRINT *, __FILE__," : 186: COPYFROMMRC: Calling OPFILES"
         CALL OPFILES(LUN1,LUN2,LUNDOC,LUNXM2, 
      &             ASKNAM,FILNAM2,NLET2,DISP,
      &             IFORM1,NX1,NY1,NZ1,NSTACK2,
      &             FILNAM2,
      &             FOUROK, ILIST2,NILMAX, 
      &             NDUM,NGOT2,IMG2, IRTFLG)
+C       PRINT *, __FILE__," : 193: COPYFROMMRC: Ret from OPFILES"
+C       PRINT *, __FILE__," : 194: COPYFROMMRC: NSTACK2=",NSTACK2
  
 C       NSTACK2 RET:  -2   IS NON-STACK IMAGE,  -1 IS STACKED IMG,                  
 C                    >= 0 IS CURRENT MAX. IMG # FOR STACK             
@@ -254,6 +258,8 @@ C          COPY THE DESIRED NUMBER OF DATA RECORDS (MRC OK)
            !write(3,*)' in copyfrommrc,img1..2:  ',img1,img2 
 
 C          OPEN NEXT SET OF I/O FILES, UPDATES NINDX1 & NINDX2 
+C          PRINT *, __FILE__," : 260: Calling NEXTFILES"
+C          PRINT *, __FILE__," : 261: Range:",NINDX1,NINDX2
            CALL NEXTFILES(NINDX1,NINDX2,  ILIST1,ILIST2, 
      &                    .FALSE., LUNXM1,LUNXM2,
      &                    NGOT1,NGOT2,    NSTACK1,NSTACK2,  

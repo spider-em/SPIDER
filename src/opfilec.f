@@ -212,13 +212,13 @@ C          CHECK THAT NECESSARY SIZE... INFO IS HERE
         IF (ISMRCFILE(FILNAM)) THEN
 
 C          WANT TO OPEN OLD OR NEW MRC FILE FOR STREAM ACCESS
-           PRINT *, "opfilec.f : 215: OPFILEC: Calling OPENFIL_MRC"
+C          PRINT *, "opfilec.f : 215: OPFILEC: Calling OPENFIL_MRC"
            CALL OPENFIL_MRC(LUN,FILNAM,NLETI,NX,NY,NZ,NSTACK,ITYPE,
      &                      DSP,IRTFLG)
            IF (IRTFLG .NE. 0) RETURN
            IFORM = ITYPE
            MAXIM = NSTACK
-           PRINT *, "opfilec.f : 221: OPFILEC: MAXIM", MAXIM
+C          PRINT *, "opfilec.f : 221: OPFILEC: MAXIM", MAXIM
 
            RETURN           ! END OF MRC CODE
 
@@ -275,10 +275,10 @@ C             INLINE IMAGE STACK ACCESS WANTED
            ELSE
 C             WANT TO ACCESS A FILE BASED SPIDER IMAGE STACK
               NSTACK = MAXIM
-              PRINT *, __FILE__," : 278: NSTACK=MAXIM=",MAXIM
+C             PRINT *, __FILE__," : 278: NSTACK=MAXIM=",MAXIM
               CALL OPENSTK(LUNT,FILNAM,LUN,NX,NY,NZ,
      &                     NSTACK,ITYPE,DISP(1:1),IRTFLG)
-              PRINT *, __FILE__," : 281: NSTACK=",NSTACK
+C             PRINT *, __FILE__," : 281: NSTACK=",NSTACK
 
            ENDIF
 
