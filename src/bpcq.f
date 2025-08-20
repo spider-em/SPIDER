@@ -36,9 +36,11 @@ C***********************************************************************
 
         SUBROUTINE BPCQ(B,NNNN,NSAM,NROW,CUBE,NX3D,NY3D,NZC,DM)
 
+        INCLUDE 'PAR.INC'
+C	     PAR includes INTEGER LDPX,LDPY,LDPZ,LDPNMX,LDPNMY,NZ1,LDP,NM,LDPNM
+	
         DIMENSION    B(NNNN,NROW),CUBE(NX3D,NY3D,NZC)
         DIMENSION    DM(9)
-        COMMON /PAR/ LDPX,LDPY,LDPZ,LDPNMX,LDPNMY,NZ1
 
 c$omp   parallel do private(k,j,i,kz,iqx,iqy,dipx,dipy,xb,yb,xbb,ybb)
         DO K=1,NZC

@@ -115,6 +115,7 @@ C                  ZERO FOR SINGLE IMAGE AND NO *
 C        IMGNUM1:  IMAGE NUMBER THAT IS CURRENTLY OPEN
 C                  ON INPUT: IF (BARESTACK) IS IMAGE # WANTED
 
+      IMGNUM1 = 0    ! Passing uninitialized variable may result in 'INVALID IMAGE NUMBER' error
       CALL OPFILES(0,LUN1,LUNDOCSEL,LUNXM1, ASKNAME1,
      &             FILPAT1,NLET1, 'O',
      &             ITYPE1,NX1,NY1,NZ1,NSTACK1,

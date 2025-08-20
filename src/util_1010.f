@@ -95,7 +95,8 @@ C     DOC FILE POINTER
       IRTFLG = 0   ! UNAPPLICABLE RARE INPUT FLAG FOR FILERD IN OPFILES
 
 C     OPEN INPUT IMAGE(S) (NOT FOURIER)
-      CALL OPFILES(0,LUNIN,LUNDOCSEL,LUNXM1, 
+      IMGNUM = 0    ! Passing uninitialized variable may result in 'INVALID IMAGE NUMBER' error
+      CALL OPFILES(0,LUNIN,LUNDOCSEL,LUNXM1,
      &             .TRUE.,FILPATIN,NLET, 'O',
      &             ITYPE,NX,NY,NZ,MAXIMIN,
      &             NULL,

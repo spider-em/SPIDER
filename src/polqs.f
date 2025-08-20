@@ -63,6 +63,8 @@ C **********************************************************************
         INCLUDE 'CMBLOCK.INC'
         INCLUDE 'CMLIMIT.INC'
         INCLUDE 'F90ALLOC.INC'
+        INCLUDE 'PAR.INC'
+C	    PAR includes INTEGER LDPX,LDPY,LDPZ,LDPNMX,LDPNMY,NZ1,LDP,NM,LDPNM
 
 	CHARACTER(LEN=MAXNAM) :: FINPAT,FINPIC,FINFO,FINDOC
 	COMMON  /F_SPEC/         FINPAT,FINPIC,FINFO,FINDOC,NLET
@@ -71,7 +73,6 @@ C **********************************************************************
 	COMMON  /POLS/ MODIS
 
 	COMMON  BUF(1024)
-	COMMON /PAR/  LDP,NM,LDPNM
 	DIMENSION  TARRAY(2)
 
 	REAL, ALLOCATABLE, DIMENSION(:,:,:) ::  PRJ
@@ -1216,86 +1217,92 @@ C        MIRROR THE LINES
 	END
 
 
-	SUBROUTINE  PRJC2_P (SQUARE,N,DM,NANG,PROJ,LENPROJ,IPCUBE,NN)
+      SUBROUTINE  PRJC2_P (SQUARE,N,DM,NANG,PROJ,LENPROJ,IPCUBE,NN)
 
-        DIMENSION  DM(2,NANG)
-	DIMENSION  SQUARE(N,N),PROJ(LENPROJ,NANG)
-	INTEGER    IPCUBE(3,NN)
+      INCLUDE 'PAR.INC'
+C     PAR includes INTEGER LDPX,LDPY,LDPZ,LDPNMX,LDPNMY,NZ1,LDP,NM,LDPNM
 
-	COMMON /PAR/  LDP,NM,LDPNM
+      DIMENSION  DM(2,NANG)
+      DIMENSION  SQUARE(N,N),PROJ(LENPROJ,NANG)
+      INTEGER    IPCUBE(3,NN)
 
-	PROJ=0.0
+
+      PROJ=0.0
 CC$OMP PARALLEL DO PRIVATE(I)
-	DO  I=1,NANG
-	  CALL  PRJC11_P(SQUARE,N,DM(1,I),PROJ(1,I),LENPROJ,IPCUBE,NN)
-	ENDDO
-	END
+      DO  I=1,NANG
+         CALL  PRJC11_P(SQUARE,N,DM(1,I),PROJ(1,I),LENPROJ,IPCUBE,NN)
+      ENDDO
+      END
 
 
 
-	SUBROUTINE  PRJC11_P(SQUARE,N,DM,PROJ,LENPROJ,IPCUBE,NN)
+      SUBROUTINE  PRJC11_P(SQUARE,N,DM,PROJ,LENPROJ,IPCUBE,NN)
 
-        DIMENSION  DM(2)
-	DIMENSION  SQUARE(N,N),PROJ(LENPROJ)
-	INTEGER  IPCUBE(3,NN)
-	COMMON /PAR/  LDP,NM,LDPNM
+      INCLUDE 'PAR.INC'
+C     PAR includes INTEGER LDPX,LDPY,LDPZ,LDPNMX,LDPNMY,NZ1,LDP,NM,LDPNM
 
-	DO  1  I=1,NN
-           IY=IPCUBE(2,I)
-           XB=(IPCUBE(1,I)-LDP)*DM(1)+(IY-LDP)*DM(2)
-           DO  1  J=IPCUBE(1,I),IPCUBE(3,I)
-              IQX=IFIX(XB+FLOAT(LDPNM))
-	      IF(IQX.GT.0 .AND.  IQX.LT.LENPROJ) THEN
+      DIMENSION  DM(2)
+      DIMENSION  SQUARE(N,N),PROJ(LENPROJ)
+      INTEGER  IPCUBE(3,NN)
+
+      DO  1  I=1,NN
+         IY=IPCUBE(2,I)
+         XB=(IPCUBE(1,I)-LDP)*DM(1)+(IY-LDP)*DM(2)
+         DO  1  J=IPCUBE(1,I),IPCUBE(3,I)
+            IQX=IFIX(XB+FLOAT(LDPNM))
+            IF(IQX.GT.0 .AND.  IQX.LT.LENPROJ) THEN
                DIPX=XB+LDPNM-IQX
                PROJ(IQX)=PROJ(IQX)+(1.0-DIPX)*SQUARE(J,IY)
                PROJ(IQX+1)=PROJ(IQX+1)+DIPX*SQUARE(J,IY)
-	      ENDIF
-1	XB=XB+DM(1)
-	END
+            ENDIF
+1     XB=XB+DM(1)
+      END
 
 
 
-	SUBROUTINE  PSQU_P(N,NN,IPCUBE,RI,FILL)
+      SUBROUTINE  PSQU_P(N,NN,IPCUBE,RI,FILL)
 
-	INTEGER  IPCUBE(3,*)
-	LOGICAL  FIRST,FILL
-	COMMON /PAR/  LDP
+      INCLUDE 'PAR.INC'
+C     PAR includes INTEGER LDPX,LDPY,LDPZ,LDPNMX,LDPNMY,NZ1,LDP,NM,LDPNM
+
+      INTEGER  IPCUBE(3,*)
+      LOGICAL  FIRST,FILL
 
 C       IPCUBE: 
 C       1 - IX
 C       2 - IY
 C       3 - END OF IX
 
-	R=RI*RI
+      R=RI*RI
 
-	NN=0
+      NN=0
 
-	DO  25  I1=1,N
-	T=I1-LDP
-	XX=T*T
-	FIRST=.TRUE.
-	DO 20 I2=1,N
-           T=I2-LDP
-           RC=T*T+XX
-           IF (FIRST)  THEN
-              IF (RC.GT.R)  GOTO 14
-              FIRST = .FALSE.
-              NN = NN+1
-              IF (FILL) THEN
-                 IPCUBE(1,NN)=I2
-                 IPCUBE(2,NN)=I1
-                 IPCUBE(3,NN)=I2
-              ENDIF
-           ELSE
-              IF (FILL)  IPCUBE(3,NN)=I2
-              IF (RC.GT.R)  GOTO  16
-           ENDIF
-14	   CONTINUE
-20	CONTINUE
-16	CONTINUE
-25	CONTINUE
+      DO  25  I1=1,N
+      T=I1-LDP
+      XX=T*T
+      FIRST=.TRUE.
+      DO 20 I2=1,N
+         T=I2-LDP
+         RC=T*T+XX
+         IF (FIRST)  THEN
+            IF (RC.GT.R)  GOTO 14
+            FIRST = .FALSE.
+            NN = NN+1
+            IF (FILL) THEN
+               IPCUBE(1,NN)=I2
+               IPCUBE(2,NN)=I1
+               IPCUBE(3,NN)=I2
+            ENDIF
+         ELSE
+            IF (FILL)  IPCUBE(3,NN)=I2
+            IF (RC.GT.R)  GOTO  16
+         ENDIF
+14    CONTINUE
+20    CONTINUE
+16    CONTINUE
+25    CONTINUE
 
-	END
+      END
 
 
 	SUBROUTINE  GENAT(ANGTAB,DPSI,NANGT,FILL)

@@ -92,7 +92,8 @@ C--*********************************************************************
 
 C     OPEN INPUT IMAGE(S)
       MAXIM = 0
-      CALL OPFILES(0,LUNIN,LUNDOCSEL,LUNXM, 
+      IMGNUM = 0    ! Passing uninitialized variable may result in 'INVALID IMAGE NUMBER' error
+      CALL OPFILES(0,LUNIN,LUNDOCSEL,LUNXM,
      &             ASKNAM,FILPAT,NLET, 'O',
      &             ITYPE,NX,NY,NZ,MAXIM,
      &             'TEMPLATE FOR INPUT FILES~',

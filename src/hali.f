@@ -54,12 +54,14 @@ C--*********************************************************************
         INTEGER,PARAMETER      :: INPIC  = 21
         INTEGER,PARAMETER      :: LUNDOC = 80   
         INTEGER,PARAMETER      :: LUNXM  = 0  ! SELFILE NOT ALLOWED
+        INTEGER                :: IMGNUM
 
         NILMAX = NIMAX
 
 C       OPEN INPUT IMAGE(S)
         MAXIM = 0
-        CALL OPFILES(0,INPIC,LUNDOC,LUNXM, 
+        IMGNUM = 0    ! Passing uninitialized variable may result in 'INVALID IMAGE NUMBER' error
+        CALL OPFILES(0,INPIC,LUNDOC,LUNXM,
      &             .TRUE.,FINPAT,NLET, 'O',
      &             IFORM,NX,NY,NZ,MAXIM,
      &             'INPUT FILE TEMPLATE (E.G. PIC****)~',

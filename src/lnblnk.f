@@ -44,7 +44,7 @@ C--*********************************************************************
 #if defined (SP_IBMSP3) || defined (__ia64)
         INTEGER FUNCTION LNBLNK(STRING)
 
-	INCLUDE 'CMBLOCK.INC'
+        INCLUDE 'CMBLOCK.INC'
 
         CHARACTER *(*) STRING
         CHARACTER      NULL

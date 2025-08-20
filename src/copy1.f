@@ -157,7 +157,8 @@ C          OPEN INPUT IMAGE(S), (NOT FOURIER)
 
            ASKNAM = .TRUE.
            FOUROK = .FALSE.
-           CALL OPFILES(0,LUN1,LUNDOC,LUNXM1, 
+           IMGNUM = 0    ! Passing uninitialized variable may result in 'INVALID IMAGE NUMBER' error
+           CALL OPFILES(0,LUN1,LUNDOC,LUNXM1,
      &                  ASKNAM,FILOLD,NLET, 'O',
      &                  ITYPE,NX,NY,NZ,MAXIM,
      &                  'SPIDER INPUT',

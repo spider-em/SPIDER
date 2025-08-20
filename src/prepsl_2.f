@@ -35,11 +35,13 @@ C        0         2         3         4         5         6         7 *
 C23456789012345678901234567890123456789012345678901234567890123456789012
 C***********************************************************************
 
-	SUBROUTINE  PREPSL_2(NSAM,NSLICE,NN,NMAT,IPCUBE,RI)
+      SUBROUTINE  PREPSL_2(NSAM,NSLICE,NN,NMAT,IPCUBE,RI)
 
-	INTEGER  IPCUBE(5,*)
-	LOGICAL  FIRST
-	COMMON /PAR/  LDPX,LDPY,LDPZ,LDPNMX,LDPNMY
+      INCLUDE 'PAR.INC'
+C     PAR includes INTEGER LDPX,LDPY,LDPZ,LDPNMX,LDPNMY,NZ1,LDP,NM,LDPNM
+
+      INTEGER  IPCUBE(5,*)
+      LOGICAL  FIRST
 
 C
 C IPCUBE: 1 - beginning
@@ -48,33 +50,33 @@ C         3 - ix
 C         4 - iy
 C         5 - iz
 C                   
-	R=RI*RI
-	NN=0
-	NMAT=0
-C
-	DO    I1=1,NSLICE
-	T=I1-LDPZ
-	XX=T*T
-	FIRST=.TRUE.
-	DO    I3=1,NSAM
-	NMAT=NMAT+1
-	T=I3-LDPX
-        RC=T*T+XX
-	IF(FIRST)  THEN
-	IF(RC-R)  80  ,80,14
-80	FIRST=.FALSE.
-	NN=NN+1
-	IPCUBE(1,NN)=NMAT
-	IPCUBE(2,NN)=NMAT
-	IPCUBE(3,NN)=I3
-	IPCUBE(4,NN)=1
-	IPCUBE(5,NN)=I1	
-	ELSE
-	IF(RC.le.R)  IPCUBE(2,NN)=NMAT
-	ENDIF
-14	CONTINUE
-	ENDDO
-16	CONTINUE
-20	CONTINUE
-	ENDDO
-	END
+      R=RI*RI
+      NN=0
+      NMAT=0
+
+      DO    I1=1,NSLICE
+         T=I1-LDPZ
+         XX=T*T
+         FIRST=.TRUE.
+         DO    I3=1,NSAM
+            NMAT=NMAT+1
+            T=I3-LDPX
+            RC=T*T+XX
+            IF(FIRST)  THEN
+               IF(RC-R)  80  ,80,14
+80             FIRST=.FALSE.
+               NN=NN+1
+               IPCUBE(1,NN)=NMAT
+               IPCUBE(2,NN)=NMAT
+               IPCUBE(3,NN)=I3
+               IPCUBE(4,NN)=1
+               IPCUBE(5,NN)=I1
+            ELSE
+               IF(RC.le.R)  IPCUBE(2,NN)=NMAT
+            ENDIF
+14          CONTINUE
+         ENDDO
+16       CONTINUE
+20       CONTINUE
+      ENDDO
+      END

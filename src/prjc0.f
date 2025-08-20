@@ -35,22 +35,24 @@ C        0         2         3         4         5         6         7 *
 C23456789012345678901234567890123456789012345678901234567890123456789012
 C***********************************************************************
 
-	SUBROUTINE  PRJC0(CUBE,LTC,DM,B,NSAM,IPCUBE,NN)
+      SUBROUTINE  PRJC0(CUBE,LTC,DM,B,NSAM,IPCUBE,NN)
 
-        DIMENSION  DM(9)
-	DIMENSION  CUBE(LTC),B(nsam)
-	INTEGER  IPCUBE(5,NN)
-	COMMON /PAR/  LDPX,LDPY,LDPZ,LDPNMX,LDPNMY
+      INCLUDE 'PAR.INC'
+C     Includes INTEGER LDPX,LDPY,LDPZ,LDPNMX,LDPNMY,NZ1,LDP,NM,LDPNM
 
-	DO    I=1,NN
-	XB=(IPCUBE(3,I)-LDPX)*DM(1)+(IPCUBE(5,I)-LDPZ)*DM(3)
-	DO    J=IPCUBE(1,I),IPCUBE(2,I)
-	IQX=IFIX(XB+FLOAT(LDPNMX))
-	DIPX=XB+LDPNMX-IQX
-	CT=CUBE(J)
-	B(IQX)  =B(IQX)    +(1.0-DIPX)*CT
-	B(IQX+1)=B(IQX+1)  +     DIPX *CT
-	XB=XB+DM(1)
-	ENDDO
-	ENDDO
-	END
+      DIMENSION  DM(9)
+      DIMENSION  CUBE(LTC),B(nsam)
+      INTEGER  IPCUBE(5,NN)
+
+      DO    I=1,NN
+         XB=(IPCUBE(3,I)-LDPX)*DM(1)+(IPCUBE(5,I)-LDPZ)*DM(3)
+         DO    J=IPCUBE(1,I),IPCUBE(2,I)
+            IQX=IFIX(XB+FLOAT(LDPNMX))
+            DIPX=XB+LDPNMX-IQX
+            CT=CUBE(J)
+            B(IQX)  =B(IQX)    +(1.0-DIPX)*CT
+            B(IQX+1)=B(IQX+1)  +     DIPX *CT
+            XB=XB+DM(1)
+         ENDDO
+      ENDDO
+      END

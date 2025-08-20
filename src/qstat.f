@@ -67,6 +67,7 @@ C--*******************************************************************
 C     OPEN INPUT FILE
       NILMAX = NIMAX
       FOUROK = .TRUE.
+      IMG1 = 0    ! Passing uninitialized variable may result in 'INVALID IMAGE NUMBER' error
       CALL OPFILES(0,LUN1,LUNDOC,LUNXM1,  
      &             .TRUE.,FILNAM1,NLET1, 'O',
      &             IFORM1,NX1,NY1,NZ1,NSTACK1,

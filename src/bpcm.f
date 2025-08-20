@@ -37,9 +37,11 @@ C***********************************************************************
         SUBROUTINE BPCM(B,NNNN,NSAM,NROW,LPRJ,CUBE,NX3D,NY3D,NZC,DM,
      &                   IOPIC,FIRST)
 
+       INCLUDE 'PAR.INC'
+C	    PAR includes INTEGER LDPX,LDPY,LDPZ,LDPNMX,LDPNMY,NZ1,LDP,NM,LDPNM
+	
         DIMENSION         B(NNNN,NROW,LPRJ),CUBE(NX3D,NY3D)
         DIMENSION         DM(9,LPRJ)
-        COMMON /PAR/      LDPX,LDPY,LDPZ,LDPNMX,LDPNMY,NZ1
         LOGICAL           FIRST
 
         DO K=1,NZC

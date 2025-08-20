@@ -103,6 +103,8 @@ C       OPEN FIRST INPUT MRC FILE
 C       APPEND .mrc IF NEEDED
         IF (INDEX(FILNAM1,'.mrc') <= 0 .AND.
      &      INDEX(FILNAM1,'.MRC') <= 0 .AND.
+     &      INDEX(FILNAM1,'.mrcs') <= 0 .AND.
+     &      INDEX(FILNAM1,'.MRCS') <= 0 .AND.
      &      INDEX(FILNAM1,'.map') <= 0 .AND.
      &      INDEX(FILNAM1,'.MAP') <= 0) THEN
             FILNAM1 = FILNAM1(1:NLET1) // '.mrc'
@@ -112,12 +114,15 @@ C       APPEND .mrc IF NEEDED
         NSTACK1 =  1   ! PARAMETER UNUSED ON INPUT
         DISP    = 'E'  ! DISP = 'E' DOES NOT STOP ON ERROR
         ASKNAM  = .FALSE.  
-        CALL OPFILES(0,LUN1,LUNDOC,LUNXM1,  
+C       PRINT *, "copyfrommrc.f : 117: Calling OPFILES"
+        IMG1 = 0    ! Passing uninitialized variable may result in 'INVALID IMAGE NUMBER'
+        CALL OPFILES(0,LUN1,LUNDOC,LUNXM1,
      &               ASKNAM,FILNAM1,NLET1, DISP,
      &               IFORM1,NX1,NY1,NZ1,NSTACK1,
      &               FILNAM1,
      &               FOUROK, ILIST1,NILMAX, 
      &               NDUM,NGOT1,IMG1, IRTFLG) 
+        PRINT *, "copyfrommrc.f : 124: OPFILES: NSTACK1:", NSTACK1
         IF (IRTFLG .NE. 0) RETURN
 
 C       NSTACK1 RET:  -2   IS NON-STACK IMAGE,  -1 IS STACKED IMG,                  
@@ -127,11 +132,13 @@ C                    >= 0 IS CURRENT MAX. IMG # FOR STACK
         !&                                      nstack1,ngot1,img1
  
 C       BE SURE INPUT IS MRC
+C       PRINT *, "copyfrommrc.f : 134: Calling LUNGETIS_MRC"
         CALL LUNGETIS_MRC(LUN1,IS_MRC,IRTFLG)
         IF (.NOT. IS_MRC) THEN    
            CALL ERRT(101,'INPUT IS NOT MRC FILE',NE)
            GOTO 999
         ENDIF
+C       PRINT *, "copyfrommrc.f : 140: LUNGETIS_MRC ok"
 
 C	OPEN FIRST SPIDER OUTPUT FILE
         NSTACK2 =  1   ! PARAMETER NOT USED ON INPUT
@@ -153,7 +160,7 @@ C       TREAT THIS IMAGE AS A STACK NOT A VOLUME (WHERE RELEVENT)
         IS_ACTUALLY_A_VOL = .FALSE.
 
         IF (NSTACK1 >= 0) THEN
-C           MAY HAVE ABERRENT MRC HEADER
+C           MAY HAVE ABERRANT MRC HEADER
             IF  (FCHAR(9:12) == 'MRCV') THEN
                IS_ACTUALLY_A_VOL = .TRUE.
 

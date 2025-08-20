@@ -65,6 +65,7 @@ C--*********************************************************************
         INTEGER,ALLOCATABLE      :: ILIST1(:),ILIST2(:)
         CHARACTER (LEN=1)        :: NULL = CHAR(0)
         CHARACTER (LEN=1)        :: DISP
+        INTEGER                  :: IMG1,IMG2
 
         CALL SET_MPI(ICOMM,MYPID,MPIERR) ! SETS ICOMM AND MYPID
 
@@ -82,6 +83,7 @@ C--*********************************************************************
 C       OPEN FIRST INPUT FILE, DISP = 'E' DOES NOT STOP ON ERROR
         MAXIM1 = 0
         PROMPT = 'INPUT FILE NAME OR TEMPLATE (E.G. STK@****)~~9'
+        IMG1 = 0    ! Passing uninitialized variable may result in 'INVALID IMAGE NUMBER' error
         CALL OPFILES(0,LUN1,LUNDOC,LUNXM1,  
      &               .TRUE.,FILNAM1,NLET1, 'E',
      &               IFORM1,NX1,NY1,NZ1,NSTACK1,

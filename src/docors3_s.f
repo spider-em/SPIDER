@@ -38,8 +38,10 @@ C***********************************************************************
 
         subroutine  docors3_s(bcke,bcn,n,nmat,ipcube,nn,ala,ANGS)
 
+        INCLUDE 'PAR.INC'
+C	     PAR includes INTEGER LDPX,LDPY,LDPZ,LDPNMX,LDPNMY,NZ1,LDP,NM,LDPNM
+
         dimension    bcke(nmat),bcn(n,n,n),ipcube(5,nn),angs(3)
-        COMMON /PAR/  LDP,NM,LDPNM
         DIMENSION  IM(3)
         DOUBLE PRECISION  RM(3,3),QR(3),THETA,PHI,PSI,DX,DY,DZ
 C       EQUIVALENCE  (IM(1),IX),(IM(2),IY),(IM(3),IZ)
