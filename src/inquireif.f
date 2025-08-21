@@ -53,11 +53,11 @@ C--*********************************************************************
 
         IF (TYPET .EQ. 'DIR') THEN
            CALL FILERD(FILNAM,NLET,NULL,
-     &         'QUERY EXISTANCE OF DIRECTORY~',IRTFLG)
+     &         'QUERY EXISTENCE OF DIRECTORY~',IRTFLG)
            IF (IRTFLG .NE. 0) GOTO 1000
 
         ELSE
-           CALL FILERD(FILNAM,NLET,NULL,'QUERY EXISTANCE OF~9',IRTFLG)
+           CALL FILERD(FILNAM,NLET,NULL,'QUERY EXISTENCE OF~9',IRTFLG)
            IF (IRTFLG .NE. 0) GOTO 1000
 
 C          MERGE FILNAM WITH DATEXC IF NECESARY

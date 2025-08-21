@@ -56,7 +56,7 @@ C--*********************************************************************
      &                IRTFLG)
         ELSE
           CALL FILERD(FILNAM,NLET,DATEXC,
-     &                'WAIT FOR EXISTANCE OF~9',IRTFLG)
+     &                'WAIT FOR EXISTENCE OF~9',IRTFLG)
         ENDIF
         IF (IRTFLG .NE. 0) RETURN
 

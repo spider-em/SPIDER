@@ -232,7 +232,7 @@ C             EXCLUSIVE SUBTRACTING BY KEY
               DO IKEYT = 1,MAXY
                  ICOUNT1 = DOCBUF((IKEYT - 1) * MAXX + 1)
                  IF (ICOUNT1 .GT. 0 .AND. IKEYT .LE. MAXY2) THEN
-C                   KEY EXISTS IN FIRST FILE, CHECK EXISTANCE IN 2ND
+C                   KEY EXISTS IN FIRST FILE, CHECK EXISTENCE IN 2ND
                      
                     ICOUNT2 = DOCBUF2(1,IKEYT)
                     IF (ICOUNT2 .EQ. 0) THEN
@@ -336,7 +336,7 @@ C             'ANDING' BY KEY
               DO KEYT = 1,MAXY
                  ICOUNT1 = DOCBUF((KEYT - 1) * MAXX + 1)
                  IF (ICOUNT1 .NE. 0 .AND. KEYT .LE. MAXY2) THEN
-C                   KEY EXISTS IN FIRST FILE, CHECK EXISTANCE IN 2ND
+C                   KEY EXISTS IN FIRST FILE, CHECK EXISTENCE IN 2ND
                      
                     ICOUNT2 = DOCBUF2(1,KEYT)
                     IF (ICOUNT2 .GT. 0) THEN
