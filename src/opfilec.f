@@ -193,6 +193,7 @@ C          SOLICIT FILE NAME, KEEPS EXTENSION IF PROMPT ENDS WITH: ~9
            NLETI = lnblnk(FILNAM)
         ENDIF
 
+C       PRINT *, __FILE__," : 196: OPFILEC: ITYPE=",ITYPE
         DSP = 'O'
         IF (DISP(1:1) .NE. 'O' .AND. 
      &      DISP(1:1) .NE. 'Z' .AND.
@@ -212,13 +213,11 @@ C          CHECK THAT NECESSARY SIZE... INFO IS HERE
         IF (ISMRCFILE(FILNAM)) THEN
 
 C          WANT TO OPEN OLD OR NEW MRC FILE FOR STREAM ACCESS
-C          PRINT *, "opfilec.f : 215: OPFILEC: Calling OPENFIL_MRC"
            CALL OPENFIL_MRC(LUN,FILNAM,NLETI,NX,NY,NZ,NSTACK,ITYPE,
      &                      DSP,IRTFLG)
            IF (IRTFLG .NE. 0) RETURN
            IFORM = ITYPE
            MAXIM = NSTACK
-C          PRINT *, "opfilec.f : 221: OPFILEC: MAXIM", MAXIM
 
            RETURN           ! END OF MRC CODE
 
@@ -249,8 +248,11 @@ C             NOTE: THIS IS THE PATH FOR 'REGULAR' SPIDER IMAGE FILES.
 
               !write(3,*)' In opfilec, call openfil itype:',itype,nstack
               NSTACK = 0
+C             PRINT *, __FILE__," : 252: Calling OPENFIL"
               CALL OPENFIL(LUNT,FILNAM,LUN,NX,NY,NZ,NSTACK,
      &                     ITYPE,DISP(1:1),KEEPEXT,IRTFLG)
+C             PRINT *, __FILE__," : 255: Returned from OPENFIL"
+C             PRINT *, __FILE__," : 256: OPENFILEC: ITYPE=",ITYPE
               !write(3,*)' In opfilec, openfil returned filnam:',filnam
               !write(3,*)' In opfilec, nstack,irtflg:',nstack,irtflg
 
@@ -275,11 +277,8 @@ C             INLINE IMAGE STACK ACCESS WANTED
            ELSE
 C             WANT TO ACCESS A FILE BASED SPIDER IMAGE STACK
               NSTACK = MAXIM
-C             PRINT *, __FILE__," : 278: NSTACK=MAXIM=",MAXIM
               CALL OPENSTK(LUNT,FILNAM,LUN,NX,NY,NZ,
      &                     NSTACK,ITYPE,DISP(1:1),IRTFLG)
-C             PRINT *, __FILE__," : 281: NSTACK=",NSTACK
-
            ENDIF
 
 C

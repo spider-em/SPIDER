@@ -398,7 +398,6 @@ C     ------------------------- LUNGETTYPE ----------------------------
 C     DETERMINE IF MRC OR SPIDER HEADER OBJECT
       CALL LUNGETIS_MRC(LUN,IS_MRC,IRTFLG)
 
-C     PRINT *, __FILE__," : 400: LUNGETTYPE: IS_MRC=",IS_MRC
       IF (IS_MRC) THEN
          CALL LUNGETTYPE_MRC(LUN,ITYPE,IRTFLG)
          IF (IRTFLG .NE. 0) RETURN
@@ -410,6 +409,7 @@ C        POINT TO HEADER OBJECT
 
 C        RETURN SPIDER FILE TYPE  
          ITYPE = HEADER(5)
+C        PRINT *, __FILE__," : 412: LUNGETTYPE: ITYPE=",ITYPE
       ENDIF
 
       IRTFLG = 0

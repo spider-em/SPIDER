@@ -747,8 +747,8 @@ C             INCREMENT NGOT AND TRY AGAIN
 
            !write(6,*)' Opened old bare stacked file: ',FILNAM(1:NLET)
            !write(6,*)' ngot,NX:',ngot,NX,lun,imused,irtflg
-        ELSE
-           PRINT *, __FILE__," : 751: GETOLDIMG: Unknown case"
+C        ELSE
+C          PRINT *, __FILE__," : 751: GETOLDIMG: Unknown case"
         ENDIF
 
 C       SET OFFSETS FOR REDLIN/WRTLIN ON THIS LUN
