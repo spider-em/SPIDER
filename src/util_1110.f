@@ -85,6 +85,7 @@ C     DOC FILE POINTER
       ENDIF
 
 C     OPEN INPUT IMAGE(S)
+      IMGNUM = 0    ! Passing uninitialized variable may result in 'INVALID IMAGE NUMBER' error
       CALL OPFILES(0,LUNIN,LUNDOCSEL,LUNXM1, 
      &             .TRUE.,FILPATIN,NLET, 'O',
      &             ITYPE,NX,NY,NZ,MAXIMIN,

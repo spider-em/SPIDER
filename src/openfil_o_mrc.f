@@ -179,7 +179,9 @@ C     GET MRC FILE PARAMETERS: IVERSION,ISPG,NSYMBT,NLABL
       IF (IRTFLG .NE. 0) RETURN        
   
 C     GET MRC FILE PARAMETERS:  NZ,MZ, & NSTACK.(HANDLES .mrcs FILES OK)
+C     PRINT *, "opfil_o_mrc.f : 182: Calling LUNGETNSTACK_MRC"
       CALL LUNGETNSTACK_MRC(LUN, NX,NY,NZ,MZ,NSTACK,IRTFLG)
+C     PRINT *, "opfil_o_mrc.f : 184: OPENFIL_O_MRC: NSTACK",NSTACK
       IF (IRTFLG .NE. 0) RETURN        
 
       !write(3,*)' In openfil_o_mrc, filnam: ',filnam(1:nlet)

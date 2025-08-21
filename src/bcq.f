@@ -58,11 +58,10 @@ C--*********************************************************************
 
         INCLUDE 'CMBLOCK.INC'
         INCLUDE 'CMLIMIT.INC'
-
-	COMMON /PAR/    LDPX,LDPY,LDPZ,LDPNMX,LDPNMY,NZ1
-
-
         INCLUDE 'F90ALLOC.INC'
+        INCLUDE 'PAR.INC'
+C	PAR includes INTEGER LDPX,LDPY,LDPZ,LDPNMX,LDPNMY,NZ1,LDP,NM,LDPNM
+
         REAL, DIMENSION(:,:), POINTER       :: ANGBUF
         REAL, ALLOCATABLE, DIMENSION(:,:)   :: DM,SS,CW
         REAL, ALLOCATABLE, DIMENSION(: )    :: CB,ILISTP

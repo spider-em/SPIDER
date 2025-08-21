@@ -105,6 +105,7 @@ C--*********************************************************************
         INTEGER, PARAMETER    :: LUNVOL  = 21
         INTEGER, PARAMETER    :: LUNVOL1 = 22
         INTEGER, PARAMETER    :: LUNVOL2 = 23
+        INTEGER               :: IMG1
 
         CALL SET_MPI(ICOMM,MYPID,MPIERR) ! SETS ICOMM AND MYPID
  
@@ -121,7 +122,8 @@ C       MEMORY FOR LISTS OF IMAGES
 
 C       OPEN FIRST INPUT FILE
 C       RETURNS: NANG = NUMBER OF ANGLES = NUMBER OF PROJECTIONS
-        CALL OPFILES(0,LUNPROJ,LUNDOC,LUNXM,  
+        IMG1 = 0    ! Passing uninitialized variable may result in 'INVALID IMAGE NUMBER' error
+        CALL OPFILES(0,LUNPROJ,LUNDOC,LUNXM,
      &             ASKNAM,FILPAT,NLET, 'O',
      &             IFORM ,NX,NY,NZ,NSTACK,
      &             'TEMPLATE FOR IMAGE FILES~',

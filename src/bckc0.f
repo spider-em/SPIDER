@@ -35,23 +35,25 @@ C        0         2         3         4         5         6         7 *
 C23456789012345678901234567890123456789012345678901234567890123456789012
 C***********************************************************************
 
-	SUBROUTINE  BCKC0(CUBE,LTC,DM,B,NSAM,IPCUBE,NN)
+      SUBROUTINE  BCKC0(CUBE,LTC,DM,B,NSAM,IPCUBE,NN)
 
-        DIMENSION  DM(9)
-	DIMENSION  CUBE(LTC),B(NSAM)
-	INTEGER  IPCUBE(5,NN)
-	COMMON /PAR/  LDPX,LDPY,LDPZ,LDPNMX,LDPNMY
+      INCLUDE 'PAR.INC'
+C     PAR includes INTEGER LDPX,LDPY,LDPZ,LDPNMX,LDPNMY,NZ1,LDP,NM,LDPNM
+
+      DIMENSION  DM(9)
+      DIMENSION  CUBE(LTC),B(NSAM)
+      INTEGER  IPCUBE(5,NN)
 
 c$omp parallel do  private(i,xb,xbb,j,iqx,dipx)
-	DO    I=1,NN
-	   XB=(IPCUBE(3,I)-LDPX)*DM(1)+(IPCUBE(5,I)-LDPZ)*DM(3)
-	   DO    J=IPCUBE(1,I),IPCUBE(2,I)
-	      XBB=(J-IPCUBE(1,I))*DM(1)+XB
-	      IQX=IFIX(XBB+FLOAT(LDPNMX))
-	      DIPX=XBB+LDPNMX-IQX
-	      CUBE(J)=CUBE(J)+B(IQX)+DIPX*(B(IQX+1)-B(IQX))
-	   ENDDO
-	ENDDO
+      DO    I=1,NN
+         XB=(IPCUBE(3,I)-LDPX)*DM(1)+(IPCUBE(5,I)-LDPZ)*DM(3)
+         DO    J=IPCUBE(1,I),IPCUBE(2,I)
+            XBB=(J-IPCUBE(1,I))*DM(1)+XB
+            IQX=IFIX(XBB+FLOAT(LDPNMX))
+            DIPX=XBB+LDPNMX-IQX
+            CUBE(J)=CUBE(J)+B(IQX)+DIPX*(B(IQX+1)-B(IQX))
+         ENDDO
+      ENDDO
 C     1                 +(1.0-DIPX)*B(IQX)
 C     2                 +     DIPX *B(IQX+1)
-	END
+      END

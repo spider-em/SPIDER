@@ -141,7 +141,8 @@ C          GET NAME FOR JPEG FILE
      &     ' convert -depth 32 -size ',A,'x',A, 
      &     ' -define quantum:format=floating-point ',
      &     '-define quantum:scale=65536.0 -endian msb ',
-     &     A,' ',A, ' >& /dev/null' )
+     &     A,' ',A, ' 2>&1 /dev/null' )
+C       (I think >& needs to be 2>&1 to avoid message 'Syntax error: Bad fd number')
 
         ENDIF
 

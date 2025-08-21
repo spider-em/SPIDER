@@ -80,7 +80,7 @@ C--*********************************************************************
 
         CHARACTER (LEN=MAXNAM)   :: FILNOAT,FILNPE
         CHARACTER (LEN=2*MAXNAM) :: MSG
-	LOGICAL                  :: EX,ISDIGI,CALLERRTRED,INDXD
+        LOGICAL                  :: EX,ISDIGI,CALLERRTRED,INDXD
 
 #ifdef USE_MPI
         include 'mpif.h'
@@ -118,7 +118,7 @@ C       GET FILENAME WITHOUT @ AND DATEXC
 
 C       CREATE STACK FILE NAME WITHOUT '@' BUT WITH EXTENSION
         CALL FILNAMANDEXT(FILNOAT,DATEXC,FILNPE,NLET,.TRUE.,IRTFLGT)
-	IF (IRTFLGT .NE.0) RETURN
+        IF (IRTFLGT .NE.0) RETURN
 
 C       SEE IF STACK FILE ALREADY EXISTS NOW
 #ifdef USE_MPI
@@ -143,7 +143,7 @@ C       SEE IF STACK FILE ALREADY EXISTS NOW
            RETURN
         ENDIF
  
-	IF (DISP(1:1) == 'U' .OR. DISP(1:1) == 'N') THEN
+        IF (DISP(1:1) == 'U' .OR. DISP(1:1) == 'N') THEN
 C          WANT TO MAKE A NEW STACK OR NEW IMAGE WITHIN EXISTING STACK
 C -------------------------------- NEW --------------------------------
 
@@ -166,7 +166,7 @@ C                 REGULAR NEW STACK
               ENDIF
 
 C             CREATE NEW STACK FILE, OPENFIL WILL RETURN NSTACK = 0
-	      CALL OPENFIL(0,FILNOAT,LUN, NX,NY,NZ,NSTACK,
+              CALL OPENFIL(0,FILNOAT,LUN, NX,NY,NZ,NSTACK,
      &                     ITYPE,DISP,.FALSE.,IRTFLG)
               IF (IRTFLG .NE. 0) RETURN
 
@@ -175,6 +175,8 @@ C                 CLEAR STACK INDEX IN NEW FILE
                   CALL LUNCLRINDX(LUN,NX,IRTFLGT)
               ENDIF
 
+C            PRINT *, __FILE__," : 178: IMGNUM=",IMGNUM
+C            PRINT *, __FILE__," : 179: NSTACK=",NSTACK
               IF (IMGNUM <= 0) THEN
 C                ONLY WANT TO OPEN NEW BARE STACK
                  IRTFLG  = 0
@@ -184,9 +186,10 @@ C                ONLY WANT TO OPEN NEW BARE STACK
            ELSE
 C             OPEN EXISTING STACK FILE TO APPEND A NEW STACKED IMAGE
               ITYPEIN = ITYPE
-	      CALL OPENFIL(0,FILNOAT,LUN, NXF,NYF,NZF,NSTACK,
+              CALL OPENFIL(0,FILNOAT,LUN, NXF,NYF,NZF,NSTACK,
      &                     ITYPE,'O',.FALSE.,IRTFLGT)
               IF (IRTFLGT .NE. 0)  RETURN
+C            PRINT *, __FILE__," : 191: NSTACK=",NSTACK
 
 C             OPENFIL WILL RETURN NUMBER OF IMAGES IN STACK, OR -1
 C             IF THIS IS A SPECIFIC IMAGE WITHIN THE STACK, -2 IS
@@ -256,11 +259,13 @@ C          RETURNS NSTACK = -1 TO SIGNIFY THIS IS STACKED IMAGE
 
 C -------------------------------- OLD --------------------------------
            
-	ELSEIF (DISP(1:1) == 'O' .OR. DISP(1:1) ==  'K' .OR.
+        ELSEIF (DISP(1:1) == 'O' .OR. DISP(1:1) ==  'K' .OR.
      &          DISP(1:1) == 'Z' .OR. 
      &          DISP(1:1) == 'E' .OR. DISP(1:1) ==  'M') THEN
 C          WANT AN EXISTING IMAGE FROM EXISTING STACK OR AN
 C          EXISTING BARE STACK HEADER
+C          PRINT *, __FILE__," : 266: EXISTING STACK"
+C          PRINT *, __FILE__," : 267: IMGNUM=",IMGNUM
 
            IF (.NOT. EX) THEN
 C             STACK FILE DOES NOT EXIST YET, ERROR
@@ -272,7 +277,7 @@ C	      FOR DISP=Z, DO NOT STOP THE BATCH JOB BY CALLING ERRT
            ENDIF
 
 C          OPEN EXISTING OVERALL STACK FILE, RETURNS MAXIM IN NSTACK
-	   CALL OPENFIL(0,FILNOAT,LUN, NX,NY,NZ,NSTACK,
+           CALL OPENFIL(0,FILNOAT,LUN, NX,NY,NZ,NSTACK,
      &                  ITYPE,'O',.FALSE.,IRTFLGT)
            IF (IRTFLGT .NE. 0)  RETURN
 
@@ -382,6 +387,6 @@ C       SET COMMON BLOCK VARIABLES
 C       SET FLAG FOR NORMAL RETURN	
         IRTFLG = 0
 
-	END
+        END
 
 

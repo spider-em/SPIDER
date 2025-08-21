@@ -39,17 +39,29 @@ C--*********************************************************************
        CHARACTER *(*) STRING
 
 C      FIND LOCATION OF LAST NON-NULL, PRINTING CHARACTER IN STRING
- 
        LNBLNKN = lnblnk(STRING)
+
+C      Check for null character inside string
        LENN    = INDEX(STRING,CHAR(0)) 
        IF (LENN .GE. 1 .AND. LENN .LE. LNBLNKN) LNBLNKN = LENN - 1
 
-       IF (LNBLNKN .GT. 0 .AND. STRING(LNBLNKN:LNBLNKN) .LE. CHAR(32))
-     &    THEN
+C      If lnblnkn is 0, then string(lnblnkn:lnblnkn) below will be invalid
+       IF (LNBLNKN .LE. 0) THEN
+          LNBLNKN = 0
+          RETURN
+       ENDIF
+
+C      PRINT *, 'lnblnkn.f : 54: LNBLNKN=', LNBLNKN
+C      IF (STRING(LNBLNKN:LNBLNKN) .LE. CHAR(32)) THEN
+       IF (ICHAR(STRING(LNBLNKN:LNBLNKN)) .LE. 32) THEN
 C         LAST POSITION IS STILL NON PRINTING
           LENB = LNBLNKN
-          DO LNBLNKN = LENB,1,-1
-             IF (STRING(LNBLNKN:LNBLNKN) .GT. CHAR(32)) RETURN
+          DO IDX = LENB,1,-1
+C            IF (STRING(LNBLNKN:LNBLNKN) .GT. CHAR(32)) THEN
+             IF (ICHAR(STRING(idx:idx)) .GT. 32) THEN
+                LNBLNKN = IDX
+                RETURN
+             ENDIF
           ENDDO
           LNBLNKN = 0 
        ENDIF

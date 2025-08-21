@@ -78,11 +78,13 @@ C       MXR in: ang.f, gali.f, hali_p.f
         INTEGER,PARAMETER      :: INPIC  = 78
         INTEGER,PARAMETER      :: LUNDOC = 80   
         INTEGER,PARAMETER      :: LUNXM  = 0  ! SELFILE NOT ALLOWED
+        INTEGER                :: IMGNUM
 
 C       OPEN INPUT IMAGE(S)
         MAXIM = 0
         NILMAX = NIMAX
-        CALL OPFILES(0,INPIC,LUNDOC,LUNXM, 
+        IMGNUM = 0    ! Passing uninitialized variable may result in 'INVALID IMAGE NUMBER' error
+        CALL OPFILES(0,INPIC,LUNDOC,LUNXM,
      &             .TRUE.,FINPAT,NLET, 'O',
      &             IFORM,NX,NY,NZ,MAXIM,
      &             'INPUT FILE TEMPLATE (E.G. PIC****)~',

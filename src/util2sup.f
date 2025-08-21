@@ -262,6 +262,7 @@ C--*********************************************************************
       ENDIF
  
 C     OPEN FIRST INPUT IMAGE(S)
+      IMGNUM1 = 0    ! Passing uninitialized variable may result in 'INVALID IMAGE NUMBER'
       CALL OPFILES(0,LUN1,LUNDOC,LUNXM1, ASKNAME,
      &             FILPAT1,NLET1, 'O',
      &             ITYPE1,NX,NY,NZ,MAXIM1,
@@ -282,6 +283,7 @@ C     OPEN FIRST INPUT IMAGE(S)
       !write(6,*) ' opened lun1:',lun1,filpat1(1:20)
 
 C     OPEN SECOND INPUT IMAGE(S)
+      IMGNUM2 = 0    ! Passing uninitialized variable may result in 'INVALID IMAGE NUMBER'
       CALL OPFILES(0,LUN2,LUNDOC,LUNXM2, ASKNAME,
      &             FILPAT2,NLET2, 'O',
      &             ITYPE2,NX2,NY2,NZ2,MAXIM2,

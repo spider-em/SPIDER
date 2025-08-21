@@ -87,6 +87,7 @@ C       COMMON: /TABS/ IS USED IN ONELINE, EXTRACTLINE, PUTLINE3, ETC
         !INTEGER, PARAMETER    :: LUNXM2  = 83   ! IN CALLED SUB
         !INTEGER, PARAMETER    :: LUNDOC  = 80   ! IN CALLED SUB
         !INTEGER, PARAMETER    :: LUNROTT = 81   ! IN CALLED SUB 
+        INTEGER                :: IMGNUM
 
         CALL SET_MPI(ICOMM,MYPID,MPIERR)      ! SETS ICOMM AND MYPID
 
@@ -99,7 +100,8 @@ C       COMMON: /TABS/ IS USED IN ONELINE, EXTRACTLINE, PUTLINE3, ETC
         ENDIF 
 
 C       OPEN INPUT IMAGE FILES 
-        CALL OPFILES(0,INPROJ,LUNDOC,LUNXM1, 
+        IMGNUM = 0    ! Passing uninitialized variable may result in 'INVALID IMAGE NUMBER' error
+        CALL OPFILES(0,INPROJ,LUNDOC,LUNXM1,
      &             .TRUE.,FILPAT,NLET, 'O',
      &             ITYPE,NX,NY,NZ,MAXIM1,
      &             'TEMPLATE FOR IMAGE FILES (E.G. STK@****)~~',

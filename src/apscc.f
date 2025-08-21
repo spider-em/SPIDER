@@ -92,6 +92,7 @@ C--*********************************************************************
 
 C       ASK FOR TEMPLATE AND NUMBERS FOR REFERENCE IMAGES
 C       OPEN FIRST REFERENCE IMAGE TO BE ALIGNED
+        IREF = 0    ! Passing uninitialized variable may result in 'INVALID IMAGE NUMBER' error
         CALL OPFILES(0,LUNREF,LUNDOCSEL,LUNXMR, 
      &        .TRUE.,REFPAT,NLET, 'O',
      &        ITYPER,NX,NY,NZ,MAXIMR,
@@ -153,6 +154,7 @@ C          FOURIER INPUT (MUST ALREADY BE PADDED IF DESIRED)
 
 
 C       OPEN FIRST EXPERIMENTAL IMAGE TO BE ALIGNED
+        IEXP = 0    ! Passing uninitialized variable may result in 'INVALID IMAGE NUMBER' error
         CALL OPFILES(0,LUNEXP,LUNDOCSEL,LUNXME, 
      &      .TRUE.,EXPPAT,NLET, 'O',
      &      ITYPEE,NX2,NY2,NZ2,MAXIME,

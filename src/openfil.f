@@ -108,7 +108,7 @@ C
 C23456789 123456789 123456789 123456789 123456789 123456789 123456789 12
 C--*********************************************************************
 
-	SUBROUTINE OPENFIL(LUNT,FILNAM,LUNSENT,NX,NY,NZ,NSTACK,
+        SUBROUTINE OPENFIL(LUNT,FILNAM,LUNSENT,NX,NY,NZ,NSTACK,
      &                     ITYPE,DISP,KEEPEXT,IRTFLG)
 
         INCLUDE 'CMLIMIT.INC'
@@ -130,9 +130,9 @@ C--*********************************************************************
         CHARACTER(LEN=1)             :: NULL = CHAR(0)
         LOGICAL                      :: EX,CALLERRT,OPENED
         INTEGER, PARAMETER           :: I_8 = SELECTED_INT_KIND(12)
-	INTEGER(KIND=I_8)            :: NWORDS_8
+        INTEGER(KIND=I_8)            :: NWORDS_8
         INTEGER(KIND=I_8), PARAMETER :: ZERO_8 = 0
-        INTEGER                      :: LUN
+        INTEGER                      :: LUN,ITYPE
 
         LOGICAL                      :: IS_MRC
 
@@ -145,24 +145,24 @@ C       INCLUSION FOR OPTIONAL MPI INITIALIZATION. MAY ALTER MYPID
 C       SET FLAG FOR ERRONEOUS RETURN
         IRTFLG = 1
        
-C	CHECK IF USER WANTS TO USE THE IN-LINE BUFFER.
+C       CHECK IF USER WANTS TO USE THE IN-LINE BUFFER.
         INLNED = 0
         IF (FILNAM(1:1) == '_') THEN
-C	   USE AN IN-LINE BUFFER.
+C       USE AN IN-LINE BUFFER.
            CALL INLNBUF(FILNAM,NLET,INLNED,IRTFLGT)
            IF (IRTFLGT .NE. 0)  RETURN
 
-	   IF (DISP == 'U' .OR. DISP == 'N') THEN
-	      EX = .FALSE.
-	   ELSE
-	      EX = .TRUE.
-	   ENDIF
+           IF (DISP == 'U' .OR. DISP == 'N') THEN
+              EX = .FALSE.
+           ELSE
+              EX = .TRUE.
+           ENDIF
            FILNM = FILNAM(1:NLET)
 
         ELSE
-C          USE REGULAR FILE
+C          USE REGULAR NON-INLINE FILE
            INLNED = 0
-	   LUNC   = LUN
+           LUNC   = LUN
 
 C          NULLIFY THE INLINE POINTER (CLOSEINLN IS INSIDE OPENINLN.F)
            CALL CLOSEINLN(LUN,IRTFLGT)
@@ -174,7 +174,7 @@ C          NULLIFY THE INLINE POINTER (CLOSEINLN IS INSIDE OPENINLN.F)
               NLET  = lnblnk(FILNM)
            ELSE
               CALL FILNAMANDEXT(FILNAM,DATEXC,FILNM,NLET,.TRUE.,IRTFLGT)
-	      IF (IRTFLGT .NE.0) RETURN
+              IF (IRTFLGT .NE.0) RETURN
            ENDIF
            !write(3,*) ' In openfil, filnm: ',filnm(:nlet),disp
 
@@ -202,350 +202,355 @@ C       LUNARB(LUN) = LUN
 
         CALLERRT = (DISP(1:1) .NE. 'Z' .AND. DISP(1:1) .NE. 'E')
 
-10	IF (DISP == 'U' .OR. DISP == 'N') THEN
-C         USER WANTS A NEW FILE TO WRITE INTO ---------------------- NEW
+C       PRINT *, __FILE__," : 205: OPENFIL: DISP=",DISP
+10      IF (DISP == 'U' .OR. DISP == 'N') THEN
+C       USER WANTS A NEW FILE TO WRITE INTO ---------------------- NEW
 
-          IF (EX) THEN
-C           FILE IS IS OPENED WITH 'UNKNOWN' BUT ALREADY EXISTS; IT WILL
-C           BE REPLACED.  OLD FILES ARE DELETED FIRST 
-            IF (MYPID <= 0) THEN
-               OPEN(UNIT=LUN,FILE=FILNM(1:NLET),STATUS='OLD')
-               CLOSE(UNIT=LUN,STATUS='DELETE',IOSTAT=IER)
-            ENDIF
+           IF (EX) THEN
+C             FILE IS IS OPENED WITH 'UNKNOWN' BUT ALREADY EXISTS; IT WILL
+C             BE REPLACED.  OLD FILES ARE DELETED FIRST
+              IF (MYPID <= 0) THEN
+                 OPEN(UNIT=LUN,FILE=FILNM(1:NLET),STATUS='OLD')
+                 CLOSE(UNIT=LUN,STATUS='DELETE',IOSTAT=IER)
+              ENDIF
 #ifdef USE_MPI
-            IF (ONLYONE_RED)
-     &         CALL BCAST_MPI('OPENFIL','IER',IER,1,'I',ICOMM)
+              IF (ONLYONE_RED)
+     &           CALL BCAST_MPI('OPENFIL','IER',IER,1,'I',ICOMM)
 #endif
 
-	    IF (IER .NE. 0) THEN
-               MSG =  'OPENFIL; DELETING FILE: ' // FILNM(1:NLET)
-               CALL ERRT(101,MSG,NE)
-               RETURN
-            ENDIF
-          ENDIF
+              IF (IER .NE. 0) THEN
+                 MSG =  'OPENFIL; DELETING FILE: ' // FILNM(1:NLET)
+                 CALL ERRT(101,MSG,NE)
+                 RETURN
+              ENDIF
+           ENDIF
 
-C         INITIALIZE HEADER OBJECT FOR NEW IMAGE 
-          CALL LUNGETIS_MRC(LUNT,IS_MRC,IRTFLG)
-          IF (IS_MRC) THEN 
-C            DO NOT COPY FROM LUNT IF IT IS A MRC FILE
-             CALL LUNSETHDR(0,   LUN,NX,NY,NZ,ITYPE,NSTACK,IRTFLGT)
-          ELSE
-             CALL LUNSETHDR(LUNT,LUN,NX,NY,NZ,ITYPE,NSTACK,IRTFLGT)
-          ENDIF
+C          INITIALIZE HEADER OBJECT FOR NEW IMAGE
+           CALL LUNGETIS_MRC(LUNT,IS_MRC,IRTFLG)
+           IF (IS_MRC) THEN
+C             DO NOT COPY FROM LUNT IF IT IS A MRC FILE
+              CALL LUNSETHDR(0,   LUN,NX,NY,NZ,ITYPE,NSTACK,IRTFLGT)
+           ELSE
+              CALL LUNSETHDR(LUNT,LUN,NX,NY,NZ,ITYPE,NSTACK,IRTFLGT)
+           ENDIF
+C          PRINT *, __FILE__," : 237: OPENFIL: ITYPE=",ITYPE
 
-C         SET FILE'S FMIN.... TO AVOID FLT. PT. ERROR ON DEC
-C         DOES NOT ALTER STATS: FMIN... IN COMMON BLOCK
-          CALL LUNSETSTAT(LUN,0,0.0,0.0,0.0,0.0,IRTFLGT)
+C          SET FILE'S FMIN.... TO AVOID FLT. PT. ERROR ON DEC
+C          DOES NOT ALTER STATS: FMIN... IN COMMON BLOCK
+           CALL LUNSETSTAT(LUN,0,0.0,0.0,0.0,0.0,IRTFLGT)
 
-	  IF (INLNED == 0) THEN
-C	     REGULAR FILE, NOT INLINE FILE
+           IF (INLNED == 0) THEN
+C          REGULAR FILE, NOT INLINE FILE
 
-             LENREC = LENOPENFILE(NX*4)
-             IF (MYPID <= 0) THEN
-                OPEN(LUN,FILE=FILNM(1:NLET),STATUS='NEW',
-     &               FORM='UNFORMATTED',
-     &               ACCESS='DIRECT',IOSTAT=IER,RECL=LENREC)
-             ENDIF
+              LENREC = LENOPENFILE(NX*4)
+              IF (MYPID <= 0) THEN
+                 OPEN(LUN,FILE=FILNM(1:NLET),STATUS='NEW',
+     &                FORM='UNFORMATTED',
+     &                ACCESS='DIRECT',IOSTAT=IER,RECL=LENREC)
+              ENDIF
 
 #ifdef USE_MPI
-             IF (ONLYONE_RED) THEN
-                CALL BCAST_MPI('OPENFIL','IER',IER,1,'I',ICOMM)
-             ENDIF
+              IF (ONLYONE_RED) THEN
+                 CALL BCAST_MPI('OPENFIL','IER',IER,1,'I',ICOMM)
+              ENDIF
 #endif
-             IF (IER .NE. 0) THEN        
-                MSG = 'OPENFIL; OPENING FILE: ' // FILNM(1:NLET)
-                CALL ERRT(101,MSG,NE)
-                RETURN
-             ENDIF
+              IF (IER .NE. 0) THEN
+                 MSG = 'OPENFIL; OPENING FILE: ' // FILNM(1:NLET)
+                 CALL ERRT(101,MSG,NE)
+                 RETURN
+              ENDIF
 
-C            FOR USING NEW FILE ON OLDER SPIDER RELEASES
-             CALL LUNSET25(LUN,-1,IRTFLGT)
+C             FOR USING NEW FILE ON OLDER SPIDER RELEASES
+              CALL LUNSET25(LUN,-1,IRTFLGT)
  
-          ELSE
-C            SET UP INLINE BUFFER AND TIE IT TO LUN
+           ELSE
+C             SET UP INLINE BUFFER AND TIE IT TO LUN
 
-C            SAVE ISTACK IN NON-VOLATILE PART OF HEADER OBJECT
-             CALL LUNGETISTACK(LUN,ISTACK,IRTFLGT)
-             CALL LUNSETSTKALL(LUN,ISTACK,IRTFLGT)
+C             SAVE ISTACK IN NON-VOLATILE PART OF HEADER OBJECT
+              CALL LUNGETISTACK(LUN,ISTACK,IRTFLGT)
+              CALL LUNSETSTKALL(LUN,ISTACK,IRTFLGT)
 
-             CALL LUNGETLAB(LUN,LABREC,INDXREC,NRECS,LABBYT,
+              CALL LUNGETLAB(LUN,LABREC,INDXREC,NRECS,LABBYT,
      &                      LENBYT,IRTFLGT)
-             IF (IRTFLGT .NE. 0) THEN
-                write(6,*) 'nrecs,indxrec,lenbyt,errorflag:'
-                write(6,*)  nrecs,indxrec,lenbyt,irtflgt
-                RETURN
-             ENDIF
+              IF (IRTFLGT .NE. 0) THEN
+                 write(6,*) 'nrecs,indxrec,lenbyt,errorflag:'
+                 write(6,*)  nrecs,indxrec,lenbyt,irtflgt
+                 RETURN
+              ENDIF
 
-             NWORDS_8 = (NRECS + INDXREC) * LENBYT / 4
+              NWORDS_8 = (NRECS + INDXREC) * LENBYT / 4
 
-             CALL OPENINLN(LUN,INLNED,.TRUE.,NX,NWORDS_8,
+              CALL OPENINLN(LUN,INLNED,.TRUE.,NX,NWORDS_8,
      &                     .TRUE.,IRTFLGT)
-             IF (IRTFLGT .NE. 0)  RETURN
-	  ENDIF
-          !write(3,*)' In openfil,opened filnm: ', filnm(1:nlet)
+              IF (IRTFLGT .NE. 0)  RETURN
+           ENDIF
+           !write(3,*)' In openfil,opened filnm: ', filnm(1:nlet)
 
-C         PUSH HEADER OBJECT INFO INTO NEW FILE
-          CALL LUNWRTHED(LUN,NX,0,IRTFLGT)
+C          PUSH HEADER OBJECT INFO INTO NEW FILE
+           CALL LUNWRTHED(LUN,NX,0,IRTFLGT)
 
 
 
-          GOTO 2000
+           GOTO 2000
 
 C         --------------------------------------------------------- OLD
 
-	ELSEIF (DISP == 'O' .OR. DISP == 'K' .OR.
+C       PRINT *, __FILE__," : 298: OPENFIL: ITYPE=",ITYPE
+        ELSEIF (DISP == 'O' .OR. DISP == 'K' .OR.
      &          DISP == 'Z' .OR. 
      &          DISP == 'E' .OR. DISP == 'M') THEN
 
-C         FILE EXISTS, AND IS ACCESSED WITH 'OLD', OPEN THE FILE
+C          FILE EXISTS, AND IS ACCESSED WITH 'OLD', OPEN THE FILE
 
-	  IF (.NOT. EX) THEN
-C            ERROR -- FILE DOES NOT EXIST, BUT BEING OPENED WITH 'OLD
-             IF (MYPID <= 0)
-     &          WRITE(NOUT,*) '*** FILE NOT FOUND: ',FILNM(1:NLET)
+           IF (.NOT. EX) THEN
+C             ERROR -- FILE DOES NOT EXIST, BUT BEING OPENED WITH 'OLD
+              IF (MYPID <= 0)
+     &           WRITE(NOUT,*) '*** FILE NOT FOUND: ',FILNM(1:NLET)
 
-C	     FOR DISP=Z, DO NOT STOP THE BATCH JOB BY CALLING ERRT
-             IF (CALLERRT) THEN
-                MSG = 'OPENFIL; FILE NOT FOUND: ' // FILNM(1:NLET)
-                CALL ERRT(101,MSG,NE)
-             ENDIF
-             RETURN
-          ENDIF    ! END OF: .NOT. EX
+C             FOR DISP=Z, DO NOT STOP THE BATCH JOB BY CALLING ERRT
+              IF (CALLERRT) THEN
+                 MSG = 'OPENFIL; FILE NOT FOUND: ' // FILNM(1:NLET)
+                 CALL ERRT(101,MSG,NE)
+              ENDIF
+              RETURN
+           ENDIF    ! END OF: .NOT. EX
 
 
-          IF (INLNED .NE. 0) THEN
-C            USE EXISTING INLINE BUFFER, TIE IT TO LUN & RETRIEVE NX
-             CALL OPENINLN(LUN,INLNED,.FALSE.,NX,ZERO_8,
-     &                     CALLERRT,IRTFLGT)
-             IF (IRTFLGT .NE. 0)  RETURN
+C          USE EXISTING INLINE BUFFER, TIE IT TO LUN & RETRIEVE NX
+           IF (INLNED .NE. 0) THEN
+              CALL OPENINLN(LUN,INLNED,.FALSE.,NX,ZERO_8,
+     &                      CALLERRT,IRTFLGT)
+              IF (IRTFLGT .NE. 0)  RETURN
 
-          ELSE
-C            REGULAR SPIDER FILE ACCESS
+C          REGULAR SPIDER FILE ACCESS
+           ELSE
 
-C            SEE IF FILE ALREADY OPEN ON DIFFERENT LUN THAN CURRENT
-             IF (MYPID <= 0) THEN
-                INQUIRE(FILE=FILNM(1:NLET),IOSTAT=IRTFLG,OPENED=OPENED,
-     &                  NUMBER=LUNOPENED)
+C             SEE IF FILE ALREADY OPEN ON DIFFERENT LUN THAN CURRENT
+              IF (MYPID <= 0) THEN
+                 INQUIRE(FILE=FILNM(1:NLET),IOSTAT=IRTFLG,OPENED=OPENED,
+     &                   NUMBER=LUNOPENED)
 
-c                write(3,*)  ' Inquire file: ',filnm(1:nlet),
-c     &                      '  Opened:',opened,' On lun:',lunopened,
-c     &                      '  Irtflg: ',irtflg  
-             ENDIF   ! END OF: MYPID <= 0
+c                 write(3,*)  ' Inquire file: ',filnm(1:nlet),
+c     &                       '  Opened:',opened,' On lun:',lunopened,
+c     &                       '  Irtflg: ',irtflg
+              ENDIF   ! END OF: MYPID <= 0
 
 #ifdef USE_MPI
-             IF (ONLYONE_RED) THEN
-               CALL BCAST_MPI('OPENFIL','IRTFLG',   IRTFLG, 1,'I',ICOMM)
-               CALL BCAST_MPI('OPENFIL','OPENED',   OPENED, 1,'L',ICOMM)
-               CALL BCAST_MPI('OPENFIL','LUNOPENED',LUNOPENED,
+              IF (ONLYONE_RED) THEN
+                CALL BCAST_MPI('OPENFIL','IRTFLG',   IRTFLG, 1,'I',ICOMM)
+                CALL BCAST_MPI('OPENFIL','OPENED',   OPENED, 1,'L',ICOMM)
+                CALL BCAST_MPI('OPENFIL','LUNOPENED',LUNOPENED,
      &                         1,'I',ICOMM)
-             ENDIF
+              ENDIF
 #endif
 
-             IF (OPENED) THEN
-C               MUST REDIRECT OLD LUNS TO CURRENT LUN BEFORE OPENING 
-                IF (MYPID <= 0)  CLOSE(LUNOPENED)
-                DO I = 1,100
-                   CALL LUNGETLUNB(I,LUNNOW,IRTFLG)
-                   IF (LUNNOW == LUNOPENED) THEN
-                      CALL LUNSETLUNB(I,LUN,IRTFLG)
-                   ENDIF
-                ENDDO                      
-             ENDIF
+              IF (OPENED) THEN
+C                MUST REDIRECT OLD LUNS TO CURRENT LUN BEFORE OPENING
+                 IF (MYPID <= 0)  CLOSE(LUNOPENED)
+                 DO I = 1,100
+                    CALL LUNGETLUNB(I,LUNNOW,IRTFLG)
+                    IF (LUNNOW == LUNOPENED) THEN
+                       CALL LUNSETLUNB(I,LUN,IRTFLG)
+                    ENDIF
+                 ENDDO
+              ENDIF
              !write(3,*)' In openfil, lun,lunopened: ',lun,lunopened
 
-C            NOW WE CAN OPEN THIS FILE ON LUN
-             IF (MYPID <= 0) THEN
-               LENREC = LENOPENFILE(256*4)  ! USED FOR SPIDER FILE
-               OPEN(LUN,FILE=FILNM(1:NLET),STATUS='OLD',
-     &               ACCESS='DIRECT',
-     &               FORM='UNFORMATTED',RECL=LENREC,IOSTAT=IER)
-             ENDIF  ! END OF: MYPID <= 0
+C             NOW WE CAN OPEN THIS FILE ON LUN
+              IF (MYPID <= 0) THEN
+                LENREC = LENOPENFILE(256*4)  ! USED FOR SPIDER FILE
+                OPEN(LUN,FILE=FILNM(1:NLET),STATUS='OLD',
+     &                ACCESS='DIRECT',
+     &                FORM='UNFORMATTED',RECL=LENREC,IOSTAT=IER)
+              ENDIF  ! END OF: MYPID <= 0
 #ifdef USE_MPI
-             IF (ONLYONE_RED) THEN
-                CALL BCAST_MPI('OPENFIL','IER',IER,1,'I',ICOMM)
-             ENDIF
+              IF (ONLYONE_RED) THEN
+                 CALL BCAST_MPI('OPENFIL','IER',IER,1,'I',ICOMM)
+              ENDIF
 #endif
 
-             IF (IER .NE. 0) THEN
-C              UNKNOWN OPENING ERROR
-               MSG = 'OPENFIL; OPENING FILE: ' // FILNM(1:NLET)
-               CALL ERRT(101,MSG,NE)
-               RETURN
-             ENDIF  ! END OF: IER .NE. 0 
-             !write(3,*)' In openfil, filnm:', filnm(1:nlet)
+              IF (IER .NE. 0) THEN
+C                UNKNOWN OPENING ERROR
+                 MSG = 'OPENFIL; OPENING FILE: ' // FILNM(1:NLET)
+                 CALL ERRT(101,MSG,NE)
+                 RETURN
+              ENDIF  ! END OF: IER .NE. 0
+              !write(3,*)' In openfil, filnm:', filnm(1:nlet)
 
-          ENDIF     ! END OF:  IF (INLNED .EQ. 0)
+           ENDIF     ! END OF:  IF (INLNED .EQ. 0)
 
-C         READ OVERALL HEADER FROM SPIDER FILE 
-          CALL LUNREDHED(LUN,256,0,.TRUE.,IRTFLGT)
-          IF (IRTFLGT .NE. 0 .AND. MYPID <= 0) THEN
-             WRITE(NOUT,*) '*** ERROR READING HEADER OF: ',FILNM(:NLET)
-             IF (IRTFLGT .NE. 0) RETURN
-          ENDIF    ! END OF: IRTFLGT .NE. 0 ......
+C          READ OVERALL HEADER FROM SPIDER FILE
+           CALL LUNREDHED(LUN,256,0,.TRUE.,IRTFLGT)
+           IF (IRTFLGT .NE. 0 .AND. MYPID <= 0) THEN
+              WRITE(NOUT,*) '*** ERROR READING HEADER OF: ',FILNM(:NLET)
+              IF (IRTFLGT .NE. 0) RETURN
+           ENDIF    ! END OF: IRTFLGT .NE. 0 ......
 
-C         NEED ITYPE
-          CALL LUNGETTYPE(LUN,ITYPE,IRTFLGT)
+C          NEED ITYPE
+           CALL LUNGETTYPE(LUN,ITYPE,IRTFLGT)
+C          PRINT *, __FILE__," : 391: OPENFIL: ITYPE=",ITYPE
 
-          IF (ITYPE == -1 .OR. ITYPE == -3 .OR. ITYPE == -7) THEN
-C           READING OBSOLETE FORMAT FOURIER FILE
-            WRITE(NOUT,96)
-96          FORMAT(' *** CAN NOT READ OBSOLETE FOURIER FORMAT',/,
-     &            '*** CONVERT FOURIER FILE TO REAL FORMAT USING ',
-     &            'ORIGINAL VERSION OF SPIDER.'/)
-            CALL ERRT(100, 'OPENFIL',NE)
-            RETURN
-          ENDIF
+           IF (ITYPE == -1 .OR. ITYPE == -3 .OR. ITYPE == -7) THEN
+C            READING OBSOLETE FORMAT FOURIER FILE
+             WRITE(NOUT,96)
+96           FORMAT(' *** CAN NOT READ OBSOLETE FOURIER FORMAT',/,
+     &             '*** CONVERT FOURIER FILE TO REAL FORMAT USING ',
+     &             'ORIGINAL VERSION OF SPIDER.'/)
+             CALL ERRT(100, 'OPENFIL',NE)
+             RETURN
+           ENDIF
 
-C         NEED NX VALUE 
-          CALL LUNGETSIZE(LUN,NX,NY,NZ,IRTFLGT)
-          IF (IRTFLGT .NE. 0) RETURN
+C          NEED NX VALUE
+           CALL LUNGETSIZE(LUN,NX,NY,NZ,IRTFLGT)
+           IF (IRTFLGT .NE. 0) RETURN
 
-          !write(3,*)' In openfil, nx,itype:',nx,itype
-          !print *,  'Reading header of: ',filnm(:nlet)
-          !print *,  'nx...: ',lun,nx,ny,nz,itype
+           !write(3,*)' In openfil, nx,itype:',nx,itype
+           !print *,  'Reading header of: ',filnm(:nlet)
+           !print *,  'nx...: ',lun,nx,ny,nz,itype
 
-          IF (ITYPE == 0 .OR. 
-     &          NX <= 0       .OR. NY <= 0       .OR. NZ <= 0 .OR.
-     &          NX > 10000000 .OR. NY > 10000000 .OR. 
-     &          NZ > 10000000) THEN
-C           NOT A NATIVE SPIDER IMAGE
+           IF (ITYPE == 0 .OR.
+     &           NX <= 0       .OR. NY <= 0       .OR. NZ <= 0 .OR.
+     &           NX > 10000000 .OR. NY > 10000000 .OR.
+     &           NZ > 10000000) THEN
+C             NOT A NATIVE SPIDER IMAGE
 
-C           FLIP BYTES IN HEADER OBJECT 
-            CALL LUNFLIPHDR(LUN,IRTFLGT)
-            CALL LUNSETFLIP(LUN,1,IRTFLG)
+C             FLIP BYTES IN HEADER OBJECT
+              CALL LUNFLIPHDR(LUN,IRTFLGT)
+              CALL LUNSETFLIP(LUN,1,IRTFLG)
 
-C           NEED ITYPE & SIZE
-            CALL LUNGETTYPE(LUN,ITYPE,IRTFLGT)
-            CALL LUNGETSIZE(LUN,NX,NY,NZ,IRTFLGT)
-            IF (IRTFLGT .NE. 0) RETURN
+C             NEED ITYPE & SIZE
+              CALL LUNGETTYPE(LUN,ITYPE,IRTFLGT)
+              CALL LUNGETSIZE(LUN,NX,NY,NZ,IRTFLGT)
+              IF (IRTFLGT .NE. 0) RETURN
 
-            IF (ITYPE == 0 ) THEN
-C              PROBABLY NOT A SPIDER IMAGE
-               IF (CALLERRT) THEN
-                 CALL ERRT(102,'INVALID HEADER, BAD FILE TYPE',ITYPE)
-               ENDIF
-               IRTFLG = 5   ! RETURN ERROR FLAG FOR NON-SPIDER IMAGE
+C             PRINT *, __FILE__," : 426: OPENFIL: ITYPE=",ITYPE
+              IF (ITYPE == 0 ) THEN
+C                PROBABLY NOT A SPIDER IMAGE
+                 IF (CALLERRT) THEN
+                   CALL ERRT(102,'INVALID HEADER, BAD FILE TYPE',ITYPE)
+                 ENDIF
+                 IRTFLG = 5   ! RETURN ERROR FLAG FOR NON-SPIDER IMAGE
 
-            ELSEIF ( NX <= 0 ) THEN
-C              PROBABLY NOT A SPIDER IMAGE
-               IF (CALLERRT) THEN
-                 CALL ERRT(101,'INVALID HEADER, NX',NX)
-               ENDIF
-               IRTFLG = 5   ! RETURN ERROR FLAG FOR NON-SPIDER IMAGE
+              ELSEIF ( NX <= 0 ) THEN
+C                PROBABLY NOT A SPIDER IMAGE
+                 IF (CALLERRT) THEN
+                   CALL ERRT(101,'INVALID HEADER, NX',NX)
+                 ENDIF
+                 IRTFLG = 5   ! RETURN ERROR FLAG FOR NON-SPIDER IMAGE
 
-            ELSEIF ( NY <= 0 ) THEN
-C              PROBABLY NOT A SPIDER IMAGE
-               IF (CALLERRT) THEN
-                 CALL ERRT(101,'INVALID HEADER, NY',NY)
-               ENDIF
-               IRTFLG = 5   ! RETURN ERROR FLAG FOR NON-SPIDER IMAGE
+              ELSEIF ( NY <= 0 ) THEN
+C                PROBABLY NOT A SPIDER IMAGE
+                 IF (CALLERRT) THEN
+                   CALL ERRT(101,'INVALID HEADER, NY',NY)
+                 ENDIF
+                 IRTFLG = 5   ! RETURN ERROR FLAG FOR NON-SPIDER IMAGE
 
-            ELSEIF ( NZ <= 0 ) THEN
-C              PROBABLY NOT A SPIDER IMAGE
-               IF (CALLERRT) THEN
-                 CALL ERRT(101,'INVALID HEADER, NZ',NX)
-               ENDIF
-               IRTFLG = 5   ! RETURN ERROR FLAG FOR NON-SPIDER IMAGE
+              ELSEIF ( NZ <= 0 ) THEN
+C                PROBABLY NOT A SPIDER IMAGE
+                 IF (CALLERRT) THEN
+                   CALL ERRT(101,'INVALID HEADER, NZ',NX)
+                 ENDIF
+                 IRTFLG = 5   ! RETURN ERROR FLAG FOR NON-SPIDER IMAGE
 
-            ELSEIF (NX > 1000000) THEN
-C              PROBABLY NOT A SPIDER IMAGE
-               IF (CALLERRT) THEN
-                 CALL ERRT(102,
-     &                 'INVALID HEADER, NX (LIMIT=10000000)',NX)
-               ENDIF
-               IRTFLG = 5   ! RETURN ERROR FLAG FOR NON-SPIDER IMAGE
+              ELSEIF (NX > 1000000) THEN
+C                PROBABLY NOT A SPIDER IMAGE
+                 IF (CALLERRT) THEN
+                   CALL ERRT(102,
+     &                  'INVALID HEADER, NX (LIMIT=10000000)',NX)
+                 ENDIF
+                 IRTFLG = 5   ! RETURN ERROR FLAG FOR NON-SPIDER IMAGE
 
-             ELSEIF (NY > 1000000) THEN
-C              PROBABLY NOT A SPIDER IMAGE
-               IF (CALLERRT) THEN
-                 CALL ERRT(102,
-     &               'INVALID HEADER, NY (LIMIT=10000000)',NY)
-               ENDIF
-               IRTFLG = 5   !RETURN ERROR FLAG FOR NON-SPIDER IMAGE
+              ELSEIF (NY > 1000000) THEN
+C                PROBABLY NOT A SPIDER IMAGE
+                 IF (CALLERRT) THEN
+                   CALL ERRT(102,
+     &                 'INVALID HEADER, NY (LIMIT=10000000)',NY)
+                 ENDIF
+                 IRTFLG = 5   !RETURN ERROR FLAG FOR NON-SPIDER IMAGE
 
-             ELSEIF (NZ > 1000000) THEN
-C              PROBABLY NOT A SPIDER IMAGE
-               IF (CALLERRT) THEN
-                 CALL ERRT(102,
-     &                 'INVALID HEADER, NZ (LIMIT=10000000)',NZ)
-               ENDIF
-               IRTFLG = 5   ! RETURN ERROR FLAG FOR NON-SPIDER IMAGE
+              ELSEIF (NZ > 1000000) THEN
+C                PROBABLY NOT A SPIDER IMAGE
+                 IF (CALLERRT) THEN
+                   CALL ERRT(102,
+     &                   'INVALID HEADER, NZ (LIMIT=10000000)',NZ)
+                 ENDIF
+                 IRTFLG = 5   ! RETURN ERROR FLAG FOR NON-SPIDER IMAGE
+              ENDIF
+
+C             PRINT *, __FILE__," : 480: OPENFIL: IRTFLG=",IRTFLG
+              IF (IRTFLG == 5) THEN
+C                RETURN ERROR FLAG FOR NON-SPIDER IMAGE
+                 FILNAM = FILNM(1:NLET)
+                 RETURN
+              ENDIF
+
+              IF (VERBOSE)
+     &           WRITE(NOUT,*) ' NON-NATIVE BYTE ORDERED SPIDER FILE'
             ENDIF
 
-            IF (IRTFLG == 5) THEN
-C              RETURN ERROR FLAG FOR NON-SPIDER IMAGE
-               FILNAM = FILNM(1:NLET)
-               RETURN
-            ENDIF 
 
-            IF (VERBOSE) 
-     &         WRITE(NOUT,*) ' NON-NATIVE BYTE ORDERED SPIDER FILE'
-          ENDIF
-
-
-          IF (INLNED == 0) THEN
-C            REOPEN SPIDER FILE WITH FINAL RECORD LENGTH
-             CLOSE(LUN)
-             LENREC = LENOPENFILE(NX*4)
-             IF (MYPID <= 0) THEN
-  	        OPEN(LUN,FILE=FILNM(1:NLET),STATUS='OLD',
-     &                  FORM='UNFORMATTED',
-     &                  ACCESS='DIRECT',IOSTAT=IER,RECL=LENREC)
-             ENDIF
+           IF (INLNED == 0) THEN
+C             REOPEN SPIDER FILE WITH FINAL RECORD LENGTH
+              CLOSE(LUN)
+              LENREC = LENOPENFILE(NX*4)
+              IF (MYPID <= 0) THEN
+                 OPEN(LUN,FILE=FILNM(1:NLET),STATUS='OLD',
+     &                FORM='UNFORMATTED',
+     &                ACCESS='DIRECT',IOSTAT=IER,RECL=LENREC)
+              ENDIF
 #ifdef USE_MPI
-             IF (ONLYONE_RED) THEN
-               CALL BCAST_MPI('OPENFIL','IER',IER,1,'I',ICOMM)
-             ENDIF
+              IF (ONLYONE_RED) THEN
+                 CALL BCAST_MPI('OPENFIL','IER',IER,1,'I',ICOMM)
+              ENDIF
 #endif
-             IF (IER .NE. 0) THEN        
-                MSG = 'OPENFIL; REOPENING FILE: ' // FILNM(1:NLET)
-                CALL ERRT(101,MSG,NE)
-                RETURN
-             ENDIF
-          ENDIF   ! END OF: INLNED == 0
+              IF (IER .NE. 0) THEN
+                 MSG = 'OPENFIL; REOPENING FILE: ' // FILNM(1:NLET)
+                 CALL ERRT(101,MSG,NE)
+                 RETURN
+              ENDIF
+           ENDIF   ! END OF: INLNED == 0
 
-        ELSE  
-           MSG = 'OPENFIL; PGM. ERROR, UNKNOWN DISP: ' // DISP
-           CALL ERRT(101,MSG,NE)
-           RETURN
-        ENDIF    ! END OF:  (DISP == 'O' .OR. ......
+         ELSE
+            MSG = 'OPENFIL; PGM. ERROR, UNKNOWN DISP: ' // DISP
+            CALL ERRT(101,MSG,NE)
+            RETURN
+         ENDIF    ! END OF:  (DISP == 'O' .OR. ......
 
-2000	CONTINUE
+2000     CONTINUE
 
-C       SAVE ISTACK IN NON-VOLATILE PART OF HEADER OBJECT
-        CALL LUNGETISTACK(LUN,ISTACK,IRTFLGT)
-        CALL LUNSETSTKALL(LUN,ISTACK,IRTFLGT)
+C        SAVE ISTACK IN NON-VOLATILE PART OF HEADER OBJECT
+         CALL LUNGETISTACK(LUN,ISTACK,IRTFLGT)
+         CALL LUNSETSTKALL(LUN,ISTACK,IRTFLGT)
 
-C       SAVE MAXIM IN NON-VOLATILE PART OF HEADER OBJECT
-        CALL LUNCOPYMAXIM(LUN,MAXIM,IRTFLGT)
+C        SAVE MAXIM IN NON-VOLATILE PART OF HEADER OBJECT
+         CALL LUNCOPYMAXIM(LUN,MAXIM,IRTFLGT)
 
-C       SET FINAL LUNARA OFFSET VALUE FOR USE BY REDLIN/WRTLIN.
-C       FOR INDEXED STACKS THIS INCLUDES INDEX OFFSET
-        IF (ISTACK .NE. 0) THEN
-           CALL LUNSETIMGOFF(LUN,0,NX,IRTFLGT)
-        ELSE
-           IVAL = 1
-           CALL LUNSETIMGOFF(LUN,IVAL,NX,IRTFLGT)
-        ENDIF
+C        SET FINAL LUNARA OFFSET VALUE FOR USE BY REDLIN/WRTLIN.
+C        FOR INDEXED STACKS THIS INCLUDES INDEX OFFSET
+         IF (ISTACK .NE. 0) THEN
+            CALL LUNSETIMGOFF(LUN,0,NX,IRTFLGT)
+         ELSE
+            IVAL = 1
+            CALL LUNSETIMGOFF(LUN,IVAL,NX,IRTFLGT)
+         ENDIF
 
-C       PUT COMMON VALUES INTO COMMON AREA (NOT NEEDED IN FUTURE?)
-C       SET STATS: FMIN... IN COMMON BLOCK AND FILE HEADER
-        CALL LUNSETCOMMON(LUN,IRTFLGT)
+C        PUT COMMON VALUES INTO COMMON AREA (NOT NEEDED IN FUTURE?)
+C        SET STATS: FMIN... IN COMMON BLOCK AND FILE HEADER
+         CALL LUNSETCOMMON(LUN,IRTFLGT)
 
-C       WRITE OUT FILE OPENING INFO
-        CALL LUNSAYINFO(LUN,IRTFLGT)
+C        WRITE OUT FILE OPENING INFO
+         CALL LUNSAYINFO(LUN,IRTFLGT)
       
-C       NEED TO RETURN NSTACK & MAXIM 
-        IF (ISTACK .NE. 0) THEN
-C          RETURN CURRENT HIGHEST IMAGE NUMBER IN NSTACK
-           NSTACK = MAXIM
-        ELSE
-C          NOT A STACK, RETURN -2
-           NSTACK = -2
-        ENDIF
+C        NEED TO RETURN NSTACK & MAXIM
+         IF (ISTACK .NE. 0) THEN
+C           RETURN CURRENT HIGHEST IMAGE NUMBER IN NSTACK
+            NSTACK = MAXIM
+         ELSE
+C           NOT A STACK, RETURN -2
+            NSTACK = -2
+         ENDIF
 
-C       SET FLAG FOR NORMAL RETURN	
-        IRTFLG = 0
+C        SET FLAG FOR NORMAL RETURN
+         IRTFLG = 0
 
-	END
-
+         END

@@ -480,7 +480,13 @@ C     PURPOSE:  QUERIES HEADER LOCATION THAT SPECIFIES MRC FILE
       INTEGER         :: LUNMRCNBYT
       COMMON /LUNMRC/    LUNMRCPOS(100),LUNMRCNBYT(100)
 
-      IS_MRC = (LUNMRCPOS(LUN) .NE. 0)
+C     Handle invalid index (LUN=0, etc.)
+      IF (LUN >= LBOUND(LUNMRCPOS, 1) .AND. 
+     &    LUN <= UBOUND(LUNMRCPOS, 1)) THEN
+         IS_MRC = (LUNMRCPOS(LUN) .NE. 0)
+      ELSE
+         IS_MRC = .FALSE.
+      ENDIF
 
       IRTFLG = 0
       END
@@ -1590,6 +1596,7 @@ C     GET HEADER VALUES
       !write(3,*)' In lungetnstack, :', nzmrc,mz,nz,nstack
 
 C     GET CURRENT FILE NAME FROM LUNFILNAM COMMON
+C     PRINT *, "lunsetmrchdr.f : 1593: Calling LUNGETFILE_MRC"
       CALL LUNGETFILE_MRC(LUN,FILNAM,NLET,DSP,IRTFLG)
       IF (IRTFLG .NE. 0) RETURN
       !write(3,*)' In lungetnstack, nlet,filnam:', nlet,filnam(1:nlet)
@@ -1598,12 +1605,24 @@ C     GET CURRENT FILE NAME FROM LUNFILNAM COMMON
      &    INDEX(FILNAM(1:NLET),'.MRCS') > 0) THEN
 C        HACK FOR RELION mrcs IMAGE STACKS HAVING NZ > 1
 C        IN RELION  THIS WAS A STACK OF IMAGES NOT A VOLUME
+C        PRINT *, "lunsetmrchdr.f : 1602: LUNGETNSTACK_MRC: mrcs"
+         NZ     = 1        ! DO NOT WANT TO OVERWRITE THIS??
+C        PRINT *, "lunsetmrchdr.f : 1604: NZMRC",NZMRC
+         NSTACK = NZMRC    ! WAS NZ IN FILE
+C        PRINT *, "lunsetmrchdr.f : 1606: NSTACK:",NSTACK
+
+      ELSEIF (INDEX(FILNAM(1:NLET),'.mrc') > 0 .OR.
+     &        INDEX(FILNAM(1:NLET),'.MRC') > 0) THEN
+C        CP FROM MRCV WILL BE REQUIRED TO READ VOLUMES AS VOLUMES
+C        NOT SURE IF THIS WILL BREAK THINGS
+C        PRINT *, "lunsetmrchdr.f : 1610: LUNGETNSTACK_MRC: mrc"
          NZ     = 1        ! DO NOT WANT TO OVERWRITE THIS??
          NSTACK = NZMRC    ! WAS NZ IN FILE
 
       ELSEIF (INDEX(FILNAM(1:NLET),'.map') > 0 .OR.
      &        INDEX(FILNAM(1:NLET),'.MAP') > 0) THEN
 C        HACK FOR EMD VOLUME 
+C         PRINT *, "lunsetmrchdr.f : 1617: LUNGETNSTACK_MRC: map"
          NZ     = NZMRC    ! DO NOT WANT TO OVERWRITE THIS??
          NSTACK = -2       ! WAS NZ IN FILE
          !write(3,*)' In lungetnstack 1, :', nz,nstack
@@ -1611,30 +1630,35 @@ C        HACK FOR EMD VOLUME
       ELSEIF (INDEX(FILNAM(1:NLET),'@') > 0 .AND. 
      &        NZMRC == 1 .AND. MZ == 1) THEN
 C        HACK FOR IMAGE STACKS CONTAINING ONLY ONE IMAGE
+C        PRINT *, "lunsetmrchdr.f : 1625: LUNGETNSTACK_MRC: 1-img stk"
          NZ     = 1        ! 
          NSTACK = 1        !  
          !write(3,*)' In lungetnstack 2, :', nz,nstack
 
       ELSEIF (ISPG == 0 .AND. MZ > 1 .AND. IVERSION == 20140) THEN
 C        STACK OF IMAGES IN NEW MRC FORMAT VERSION
+C        PRINT *, "lunsetmrchdr.f : 1632: LUNGETNSTACK_MRC: v2014"
          NZ     = 1
          NSTACK = MZ
          !write(3,*)' In lungetnstack 3, :', nz,nstack
 
       ELSEIF (ISPG >= 410) THEN
 C        STACK OF VOLUMES IN NEW MRC FORMAT VERSION
+C        PRINT *, "lunsetmrchdr.f : 1632: LUNGETNSTACK_MRC: ISPG:",ISPG
          NZ     = NZMRC
          NSTACK = MZ
          !write(3,*)' In lungetnstack 4, :', nz,nstack
 
       ELSEIF (MZ > 1 .AND. NZMRC == MZ) THEN
 C        VOLUME 
+C        PRINT *, "lunsetmrchdr.f : 1646: LUNGETNSTACK_MRC: MZ:",MZ
          NZ     = NZMRC
          NSTACK = -2
          !write(3,*)' In lungetnstack 5, :', nz,nstack
 
       ELSE
 C        VOLUME/IMAGE.  NOT A STACK
+C        PRINT *, "lunsetmrchdr.f : 1646: LUNGETNSTACK_MRC: not a stack"
          NZ     = NZMRC
          NSTACK = -2     ! NOT STACK, RETURN NEGATIVE (-2)
          !write(3,*)' In lungetnstack 6, :', nz,nstack
@@ -1849,6 +1873,7 @@ C        GET LABELS
 
          INOW = 1
          DO I = 57,56 + NLABL * 20      ! 57...57+2*20
+            IF (INOW+3 > LEN(LABELS)) EXIT   ! stop if we would overflow
             LABELS(INOW:INOW+3) = TRANSFER(MRC_HEADER(I),CSTR(1:4))
             INOW = INOW + 4
          ENDDO
@@ -1863,9 +1888,10 @@ C        STRIP LEADING BLANKS FROM LABELS (UNTIDY HACK)
          DO ILAB=1,NLABL
             IGO  = (ILAB - 1) * 80 + 1
             IEND = IGO + 80 - 1
+            IF (IEND > LEN(LABELS)) EXIT   ! stop if we would overflow
             DO I = IGO,IEND
                IF (LABELS(I:I) .NE. ' ') THEN
-                   LABELS(IGO:IEND) = LABELS(I:IEND)
+                  LABELS(IGO:IEND) = LABELS(I:IEND)
                   EXIT
                ENDIF
             ENDDO

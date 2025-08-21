@@ -57,7 +57,7 @@ C--*********************************************************************
         INTEGER                  :: LUN1,LUN2,LUNDOC,LUNXM1,LUNXM2
         LOGICAL                  :: INDXD,FLIPOUT
 
-        INTEGER                  :: IFLIPOUT
+        INTEGER                  :: IFLIPOUT,IFLIPIN
         CHARACTER (LEN=MAXNAM)   :: PROMPT 
         CHARACTER (LEN=MAXNAM)   :: FILNAM1,FILNAM2
         CHARACTER (LEN=2*MAXNAM) :: COMMAN
@@ -65,6 +65,7 @@ C--*********************************************************************
         INTEGER,ALLOCATABLE      :: ILIST1(:),ILIST2(:)
         CHARACTER (LEN=1)        :: NULL = CHAR(0)
         CHARACTER (LEN=1)        :: DISP
+        INTEGER                  :: IMG1,IMG2
 
         CALL SET_MPI(ICOMM,MYPID,MPIERR) ! SETS ICOMM AND MYPID
 
@@ -79,9 +80,13 @@ C--*********************************************************************
            RETURN
         ENDIF
 
+        IFLIPOUT = 0
+C       PRINT *, __FILE__," : 83: COPYD: IFLIPIN=",IFLIPIN
+
 C       OPEN FIRST INPUT FILE, DISP = 'E' DOES NOT STOP ON ERROR
         MAXIM1 = 0
         PROMPT = 'INPUT FILE NAME OR TEMPLATE (E.G. STK@****)~~9'
+        IMG1 = 0    ! Passing uninitialized variable may result in 'INVALID IMAGE NUMBER' error
         CALL OPFILES(0,LUN1,LUNDOC,LUNXM1,  
      &               .TRUE.,FILNAM1,NLET1, 'E',
      &               IFORM1,NX1,NY1,NZ1,NSTACK1,
@@ -132,6 +137,8 @@ C          INPUT IS A WHOLE STACK AND WANT INDEXED OUTPUT STACK
 C          STANDARD COPY WITH FLIPPED ENDEDNESS
            CALL LUNGETFLIP(LUN1,IFLIPIN,IRTFLG)
            IF (IFLIPIN .NE. 1) IFLIPOUT = 1
+C          PRINT *, __FILE__," : 139: COPYD: IFLIPIN=",IFLIPIN
+C          PRINT *, __FILE__," : 140: COPYD: IFLIPOUT=",IFLIPOUT
         ENDIF
         IF (IFLIPOUT == 1) CALL LUNSETFLIP(LUN2,IFLIPOUT,IRTFLG)
 
@@ -146,7 +153,6 @@ C	OPEN FIRST OUTPUT FILE
 
         !write(6,'(A,4i6)')' Out nstack2,ngot2,img2:',nstack2,ngot2,img2
 
-        IFLIPOUT = 0
         IF (FLIPOUT) THEN
 C          STANDARD COPY WITH FLIPPED ENDEDNESS
            CALL LUNGETFLIP(LUN1,IFLIPIN,IRTFLG)

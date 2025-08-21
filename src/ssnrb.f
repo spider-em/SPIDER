@@ -63,14 +63,16 @@ C***********************************************************************
          INTEGER, PARAMETER            :: LUNDOC = 80
          INTEGER, PARAMETER            :: LUNXM1 = 81
 
-	 REAL                          :: SNR
-	 REAL                          :: SIGNALSUM
-	 REAL                          :: SIGDIFSUM
+         REAL                          :: SNR
+         REAL                          :: SIGNALSUM
+         REAL                          :: SIGDIFSUM
+         INTEGER                       :: IMG1
 
 C        OPEN FIRST INPUT FILE, NOT FOURIER
          MAXIM1  = 0
          NILMAX  = NIMAX         ! INUMBR FROM CMLIMIT
-         CALL OPFILES(0,LUN1,LUNDOC,LUNXM1,  
+         IMG1 = 0    ! Passing uninitialized variable may result in 'INVALID IMAGE NUMBER' error
+         CALL OPFILES(0,LUN1,LUNDOC,LUNXM1,
      &             ASKNAM,FILPAT1,NLET1, 'O',
      &             IFORM1,NX1,NY1,NZ1,MAXIM1,
      &             NULL,
@@ -240,13 +242,13 @@ C     &                   N1 * DLIST(3)**2) / FLOAT(N1*(N2-4)))
            ENDIF
         ENDDO
 
-	SIGNALSUM = 0
-	SIGDIFSUM = 0
+        SIGNALSUM = 0
+        SIGDIFSUM = 0
 
         SNR = 0
         DO L=1,INC
-	   SIGNALSUM = SIGNALSUM + SIGNAL(L)
-	   SIGDIFSUM = SIGDIFSUM + SIGDIF(L)
+           SIGNALSUM = SIGNALSUM + SIGNAL(L)
+           SIGDIFSUM = SIGDIFSUM + SIGDIF(L)
         ENDDO
 
         SNR = (SIGNALSUM/SIGDIFSUM) / FLOAT(NGOT1)

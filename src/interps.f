@@ -81,6 +81,7 @@ C--*********************************************************************
 
 C       OPEN FIRST INPUT FILE
         MAXIM1  = 0
+        IMG1 = 0    ! Passing uninitialized variable may result in 'INVALID IMAGE NUMBER' error
         CALL OPFILES(0,LUN1,LUNDOC,LUNXM1,  
      &               .TRUE.,FILNAM1,NLET, 'O',
      &               IFORM1,NX1,NY1,NZ1,MAXIM1,

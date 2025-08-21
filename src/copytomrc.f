@@ -117,7 +117,8 @@ C     OPEN FIRST INPUT FILE, DISP = 'E' DOES NOT STOP ON ERROR
       MAXIM1 = 0
       PROMPT =
      &     'SPIDER INPUT FILE NAME OR TEMPLATE (e.g. SPI_STK@**)~~9'
-      CALL OPFILES(0,LUNSPI,LUNDOC,LUNXM1,  
+      IMG1 = 0    ! Passing uninitialized variable may result in 'INVALID IMAGE NUMBER' error
+      CALL OPFILES(0,LUNSPI,LUNDOC,LUNXM1,
      &               .TRUE.,FILNAM1,NLET1, 'E',
      &               IFORM1,NX1,NY1,NZ1,NSTACK1,
      &               PROMPT,
@@ -141,7 +142,9 @@ C     OPEN FIRST INPUT FILE, DISP = 'E' DOES NOT STOP ON ERROR
       IF (IRTFLG .NE. 0) GOTO 999
 
       IF (INDEX(FILNAM2,'.mrc') <= 0 .AND.
-     &    INDEX(FILNAM2,'.MRC') <= 0) THEN
+     &    INDEX(FILNAM1,'.MRC') <= 0 .AND.
+     &    INDEX(FILNAM1,'.mrcs') <= 0 .AND.
+     &    INDEX(FILNAM2,'.MRCS') <= 0) THEN
          CALL ERRT(101,
      &     'OUTPUT FILE NAME MUST HAVE MRC/mrc EXTENSION',NDUM)
          GOTO 999

@@ -87,7 +87,8 @@ C--*********************************************************************
       ENDIF
 
 C     OPEN INPUT IMAGE(S)
-      CALL OPFILES(0,LUNIN,LUNDOCSEL,LUNXM1, 
+      IMGNUM = 0    ! Passing uninitialized variable may result in 'INVALID IMAGE NUMBER'
+      CALL OPFILES(0,LUNIN,LUNDOCSEL,LUNXM1,
      &             .TRUE.,FILPATIN,NLET, 'O',
      &             ITYPE,NX,NY,NZ,MAXIMIN,
      &             NULL,

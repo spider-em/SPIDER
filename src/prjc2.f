@@ -35,22 +35,23 @@ C        0         2         3         4         5         6         7 *
 C23456789012345678901234567890123456789012345678901234567890123456789012
 C***********************************************************************
 
-	SUBROUTINE  PRJC2(CUBE,LTC,DM,IM,B,IPCUBE,NN,NSAM)
+      SUBROUTINE  PRJC2(CUBE,LTC,DM,IM,B,IPCUBE,NN,NSAM)
 
-        DIMENSION DM(9,IM)
-	DIMENSION  CUBE(LTC),B(NSAM,IM)
-	INTEGER  IPCUBE(5,NN)
-	COMMON /PAR/  LDPX,LDPY,LDPZ,LDPNMX,LDPNMY
+      INCLUDE 'PAR.INC'
+C     Includes INTEGER LDPX,LDPY,LDPZ,LDPNMX,LDPNMY,NZ1,LDP,NM,LDPNM
 
-C
+      DIMENSION DM(9,IM)
+      DIMENSION  CUBE(LTC),B(NSAM,IM)
+      INTEGER  IPCUBE(5,NN)
+
 cc$omp parallel do  private(i,j)
-	DO    i=1,im
-	DO    j=1,nsam
-	B(j,i)=0.0
-	ENDDO
-	ENDDO
+      DO    i=1,im
+         DO    j=1,nsam
+         B(j,i)=0.0
+         ENDDO
+      ENDDO
 c$omp parallel do  private(i),schedule(static)
-	DO    I=1,IM
-	CALL  PRJC0(CUBE,LTC,DM(1,I),B(1,i),NSAM,IPCUBE,NN)
-	ENDDO
-	END
+      DO    I=1,IM
+         CALL  PRJC0(CUBE,LTC,DM(1,I),B(1,i),NSAM,IPCUBE,NN)
+      ENDDO
+      END

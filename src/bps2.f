@@ -46,6 +46,8 @@ C***********************************************************************
 
         INCLUDE 'CMBLOCK.INC' 
         INCLUDE 'CMLIMIT.INC' 
+        INCLUDE 'PAR.INC'
+C	    PAR includes INTEGER LDPX,LDPY,LDPZ,LDPNMX,LDPNMY,NZ1,LDP,NM,LDPNM
 
 	CHARACTER*1  NULL
  
@@ -58,8 +60,6 @@ C***********************************************************************
      &	  K_BCKE,K_PROJ,K_BCKN,K_PRJE,K_SIGMA,
      &    KDM(7),
      &	  IUNIT,Q(1)
-
-	COMMON /PAR/  LDPX,LDPY,LDPZ,LDPNMX,LDPNMY
 
 	DOUBLE PRECISION  ABA
 
