@@ -62,6 +62,7 @@ C--*********************************************************************
       CHARACTER (LEN=78)  :: MESG
       CHARACTER (LEN=180) :: CSTRING
       CHARACTER (LEN=1)   :: NUL
+C     INTEGER*4           :: NE
 
 C     FOLLOWING COMMON BLOCKS ARE USED BY THIS MODULE
 C     COMMON /UNITS/, /FUNCTION/, /PROC/

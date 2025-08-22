@@ -85,7 +85,7 @@ C--*********************************************************************
 
         CALL SET_MPI(ICOMM,MYPID,MPIERR)
 
-        WANTSQRTS = (FSCOP == .TRUE.)
+        WANTSQRTS = FSCOP
 
 C       INPUT FIRST IMAGE
         MAXIM = 0

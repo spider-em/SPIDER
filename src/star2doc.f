@@ -355,7 +355,7 @@ C           INTERPRET TOKENS AS FLOATS, PLACE IN DLIST
                CTOKEN = ADJUSTL(VARTMP(IWHICH))
                NCHAR  = lnblnkn(CTOKEN)
 
-               READ(CTOKEN(1:NCHAR),'(I)') IDLIST
+               READ(CTOKEN(1:NCHAR),*) IDLIST
                DLIST(ILOC) = IDLIST
  
                !write(6,*)' Token:',ctoken(1:nchar),i,iloc,idlist

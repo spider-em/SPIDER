@@ -323,8 +323,8 @@ C      FILLS TOKENS ARRAY WITH CONSECUTIVE TOKENS FROM A LINE
        IMPLICIT NONE
        INCLUDE 'CMBLOCK.INC'
 
-       CHARACTER(LEN=NLET)      :: RECLIN          ! TOKEN LINE  (SENT)
        INTEGER                  :: NLET            ! LINE LENGTH (SENT)
+       CHARACTER(LEN=NLET)      :: RECLIN          ! TOKEN LINE  (SENT)
        INTEGER                  :: MAXLENTOK,NTOKSMAX  ! (SENT)
        CHARACTER(LEN=MAXLENTOK) :: TOKENS(NTOKSMAX)! TOKEN FIELDS
        LOGICAL                  :: INSIDE          ! DELIM IS INSIDE (SENT)
@@ -393,8 +393,8 @@ C      WILL PARTITION SUCH FIELDS INTO MULTIPLE TOKENS.
        IMPLICIT NONE
        INCLUDE 'CMBLOCK.INC'
 
-       CHARACTER(LEN=NLET)      :: RECLIN          ! TOKEN LINE  (SENT)
        INTEGER                  :: NLET            ! LINE LENGTH (SENT)
+       CHARACTER(LEN=NLET)      :: RECLIN          ! TOKEN LINE  (SENT)
        INTEGER                  :: MAXLENTOK,NTOKSMAX  ! (SENT)
        CHARACTER(LEN=MAXLENTOK) :: TOKENS(NTOKSMAX)! TOKEN FIELDS
        LOGICAL                  :: INSIDE          ! DELIM IS INSIDE (SENT)
@@ -416,12 +416,12 @@ C      WILL PARTITION SUCH FIELDS INTO MULTIPLE TOKENS.
 
          IF (INSIDE) THEN
 C           GET TOKEN (CHAR. STRING CONTAINS SYMBOLS IN: DELIM)
-            CALL GETNEXTTOKEN_NOT(RECLIN(1:NLET),
+            CALL GETNEXTTOKEN_NOT(RECLIN,
      &                            DELIM,IFIRST,IGO,IEND)
          ELSE
 
 C          GET TOKEN (CHAR. STRING DELIMITED BY SYMBOLS IN: DELIM)
-            CALL GETNEXTTOKEN_D(RECLIN(1:NLET),
+            CALL GETNEXTTOKEN_D(RECLIN,
      &                            DELIM,IFIRST,IGO,IEND)
          ENDIF
          !write(6,*) '  ifirst,go,end,nlet: ',ifirst, igo, iend, nlet
