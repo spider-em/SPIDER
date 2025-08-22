@@ -224,16 +224,19 @@ C     CONVERT OLD @b01[..] ARG. FORMAT TO TO NEW: () ARG.  FORMAT
       IQUO   = SCAN(ANS(1:NCHAR), NQ12) 
       IF (IPAT == 1 .AND. IQUO == 0) THEN
          IGOBRAK  = SCAN(ANS(1:NCHAR), '([')         ! ( first is ok
-         IF (IGOBRAK > IPAT .AND. ANS(IGOBRAK:IGOBRAK) == '[')THEN
-C           PROBABLY USES OLD @b01[] PROC. ARG. FORMAT 
-            IENDBRAK = INDEX(ANS(1:NCHAR), ']',.TRUE.)
-            CALL GETNEXTTOKEN2(ANS(IGOBRAK:IENDBRAK),1,IGO,IEND)
-            INOT = VERIFY(ANS(IGOBRAK+IGO-1:IEND+IGOBRAK-1), 
+C        If igobrak is 0, then ans(igobrak:igobrak) below will be invalid
+         IF (IGOBRAK .GE. 1) THEN
+            IF (IGOBRAK > IPAT .AND. ANS(IGOBRAK:IGOBRAK) == '[')THEN
+C              PROBABLY USES OLD @b01[] PROC. ARG. FORMAT
+               IENDBRAK = INDEX(ANS(1:NCHAR), ']',.TRUE.)
+               CALL GETNEXTTOKEN2(ANS(IGOBRAK:IENDBRAK),1,IGO,IEND)
+               INOT = VERIFY(ANS(IGOBRAK+IGO-1:IEND+IGOBRAK-1),
      &                    '[xX0123456789]')
-            IF (INOT == 0) THEN
+               IF (INOT == 0) THEN
 C              PROBABLY  @b01[x11...,], [[var]...
-               ANS(IGOBRAK:IGOBRAK)   = '(' 
-               ANS(IENDBRAK:IENDBRAK) = ')'
+                  ANS(IGOBRAK:IGOBRAK)   = '('
+                  ANS(IENDBRAK:IENDBRAK) = ')'
+               ENDIF
             ENDIF
          ENDIF
       ENDIF
