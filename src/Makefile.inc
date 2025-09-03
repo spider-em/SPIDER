@@ -156,13 +156,12 @@ ELEMENTS =  \
  $(LIB)(copyd.o)   \
  $(LIB)(copye.o)   \
  $(LIB)(copyf.o)   \
+ $(LIB)(copyfromccp4.o) \
  $(LIB)(copyfromnik.o) \
  $(LIB)(copyfromtif.o) \
- $(LIB)(copyfromxplo.o)\
  $(LIB)(copypos.o)     \
  $(LIB)(copytojpg.o)   \
  $(LIB)(copytostk.o)   \
- $(LIB)(copytoxplor.o) \
  $(LIB)(copytovol.o)   \
  $(LIB)(copyr.o) \
  $(LIB)(copyu.o) \

@@ -171,7 +171,7 @@ C          SEE IF FILE IS ALREADY OPEN
            IF (ISOPEN) THEN
               IF (MYPID <= 0) THEN
                  CLOSE(LUNOP)
-	         WRITE(NOUT,*) ' FILE ALREADY OPEN, HAS BEEN CLOSED!'
+	         WRITE(NOUT,*) " FILE ALREADY OPEN, HASN'T BEEN CLOSED!"
               ENDIF
            ENDIF
 

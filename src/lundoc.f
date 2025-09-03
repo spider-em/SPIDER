@@ -847,6 +847,9 @@ C--*********************************************************************
 
       SUBROUTINE LUNDOCREDANG(LUNDOC,DLIST,MAXY,NGOTY,MAXGOTY,IRTFLG)
 
+      INTEGER :: IDUM(3, MAXY)
+      REAL    :: DLIST(3, MAXY)
+
       CALL LUNDOCREDSLC(LUNDOC,.FALSE.,IDUM,DLIST, 3,MAXY,
      &    .TRUE.,.FALSE.,1,3, 1,MAXY, NGOTY,MAXGOTY,IRTFLG)
 
@@ -874,6 +877,9 @@ C--*********************************************************************
 
       SUBROUTINE LUNDOCREDSEL(LUNDOC,ILIST,MAXY,NGOTY,MAXGOTY,IRTFLG)
 
+      INTEGER :: ILIST(1, MAXY)
+      REAL    :: DUM(1, MAXY)
+
       CALL LUNDOCREDSLC(LUNDOC,.TRUE.,ILIST,DUM,1,MAXY,
      &    .FALSE.,.FALSE. ,1,1, 1,MAXY,NGOTY,MAXGOTY,IRTFLG)
 
@@ -899,6 +905,9 @@ C--*********************************************************************
 
       SUBROUTINE LUNDOCREDSEQ(LUNDOC,DLIST,MAXX,MAXY,IWANTY,
      &                        NGOTY,IRTFLG)
+
+      INTEGER :: IDUM(MAXX, MAXY)
+      REAL    :: DLIST(MAXX, MAXY)
 
       CALL LUNDOCREDSLC(LUNDOC,.FALSE.,IDUM,DLIST,MAXX,MAXY,
      &    .FALSE.,.FALSE. ,1,MAXX, 1,IWANTY, NGOTY,MAXGOTY,IRTFLG)

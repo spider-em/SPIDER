@@ -34,8 +34,8 @@ C--*********************************************************************
         SUBROUTINE PW3SR(Q,NX,NY,NZ,MODE)
 
         IMPLICIT NONE
-        REAL         :: Q(NX+2-MOD(NX,2),NY,NZ)
         INTEGER      :: NX,NY,NZ
+        REAL         :: Q(NX+2-MOD(NX,2),NY,NZ)
         CHARACTER    :: MODE
 
         LOGICAL      :: EVENY,EVENZ,WANTLOG,WANT2,WANTPH

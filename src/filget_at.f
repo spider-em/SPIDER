@@ -56,7 +56,7 @@ C
 C     APPEND IMAGE NUMBER TO BARE STACK FILE NAME
 C     (INTTOCHAR ALSO RETURNS NEW VALUE FOR NLET)
 C
-C     ***@STK.MRC or aaa/***@STK.MRC
+C     ???@STK.MRC or aaa/???@STK.MRC
 C        @STK.MRC or aaa/@STK.MRC
 C         IMG***.MRC ??
 

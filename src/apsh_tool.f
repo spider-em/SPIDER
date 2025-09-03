@@ -103,7 +103,7 @@ C     **************** APSH_TOOL *************************************
 	INTEGER              :: IREFLIST(NUMREF) 
 	INTEGER              :: IEXPLIST(NUMEXP)
         INTEGER              :: NUMR(3,NRING)
-	REAL                 :: CIRCREF(LCIRC,NUMREF)
+	COMPLEX              :: CIRCREF(LCIRC,NUMREF)
 	LOGICAL              :: CIRCREF_IN_CORE
         LOGICAL              :: CKMIRROR
 	LOGICAL              :: MIRRORNEW
@@ -345,7 +345,7 @@ C       NOTE: RUNS WITHIN OMP PARALLEL SECTION OF CODE!
         USE APSH_SAM_INFO
 
 	REAL                   :: EXPBUF(NSAM,NROW)
-        REAL                   :: CIRCREF(LCIRC,NUMREF)
+        COMPLEX                :: CIRCREF(LCIRC,NUMREF)
         INTEGER                :: NUMR(3,NRING) 
         REAL                   :: COEFFS(6,LCIRC)
         INTEGER                :: IXY(2,LCIRC)
@@ -363,7 +363,7 @@ C       AUTOMATIC ARRAYS
 
 	REAL                   :: CC(-ISTEP:ISTEP,-ISTEP:ISTEP)
 	REAL                   :: CCP(-1:1,-1:1)
-        REAL                   :: CIRCEXP(LCIRC),CIRCT(LCIRC)
+        COMPLEX                :: CIRCEXP(LCIRC),CIRCT(LCIRC)
         !!REAL                 :: QU(2*NRAYSC),QM(2*NRAYSC)
 
 	REAL                   :: CCROT, CCOA
@@ -536,7 +536,7 @@ C                EACH SHIFTED EXP - REF IMAGE COMPARISON.
 
         INTEGER, INTENT(IN)   :: NSKIP,IR,ISX,ISY
 
-	REAL, INTENT(IN)      :: QQ(*)          ! unused FFT'D CCROT RETURN FOR NO SKIP
+	COMPLEX, INTENT(IN)   :: QQ(*)          ! unused FFT'D CCROT RETURN FOR NO SKIP
         INTEGER, INTENT(IN)   :: NRAYS
 
         REAL                  :: CCONE,CCNOW,CCTOP,CCOLD,tmp 
@@ -1207,7 +1207,7 @@ C       KLUDGE TO USE REAL VARIABLE ARRAY
         REAL FUNCTION CCSET(QQ,NTSKIP,NRAYS)
         IMPLICIT NONE
 
-        REAL,     INTENT(IN)  :: QQ(*)
+        COMPLEX,  INTENT(IN)  :: QQ(*)
         INTEGER,  INTENT(IN)  :: NTSKIP,NRAYS  
 
 C       SAVE THE EQUIVALENT TOP NO-SKIP CC

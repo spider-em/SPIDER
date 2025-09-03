@@ -611,7 +611,7 @@ C             PUSH DLIST INTO FIRST DOC. FILE
 C          'MIRRORING'  VALUES IN COLUMN: KEYCOL --------- 'DOC MIRROR'
 
            IF (KEYCOL == 0) THEN
-C             MIRROR BY KEY EXISTANCE (NOT REGISTER CONTENTS)
+C             MIRROR BY KEY EXISTENCE (NOT REGISTER CONTENTS)
               DLIST(2) = 1.0
               DO IKEY = 1,MAXY
                  IGOT = DOCBUF((IKEY - 1) * MAXX + 1)

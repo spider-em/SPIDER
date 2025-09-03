@@ -238,8 +238,8 @@ C       -------------------- PW2SR ------------------------
         SUBROUTINE  PW2SR(Q,NX,NY,MODE)
 
         IMPLICIT NONE
-        REAL         :: Q(NX+2-MOD(NX,2), NY)
         INTEGER      :: NX,NY
+        REAL         :: Q(NX+2-MOD(NX,2), NY)
         CHARACTER*1  :: MODE
 
         INTEGER      :: NNNN,NSC,J,I,JJ,II,JB

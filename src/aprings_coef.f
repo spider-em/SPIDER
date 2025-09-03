@@ -272,7 +272,7 @@ C       --------------------- APRINGS_FILL_COEF --------------------------
            MAXRIN = NUMR(3,NRING) - 2   ! FOR FFTW3
 
 C          RINGWE RETURNS WR WEIGHTS
-	   CALL RINGWE_NEW(WR,NUMR,NRING,MAXRIN)
+           CALL RINGWE_NEW(WR,NUMR,NRING,MAXRIN)
            IF (MODE == 'H') WR = WR * 0.5
         ELSE
            WR(1) = 0.0
@@ -298,8 +298,8 @@ C       FILL COEFFS ARRAY WITH RINGS DEFINITIONS  (HAS OMP || LOOP)
         ENDIF
 
 C       CALCULATE CENTERS
-	CNS2C = (NX / 2 + 1) 
-	CNR2C = (NY / 2 + 1)
+        CNS2C = (NX / 2 + 1)
+        CNR2C = (NY / 2 + 1)
 
         NCIRCGOT = IGOCIRC -1
 
@@ -318,11 +318,11 @@ C          LOOP OVER ANY SHIFTS (CAN LOAD A SET OF SHIFTS)
 
            DO ISHY=-ISHRANGEY,ISHRANGEY,ISTEP
 C             LOOP OVER SHIFTED CENTERS IN Y
- 	      CNR2 = CNR2C + ISHY
+              CNR2 = CNR2C + ISHY
  
               DO ISHX=-ISHRANGEX,ISHRANGEX,ISTEP
 C                LOOP OVER SHIFTED CENTERS IN X
-	         CNS2     = CNS2C + ISHX 
+                 CNS2     = CNS2C + ISHX
 
                  NCIRCGOT = NCIRCGOT + 1      ! CURRENT CIRC # TO FILL
 
@@ -389,10 +389,10 @@ C       --------------------- APRINGS_ONE_COEF --------------------------
 
 C       CNS2 AND CNR2 ARE PREDEFINED CENTERS
 C       CALCULATE DIMENSIONS FOR NORMALIZING MASK
-	NSB  = -CNS2
-	NSE  =  NSB + NX - 1
-	NRB  = -CNR2
-	NRE  =  NRB + NY - 1
+        NSB  = -CNS2
+        NSE  =  NSB + NX - 1
+        NRB  = -CNR2
+        NRE  =  NRB + NY - 1
 
 C       FIND PARAMETERS TO NORMALIZE UNDER THE MASK,  
 C       GET PARAMETERS AVT & VRINV TO NORMALIZE UNDER CIRCULAR MASK
@@ -479,7 +479,8 @@ C          F3 FC
         IF (USE_OMP) THEN
 C          FILL THE RINGS WITH ACTUAL IMAGE VALUES
 
-c$omp      parallel do private(i,ix,iy)
+!$omp      parallel private(i,ix,iy)
+!$omp      do
            DO  I=1,LCIRC  ! LOOP OVER ALL POINTS ON THE RING SET
 
               IF (IXY(1,I) == -100 ) THEN
@@ -496,7 +497,9 @@ c$omp      parallel do private(i,ix,iy)
      &                   XIM(IX,  IY-1) * COEFFS(4,I) +
      &                   XIM(IX,  IY+1) * COEFFS(5,I) +
      &                   XIM(IX+1,IY+1) * COEFFS(6,I) - AVT) * VRINV
-	   ENDDO
+           ENDDO
+!$omp      end do
+!$omp      end parallel
         ELSE
 C          FILL THE RINGS WITH ACTUAL IMAGE VALUES
            DO  I=1,LCIRC  ! LOOP OVER ALL POINTS ON THE RING SET
@@ -515,7 +518,7 @@ C          FILL THE RINGS WITH ACTUAL IMAGE VALUES
      &                   XIM(IX,  IY-1) * COEFFS(4,I) +
      &                   XIM(IX,  IY+1) * COEFFS(5,I) +
      &                   XIM(IX+1,IY+1) * COEFFS(6,I) - AVT) * VRINV
-	   ENDDO
+           ENDDO
         ENDIF
 
         END
@@ -550,8 +553,8 @@ C          RINGS. FFT WILL BE USED ON RINGS.
 
 
 C       CNS2 AND CNR2 ARE PREDEFINED CENTERS
-	CNS2  = (NX / 2 + 1) 
-	CNR2  = (NY / 2 + 1)
+        CNS2  = (NX / 2 + 1)
+        CNR2  = (NY / 2 + 1)
 
         IRTFLG = 0
 
@@ -559,10 +562,10 @@ C       CNS2 AND CNR2 ARE PREDEFINED CENTERS
 
 C       FIND COEFFICIENTS FOR ALL THE RINGS OVER THE IMAGE
 
-c$omp   parallel do private(it,inr,yq,igo,nval,lt,ltigo,ltltigo,
-c$omp&                      ltltltigo,nsim,dfi,x,y,jt,fi)
-
-        DO  IT=1,NRING 
+!$omp   parallel private(it,inr,yq,igo,nval,lt,ltigo,ltltigo,
+!$omp&                      ltltltigo,nsim,dfi,x,y,jt,fi)
+!$omp   do
+        DO  IT=1,NRING
 
            INR  = NUMR(1,IT)        ! RADIUS OF THE CURRENT RING
            YQ   = INR               ! FLOATING POINT RADIUS
@@ -693,10 +696,11 @@ C                FILL OTHER HALF OF RING
      &                       COEFFS(1,JT+LTLTLTIGO),IXY(1,JT+LTLTLTIGO))
 
              ENDIF
-	   ENDDO
+           ENDDO
 
- 	ENDDO
-
+         ENDDO
+!$omp    end do
+!$omp    end parallel
         END
 
 C     ------------------------- QUADRI_COEFFS ------------------------

@@ -139,7 +139,7 @@ C     ----------- LUNNEWHED_MRC ---------------------------------------
 
 C     CREATES STORAGE SPACE FOR A MRC_HEADER OBJECT
 
-#include "LUNHDR.INC"
+#include "LUNMRCHDR.INC"
 
       INTEGER         :: LUN,IRTFLG
       
@@ -173,7 +173,7 @@ C     ----------- LUNREDHED_MRC ---------------------------------------
 
 C     READS MRC IMAGE HEADER FROM FILE INTO MRC HEADER OBJECT 
 
-#include "LUNHDR.INC"
+#include "LUNMRCHDR.INC"
 
       INTEGER      :: LUN,IRTFLG 
       LOGICAL      :: CALLERRT
@@ -224,7 +224,7 @@ C     ----------- LUNWRTHED_MRC ---------------------------------------
 
 C     WRITES HEADER OBJECT INTO FILE'S MRC IMAGE HEADER
 
-#include "LUNHDR.INC"
+#include "LUNMRCHDR.INC"
 
       INTEGER    :: LUN,IRTFLG
 
@@ -298,7 +298,7 @@ C     ------------------ LUNGETPOSINFO_MRC ----------------------------
 
       SUBROUTINE LUNGETPOSINFO_MRC(LUN,NBYT,IHEDLEN,IRTFLG)
 
-#include "LUNHDR.INC"
+#include "LUNMRCHDR.INC"
      
       INTEGER         :: LUN,NBYT,IHEDLEN,IRTFLG
 
@@ -421,7 +421,7 @@ C     ------------------------- LUNFLIPORG_MRC ------------------------
 
       SUBROUTINE LUNFLIPORG_MRC(LUN,NX,NY,NZ,RESET,IRTFLG)
 
-#include "LUNHDR.INC"
+#include "LUNMRCHDR.INC"
 
       INTEGER         :: LUN,NX,NY,NZ,IRTFLG
       LOGICAL         :: RESET
@@ -489,7 +489,7 @@ C     ------------------------- LUNGETMAP_MRC -------------------------
 
       SUBROUTINE LUNGETMAP_MRC(LUN,MAPC,MAPR,MAPS,IRTFLG)
 
-#include "LUNHDR.INC"
+#include "LUNMRCHDR.INC"
       INTEGER         :: LUN,MAPC,MAPR,MAPS,IRTFLG
 
 C     POINT TO HEADER OBJECT
@@ -554,7 +554,7 @@ C     ------------------------- LUNSETHAND_MRC ------------------------
 C     SETS  AXIS ORIGIN LOCATION & VOLUME HANDEDNESS (CHARACTERS)
 C     THIS IS NOT A STANDARD MRC DEFINED HEADER POSITION!!
 
-#include "LUNHDR.INC"
+#include "LUNMRCHDR.INC"
 
       INTEGER            :: LUN,IRTFLG
       CHARACTER(LEN=4)   :: CAXIS
@@ -579,7 +579,7 @@ C     ------------------------- LUNGETHAND_MRC ------------------------
 C     GETS  AXIS ORIGIN LOCATION & VOLUME HANDEDNESS (CHARACTERS)
 C     THIS IS NOT A STANDARD MRC DEFINED HEADER POSITION!!
 
-#include "LUNHDR.INC"
+#include "LUNMRCHDR.INC"
 
       INTEGER            :: LUN,IRTFLG
       CHARACTER(LEN=4)   :: CAXIS
@@ -601,7 +601,7 @@ C     ------------------------- LUNSETXXX_MRC -------------------------
       SUBROUTINE LUNSETXXX_MRC(LUN,IRTFLG)
 
 C     SETS  N?START,CELLANGS,AXES,NSYMBYT,MAP,MACHST,LABELS,ETC.
-#include "LUNHDR.INC"
+#include "LUNMRCHDR.INC"
 
       INTEGER            :: LUN,IRTFLG
 
@@ -685,7 +685,7 @@ C     ------------------------- LUNSETMODSIZ_MRC ----------------------------
       SUBROUTINE LUNSETMODSIZ_MRC(LUN,MRCMODE,NX,NY,NZMRC,
      &                            MX,MY,MZ,IRTFLG)
 
-#include "LUNHDR.INC"
+#include "LUNMRCHDR.INC"
 
       INTEGER  :: LUN,MRCMODE,NX,NY,NZMRC,MX,MY,MZ,IRTFLG
 
@@ -710,7 +710,7 @@ C     ------------------------- LUNSETMODE_MRC ----------------------------
 
       SUBROUTINE LUNSETMODE_MRC(LUN,MRCMODE,IRTFLG)
 
-#include "LUNHDR.INC"
+#include "LUNMRCHDR.INC"
 
       INTEGER         :: LUN,MRCMODE,IRTFLG
 
@@ -736,7 +736,7 @@ C     ------------------------- LUNGETMODSIZ_MRC ----------------------
       SUBROUTINE LUNGETMODSIZ_MRC(LUN,MRCMODE,NX,NY,NZMRC,
      &                            MX,MY,MZ,IRTFLG)
 
-#include "LUNHDR.INC"
+#include "LUNMRCHDR.INC"
 
       INTEGER  :: LUN,MRCMODE,NX,NY,NZMRC,MX,MY,MZ,IRTFLG
 
@@ -761,7 +761,7 @@ C     ------------------------- LUNGETMODE_MRC ----------------------
 
       SUBROUTINE LUNGETMODE_MRC(LUN,MRCMODE,IRTFLG)
 
-#include "LUNHDR.INC"
+#include "LUNMRCHDR.INC"
 
       INTEGER  :: LUN,MRCMODE,IRTFLG
 
@@ -780,7 +780,7 @@ C     ------------------------- LUNGETVIN_MRC ----------------------------
 
       SUBROUTINE LUNGETVIN_MRC(LUN,IVERSION,ISPG,NSYMBT,NLABL,IRTFLG)
 
-#include "LUNHDR.INC"
+#include "LUNMRCHDR.INC"
       INTEGER         :: LUN,IVERSION,ISPG,NSYMBT,NLABL,IRTFLG
 
 C     POINT TO HEADER OBJECT
@@ -805,7 +805,7 @@ C     ------------------------- LUNSETVIN_MRC -------------------------
 
       SUBROUTINE LUNSETVIN_MRC(LUN,IVERSION,ISPG,NSYMBT,NLABL,IRTFLG)
 
-#include "LUNHDR.INC"
+#include "LUNMRCHDR.INC"
       INTEGER         :: LUN,IVERSION,ISPG,NSYMBT,NLABL,IRTFLG
 
 C     POINT TO HEADER OBJECT
@@ -830,7 +830,7 @@ C     ------------------------- LUNGETISBARE_MRC ----------------------
 
       SUBROUTINE LUNGETISBARE_MRC(LUN,ISBARE,IRTFLG)
 
-#include "LUNHDR.INC"
+#include "LUNMRCHDR.INC"
 
       INTEGER   :: LUN,IRTFLG
       LOGICAL   :: ISBARE
@@ -851,7 +851,7 @@ C     --------------------- LUNSETISBARE_MRC -------------------------
 
       SUBROUTINE LUNSETISBARE_MRC(LUN,ISBARE,IRTFLG)
 
-#include "LUNHDR.INC"
+#include "LUNMRCHDR.INC"
 
       INTEGER     :: LUN,IRTFLG
       LOGICAL     :: ISBARE
@@ -874,7 +874,7 @@ C     ------------------------- LUNSETFILE_MRC -----------------------
 
       SUBROUTINE LUNSETFILE_MRC(LUN,FILNAM,DSP,IRTFLG)
 
-#include "LUNHDR.INC"
+#include "LUNMRCHDR.INC"
 
       INTEGER                :: LUN,IRTFLG
       CHARACTER(LEN=*)       :: FILNAM
@@ -907,7 +907,7 @@ C     ------------------------ LUNGETFILE_MRC -----------------------
 
       SUBROUTINE LUNGETFILE_MRC(LUN,FILNAM,NLET,DSP,IRTFLG)
 
-#include "LUNHDR.INC"
+#include "LUNMRCHDR.INC"
 
       INTEGER                :: LUN,NLET,IRTFLG
       CHARACTER(LEN=*)       :: FILNAM
@@ -932,7 +932,7 @@ C     ------------------------- LUNSETIMGNUM_MRC ----------------------
 
       SUBROUTINE LUNSETIMGNUM_MRC(LUN,IMGNUM,IRTFLG)
 
-#include "LUNHDR.INC"
+#include "LUNMRCHDR.INC"
 
       INTEGER  :: LUN,IMGNUM,IRTFLG
 
@@ -950,7 +950,7 @@ C     ------------------------- LUNSET_STATSIMG_MRC -------------------
 
       SUBROUTINE LUNSET_STATSIMG_MRC(LUN,IMGSTATS,IRTFLG)
 
-#include "LUNHDR.INC"
+#include "LUNMRCHDR.INC"
 
       INTEGER  :: LUN,IMGSTATS,IRTFLG
 
@@ -970,7 +970,7 @@ C     ------------------------- LUNGET_STATSIMG_MRC -------------------
 
       SUBROUTINE LUNGET_STATSIMG_MRC(LUN,IMGSTATS,IMGNUM,NSTACK,IRTFLG)
 
-#include "LUNHDR.INC"
+#include "LUNMRCHDR.INC"
 
       INTEGER  :: LUN,IMGSTATS,IMGNUM,NSTACK,IRTFLG
 
@@ -990,7 +990,7 @@ C     ------------------------- LUNSETSTATS_MRC ----------------------------
 
       SUBROUTINE LUNSETSTATS_MRC(LUN,IMAMIT,FMINT,FMAXT,AVT,SIGT,IRTFLG)
 
-#include "LUNHDR.INC"
+#include "LUNMRCHDR.INC"
 
       INTEGER  :: LUN,IMAMIT,IRTFLG
       REAL     :: FMINT,FMAXT,AVT,SIGT
@@ -1041,7 +1041,7 @@ C     ------------------------- LUNGETSTATS_MRC ----------------------------
 
       SUBROUTINE LUNGETSTATS_MRC(LUN,IMAMIT,FMINT,FMAXT,AVT,SIGT,IRTFLG)
 
-#include "LUNHDR.INC"
+#include "LUNMRCHDR.INC"
 
       INTEGER  :: LUN,IMAMIT,IRTFLG
       REAL     :: FMINT,FMAXT,AVT,SIGT
@@ -1093,7 +1093,7 @@ C     ------------------------- LUNZEROSTATS_MRC ----------------------
 
       SUBROUTINE LUNZEROSTATS_MRC(LUN,IVERSION,IRTFLG)
 
-#include "LUNHDR.INC"
+#include "LUNMRCHDR.INC"
 
       INTEGER  :: LUN,IVERSION,IRTFLG
  
@@ -1134,7 +1134,7 @@ C     ------------------------- LUNGETVERSION_MRC ---------------------
 
        SUBROUTINE LUNGETVERSION_MRC(LUN,IVERSION,IRTFLG)
 
-#include "LUNHDR.INC"
+#include "LUNMRCHDR.INC"
 
       INTEGER   :: LUN,IVERSION,IRTFLG 
 
@@ -1155,7 +1155,7 @@ C     ------------------------- LUNGETPIXSIZ_MRC ----------------------
 C     PURPOSE:  GET PIXEL SIZE, NOTE THAT MRC HAS 3 SIZES BUT NOT SPIDER
 C     LOCATIONS 11-13 CELLA       CELL DIMENSIONS IN ANGSTROMS
 
-#include "LUNHDR.INC"
+#include "LUNMRCHDR.INC"
 
       REAL              :: PIXSIZ,FVAL
       INTEGER           :: LUN,IRTFLG
@@ -1182,7 +1182,7 @@ C     ------------------------- LUNSETPIXSIZE_MRC ---------------------
 C     PURPOSE:  SET PIXEL SIZE, NOTE MRC HAS 3 SIZES BUT NOT SPIDER!
 C     LOCATIONS 11-13 CELLAX,CELLAY,CELLAZ   CELL DIMENSIONS IN ANG.
 
-#include "LUNHDR.INC"
+#include "LUNMRCHDR.INC"
 
       REAL              :: PIXSIZ
       INTEGER           :: LUN,IRTFLG
@@ -1222,7 +1222,7 @@ C     ------------------------- LUNSETPIXSIZES_MRC --------------------
 C     PURPOSE:  SET PIXEL SIZE, NOTE MRC HAS 3 SIZES BUT NOT SPIDER!
 C     LOCATIONS 11-13 CELLAX,CELLAY,CELLAZ   CELL DIMENSIONS IN ANG.
 
-#include "LUNHDR.INC"
+#include "LUNMRCHDR.INC"
 
       REAL              :: SIZEX,SIZEY,SIZEZ
       INTEGER           :: LUN,IRTFLG
@@ -1264,7 +1264,7 @@ C     ------------------------- LUNSETANGS_MRC ----------------------------
 C     PURPOSE:  SET ANGLES, NOTE THAT MRC HAS 6, SPIDER HAS 9
 C     LOCATIONS 43-48 ANG1...ANG6  USING SPIDER ANGLE CONVENTIONS
 
-#include "LUNHDR.INC"
+#include "LUNMRCHDR.INC"
 
       INTEGER           :: LUN,NANG,IRTFLG
       REAL              :: ANGS(6)
@@ -1294,7 +1294,7 @@ C     ------------------------- LUNGETANGS_MRC ----------------------------
 C     PURPOSE:  RETRIEVE ANGLES, NOTE THAT MRC HAS 6 SPIDER HAS 9
 C     LOCATIONS 43-48 ANG1...ANG6  USING SPIDER ANGLE CONVENTIONS
 
-#include "LUNHDR.INC"
+#include "LUNMRCHDR.INC"
 
       REAL              :: ANGS(6)
       INTEGER           :: LUN,NANG,IRTFLG
@@ -1321,7 +1321,7 @@ C     ------------------------- LUNGETSIZE_MRC ----------------------------
 
       SUBROUTINE LUNGETSIZE_MRC(LUN,NX,NY,NZ,IRTFLG)
 
-#include "LUNHDR.INC"
+#include "LUNMRCHDR.INC"
 
       INCLUDE 'CMLIMIT.INC'
 
@@ -1363,7 +1363,7 @@ C     ------------------------- LUNGETVALS_R_MRC ------------------------
 
 C     GET RETURN VALUES, ONLY WORKS FOR REALS STORED AS I*4
 
-#include "LUNHDR.INC"
+#include "LUNMRCHDR.INC"
 
       INCLUDE 'CMLIMIT.INC'    ! PROVIDES IAPLOC
       INTEGER,PARAMETER :: IAPLOC_MRC  = 29
@@ -1427,7 +1427,7 @@ C     ------------------------- LUNSETVALS_R_MRC ------------------------
       SUBROUTINE LUNSETVALS_R_MRC(LUN,IGO,NVAL,BUFVALS,IRTFLG)
 
 C     SET HEADER VALUES ONLY WORKS FOR REALS STORED AS I*4
-#include "LUNHDR.INC"
+#include "LUNMRCHDR.INC"
 
       INCLUDE 'CMLIMIT.INC'    ! PROVIDES IAPLOC
       INTEGER,PARAMETER :: IAPLOC_MRC  = 29
@@ -1517,7 +1517,7 @@ C     ------------------------- LUNGETSTK_MRC----------------------------
 
        SUBROUTINE LUNGETSTK_MRC(LUN,MZ,NSTACK,IMGNUM,IRTFLG)
 
-#include "LUNHDR.INC"
+#include "LUNMRCHDR.INC"
 
       INTEGER   :: LUN,MZ,NSTACK,IMGNUM,IRTFLG
 
@@ -1537,7 +1537,7 @@ C     ------------------------- LUNSETSTK_MRC----------------------------
 
       SUBROUTINE LUNSETSTK_MRC(LUN,IMGNUM,NSTACK,IRTFLG)
 
-#include "LUNHDR.INC"
+#include "LUNMRCHDR.INC"
 
       INTEGER  :: LUN,IMGNUM,NSTACK,IRTFLG
 
@@ -1564,7 +1564,7 @@ C               AND SOME VOLUMES LOOK LIKE STACKS SO THIS IS COMPLEX!!
 
 C      RETURNS:   NZ   MZ    NSTACK 
 
-#include "LUNHDR.INC"
+#include "LUNMRCHDR.INC"
       INCLUDE 'CMLIMIT.INC'
 
       INTEGER                :: LUN,NX,NY,NZ,MZ,NSTACK,IRTFLG
@@ -1652,7 +1652,7 @@ C      PURPOSE: UPDATE NSTACK RELATED LOCATIONS IN MRC HEADER.
 C               MRC FILES LACK STANDARD ENCODING FOR STACK SIZE
 C               SO THIS IS COMPLEX!!
 
-#include "LUNHDR.INC"
+#include "LUNMRCHDR.INC"
       INCLUDE 'CMLIMIT.INC'    ! FOR MAXNAM
 
       INTEGER                :: LUN,NZ,NSTACK,IRTFLG
@@ -1832,7 +1832,7 @@ C     ------------------------- LUNGETLABELS_MRC ----------------------------
 
       SUBROUTINE LUNGETLABELS_MRC(LUN,NLABL,LABELS,IRTFLG)
 
-#include "LUNHDR.INC"
+#include "LUNMRCHDR.INC"
 
       INTEGER            :: LUN,NLABL,IRTFLG 
       CHARACTER(LEN=800) :: LABELS
@@ -1897,12 +1897,12 @@ C     ------------------------- LUNSAYINFO_MRC ------------------------
       CHARACTER(LEN=5)     :: DTP
       CHARACTER(LEN=104)   :: CSTRING
       CHARACTER(LEN=11)    :: TYPEF
-      CHARACTER(LEN=80)    :: LABEL1
+      CHARACTER(LEN=800)   :: LABEL1
       CHARACTER(LEN=4)     :: CAXIS
       CHARACTER(LEN=1)     :: MODE_STR
 
       IRTFLG = 0
-      IF (.NOT. SAYIT) RETURN
+      IF (SAYIT == 0) RETURN
 
 C     SET ICOMM AND MYPID
       CALL SET_MPI(ICOMM,MYPID,MPIERR) 
