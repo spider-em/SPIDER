@@ -201,8 +201,8 @@ C       LUNARB(LUN) = LUN
         CALL LUNSETLUNB(LUN,LUN,IRTFLG)
 
         CALLERRT = (DISP(1:1) .NE. 'Z' .AND. DISP(1:1) .NE. 'E')
+C       ITYPE = 0
 
-C       PRINT *, __FILE__," : 205: OPENFIL: DISP=",DISP
 10      IF (DISP == 'U' .OR. DISP == 'N') THEN
 C       USER WANTS A NEW FILE TO WRITE INTO ---------------------- NEW
 
@@ -233,7 +233,6 @@ C             DO NOT COPY FROM LUNT IF IT IS A MRC FILE
            ELSE
               CALL LUNSETHDR(LUNT,LUN,NX,NY,NZ,ITYPE,NSTACK,IRTFLGT)
            ENDIF
-C          PRINT *, __FILE__," : 237: OPENFIL: ITYPE=",ITYPE
 
 C          SET FILE'S FMIN.... TO AVOID FLT. PT. ERROR ON DEC
 C          DOES NOT ALTER STATS: FMIN... IN COMMON BLOCK
@@ -295,7 +294,6 @@ C          PUSH HEADER OBJECT INFO INTO NEW FILE
 
 C         --------------------------------------------------------- OLD
 
-C       PRINT *, __FILE__," : 298: OPENFIL: ITYPE=",ITYPE
         ELSEIF (DISP == 'O' .OR. DISP == 'K' .OR.
      &          DISP == 'Z' .OR. 
      &          DISP == 'E' .OR. DISP == 'M') THEN
@@ -388,7 +386,6 @@ C          READ OVERALL HEADER FROM SPIDER FILE
 
 C          NEED ITYPE
            CALL LUNGETTYPE(LUN,ITYPE,IRTFLGT)
-C          PRINT *, __FILE__," : 391: OPENFIL: ITYPE=",ITYPE
 
            IF (ITYPE == -1 .OR. ITYPE == -3 .OR. ITYPE == -7) THEN
 C            READING OBSOLETE FORMAT FOURIER FILE
@@ -420,10 +417,10 @@ C             FLIP BYTES IN HEADER OBJECT
 
 C             NEED ITYPE & SIZE
               CALL LUNGETTYPE(LUN,ITYPE,IRTFLGT)
+C             PRINT *, __FILE__," : 426: OPENFIL: ITYPE=",ITYPE
               CALL LUNGETSIZE(LUN,NX,NY,NZ,IRTFLGT)
               IF (IRTFLGT .NE. 0) RETURN
 
-C             PRINT *, __FILE__," : 426: OPENFIL: ITYPE=",ITYPE
               IF (ITYPE == 0 ) THEN
 C                PROBABLY NOT A SPIDER IMAGE
                  IF (CALLERRT) THEN
@@ -477,17 +474,19 @@ C                PROBABLY NOT A SPIDER IMAGE
                  IRTFLG = 5   ! RETURN ERROR FLAG FOR NON-SPIDER IMAGE
               ENDIF
 
-C             PRINT *, __FILE__," : 480: OPENFIL: IRTFLG=",IRTFLG
               IF (IRTFLG == 5) THEN
 C                RETURN ERROR FLAG FOR NON-SPIDER IMAGE
                  FILNAM = FILNM(1:NLET)
                  RETURN
               ENDIF
 
-              IF (VERBOSE)
-     &           WRITE(NOUT,*) ' NON-NATIVE BYTE ORDERED SPIDER FILE'
+c               IF (VERBOSE)
+c      &           WRITE(NOUT,*) ' NON-NATIVE BYTE ORDERED SPIDER FILE'
+              IF (VERBOSE) THEN
+                 WRITE(NOUT,*) ' NON-NATIVE BYTE ORDERED SPIDER FILE'
+              ENDIF
             ENDIF
-
+C           END ITYPE-DIMENSIONS IF-THEN
 
            IF (INLNED == 0) THEN
 C             REOPEN SPIDER FILE WITH FINAL RECORD LENGTH

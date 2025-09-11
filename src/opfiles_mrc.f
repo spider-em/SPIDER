@@ -157,7 +157,6 @@ C--*********************************************************************
        IF (LOCAST > 0 .AND. LOCAST < LOCAT) THEN
 C         TEMPLATED STACKED MRC FILE: ***@STK.MRC --------- **@STK.MRC
 
-C         PRINT *, "opfiles_mrc.f : 160: Templated stacked MRC file"  ! get segfault
           !write(3,*)' In opfiles_mrc, opening: ',filpat(1:nlet)
         
 C         SUBSTITUTE STACKED IMGNUM INTO FILE NAME PATTERN -> FILNAM 
@@ -170,7 +169,6 @@ C         OPEN IMGNUM IN EXISTING MRC STACK FILE
 
           !write(3,*)' In opfiles_mrc, opening: ',filnam(1:nlet)
 
-C         PRINT *, "opfiles_mrc.f : 174: OPFILES_MRC: Calling OPFILEC"
           CALL OPFILEC(0,.FALSE.,FILNAM,LUNIMG,DISP,
      &                 ITYPE,NX,NY,NZ, 
      &                 MAXIM,' ',FOUROK,IRTFLG)
@@ -184,7 +182,6 @@ C         THIS IS NOT A BARE STACK REQUEST
 
        ELSEIF (LOCAST > 0) THEN
 C         A SIMPLE FILE TEMPLATE: IMG***.mrc ------------- IMG***.mrc
-C         PRINT *, "opfiles_mrc.f : 186: Simple templated MRC files"
 
 C         SUBSTITUTE IMGNUM INTO FILE NAME PATTERN -> FILNAM   
           CALL  FILGET(FILPAT,FILNAM,NLET,IMGNUM,IRTFLG)
@@ -205,7 +202,6 @@ c     &              '  for:',imgnum
 
        ELSEIF (LOCAT == 1 .OR. IS_BAREL) THEN
 C         WHOLE BARESTACK:  @STK.mrc  ---------------------- @STK.mrc
-C         PRINT *, "opfiles_mrc.f : 208: Whole barestack MRC file"
 
 C         SUBSTITUTE STACKED IMGNUM INTO FILE NAME PATTERN -> FILNAM   
           

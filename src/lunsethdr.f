@@ -100,8 +100,8 @@ C--*********************************************************************
  
       MODULE LUNHDR_INFO
          INTEGER, PARAMETER :: NUMLUNST = 100
-         TYPE REAL_POINTER  
-            REAL, POINTER   :: IPT(:) 
+         TYPE REAL_POINTER
+            REAL, POINTER   :: IPT(:)
          END TYPE REAL_POINTER
 
          TYPE(REAL_POINTER) :: LUNHDRBUF(NUMLUNST)
@@ -303,7 +303,7 @@ C     ------------------------- LUNGETOBJ -------------------------
       USE LUNHDR_INFO
 
       INTEGER                     :: LUN,IRTFLG
-      REAL, DIMENSION(:), POINTER :: IPOINTER 
+      REAL, DIMENSION(:), POINTER :: IPOINTER
 
       INTEGER, PARAMETER          :: NUMLUNS = 100
 
@@ -317,12 +317,7 @@ C     POINT TO HEADER OBJECT
       ENDIF
 
       IPOINTER => LUNHDRBUF(LUN)%IPT
-C     IF (.NOT. ASSOCIATED(IPOINTER)) RETURN
-      IF (.NOT. ASSOCIATED(IPOINTER)) THEN
-C        PRINT *, __FILE__," : 322: LUNGETOBJ: Pointer not assoc'd"
-C        PRINT *, __FILE__," : 323: LUNGETOBJ: LUN=",LUN
-         RETURN
-      ENDIF
+      IF (.NOT. ASSOCIATED(IPOINTER)) RETURN
 
       IRTFLG = 0
       END
@@ -409,7 +404,6 @@ C        POINT TO HEADER OBJECT
 
 C        RETURN SPIDER FILE TYPE  
          ITYPE = HEADER(5)
-C        PRINT *, __FILE__," : 412: LUNGETTYPE: ITYPE=",ITYPE
       ENDIF
 
       IRTFLG = 0
@@ -1635,14 +1629,12 @@ C     RETRIEVE ITYPE
 
 C     RETRIEVE CURRENT HEADER ISTACK 
       CALL LUNGETISTACK(LUN,ISTACK,IRTFLG)
-C     PRINT *, __FILE__," : 1633: LUNSAYINFO: ISTACK=",ISTACK
 
 C     RETRIEVE SIZE
       CALL LUNGETSIZE(LUN,NX,NY,NZ,IRTFLG)
 
 C     RETRIEVE IMGNUM FROM HEADER OBJECT
       CALL LUNGETINUSE(LUN,IMGNUM,IRTFLG)
-C     PRINT *, __FILE__," : 1645: LUNSAYINFO: IMGNUM=",IMGNUM
 
       IF (ITYPE == -2) THEN
             TYPE = 'P '
@@ -1683,8 +1675,6 @@ C     RECOVER FILE DATE, TIME & TITLE FROM HEADER
 C     GET RECORD INFO
       CALL LUNGETLAB(LUN,LABREC,INDXREC,NRECS,LABBYT,LENBYT,IRTFLG)
 
-C     PRINT *, __FILE__," : 1676: LUNSAYINFO: USE_SPIRE=",USE_SPIRE
-C     PRINT *, __FILE__," : 1677: LUNSAYINFO: DSP=",DSP
       IF (USE_SPIRE .AND. DSP == 'N' .AND. FILNAM(1:1) .NE. '_') THEN
          CALL SPIREOUT(FILNAM(:NLET),IRTFLG)
 
@@ -1721,10 +1711,7 @@ C           SIMPLE IMAGE
 
 
       IF (VERBOSE .AND. IFOUND .NE. -4) THEN
-C         PRINT STACK OPENING INFORMATION
-C         PRINT *, __FILE__," : 1715: LUNSAYINFO: LENTIT=",LENTIT
-C         PRINT *, __FILE__," : 1716: LUNSAYINFO: NLET=",NLET
-
+C        PRINT STACK OPENING INFORMATION
          LENT = LENTIT + NLET
          IF (LENTIT <= 0 .AND. NLET > 0) THEN
 C           FILENAME BUT NO TITLE
@@ -1905,7 +1892,7 @@ C           LABBYT, LABREC, NREC, DATE, TIME, IMGNUM, INUSE
 
       REAL, DIMENSION(LENBUF) :: BUF
       CHARACTER(LEN=1)        :: DSP
-      REAL, POINTER           :: HEADERT(:) 
+      REAL, POINTER           :: HEADERT(:)
 
       IRTFLG = 1
 
@@ -2190,6 +2177,48 @@ C     GET STACK RELATED LOCATIONS
       IRTFLG = 0
       END
 
+C     ------------------------- FLIPBYTESII ----------------------------
+
+      SUBROUTINE FLIPBYTESII(IBUF,NVAL,IRTFLG)
+C     NEEDED FOR PGI COMPILER SINCE FLIPBYTES DOES NOT WORK THERE!
+
+      USE ISO_C_BINDING, ONLY: C_FLOAT, C_INT32_T,
+     &                         C_PTR, C_LOC, C_F_POINTER
+      IMPLICIT NONE
+
+      REAL(C_FLOAT), INTENT(INOUT) :: IBUF(*)   ! 32-BIT REALS IN CALLER
+      INTEGER, INTENT(IN)          :: NVAL
+      INTEGER, INTENT(OUT)         :: IRTFLG
+
+      INTEGER(C_INT32_T), POINTER  :: IBUF_INT(:)
+      TYPE(C_PTR)                  :: P
+      INTEGER                      :: N, K
+
+
+      ! ALIAS THE REAL ARRAY AS INTEGER(4) WITHOUT COPYING
+      P = C_LOC(IBUF(1))
+      CALL C_F_POINTER(P, IBUF_INT, [NVAL])
+
+      DO N = 1,NVAL
+         K = IBUF_INT(N)
+
+         ! SWAP BYTE ORDER OF THE 32-BIT WORD
+         K = ISHFT(IAND(K, Z'000000FF'), 24) +
+     &       ISHFT(IAND(K, Z'0000FF00'),  8) +
+     &       ISHFT(IAND(K, Z'00FF0000'), -8) +
+     &       ISHFT(IAND(K, Z'FF000000'),-24)
+
+         ! The 4 ISHIFT calls do the following:
+         !   1) MOVE BYTE 0 TO BYTE 3
+         !   2) MOVE BYTE 1 TO BYTE 2
+         !   3) MOVE BYTE 2 TO BYTE 1
+         !   4) MOVE BYTE 3 TO BYTE 0
+
+         IBUF_INT(N) = K
+      ENDDO
+      IRTFLG = 0
+      END
+
 C     ------------------------- FLIPBYTESI ----------------------------
 
       SUBROUTINE FLIPBYTESI(IBUF,NVAL,IRTFLG)
@@ -2209,6 +2238,52 @@ C     NEEDED FOR PGI COMPILER SINCE FLIPBYTES DOES NOT WORK THERE!
           J       = ISHFTC(J, 8,16)
           K       = ISHFTC(K,16,32)
           IBUF(N) = K
+      ENDDO
+      IRTFLG = 0
+      END
+
+C     ------------------------- FLIPBYTESIII ----------------------------
+
+
+      SUBROUTINE FLIPBYTESIII(IBUFIN, IBUFOUT, NVAL, IRTFLG)
+
+      USE ISO_C_BINDING, ONLY: C_FLOAT, C_INT32_T,
+     &                         C_PTR, C_LOC, C_F_POINTER
+      IMPLICIT NONE
+
+      REAL(C_FLOAT), INTENT(IN)  :: IBUFIN(*)
+      REAL(C_FLOAT), INTENT(OUT) :: IBUFOUT(*)
+      INTEGER,       INTENT(IN)  :: NVAL
+      INTEGER,       INTENT(OUT) :: IRTFLG
+
+      ! LOCAL INTEGER ALIASES TO SAME MEMORY
+      INTEGER(C_INT32_T), POINTER :: IN_INT(:), OUT_INT(:)
+      TYPE(C_PTR) :: PIN, POUT
+      INTEGER :: N, K
+
+      ! ALIAS THE REAL ARRAYS AS INTEGER ARRAYS
+      PIN  = C_LOC(IBUFIN(1))
+      POUT = C_LOC(IBUFOUT(1))
+      CALL C_F_POINTER(PIN,  IN_INT,  [NVAL])
+      CALL C_F_POINTER(POUT, OUT_INT, [NVAL])
+
+      ! SWAP LOOP
+      DO N = 1, NVAL
+         K = IN_INT(N)
+
+         ! SWAP BYTE ORDER OF THE 32-BIT WORD
+         K = ISHFT(IAND(K, Z'000000FF'), 24) +
+     &       ISHFT(IAND(K, Z'0000FF00'),  8) +
+     &       ISHFT(IAND(K, Z'00FF0000'), -8) +
+     &       ISHFT(IAND(K, Z'FF000000'),-24)
+
+         ! The 4 ISHIFT calls do the following:
+         !   1) MOVE BYTE 0 TO BYTE 3
+         !   2) MOVE BYTE 1 TO BYTE 2
+         !   3) MOVE BYTE 2 TO BYTE 1
+         !   4) MOVE BYTE 3 TO BYTE 0
+
+         OUT_INT(N) = K
       ENDDO
       IRTFLG = 0
       END
@@ -2323,7 +2398,11 @@ C     POINT TO INPUT HEADER OBJECT
       IF (IRTFLG .NE. 0) RETURN
 
 C     FLIP VALUES
-      CALL FLIPBYTESI(HEADER,LENBUF,IRTFLG)
+C     PRINT *, __FILE__," : 2379: HEADER(5)=", HEADER(5)
+C     PRINT *, __FILE__," : 2380: HEADER(9)=", HEADER(9)
+      CALL FLIPBYTESII(HEADER,LENBUF,IRTFLG)
+C     PRINT *, __FILE__," : 2382: HEADER(5)=", HEADER(5)
+C     PRINT *, __FILE__," : 2383: HEADER(9)=", HEADER(9)
 
       IRTFLG = 0
       END

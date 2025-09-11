@@ -51,7 +51,6 @@ C      If lnblnkn is 0, then string(lnblnkn:lnblnkn) below will be invalid
           RETURN
        ENDIF
 
-C      PRINT *, 'lnblnkn.f : 54: LNBLNKN=', LNBLNKN
 C      IF (STRING(LNBLNKN:LNBLNKN) .LE. CHAR(32)) THEN
        IF (ICHAR(STRING(LNBLNKN:LNBLNKN)) .LE. 32) THEN
 C         LAST POSITION IS STILL NON PRINTING

@@ -193,7 +193,6 @@ C          SOLICIT FILE NAME, KEEPS EXTENSION IF PROMPT ENDS WITH: ~9
            NLETI = lnblnk(FILNAM)
         ENDIF
 
-C       PRINT *, __FILE__," : 196: OPFILEC: ITYPE=",ITYPE
         DSP = 'O'
         IF (DISP(1:1) .NE. 'O' .AND. 
      &      DISP(1:1) .NE. 'Z' .AND.
@@ -248,11 +247,8 @@ C             NOTE: THIS IS THE PATH FOR 'REGULAR' SPIDER IMAGE FILES.
 
               !write(3,*)' In opfilec, call openfil itype:',itype,nstack
               NSTACK = 0
-C             PRINT *, __FILE__," : 252: Calling OPENFIL"
               CALL OPENFIL(LUNT,FILNAM,LUN,NX,NY,NZ,NSTACK,
      &                     ITYPE,DISP(1:1),KEEPEXT,IRTFLG)
-C             PRINT *, __FILE__," : 255: Returned from OPENFIL"
-C             PRINT *, __FILE__," : 256: OPENFILEC: ITYPE=",ITYPE
               !write(3,*)' In opfilec, openfil returned filnam:',filnam
               !write(3,*)' In opfilec, nstack,irtflg:',nstack,irtflg
 
