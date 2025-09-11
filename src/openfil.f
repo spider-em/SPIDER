@@ -480,11 +480,8 @@ C                RETURN ERROR FLAG FOR NON-SPIDER IMAGE
                  RETURN
               ENDIF
 
-c               IF (VERBOSE)
-c      &           WRITE(NOUT,*) ' NON-NATIVE BYTE ORDERED SPIDER FILE'
-              IF (VERBOSE) THEN
-                 WRITE(NOUT,*) ' NON-NATIVE BYTE ORDERED SPIDER FILE'
-              ENDIF
+              IF (VERBOSE)
+     &           WRITE(NOUT,*) ' NON-NATIVE BYTE ORDERED SPIDER FILE'
             ENDIF
 C           END ITYPE-DIMENSIONS IF-THEN
 
