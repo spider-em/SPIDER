@@ -1,4 +1,4 @@
-head	1.14;
+head	1.16;
 access;
 symbols
 	pre_mrcs:1.11
@@ -6,6 +6,16 @@ symbols
 locks; strict;
 comment	@c @;
 
+
+1.16
+date	2025.10.25.15.31.03;	author dean;	state Exp;
+branches;
+next	1.15;
+
+1.15
+date	2025.10.21.19.26.55;	author dean;	state Exp;
+branches;
+next	1.14;
 
 1.14
 date	2020.01.13.19.20.24;	author leith;	state Exp;
@@ -82,23 +92,27 @@ desc
 @@
 
 
-1.14
+1.16
 log
-@relion_display --i blank needed
+@(SP_DBUGIO)
+renamed temp files
 @
 text
 @
+
 C++*********************************************************************
 C
-C  DISP.F  -- EXTRACTED FROM COPYTOJPED            Jan 20 ArDean Leith
+C  DISP.F  -- EXTRACTED FROM COPYTOJPED           Jan 2020 ArDean Leith
+C          -- IRTFLG 654321                       Oct 2025 ArDean Leith
+C          -- REMOVE MRC EXTENSION                Oct 2025 ArDean Leith
 C
 C **********************************************************************
 C=* AUTHOR: A. LEITH                                                   *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2020  Health Research Inc.,                         *
+C=* Copyright 1985-2025  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@@health.ny.gov                                        *
+C=* Email:                                                             *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -138,9 +152,9 @@ C--*********************************************************************
         CHARACTER(LEN=160)    :: COMLIN
  
         CHARACTER(LEN=1)      :: NULL = CHAR(0)
-        LOGICAL               :: VERBOSET,WANTOUT
+        LOGICAL               :: VERBOSET,WANTOUT,SAYIT
         INTEGER               :: NX,NY,NZ,MAXIM,ITYPE,IRTFLG,NLET,NLETC
-        INTEGER               :: lnblnkn,NLETO
+        INTEGER               :: lnblnkn,NLETO,IGOEXT,NDUM
 
         INTEGER, PARAMETER    :: LUN1   = 14 
         INTEGER, PARAMETER    :: LUN2   = 15 
@@ -154,10 +168,21 @@ C--*********************************************************************
 
 C       OPEN INPUT FILE, WHOLE STACK NOT ALLOWED
         MAXIM = 0
+        ITYPE = 0   ! ?
         CALL OPFILEC(0,.TRUE.,FILOLD,LUN1,'O',ITYPE,
      &               NX,NY,NZ,MAXIM,'SPIDER OR MRC INPUT',
      &               .FALSE.,IRTFLG)
         IF (IRTFLG .NE. 0) RETURN
+
+        IF (NZ > 1) THEN
+           CALL ERRT(101,'CAN NOT DISPLAY A VOLUME',NDUM)
+           RETURN
+        ENDIF
+
+#if defined (SP_DBUGIO)
+        !nletc = lnblnkn(filold)
+        !write(3,*)' In disp; nletc,filold: ',nletc,filold(:nletc)
+#endif
 
         IF (IMAMI .NE. 1) 
      &      CALL NORM3(LUN1,NX,NY,NZ,FMAX,FMIN,AV)
@@ -165,24 +190,47 @@ C       OPEN INPUT FILE, WHOLE STACK NOT ALLOWED
 C       IF MRC AND ORIGIN IS 'LL' FLIP ORIGIN FOR DISPLAY
         CALL LUNFLIPORG_MRC(LUN1,NX,NY,NZ,.FALSE.,IRTFLG)
 
-C       JPEG OUTPUT FILE NAME
+C       CREATE JPEG OUTPUT FILE NAME
         NLET   = lnblnkn(FILOLD)
-        FILNEW = FILOLD(:NLET) // '.jpg'
-        NLET   = NLET + 4
+        IGOEXT = SCAN(FILOLD,'.')
+        IF(IGOEXT > 0 .AND. IGOEXT < NLET) NLET = IGOEXT - 1
+
+#if defined (SP_DBUGIO)
+        write(3,*)' In disp; nlet,filold(:nlet): ',nlet,filold(:nlet)
+#endif
+
+        !FILNEW = FILOLD(:NLET) // '.jpg'
+        !NLET   = NLET + 4
+
+        FILNEW = 'jnk_temp_for_display.jpg'
+        NLET   = lnblnkn(FILNEW)
+
+#if defined (SP_DBUGIO)
+        write(3,*)' In disp; nlet,filnew(:nlet): ', nlet,filnew(:nlet)
+#endif
 
 C       CONVERT IMAGE FILE INTO JPG FILE
+C       COPYTOJPG HAS A DELAY NEAR END SINCE AN INTERMEDIATE FILE .gray
+C       IS CREATED TO HANDLE FLOATING POINTS AND NEGATIVE VALUES
+
         VERBOSET = .FALSE.
         CALL COPYTOJPG(LUN1,LUN2,FILNEW,NX,NY,NZ, VERBOSET,IDELAY)
 
-        IRTFLG = -999   ! KEEP LOWERCASE
+        IRTFLG = 654321   ! KEEP LOWERCASE AND ACCEPT <CR>
         CALL RDPRMC(OPTIONS,NLETO,.TRUE.,
      &          'IMAGEMAGICK DISPLAY OPTIONS (or <CR>)',NULL,IRTFLG)
 
         WRITE(COMLIN,90) OPTIONS(1:NLETO),FILNEW(1:NLET)
 90      FORMAT( ' display ', A,' ',A, ' &' )
 
-C       DO NOT ECHO COMLIN
-        CALL CSVMS(COMLIN,.FALSE.,IRTFLG)
+#if defined (SP_DBUGIO)
+        write(3,*)' In disp; comlin: ',comlin
+        !sayit = .TRUE.
+#endif
+
+C       SAYIT: ECHO COMLIN TO OUTPUT
+        SAYIT = .FALSE.
+        CALL CSVMS(COMLIN,SAYIT,IRTFLG)
 
         END
 
@@ -219,7 +267,7 @@ C       ----------------- DISP_RELION ---------------------------------
      &              NULL,IRTFLG)
         IF (IRTFLG .NE. 0) RETURN
 
-        WRITE(COMLIN,90) ,FILELINE(1:NLET1), OPTIONS(1:NLET2)
+        WRITE(COMLIN,90) FILELINE(1:NLET1), OPTIONS(1:NLET2)
 90      FORMAT( ' relion_display --i ', A,' ',A, ' &' )
 
 C       DO NOT ECHO COMLIN
@@ -284,6 +332,77 @@ gyan 877% relion_display -h
                           --version : Print RELION version and exit
 #endif
 
+@
+
+
+1.15
+log
+@removed .mrc from jpeg filename
+display options do not fail with ifort debugger now
+@
+text
+@d2 1
+d57 1
+a57 1
+        INTEGER               :: lnblnkn,NLETO,IGOEXT
+d71 1
+d77 10
+d96 8
+a103 1
+        IF(IGOEXT .LT. NLET) NLET = IGOEXT - 1
+d105 6
+a110 2
+        FILNEW = FILOLD(:NLET) // '.jpg'
+        NLET   = NLET + 4
+a122 8
+        SAYIT = .FALSE.
+
+#if defined (SP_DBUGIO)
+        write(3,*)' In disp; nleto,options(:nleto): ',
+     &                       nleto,options(:nleto)
+        !sayit = .TRUE.
+#endif
+
+d132 1
+@
+
+
+1.14
+log
+@relion_display --i blank needed
+@
+text
+@d4 3
+a6 1
+C  DISP.F  -- EXTRACTED FROM COPYTOJPED            Jan 20 ArDean Leith
+d12 1
+a12 1
+C=* Copyright 1985-2020  Health Research Inc.,                         *
+d14 1
+a14 1
+C=* Email: spider@@health.ny.gov                                        *
+d54 1
+a54 1
+        LOGICAL               :: VERBOSET,WANTOUT
+d56 1
+a56 1
+        INTEGER               :: lnblnkn,NLETO
+d81 1
+a81 1
+C       JPEG OUTPUT FILE NAME
+d83 3
+d90 3
+d96 1
+a96 1
+        IRTFLG = -999   ! KEEP LOWERCASE
+d100 8
+d111 7
+a117 2
+C       DO NOT ECHO COMLIN
+        CALL CSVMS(COMLIN,.FALSE.,IRTFLG)
+d154 1
+a154 1
+        WRITE(COMLIN,90) ,FILELINE(1:NLET1), OPTIONS(1:NLET2)
 @
 
 

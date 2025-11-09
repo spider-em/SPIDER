@@ -1,4 +1,4 @@
-head	1.46;
+head	1.48;
 access;
 symbols
 	pre_mrcs:1.42
@@ -20,6 +20,16 @@ symbols
 locks; strict;
 comment	@c @;
 
+
+1.48
+date	2025.10.25.15.34.03;	author dean;	state Exp;
+branches;
+next	1.47;
+
+1.47
+date	2025.10.20.13.51.27;	author dean;	state Exp;
+branches;
+next	1.46;
 
 1.46
 date	2020.01.09.17.59.57;	author leith;	state Exp;
@@ -256,15 +266,16 @@ desc
 @@
 
 
-1.46
+1.48
 log
-@renamed from copytomrc_new.f
+@fixed some stk bugs
+defined(SP_DBUGIO)
 @
 text
 @
 C ++********************************************************************
 C
-C COPYTOMRC    MODIFIED FROM COPYMRC               FEB 02 ArDean Leith         
+C COPYTOMRC    MODIFIED FROM COPYMRC               FEB 02 ArDean Leith  
 C              ISSWAB ADDED                        JUL 02 ArDean Leith
 C              FLIP QUESTION                       MAR 03 ArDean Leith
 C              BAD IRECMRC4 & FLIP                 SEP 03 ArDean Leith
@@ -284,14 +295,15 @@ C              BOTLEFT OPTION REINTRODUCED         SEP 16 ArDean Leith
 C              CREATES LITTLE ENDED FILES ONLY     JAN 18 ArDean Leith
 C              GETLAB PARAMETERS                   NOV 19 ArDean Leith
 C              REWRITE                             DEC 19 ArDean Leith
+C              FIXED STACKS                        OCT 25 ArDean Leith
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2019  Health Research Inc.,                         *
+C=* Copyright 1985-2025  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@@health.ny.gov                                        *
+C=* Email:                                                             *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -319,6 +331,48 @@ C               1 : INTEGER*2 (SIGNED)
 C               2 : REALS
 C               6 : INTEGER*2 (UNSIGNED)
 C
+C  CALL TREE:
+C  IF ('CP....')   
+C     |
+C  COPY1
+C     |
+C  IF ('CP TO MRC')    SPIDER FILE(S) TO MRC IMAGE(S) OR VOLUME(S)
+C     |
+C  COPYTOMRC
+C     |
+C     OPEN FIRST SPIDER INPUT FILE
+C     OPFILES(0,LUNSPI,LUNDOC,LUNXM1,  
+C     &       .TRUE.,FILNAM1,NLET1, 'E',
+C     &       IFORM1,NX1,NY1,NZ1,NSTACK1,
+C     &       'SPIDER INPUT FILE NAME OR TEMPLATE (e.g. SPI_STK@@**)~~9'
+C     &       TRUE., ILIST1,NILMAX, 
+C     &       NOT_USED,NGOT1,IMG1, IRTFLG) 
+C     |
+C     FILERD (FILNAM2,NLET2,NULL,  
+C     &       'MRC OUTPUT FILE NAME OR TEMPLATE (e.g. MRC_STK.mrc@@***)~'
+C     &       IRTFLG)
+C     OPEN FIRST MRC OUTPUT FILE 
+C     OPFILES(LUNSPI,LUNMRC,LUNDOC,LUNXM2, 
+C     &       .FALSE.,FILNAM2,NLET2,DISP,
+C     &       IFORM1,NX1,NY1,NZ1,NSTACK2,
+C     &       FILNAM2,
+C     &       .TRUE., ILIST2,NILMAX, 
+C     &       NOT_USED,NGOT2,IMG2, IRTFLG) 
+C       |
+C     LOOP
+C       REDLIN
+C        |
+C       WRTLIN
+C        |
+C       OPEN NEXT SPIDER INPUT & MRC OUTPUT FILES
+C        |
+C       NEXTFILES(NINDX1,NINDX2,  ILIST1,ILIST2,   
+C               .FALSE., LUNXM1,LUNXM2,
+C               NGOT1,NGOT2,    NSTACK1,NSTACK2,  
+C               LUNSPI,LUNSPI,LUNMRC, FILNAM1,FILNAM2,
+C               IMG1,IMG2, IRTFLG)
+C        |
+C     END LOOP
 C23456789012345678901234567890123456789012345678901234567890123456789012
 C***********************************************************************
 
@@ -357,7 +411,7 @@ C***********************************************************************
       CHARACTER (LEN=4)        :: CAXIS,CSTR
       INTEGER                  :: ICOMM,MYPID,MPIERR
       INTEGER                  :: IFORM1,NX1,NY1,NZ1,NSTACK1,NSTACK2
-      INTEGER                  :: NDUM,NGOT1,NGOT2,IMG1,IMG2,NILMAX,IVAL
+      INTEGER                  :: NGOT1,NGOT2,IMG1,IMG2,NILMAX,IVAL
       INTEGER                  :: MAXIM1,MAXIM2,NLET1,NLET2
       INTEGER                  :: LENT,NOT_USED,IRECIN
 
@@ -381,34 +435,28 @@ C     OPEN FIRST INPUT FILE, DISP = 'E' DOES NOT STOP ON ERROR
       PROMPT =
      &     'SPIDER INPUT FILE NAME OR TEMPLATE (e.g. SPI_STK@@**)~~9'
       CALL OPFILES(0,LUNSPI,LUNDOC,LUNXM1,  
-     &               .TRUE.,FILNAM1,NLET1, 'E',
+     &               .TRUE.,FILNAM1,NLET1, 'O',
      &               IFORM1,NX1,NY1,NZ1,NSTACK1,
      &               PROMPT,
      &              .TRUE., ILIST1,NILMAX, 
-     &               NDUM,NGOT1,IMG1, IRTFLG) 
+     &               NOT_USED,NGOT1,IMG1, IRTFLG) 
 
+
+#if defined(SP_DBUGIO)
+      !write(3,*)' ------- RETURNED TO: COPYTOMRC --------'
+#endif
 
       CALL LUNGETIS_MRC(LUNSPI,IS_MRC,IRTFLG)      
       CALL LUNGETISBARE(LUNSPI,IS_BARE,IRTFLG)
 
       IF (IS_MRC) THEN
-         CALL ERRT(101,'OPERATION DOES NOT READ MRC FILES',NDUM)
+         CALL ERRT(101,'OPERATION DOES NOT READ MRC FILES',IDUM)
          GOTO 999
       ENDIF
 
-      !write(3,'(A,4i6)')' In nstack1,ngot1,img1:',nstack1,ngot1,img1
-
-      CALL FILERD(FILNAM2,NLET2,NULL,
-     &       'MRC OUTPUT FILE NAME OR TEMPLATE (e.g. **@@MRC_STK.mrc)~',
-     &       IRTFLG)
-      IF (IRTFLG .NE. 0) GOTO 999
-
-      IF (INDEX(FILNAM2,'.mrc') <= 0 .AND.
-     &    INDEX(FILNAM2,'.MRC') <= 0) THEN
-         CALL ERRT(101,
-     &     'OUTPUT FILE NAME MUST HAVE MRC/mrc EXTENSION',NDUM)
-         GOTO 999
-      ENDIF
+#if defined(SP_DBUGIO)
+      !write(3,'(A,4i6)')' In nstack1; ngot1,img1:',nstack1,ngot1,img1
+#endif
 
 
 C     FIND HEADER VALUES FOR THE MRC FILE
@@ -427,12 +475,10 @@ C     LEGACY INPUT TRAP
       IF (MRCMODE == 16) MRCMODE = 6   ! 16 BIT UNSIGNED INT
       IF (MRCMODE == 32) MRCMODE = 2   ! 32 BIT FLOATING POINT
 
-      WRITE(NOUT,*) ' ' 
-      WRITE(NOUT,*) ' MRC DATA ORIGIN     UL: UPPER LEFT, ',
+       WRITE(NOUT,*) ' MRC DATA ORIGIN     UL: UPPER LEFT, ',
      &              ' LL: LOWER LEFT  '
       IF (NZ1 > 1) THEN
-         WRITE(NOUT,*) ' MRC HANDEDNESS  L: LEFT, ',
-     &                 '        R:  RIGHT '
+         WRITE(NOUT,*) ' MRC HANDEDNESS  L: LEFT, ','        R:  RIGHT '
       ENDIF
 
       CAXIS(1:2) = 'UL'        ! DEFAULT
@@ -494,7 +540,7 @@ C        NEED FMIN & FMAX (SIG IN COMMON: MASTER)
          FMAXT = FMAX
          FAVT  = AV
          FSIGT = SIG
-C     UNFININISHED HERE !!!!!!!!!!!!!!!!!!!
+C        UNFININISHED HERE !!!!!!!!!!!!!!!!!!!
 
       ELSEIF (MRCMODE == 0  .AND. MAXIM1 < 0 ) THEN
 C        8 BIT SIGNED INTEGER IMAGE OR VOLUME (NOT WHOLE STACK)
@@ -537,6 +583,7 @@ C        NEED FMIN & FMAX (SIG IN COMMON: MASTER)
             I4VAL = FMIN
             CALL ERRT(102,'POSSIBLE 16 BIT INTEGER UNDERFLOW',I4VAL)
             GOTO 999
+
          ELSEIF (FMAX > HUGE(I2VAL)) THEN 
             I4VAL = FMAX
             CALL ERRT(102,'POSSIBLE 16 BIT INTEGER OVERFLOW',I4VAL)
@@ -570,21 +617,26 @@ C          NOTHING IN SPIDER HEADER?
       ENDIF
       IF (IRTFLG .NE. 0) RETURN
 
+      WRITE(NOUT,*) ' ' 
       NSTACK2 =  1   ! UNUSED
-      DISP    = 'U'  ! NEW OUTPUT FILE        
+      DISP    = 'N'  ! NEW OUTPUT FILE        
 
 C     OPEN FIRST OUTPUT FILE 
-      IMG2 = IMG1
-      CALL OPFILES(LUNSPI,LUNMRC,LUNDOC,LUNXM2, 
-     &              .FALSE.,FILNAM2,NLET2,DISP,
-     &              IFORM1,NX1,NY1,NZ1,NSTACK2,
-     &              FILNAM2,
-     &              .TRUE., ILIST2,NILMAX, 
-     &              NDUM,NGOT2,IMG2, IRTFLG) 
+      IMG2   = IMG1
+      PROMPT =
+     &    'MRC OUTPUT FILE NAME OR TEMPLATE (e.g.MRC_STK@@***.mrc)~'
 
-      !write(3,'(A,4i6)')' In copytomrc nstack2,ngot2:',nstack2,ngot2
-      !write(3,'(A,i6,A)')' In copytomrc img2:',img2
-      !write(3,*)         ' In copytomrc caxis:',caxis
+      CALL OPFILES(LUNSPI,LUNMRC,LUNDOC,LUNXM2, 
+     &              .TRUE.,FILNAM2,NLET2,DISP,
+     &              IFORM1,NX1,NY1,NZ1,NSTACK2,
+     &              PROMPT,
+     &              .FALSE., ILIST2,NILMAX, 
+     &              NOT_USED,NGOT2,IMG2, IRTFLG) 
+
+#if defined (SP_DBUGIO)
+      write(3,*)' In copytomrc; nstack2,nilmax: ', nstack2,nilmax
+      write(3,*)' In copytomrc; ngot2,img2: ',     ngot2,img2
+#endif
 
       CALL LUNSETMODE_MRC(LUNMRC,MRCMODE,IRTFLG)
       CALL LUNSETHAND_MRC(LUNMRC,CAXIS,IRTFLG)
@@ -639,13 +691,23 @@ C              16 BIT UNSIGNED INTEGER
 
 
 C        OPEN NEXT SET OF I/O FILES, UPDATES NINDX1 & NINDX2 
-         !write(3,*)' In copytomrc, calling nextfiles:',nindx1,nindx2 
+#if defined (SP_DBUGIO)
+         write(3,*)' In copytomrc; calling nextfiles:',nindx1,nindx2 
+#endif
 
          CALL NEXTFILES(NINDX1,NINDX2,  ILIST1,ILIST2, 
      &                  .FALSE., LUNXM1,LUNXM2,
      &                  NGOT1,NGOT2,    NSTACK1,NSTACK2,  
      &                  LUNSPI,LUNSPI,LUNMRC, FILNAM1,FILNAM2,
      &                  IMG1,IMG2, IRTFLG)
+
+#if defined (SP_DBUGIO)
+         write(3,'(a,5i5)')'  After nextfiles; ngot1,nstack1,img1: ',
+     &                                         ngot1,nstack1,img1
+         write(3,'(a,5i5)')'  After nextfiles; ngot2,nstack2,img2: ',
+     &                                         ngot2,nstack2,img2
+#endif
+
          IF (IRTFLG .NE. 0) EXIT      ! ERROR / END OF INPUT STACK
       ENDDO
 
@@ -849,7 +911,7 @@ C          SET STARTING POSITION FOR MRC DATA
            IPOSMRC = IPOSMRC * 4
            IPOSMRC = IOFFSET + IPOSMRC + 1
 
-c          write(6,'(2x,A,3i6,i12)') '  nindx,ilist,imgnumout,iposmrc:',
+c        write(6,'(2x,A,3i6,i12)') '  nindx,ilist,imgnumout,iposmrc:',
 c     &                          nindx,ilist(nindx),imgnumout,iposmrc
 
            DO IRECIN = 1,NY*NZ
@@ -894,6 +956,110 @@ C          OPEN NEXT SPIDER INPUT FILE, UPDATES NINDX
 
         END
 
+@
+
+
+1.47
+log
+@cosmetic
+@
+text
+@d24 1
+d60 42
+d140 1
+a140 1
+      INTEGER                  :: NDUM,NGOT1,NGOT2,IMG1,IMG2,NILMAX,IVAL
+d164 1
+a164 1
+     &               .TRUE.,FILNAM1,NLET1, 'E',
+d168 1
+a168 1
+     &               NDUM,NGOT1,IMG1, IRTFLG) 
+d171 4
+d179 1
+a179 1
+         CALL ERRT(101,'OPERATION DOES NOT READ MRC FILES',NDUM)
+d183 3
+a185 16
+      !write(3,'(A,4i6)')' In nstack1,ngot1,img1:',nstack1,ngot1,img1
+
+C     PROMPT: ~ IN LAST CHAR MEANS SKIP ADDING "FILE" AT END OF PROMPT
+
+
+      CALL FILERD(FILNAM2,NLET2,NULL,
+     &       'MRC OUTPUT FILE NAME OR TEMPLATE (e.g. MRC_STK.mrc@@***)~',
+     &       IRTFLG)
+      IF (IRTFLG .NE. 0) GOTO 999
+
+      IF (INDEX(FILNAM2,'.mrc') <= 0 .AND.
+     &    INDEX(FILNAM2,'.MRC') <= 0) THEN
+         CALL ERRT(101,
+     &     'OUTPUT FILE NAME MUST HAVE MRC/mrc EXTENSION',NDUM)
+         GOTO 999
+      ENDIF
+d204 1
+a204 2
+      WRITE(NOUT,*) ' ' 
+      WRITE(NOUT,*) ' MRC DATA ORIGIN     UL: UPPER LEFT, ',
+d269 1
+a269 1
+C     UNFININISHED HERE !!!!!!!!!!!!!!!!!!!
+d312 1
+d346 1
+d348 1
+a348 1
+      DISP    = 'U'  ! NEW OUTPUT FILE        
+d351 4
+a354 1
+      IMG2 = IMG1
+d356 1
+a356 1
+     &              .FALSE.,FILNAM2,NLET2,DISP,
+d358 8
+a365 10
+     &              FILNAM2,
+     &              .TRUE., ILIST2,NILMAX, 
+     &              NDUM,NGOT2,IMG2, IRTFLG) 
+
+
+
+
+      !write(3,'(A,4i6)')' In copytomrc nstack2,ngot2:',nstack2,ngot2
+      !write(3,'(A,i6,A)')' In copytomrc img2:',img2
+      !write(3,*)         ' In copytomrc caxis:',caxis
+d420 3
+a422 1
+         !write(3,*)' In copytomrc, calling nextfiles:',nindx1,nindx2 
+d429 8
+d640 1
+a640 1
+c          write(6,'(2x,A,3i6,i12)') '  nindx,ilist,imgnumout,iposmrc:',
+@
+
+
+1.46
+log
+@renamed from copytomrc_new.f
+@
+text
+@d4 1
+a4 1
+C COPYTOMRC    MODIFIED FROM COPYMRC               FEB 02 ArDean Leith         
+d29 1
+a29 1
+C=* Copyright 1985-2019  Health Research Inc.,                         *
+d31 1
+a31 1
+C=* Email: spider@@health.ny.gov                                        *
+d138 3
+d142 1
+a142 1
+     &       'MRC OUTPUT FILE NAME OR TEMPLATE (e.g. **@@MRC_STK.mrc)~',
+d174 1
+a174 2
+         WRITE(NOUT,*) ' MRC HANDEDNESS  L: LEFT, ',
+     &                 '        R:  RIGHT '
+d323 3
 @
 
 

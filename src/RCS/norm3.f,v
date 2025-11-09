@@ -1,4 +1,4 @@
-head	1.19;
+head	1.22;
 access;
 symbols
 	pre_mrcs:1.18
@@ -23,6 +23,21 @@ symbols
 locks; strict;
 comment	@c @;
 
+
+1.22
+date	2025.10.16.19.21.03;	author dean;	state Exp;
+branches;
+next	1.21;
+
+1.21
+date	2025.10.07.13.47.59;	author dean;	state Exp;
+branches;
+next	1.20;
+
+1.20
+date	2025.09.24.18.31.23;	author dean;	state Exp;
+branches;
+next	1.19;
 
 1.19
 date	2019.11.04.17.35.09;	author leith;	state Exp;
@@ -125,9 +140,9 @@ desc
 @
 
 
-1.19
+1.22
 log
-@mrc_support
+@changed debug output, added comments
 @
 text
 @
@@ -140,14 +155,15 @@ C           ERROR MESSAGES                         NOV 10 ArDean Leith
 C           NORMVALSP ADDED                        AUG 11 ArDean Leith
 C           NORMVALSP ADDED                        AUG 11 ArDean Leith
 C           USED SETPRMB, IMPLICIT                 JUL 19 ArDean Leith
+C           ADDED DEBUG OUTPUT                     OCT 25 ArDean Leith
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2019  Health Research Inc.,                         *
+C=* Copyright 1985-2025  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@@health.ny.gov                                        *
+C=* Email:                                                             *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -174,7 +190,7 @@ C        FMAX         MAXIMUM OF VOLUME                        (RET.)
 C        FMIN         MINIMUM OF VOLUME                        (RET.)
 C        AV           AVERAGE OF VOLUME                        (RET.)
 C
-C    NOTE:    THIS USES UNLABELED COMMON!!
+C    NOTE:    THIS USES LEGACY UNLABELED COMMON!!
 C             SIG RETURNED IN COMMON  (LEGACY ISSUE)
 C
 C--*********************************************************************
@@ -183,23 +199,24 @@ C--*********************************************************************
 
       IMPLICIT NONE
 
-      INTEGER          :: LUN,NX,NY,NZ
-      REAL             :: FMAX,FMIN,AV
+      INTEGER            :: LUN,NX,NY,NZ,nynz
+      REAL               :: FMAX,FMIN,AV
 
-      REAL             :: BUF        
-      COMMON BUF(1)
+      INTEGER, PARAMETER :: MAX_UNLABELED_COM = 5000000
+C     Sept 2025 al to fix for Gfort warning on threaded use
+      REAL , SAVE        :: BUF(MAX_UNLABELED_COM) ! LEGACY COMMON BLOCK
 
-      INTEGER          :: NSAMC,NROWC,IREC,NLABEL,IFORM,IMAMI,IHIST
-      REAL             :: FMAXC,FMINC,AVC,SIG
+      INTEGER            :: NSAMC,NROWC,IREC,NLABEL,IFORM,IMAMI,IHIST
+      REAL               :: FMAXC,FMINC,AVC,SIG
       COMMON /MASTER/NSAMC,NROWC,IREC,NLABEL,IFORM,IMAMI,FMAXC,FMINC,
      &                    AVC,SIG,IHIST
 
-      INTEGER          :: LUNT,NIN,NOUT
+      INTEGER            :: LUNT,NIN,NOUT
       COMMON /UNITS/LUNT,NIN,NOUT
 
-      DOUBLE PRECISION :: DAV,DAV2,DTOP,FNALL,DTEMP
-      REAL             :: B,DIFF 
-      INTEGER          :: NE,IRECT,K
+      DOUBLE PRECISION   :: DAV,DAV2,DTOP,FNALL,DTEMP
+      REAL               :: B,DIFF 
+      INTEGER            :: NE,IRECT,K
 
       FNALL = FLOAT(NX) * FLOAT(NY) * FLOAT(NZ)
       IF (FNALL <= 0) THEN
@@ -208,6 +225,12 @@ C--*********************************************************************
          RETURN
       ENDIF
 
+#if defined(SP_DBUGIO)
+      nynz = ny * nz
+      write(3,'(A,5i6)')   '  In norm3; nx,ny,nz,nynz: ',nx,ny,nz,nynz
+      write(3,'(A,f12.2)') '  In norm3; fnall: ',fnall
+#endif
+
       DAV  = 0.0
       DAV2 = 0.0
 
@@ -215,7 +238,9 @@ C--*********************************************************************
       FMAX = -FMIN
 
       DO IRECT = 1,NY*NZ
+
          CALL REDLIN(LUN,BUF,NX,IRECT)
+
          DO K = 1,NX
             B    = BUF(K)
             FMAX = MAX(B,FMAX)
@@ -226,11 +251,11 @@ C--*********************************************************************
       ENDDO
 
       AV    = DAV / FNALL
-      AVC   = AV
-      FMAXC = FMAX
-      FMINC = FMIN
+      AVC   = AV            ; SET IN COMMON /MASTER/
+      FMAXC = FMAX          ; SET IN COMMON /MASTER/
+      FMINC = FMIN          ; SET IN COMMON /MASTER/
 
-      DTOP  = DAV2 - DAV * DAV / FNALL
+      DTOP  = DAV2 - DAV * DAV / FNALL   ; NOT IN COMMON /MASTER/
 
       DIFF  = FMAX - FMIN
       IF (DIFF <= TINY(DIFF)) THEN
@@ -249,21 +274,26 @@ C        DIVISION BY ZERO
 
       ELSE
 C        CAN CALCULATE SIG
-         SIG = DSQRT( DTOP / DBLE(FNALL - 1.0))
+         SIG = DSQRT( DTOP / DBLE(FNALL - 1.0)) ; NOT IN COMMON /MASTER/
       ENDIF
 
+C     VALUES ARE SET IN COMMON BY NAME ABOVE ; SET IN COMMON /MASTER/
 
-      !write(6,*)' In norm3, before setprmb, fmin,fmax: ',fmin,fmax
 
-C     VALUES ARE SET IN COMMON BY NAME ABOVE
+#if defined(SP_DBUGIO)
+      write(3,'(A,5(2x,i6),f8.2)')
+     &     '  In norm3; lun,nx,ny,irect,k,b: ',lun,nx,ny,irect,k,b
 
-C     WRITE(3,90) FMIN,FMAX,AV,SIG
-90    FORMAT('  FMIN: ', 1PG10.3,
-     &       '  FMAX: ', 1PG10.3,
-     &       '  AV: ',   1PG12.5,
-     &       '  SIG: ',  1PG12.5)
+      write(3,90) fmin,fmax,av,sig
+90    format('  Fmin: ', 1PG10.3,
+     &       '  Fmax: ', 1PG10.3,
+     &       '  Av: ',   1PG12.5,
+     &       '  Sig: ',  1PG12.5)
 
-C     SET VALUES IN FILE HEADER
+      write(3,*)' In norm3; Calling setprmb; lun,fmax: ',lun,fmax
+#endif
+
+C     PLACE STAT VALUES IN FILE HEADER
       CALL SETPRMB(LUN,FMAX,FMIN,AV,SIG)
 
       END
@@ -659,6 +689,117 @@ C          TRAP FOR BLANK IMAGE AREA IMPRECISION
 
         END
 
+@
+
+
+1.21
+log
+@added debug output
+@
+text
+@d55 1
+a55 1
+      INTEGER            :: LUN,NX,NY,NZ
+d81 6
+d94 1
+d96 1
+d107 3
+a109 3
+      AVC   = AV
+      FMAXC = FMAX
+      FMINC = FMIN
+d111 1
+a111 1
+      DTOP  = DAV2 - DAV * DAV / FNALL
+d130 1
+a130 1
+         SIG = DSQRT( DTOP / DBLE(FNALL - 1.0))
+d133 1
+a133 2
+C     VALUES ARE SET IN COMMON BY NAME ABOVE
+
+a134 2
+#if defined(SP_DBUG)
+      write(3,*) '  In norm3         ---------- '
+d136 1
+d138 1
+a138 2
+     &     '  In norm3; lun,nx,ny,irect,k,b: ',
+     &                  lun,nx,ny,irect,k,b
+d141 1
+a141 1
+90    FORMAT('  Fmin: ', 1PG10.3,
+d146 1
+a146 4
+      write(3,'(A,I5,2X,F8.1,2X,F8.2)')
+     &     '  In norm3; Calling setprmb, lun,fmax: ',
+     &                                   lun,fmax
+      write(3,*)'  '
+d149 1
+a149 1
+C     SET VALUES IN FILE HEADER
+@
+
+
+1.20
+log
+@MAX_UNLABELED_COM length defined
+@
+text
+@d11 1
+d19 1
+a19 1
+C=* Email: spider@@health.ny.gov                                        *
+d59 2
+a60 1
+      REAL               :: BUF(MAX_UNLABELED_COM) ! LEGACY COMMON BLOCK
+d125 1
+a126 1
+      !write(6,*)' In norm3, before setprmb, fmin,fmax: ',fmin,fmax
+d128 2
+a129 1
+C     VALUES ARE SET IN COMMON BY NAME ABOVE
+d131 15
+a145 5
+C     WRITE(3,90) FMIN,FMAX,AV,SIG
+90    FORMAT('  FMIN: ', 1PG10.3,
+     &       '  FMAX: ', 1PG10.3,
+     &       '  AV: ',   1PG12.5,
+     &       '  SIG: ',  1PG12.5)
+@
+
+
+1.19
+log
+@mrc_support
+@
+text
+@d16 1
+a16 1
+C=* Copyright 1985-2019  Health Research Inc.,                         *
+d45 1
+a45 1
+C    NOTE:    THIS USES UNLABELED COMMON!!
+d54 2
+a55 2
+      INTEGER          :: LUN,NX,NY,NZ
+      REAL             :: FMAX,FMIN,AV
+d57 2
+a58 2
+      REAL             :: BUF        
+      COMMON BUF(1)
+d60 2
+a61 2
+      INTEGER          :: NSAMC,NROWC,IREC,NLABEL,IFORM,IMAMI,IHIST
+      REAL             :: FMAXC,FMINC,AVC,SIG
+d65 1
+a65 1
+      INTEGER          :: LUNT,NIN,NOUT
+d68 3
+a70 3
+      DOUBLE PRECISION :: DAV,DAV2,DTOP,FNALL,DTEMP
+      REAL             :: B,DIFF 
+      INTEGER          :: NE,IRECT,K
 @
 
 

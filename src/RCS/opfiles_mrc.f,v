@@ -1,9 +1,29 @@
-head	1.7;
+head	1.11;
 access;
 symbols;
 locks; strict;
 comment	@c @;
 
+
+1.11
+date	2025.10.25.15.29.18;	author dean;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2025.10.16.19.42.57;	author dean;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2025.09.26.17.21.26;	author dean;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2025.09.26.14.24.25;	author dean;	state Exp;
+branches;
+next	1.7;
 
 1.7
 date	2020.02.06.15.16.57;	author leith;	state Exp;
@@ -45,9 +65,10 @@ desc
 @@
 
 
-1.7
+1.11
 log
-@COMMENTS
+@defined (SP_DBUG) changes
+comments
 @
 text
 @ 
@@ -55,14 +76,15 @@ C++*********************************************************************
 C                                                                      
 C  OPFILES_MRC.F    CREATED FROM OPFILES         7/30/19  ArDean Leith
 C                   COMMENTS                     2/06/20  ArDean Leith
+C                   DEBUG OUTPUT ADDED           9/26/25  ArDean Leith
 C
-C ********************************************************************** 
+C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2020  Health Research Inc.,                         *
+C=* Copyright 1985-2025  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@@health.ny.gov                                        *
+C=*                                                                    *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -76,14 +98,14 @@ C=* General Public License for more details.                           *
 C=* You should have received a copy of the GNU General Public License  *
 C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
-C ********************************************************************** 
+C **********************************************************************
 C 
 C  CONTAINS: OPFILES_MRC, GETOLDIMG_MRC, GETNEWIMG_MRC 
 C
 C  OPFILES_MRC(LUNCP,LUNIMG,LUNDOC,LUNXM,  
 C              ASKNAM,FILPAT,NLET, DISP,
-C              ITYPE,NX,NY,NZ,MAXIM,FOUROK,
-C              IMGNUM, IRTFLG)
+C              ITYPE,NX,NY,NZ,MAXIM,
+C              NTOT,IMGNUM, IRTFLG)
 C 
 C  PURPOSE: SOLICITS FILE NAME(S) AND OPENS FILE(S)
 C           SUPPORT ROUTINE FOR CONVERTING OPERATIONS TO 
@@ -97,7 +119,7 @@ C        LUNXM      UNIT TO OPEN XMIPP SELFILE ON                 (SENT)
 C        ASKNAM     FLAG TO ASK FOR FILE NAME                     (SENT)
 C        FILPAT     FILE NAME PATTERN                             (RET)
 C        NLET       CHARS IN FILE NAME PATTERN                    (RET)
-C        DISP       CHARACTER CONTAINING ONE OF THE               (SENT) 
+C        DISP       CHARACTER CONTAINING ONE OF THE               (SENT) C
 C                   FOLLOWING DISPOSITION SPECIFICATIONS:
 C                   'O'   -  FILE IS ASSUMED TO EXIST.  DIMENSIONS,
 C                            ITYPE AND HEADER INFO (IN COMMON) ARE 
@@ -111,7 +133,7 @@ C                   'N'  -   WANT NEW FILE. SEND NX, NY, NZ & ITYPE.
 C                   'U'  -   IT IS NOT KNOWN IF THE FILE EXISTS.  
 C                            SEND NX, NY, NZ & ITYPE. IF FILE 
 C                            ALREADY EXISTS, IT WILL BE REPLACED.
-C        ITYPE      IFORM FOR FILE                         (SENT OR RET) 
+C        ITYPE      IFORM FOR FILE                         (SENT OR RET) C
 C        NX,NY,NZ   IMAGE SIZE                             (SENT OR RET)
 C
 C        MAXIM      STACK INDICATOR                          (SENT/RET)
@@ -119,16 +141,16 @@ C                   ON INPUT: STACK INDICATOR IF DISP == 'I'     (SENT)
 C                   ON OUTPUT:                                    (RET)
 C                       -2 NON-STACK IMAGE                
 C                       -1 STACKED IMAGE                  
-C                     >= 0 IS CURRENT MAX. IMAGE NO. FOR STACK             
-C        PROMPT     PROMPT FOR FILNAME                            (SENT)
-C                     IF NOT (ASKNAM) THIS IS FILE NAME           (SENT)
-C                     ~ (TILDE) IN LAST CHAR. SAYS SKIP
-C                       "FILE" AT END OF PROMPT
-C                     ~9 IN NEXT TO LAST OR
-C                        NEXT-TO-NEXT-TO LAST
-C                        ACCEPTS AN EXTENSION
-C                        (OTHERWISE DISCARDED!)
-C                     ~6 KEEPS OLD DATE/TIME
+C                     >= 0 IS CURRENT MAX. IMAGE NO. FOR STACK           C 
+C        ILIST      IMAGE NUMBER LIST                             (RET)
+C                     IF NIMAXT < 0 MUST BE SENT
+C                     NOT USED IF SINGLE IMAGE/SELFILE 
+C        NIMAXT     MAX LENGTH OF IMAGE NUMBER LIST              (SENT)
+C                     <0 MEANS DO NOT ASK FOR LIST
+C
+C        NTOT:      # OF IMAGES IN IMAGE NUMBER LIST              (RET)
+C                     ZERO FOR SINGLE IMAGE AND NO * 
+C
 C        IMGNUM     IMAGE NUMBER                              (SENT/RET)
 C                     ON INPUT:   IMAGE NUMBER THAT IS WANTED
 C                     ON OUTPUT:  >=0 IMAGE NUMBER CURRENTLY OPEN 
@@ -163,9 +185,8 @@ C           |   Simple file:     IMG001.MRC
 C           ` -----------------> OPFILEC --> OPENFIL_MRC --> OPENFIL_O_MRC  
 C                                        --> OPENFIL_MRC --> OPENFIL_N_MRC
 C
-C23456789 123456789 123456789 123456789 123456789 123456789 123456789 12 
+C23456789 123456789 123456789 123456789 123456789 123456789 123456789 12
 C--********************************************************************* 
-
        SUBROUTINE OPFILES_MRC(LUNCP,LUNIMG,LUNDOC,
      &                        FILPAT,NLET, DISP,
      &                        ITYPE,NX,NY,NZ,MAXIM,
@@ -203,13 +224,20 @@ C--*********************************************************************
        LOCAST   = INDEX(FILPAT(1:NLET),'*')
        IS_BAREL = (LOCAT > 1 .AND. FILPAT(LOCAT-1:LOCAT-1) == '/')
        
-       !write(3,*)' In opfiles_mrc,locast,locat,:',locast,locat,is_barel
-       !write(3,*)' In opfiles_mrc, imgnum:',imgnum,filpat
+#if defined (SP_DBUGIO)
+       write(3,*)' In opfiles_mrc, nlet: ',          nlet
+       write(3,*)' In opfiles_mrc, filpat(:nlet): ', filpat(1:nlet)
+       write(3,*)' In opfiles_mrc; locat,locast:',   locat,locast
+       write(3,*)' In opfiles_mrc; is_barel:',       is_barel
+       write(3,*)' In opfiles_mrc; imgnum:',         imgnum
+#endif
 
        IF (LOCAST > 0 .AND. LOCAST < LOCAT) THEN
 C         TEMPLATED STACKED MRC FILE: ***@@STK.MRC --------- **@@STK.MRC
 
-          !write(3,*)' In opfiles_mrc, opening: ',filpat(1:nlet)
+#if defined (SP_DBUGIO)
+          write(3,*)' In opfiles_mrc, Opening ggg: ',filpat(1:nlet)
+#endif
         
 C         SUBSTITUTE STACKED IMGNUM INTO FILE NAME PATTERN -> FILNAM 
           CALL FILGET_AT(FILPAT,IMGNUM,FILNAM,NLET,IRTFLG)
@@ -219,38 +247,46 @@ C         OPEN IMGNUM IN EXISTING MRC STACK FILE
           SAYIT  = .TRUE.
           MAXIM  = 0          ! OPEN SPECIFIC IMAGE  
 
-          !write(3,*)' In opfiles_mrc, opening: ',filnam(1:nlet)
+#if defined (SP_DBUGIO)
+          write(3,*)' In opfiles_mrc, Calling opfilec: ',filnam(1:nlet)
+#endif
 
-	  CALL OPFILEC(0,.FALSE.,FILNAM,LUNIMG,DISP,
+          CALL OPFILEC(0,.FALSE.,FILNAM,LUNIMG,DISP,
      &                 ITYPE,NX,NY,NZ, 
-     & 		       MAXIM,' ',FOUROK,IRTFLG) 
+     &                       MAXIM,' ',FOUROK,IRTFLG) 
           IF (IRTFLG .NE. 0) RETURN
 
 C         THIS IS NOT A BARE STACK REQUEST
           CALL LUNSETISBARE_MRC(LUNIMG,.FALSE.,IRTFLG)
 
-          !write(3,*)' In opfiles_mrc, maxim: ',maxim,imgnum
+#if defined (SP_DBUGIO)
+          write(3,*)' In opfiles_mrc; maxim,imgnum: ',maxim,imgnum
+#endif
           RETURN
+
 
        ELSEIF (LOCAST > 0) THEN
 C         A SIMPLE FILE TEMPLATE: IMG***.mrc ------------- IMG***.mrc
 
 C         SUBSTITUTE IMGNUM INTO FILE NAME PATTERN -> FILNAM   
           CALL  FILGET(FILPAT,FILNAM,NLET,IMGNUM,IRTFLG)
-	  IF (IRTFLG .NE. 0) RETURN 
+          IF (IRTFLG .NE. 0) RETURN 
 
 C         OPEN THE FILE
           MAXIM = 0 
-	  CALL OPFILEC(LUNCP,.FALSE.,FILNAM,LUNIMG,DISP,
+          CALL OPFILEC(LUNCP,.FALSE.,FILNAM,LUNIMG,DISP,
      &                 ITYPE,NX,NY,NZ, 
-     & 		       MAXIM,' ',FOUROK,IRTFLG) 
-	  IF (IRTFLG .NE. 0) RETURN 
+     &                       MAXIM,' ',FOUROK,IRTFLG) 
+          IF (IRTFLG .NE. 0) RETURN 
 
 C         THIS IS NOT A BARE STACK REQUEST
           CALL LUNSETISBARE_MRC(LUNIMG,.FALSE.,IRTFLG)
 
-c          write(3,*)' Opened templated file: ',filnam(1:20),
-c     &              '  for:',imgnum
+#if defined (SP_DBUGIO)
+          write(6,*)' Opened templated file: ',filnam(1:20),
+     &              '  with:',imgnum
+#endif
+
 
        ELSEIF (LOCAT == 1 .OR. IS_BAREL) THEN
 C         WHOLE BARESTACK:  @@STK.mrc  ---------------------- @@STK.mrc
@@ -266,7 +302,7 @@ C         SUBSTITUTE STACKED IMGNUM INTO FILE NAME PATTERN -> FILNAM
 C         OPEN FIRST FILE IN MRC STACK
           IMGNUM = 1
           MAXIM  = 1
-         !write(3,*)' In opfiles_mrc, filnamnoat: ',filnamnoat(1:nlet)
+         !write(6,*)' In opfiles_mrc; filnamnoat: ',filnamnoat(1:nlet)
 
           INQUIRE(FILE=FILNAMNOAT,OPENED=ISOPEN,NUMBER=LUNOP)
           MESG = '  FILE: ' // FILNAMNOAT(1:NLET)//'  ALREADY OPENED ON' 
@@ -279,40 +315,74 @@ C         OPEN FIRST FILE IN MRC STACK
 
 C         SUBSTITUTE STACKED IMGNUM INTO FILE NAME PATTERN -> FILNAM   
           CALL FILGET_AT(FILPAT,IMGNUM,FILNAM,NLET,IRTFLG)
-          !write(3,*)' In opfiles_mrc, filpat: ',filpat(1:nlet)
-          !write(3,*)' In opfiles_mrc, filnam: ',filnam(1:nlet)
+          !write(6,*)' In opfiles_mrc; filpat: ',filpat(1:nlet)
+          !write(6,*)' In opfiles_mrc; filnam: ',filnam(1:nlet)
         
 C         OPEN FIRST FILE
           CALL OPFILEC(LUNCP,.FALSE.,FILNAM,LUNIMG,DISP,
      &                 ITYPE,NX,NY,NZ, 
-     & 		       MAXIM,'UNUSED',FOUROK,IRTFLG) 
-	  IF (IRTFLG .NE. 0) RETURN
+     &                       MAXIM,'UNUSED',FOUROK,IRTFLG) 
+         IF (IRTFLG .NE. 0) RETURN
 
 C         THIS WAS A BARE STACK REQUEST
           CALL LUNSETISBARE_MRC(LUNIMG,.TRUE.,IRTFLG)
 
-          !write(3,*)' In opfiles_mrc, opened: ',filnam(1:nlet)
-          !write(3,*)' In opfiles_mrc, imgnum: ',imgnum
+          !write(6,*)' In opfiles_mrc; Opened: ',filnam(1:nlet)
+          !write(6,*)' In opfiles_mrc; imgnum: ',imgnum 
+
 
        ELSE
 C         SINGLE SIMPLE INPUT FILE: ------------------------ IMG001.mrc
 C         STACKED IMAGE FILE:  ------------------------------ 2@@STK.mrc
-                
-          MAXIM = 0        ! SPECIFIC IMAGE WANTED  
-	  CALL OPFILEC(LUNCP,.FALSE.,FILPAT,LUNIMG,DISP,
-     &                 ITYPE,NX,NY,NZ, 
-     & 		       MAXIM,'UNUSED',FOUROK,IRTFLG) 
+C         STACKED IMAGE FILE:  --------------------------- aaaSTK@@2.mrc
+                  
+          MAXIM = 0        ! SPECIFIC IMAGE WANTED 
+ 
+#if defined (SP_DBUGIO)
+          write(3,*)' In opfiles_mrc; Opening stacked/simple image: ',
+     &                                filpat(1:nlet)
+          write(3,*)' In opfiles_mrc; imgnum,maxim: ',imgnum,maxim
+          write(3,*)' In opfiles_mrc; Calling opfilec ---------- '
+#endif
+
+          CALL OPFILEC(LUNCP,.FALSE.,FILPAT,LUNIMG,DISP,
+     &                ITYPE,NX,NY,NZ, 
+     &                MAXIM,'UNUSED',FOUROK,IRTFLG) 
+
+#if defined (SP_DBUGIO)
+          write(3,*)' After opfilec; filpat: ',filpat
+          write(3,*)' In opfiles_mrc; nlet,maxim,irtflg: ',
+     &                                nlet,maxim,irtflg
+#endif
 
 C         RETURN FILENAME WITH ANY EXTENSION IF NOT SPIDER IMAGE
           IF (IRTFLG == 5) NLET = lnblnkn(FILPAT)
-	  IF (IRTFLG .NE. 0) RETURN 
 
-          ! write(3,*)' In opfiles_mrc, imami : ',imami
-          ! write(3,*)' In opfiles_mrc, openrf simple file: ',filpat
+          IF (IRTFLG .NE. 0) THEN
+#if defined (SP_DBUG)
+            write(3,*)' In opfiles_mrc; non-zero, imgnum,irtflg : ',
+     &                                            imgnum,irtflg
+            write(3,*)' In opfiles_mrc; Opened simple file: ',filpat
+            write(3,*)' In opfiles_mrc; *** Returning irtflg: ',irtflg
+            write(3,*)
+#endif
+            RETURN
+          ENDIF
 
           IMGNUM = 1
 
-       ENDIF
+#if defined (SP_DBUG)
+          write(3,*)' In opfiles_mrc; %%%, imgnum,irtflg : ',
+     &                                      imgnum,irtflg
+          write(3,*)' In opfiles_mrc; Opened simple file: ',filpat
+#endif
+
+       ENDIF    ! -------------------------- 2@@STK.mrc  or cow.mrc
+
+#if defined (SP_DBUG)
+       write(3,*)' In opfiles_mrc; ### Returning maxim: ',maxim
+       write(3,*)
+#endif
 
        END 
  
@@ -338,7 +408,7 @@ C                   IRTFLG =  2    IMAGE NOT IN USE
 C
 C **********************************************************************
 
-	SUBROUTINE GETNEWIMG_MRC(LUN,FILPAT,NWANT,SAYIT,
+        SUBROUTINE GETNEWIMG_MRC(LUN,FILPAT,NWANT,SAYIT,
      &                           FILNAM,NGOT,IRTFLG)
 
         IMPLICIT NONE
@@ -369,14 +439,14 @@ C **********************************************************************
         LOCAST = INDEX(FILPAT(1:NLET),'*')
         LOCAT  = INDEX(FILPAT(1:NLET),'@@')
 
-        !write(3,*)' !!!locast,locat,filpat:',locast,locat,filpat(1:nlet)
+        !write(6,*)'locast,locat,filpat:',locast,locat,filpat(1:nlet)
 
         IMGNUM = NWANT
 
         IF (LOCAST > 1 .or. (LOCAT  > 0 .AND. LOCAST < LOCAT)) THEN
 C          SUBSTITUTE IMGNUM INTO FILE NAME PATTERN -> FILNAM   
            CALL FILGET_AT(FILPAT,IMGNUM,FILNAM,NLET,IRTFLG)
-	   IF (IRTFLG .NE. 0) RETURN 
+          IF (IRTFLG .NE. 0) RETURN 
         ENDIF
 
         IF (LOCAT <= 0 .AND. LOCAST > 1) THEN
@@ -386,20 +456,20 @@ C          NEW IMAGE, NEEDS TO KNOW: ITYPE,NX,NY,NZ!
 C          GET IT FROM OPFILES OR PREVIOUS CALL
 
            CALL LUNGETSIZE_MRC(LUN,NX,NY,NZ,IRTFLG)
-	   IF (IRTFLG .NE. 0) RETURN 
+           IF (IRTFLG .NE. 0) RETURN 
            CALL LUNGETTYPE_MRC(LUN,ITYPE,IRTFLG)
-	   IF (IRTFLG .NE. 0) RETURN 
+           IF (IRTFLG .NE. 0) RETURN 
 
            CLOSE(LUN)    ! MAY BE STILL OPEN FROM FIRST CALL  
 
 C          OPEN NEW FILE
            MAXIM = 0
-	   CALL OPFILEC(LUNCP,.FALSE.,FILNAM,LUN,'U',ITYPE,
+           CALL OPFILEC(LUNCP,.FALSE.,FILNAM,LUN,'U',ITYPE,
      &                  NX,NY,NZ, 
-     & 		        MAXIM,'UNUSED',FOUROK,IRTFLG) 
-	   IF (IRTFLG .NE. 0) RETURN 
+     &                        MAXIM,'UNUSED',FOUROK,IRTFLG) 
+           IF (IRTFLG .NE. 0) RETURN 
 
-           !write(3,*)' In getnewimg_mrc opened new templated file: ',
+           !write(6,*)' In getnewimg_mrc opened new templated file: ',
            !&                 filnam(1:nlet)
 
            NGOT   = NWANT   
@@ -438,7 +508,7 @@ C             SET CURRENT IMGNUM AND NSTACK IN STATIC HEADER
 C          SET OFFSETS FOR REDLIN/WRTLIN FOR IMAGE OPENED ON THIS LUN
            CALL LUNSETPOS_MRC(LUN,IMGNUM,IRTFLG)
            IF (IRTFLG .NE. 0) RETURN
-           !write(3,'(a,8i5)') ' In getnu_mrc22, lun,imgnum:',lun,imgnum
+           !write(6,'(a,8i5)') ' In getnu_mrc22, lun,imgnum:',lun,imgnum
 
 
 C          PUSH HEADER OBJECT INTO FILE TO SAVE STATS, NSTACK, & IMGNUM
@@ -458,12 +528,12 @@ C          WRITE OUT FILE OPENING INFO TO SCREEN
 
            NGOT = IMGNUM
 
-           !write(3,*)' In getnewimg_mrc opened new stacked file: ',
+           !write(6,*)' In getnewimg_mrc opened new stacked file: ',
        !&                 filnam(1:nlet)
 
         ENDIF
 
-	END
+        END
 
 
 C++*********************************************************************
@@ -491,7 +561,7 @@ C
 C23456789 123456789 123456789 123456789 123456789 123456789 123456789 12
 C--*********************************************************************
  
-	SUBROUTINE GETOLDIMG_MRC(LUN,FILPAT,NWANT,SAYIT,
+        SUBROUTINE GETOLDIMG_MRC(LUN,FILPAT,NWANT,SAYIT,
      &                           FILNAM,NGOT,IRTFLG)
 
         IMPLICIT NONE
@@ -521,14 +591,14 @@ C--*********************************************************************
         LOCAST = INDEX(FILPAT(1:NLET),'*')
         LOCAT  = INDEX(FILPAT(1:NLET),'@@')
 
-        ! write(3,*)' In getoldimg_mrc locast,locat,nlet,filpat:',
+        ! write(6,*)' In getoldimg_mrc locast,locat,nlet,filpat:',
         !&            locast,locat,nlet,filpat(1:nlet)
-        !write(3,*)' In getoldimg_mrc, nwant,: ',nwant,':',filpat(1:nlet)
+        !write(6,*)' In getoldimg_mrc, nwant,: ',nwant,':',filpat(1:nlet)
 
         IF (LOCAST > 0 .OR. (LOCAST == 0 .AND. LOCAT > 0)) THEN 
 C          SUBSTITUTE STACKED IMGNUM INTO FILE NAME PATTERN -> FILNAM   
            CALL FILGET_AT(FILPAT,NWANT,FILNAM,NLET,IRTFLG)
-	   IF (IRTFLG .NE. 0) RETURN 
+          IF (IRTFLG .NE. 0) RETURN 
         ENDIF
 
         IF (LOCAST > 0 .AND. LOCAT == 0) THEN 
@@ -541,10 +611,10 @@ C          LUNSETFILE, LUNSETPOS_MRC LUNSET_STATSIMG_MRC,
 C          LUNSETISBARE_MRC, LUNSETCOMMON_MRC, LUNSAYINFO_MRC
 
            MAXIM = 0  
-	   CALL OPFILEC(0,.FALSE.,FILNAM,LUN,NULL,ITYPE,
+          CALL OPFILEC(0,.FALSE.,FILNAM,LUN,NULL,ITYPE,
      &                  NX,NY,NZ, 
-     & 		        MAXIM,' ',FOUROK,IRTFLG) 
-	   IF (IRTFLG .NE. 0) RETURN 
+     &                        MAXIM,' ',FOUROK,IRTFLG) 
+          IF (IRTFLG .NE. 0) RETURN 
 
            !write(6,*)' In getoldimg_mrc opened old templated file: ',
            !          filpat(1:nlet), maxim
@@ -563,7 +633,7 @@ C          FIND NUMBER OF IMAGES IN STACK
                 
 C          CHECK IF IMAGE CAN FIT IN STACK
            IF (NWANT > NSTACK) THEN
-             CALL ERRT(102,'GETOLDIMG_MRC, NO SUCH IMAGE',NWANT)
+             CALL ERRT(102,'GETOLDIMG_MRC,  NO SUCH IMAGE',NWANT)
              IRTFLG = 1
              RETURN
            ENDIF
@@ -579,20 +649,20 @@ C          SET FILENAME,  IN LUN - FILENAME
 C          SET AXIS ORIGIN LOCATION & VOLUME HANDEDNESS IF NEEDED
            CALL WHICH_HAND_MRC(LUN,FILNAM,CAXIS,IRTFLG)
 
-C          SET IMAGE OFFSET FOR READ/WRITE
+C          SET IMAGE  OFFSET FOR READ/WRITE
            CALL LUNSETPOS_MRC(LUN,NWANT,IRTFLG)
            IF (IRTFLG .NE. 0) RETURN
 
 C          PUT COMMON VALUES INTO COMMON AREA (NOT NEEDED IN FUTURE?)
            CALL LUNSETCOMMON_MRC(LUN,IRTFLG)
            IF (IRTFLG .NE. 0) RETURN
-           !write(3,*)' In getoldimg_mrc after lunsetcommon: ',filnam(1:nlet)
+           !write(6,*)' In getoldimg_mrc after lunsetcommon: ',filnam(1:nlet)
 
 C          WRITE OUT FILE OPENING INFO IF WANTED
            CALL LUNSAYINFO_MRC(LUN,SAYIT,IRTFLG)
            IF (IRTFLG .NE. 0) RETURN
 
-cc         write(3,*)' In getoldimg_mrc opened old templated stk file: ',
+cc         write(6,*)' In getoldimg_mrc opened old templated stk file: ',
 cc     &               filnam(1:nlet)
 
 C          RETURN IMAGE NUMBER THAT WAS WANTED
@@ -604,8 +674,288 @@ C          RETURN IMAGE NUMBER THAT WAS WANTED
         ENDIF
         IRTFLG = 1
 
-	END
+        END
 
+@
+
+
+1.10
+log
+@debug output altered
+@
+text
+@d14 1
+a14 1
+C=* Email: spider@@health.ny.gov                                        *
+d34 2
+a35 2
+C              ITYPE,NX,NY,NZ,MAXIM,FOUROK,
+C              IMGNUM, IRTFLG)
+d49 1
+a49 1
+C        DISP       CHARACTER CONTAINING ONE OF THE               (SENT) 
+d63 1
+a63 1
+C        ITYPE      IFORM FOR FILE                         (SENT OR RET) 
+d71 10
+a80 10
+C                     >= 0 IS CURRENT MAX. IMAGE NO. FOR STACK             
+C        PROMPT     PROMPT FOR FILNAME                            (SENT)
+C                     IF NOT (ASKNAM) THIS IS FILE NAME           (SENT)
+C                     ~ (TILDE) IN LAST CHAR. SAYS SKIP
+C                       "FILE" AT END OF PROMPT
+C                     ~9 IN NEXT TO LAST OR
+C                        NEXT-TO-NEXT-TO LAST
+C                        ACCEPTS AN EXTENSION
+C                        (OTHERWISE DISCARDED!)
+C                     ~6 KEEPS OLD DATE/TIME
+d154 1
+a154 1
+#if defined (SP_DBUG)
+d165 2
+a166 2
+#if defined (SP_DBUG)
+          write(3,*)' In opfiles_mrc, Opening: ',filpat(1:nlet)
+d177 1
+a177 1
+#if defined (SP_DBUG)
+d189 1
+a189 1
+#if defined (SP_DBUG)
+d212 1
+a212 1
+#if defined (SP_DBUG)
+d214 1
+a214 1
+     &              '  for:',imgnum
+d263 2
+a264 1
+C         STACKED IMAGE FILE:  ----------------------------- 2@@STK.mrc
+a265 1
+
+d268 1
+a268 1
+#if defined (SP_DBUG)
+d272 1
+a272 1
+          write(3,*)' Calling opfilec ------------- '
+d279 1
+a279 1
+#if defined (SP_DBUG)
+d386 1
+a386 1
+          IF (IRTFLG .NE. 0) RETURN 
+d388 1
+a388 1
+          IF (IRTFLG .NE. 0) RETURN 
+d394 1
+a394 1
+          CALL OPFILEC(LUNCP,.FALSE.,FILNAM,LUN,'U',ITYPE,
+d397 1
+a397 1
+          IF (IRTFLG .NE. 0) RETURN 
+@
+
+
+1.9
+log
+@removed debug msg
+@
+text
+@d154 7
+a160 2
+       !write(6,*)' In opfiles_mrc,locast,locat,:',locast,locat,is_barel
+       !write(6,*)' In opfiles_mrc, imgnum:',imgnum,filpat
+d165 3
+a167 1
+          !write(6,*)' In opfiles_mrc, opening: ',filpat(1:nlet)
+d177 3
+a179 1
+          !write(6,*)' In opfiles_mrc, opening: ',filnam(1:nlet)
+d181 1
+a181 1
+	  CALL OPFILEC(0,.FALSE.,FILNAM,LUNIMG,DISP,
+d183 1
+a183 1
+     & 		       MAXIM,' ',FOUROK,IRTFLG) 
+d189 3
+a191 1
+          !write(6,*)' In opfiles_mrc; maxim: ',maxim,imgnum
+d194 1
+d200 1
+a200 1
+	  IF (IRTFLG .NE. 0) RETURN 
+d204 1
+a204 1
+	  CALL OPFILEC(LUNCP,.FALSE.,FILNAM,LUNIMG,DISP,
+d206 2
+a207 2
+     & 		       MAXIM,' ',FOUROK,IRTFLG) 
+	  IF (IRTFLG .NE. 0) RETURN 
+d212 5
+a216 2
+c         write(6,*)' Opened templated file: ',filnam(1:20),
+c     &              '  for:',imgnum
+d251 2
+a252 2
+     & 		       MAXIM,'UNUSED',FOUROK,IRTFLG) 
+	  IF (IRTFLG .NE. 0) RETURN
+d257 3
+a259 2
+          !write(6,*)' In opfiles_mrc; opened: ',filnam(1:nlet)
+          !write(6,*)' In opfiles_mrc; imgnum: ',imgnum
+d263 21
+a283 6
+C         STACKED IMAGE FILE:  ------------------------------ 2@@STK.mrc
+                
+          MAXIM = 0        ! SPECIFIC IMAGE WANTED  
+	  CALL OPFILEC(LUNCP,.FALSE.,FILPAT,LUNIMG,DISP,
+     &                 ITYPE,NX,NY,NZ, 
+     & 		       MAXIM,'UNUSED',FOUROK,IRTFLG) 
+a286 1
+	  IF (IRTFLG .NE. 0) RETURN 
+d288 10
+a297 2
+          ! write(6,*)' In opfiles_mrc; imami : ',imami
+          ! write(6,*)' In opfiles_mrc; openrf simple file: ',filpat
+d301 12
+a312 2
+       ENDIF
+       !write(6,*)' In opfiles_mrc; maxim: ',maxim
+d338 1
+a338 1
+	SUBROUTINE GETNEWIMG_MRC(LUN,FILPAT,NWANT,SAYIT,
+d376 1
+a376 1
+	   IF (IRTFLG .NE. 0) RETURN 
+d386 1
+a386 1
+	   IF (IRTFLG .NE. 0) RETURN 
+d388 1
+a388 1
+	   IF (IRTFLG .NE. 0) RETURN 
+d394 1
+a394 1
+	   CALL OPFILEC(LUNCP,.FALSE.,FILNAM,LUN,'U',ITYPE,
+d396 2
+a397 2
+     & 		        MAXIM,'UNUSED',FOUROK,IRTFLG) 
+	   IF (IRTFLG .NE. 0) RETURN 
+d463 1
+a463 1
+	END
+d491 1
+a491 1
+	SUBROUTINE GETOLDIMG_MRC(LUN,FILPAT,NWANT,SAYIT,
+d528 1
+a528 1
+	   IF (IRTFLG .NE. 0) RETURN 
+d541 1
+a541 1
+	   CALL OPFILEC(0,.FALSE.,FILNAM,LUN,NULL,ITYPE,
+d543 2
+a544 2
+     & 		        MAXIM,' ',FOUROK,IRTFLG) 
+	   IF (IRTFLG .NE. 0) RETURN 
+d563 1
+a563 1
+             CALL ERRT(102,'GETOLDIMG_MRC, NO SUCH IMAGE',NWANT)
+d579 1
+a579 1
+C          SET IMAGE OFFSET FOR READ/WRITE
+d604 1
+a604 1
+	END
+@
+
+
+1.8
+log
+@DEBUG OUTPUT ADDED
+@
+text
+@d264 1
+a264 1
+       write(6,*)' In opfiles_mrc, maxim !!!!!!!! : ',maxim
+@
+
+
+1.7
+log
+@COMMENTS
+@
+text
+@d6 1
+d8 1
+a8 1
+C ********************************************************************** 
+d12 1
+a12 1
+C=* Copyright 1985-2020  Health Research Inc.,                         *
+d28 1
+a28 1
+C ********************************************************************** 
+d115 1
+a115 1
+C23456789 123456789 123456789 123456789 123456789 123456789 123456789 12 
+a116 1
+
+d154 2
+a155 2
+       !write(3,*)' In opfiles_mrc,locast,locat,:',locast,locat,is_barel
+       !write(3,*)' In opfiles_mrc, imgnum:',imgnum,filpat
+d160 1
+a160 1
+          !write(3,*)' In opfiles_mrc, opening: ',filpat(1:nlet)
+d170 1
+a170 1
+          !write(3,*)' In opfiles_mrc, opening: ',filnam(1:nlet)
+d180 1
+a180 1
+          !write(3,*)' In opfiles_mrc, maxim: ',maxim,imgnum
+d200 1
+a200 1
+c          write(3,*)' Opened templated file: ',filnam(1:20),
+d217 1
+a217 1
+         !write(3,*)' In opfiles_mrc, filnamnoat: ',filnamnoat(1:nlet)
+d230 2
+a231 2
+          !write(3,*)' In opfiles_mrc, filpat: ',filpat(1:nlet)
+          !write(3,*)' In opfiles_mrc, filnam: ',filnam(1:nlet)
+d242 2
+a243 2
+          !write(3,*)' In opfiles_mrc, opened: ',filnam(1:nlet)
+          !write(3,*)' In opfiles_mrc, imgnum: ',imgnum
+d258 2
+a259 2
+          ! write(3,*)' In opfiles_mrc, imami : ',imami
+          ! write(3,*)' In opfiles_mrc, openrf simple file: ',filpat
+d264 1
+d321 1
+a321 1
+        !write(3,*)' !!!locast,locat,filpat:',locast,locat,filpat(1:nlet)
+d351 1
+a351 1
+           !write(3,*)' In getnewimg_mrc opened new templated file: ',
+d390 1
+a390 1
+           !write(3,'(a,8i5)') ' In getnu_mrc22, lun,imgnum:',lun,imgnum
+d410 1
+a410 1
+           !write(3,*)' In getnewimg_mrc opened new stacked file: ',
+d473 1
+a473 1
+        ! write(3,*)' In getoldimg_mrc locast,locat,nlet,filpat:',
+d475 1
+a475 1
+        !write(3,*)' In getoldimg_mrc, nwant,: ',nwant,':',filpat(1:nlet)
+d538 1
+a538 1
+           !write(3,*)' In getoldimg_mrc after lunsetcommon: ',filnam(1:nlet)
+d544 1
+a544 1
+cc         write(3,*)' In getoldimg_mrc opened old templated stk file: ',
 @
 
 

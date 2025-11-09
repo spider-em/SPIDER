@@ -1,9 +1,24 @@
-head	1.8;
+head	1.11;
 access;
 symbols;
 locks; strict;
 comment	@c @;
 
+
+1.11
+date	2025.10.16.19.27.07;	author dean;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2025.10.07.13.32.35;	author dean;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2025.09.26.14.40.26;	author dean;	state Exp;
+branches;
+next	1.8;
 
 1.8
 date	2020.01.21.16.19.03;	author leith;	state Exp;
@@ -50,22 +65,25 @@ desc
 @@
 
 
-1.8
+1.11
 log
-@code for fmin... retrieval altered
+@debug output added, comments added
 @
 text
 @C++*********************************************************************
 C
 C OPENFIL_O_MRC.F   ADAPTED FROM OPENFIL         MAY 2019 ArDean Leith
+C                   NLABEL BUG                   SEP 2025 ArDean Leith
+C                   DEBUG OUTPUT ADDED           SEP 2025 ArDean Leith
+C                   IRTFLG AND NLABL CHANGED     SEP 2025 ArDean Leith
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2019  Health Research Inc.,                         *
+C=* Copyright 1985-2025  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@@health.ny.gov                                        *
+C=* Email:                                                             *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -140,7 +158,7 @@ C--*********************************************************************
       REAL                    :: SCALEX,SCALEY,SCALEZ
       INTEGER                 :: IMAMIT
       REAL                    :: FMINT,FMAXT,AVT,SIGT
-      INTEGER                 :: ISPG,INOW,IGO,IEND,ILAB
+      INTEGER                 :: ISPG,INOW,IGO,IEND,ILAB,iflip
       LOGICAL                 :: ENDOK
       INTEGER                 :: LOCAT   
       INTEGER                 :: MAPC,MAPR,MAPS
@@ -156,21 +174,28 @@ C     PURPOSE:  OPEN EXISTING MRC FILE FOR STREAM ACCESS
            
       LUN = LUNT
 
-C     SET READ TO CONVERT TO LITTLE ENDEDNESS
+C     SET READ TO CONVERT TO LITTLE ENDIANNESS  (Why Sept 2025 al)
       DISP(1:1) = 'O'
       ENDED     = 'L'
       DISP(2:2) = ENDED
 
-      !write(3,*)' In openfil_o_mrc, nlet,filnam:',nlet,filnam(:nlet)
-      !write(3,*)' In openfil_o_mrc, imgnum:',imgnum
+#if defined (SP_DBUG)
+      write(3,*)' In openfil_o_mrc; nlet,filnam: ',nlet,filnam(:nlet)
+      write(3,*)' In openfil_o_mrc; imgnum,nstack: ',imgnum,nstack
+#endif
 
-C     OPEN EXISTING FILE, CREATE HEADER OBJECT, AND CHECK ENDEDNESS 
-      !write(6,*)' In openfil_o_mrc, call loadhed_mrc, disp:',disp
+C     OPEN EXISTING FILE, CREATE HEADER OBJECT, AND CHECK ENDIANNESS 
+#if defined (SP_DBUG)
+      write(3,*)' In openfil_o_mrc, Call loadhed_mrc, disp:',disp
+#endif
+
       CALL LOADHED_MRC(LUN,FILNAM,NLET,DISP,IRTFLG)
       
 C     DETERMINE CURRENT FILE ENDED-NESS AS READ IN
       CALL LUNGETMAP_MRC(LUN,MAPC,MAPR,MAPS,IRTFLG)
-      !write(3,*)' In openfil_o_mrc, mapc,r,s: ',mapc,mapr,maps
+#if defined (SP_DBUG)
+      write(3,*)' In openfil_o_mrc; mapc,mapr,maps: ',mapc,mapr,maps
+#endif
 
       ENDOK = ((MAPC == 1) .OR. (MAPR == 1) .OR. (MAPS == 1))
       IF (ENDOK)  CALL LUNSETFLIP(LUN,0,IRTFLG)
@@ -183,13 +208,19 @@ C        NOT RIGHT ENDEDNESS, TRY CONVERT FROM BIG ENDED
 
 C        OPEN FILE, CREATE HEADER OBJECT AND CHECK ENDEDNESS 
 
-         !write(6,*)' In openfil_o_mrc, call loadhed_mrc, disp:',disp
+#if defined (SP_DBUG)
+         write(3,*)' In openfil_o_mrc, call loadhed_mrc, disp:',disp
+#endif
+
          CLOSE (LUN)
          CALL LOADHED_MRC(LUN,FILNAM,NLET,DISP, IRTFLG)
 
 C        DETERMINE CURRENT FILE ENDED-NESS AS READ IN
          CALL LUNGETMAP_MRC(LUN,MAPC,MAPR,MAPS,IRTFLG)
-         !write(3,*)' In openfil_o_mrc, mapc,r,s: ',mapc,mapr,maps
+
+#if defined (SP_DBUG)
+        write(3,*)' In openfil_o_mrc; mapc,mapr,maps: ',mapc,mapr,maps
+#endif
 
          ENDOK = ((MAPC == 1) .OR. (MAPR == 1) .OR. (MAPS == 1))
 
@@ -214,8 +245,10 @@ C     GET IMAGE/VOLUME SIZE PARAMETERS AND MODE
       CALL LUNGETMODSIZ_MRC(LUN,MRCMODE,NX,NY,NZMRC, MX,MY,MZ,IRTFLG)
       IF (IRTFLG .NE. 0) RETURN        
 
-      !write(6,*)' In openfil_o_mrc, mrcmode: ',mrcmode
-      !write(3,*)' In openfil_o_mrc, size (x,y,z),mz: ',nx,ny,nzmrc,mz
+#if defined (SP_DBUG)
+      write(3,*)' In openfil_o_mrc; mrcmode: ',mrcmode
+      write(3,*)' In openfil_o_mrc; size (x,y,z),mz: ',nx,ny,nzmrc,mz
+#endif
 
       IF (MYPID <= 0 .AND. (MRCMODE == 3 .OR. MRCMODE == 4)) THEN
          CALL ERRT(102,'UNSUPPORTED MRC TRANSFORM FILE, MODE',MRCMODE)
@@ -223,25 +256,37 @@ C     GET IMAGE/VOLUME SIZE PARAMETERS AND MODE
          RETURN
       ENDIF
 
-      !write(3,*)' In openfil_o_mrc, imgnum,mz: ',imgnum,mz
-
-C     READ NLABL LABELS FROM FILE (<= 800 CHAR)
-      CALL LUNGETLABELS_MRC(LUN,NLABL,LABELS,IRTFLG)
-      IF (IRTFLG .NE. 0) RETURN        
-
 C     GET MRC FILE PARAMETERS: IVERSION,ISPG,NSYMBT,NLABL
       CALL LUNGETVIN_MRC(LUN,IVERSION,ISPG,NSYMBT,NLABL,IRTFLG)
-      !write(3,*)' In openfil_o_mrc, ispg,iversion: ', ispg,iversion
-      !write(6,*)' In openfil_o_mrc, nsymbt, nlabl: ', nsymbt, nlabl
+
+#if defined (SP_DBUG)
+      !write(3,*)' In openfil_o_mrc; iversion,ispg: ', iversion,ispg
+      !write(3,*)' In openfil_o_mrc; nsymbt, nlabl: ', nsymbt, nlabl
+#endif
       IF (IRTFLG .NE. 0) RETURN        
+
   
-C     GET MRC FILE PARAMETERS:  NZ,MZ, & NSTACK.(HANDLES .mrcs FILES OK)
+C     GET MRC FILE PARAMETERS: NZ,MZ, & NSTACK.(HANDLES .mrcs FILES OK)
+
       CALL LUNGETNSTACK_MRC(LUN, NX,NY,NZ,MZ,NSTACK,IRTFLG)
       IF (IRTFLG .NE. 0) RETURN        
 
-      !write(3,*)' In openfil_o_mrc, filnam: ',filnam(1:nlet)
-      !write(3,*)' In openfil_o_mrc, nz,mz,nstack: ',nz,mz,nstack !!!!!
-      !write(3,*)' In openfil_o_mrc,imgnum,mz,nstack: ',imgnum,mz,nstack
+#if defined (SP_DBUG)
+      write(3,*)' In openfil_o_mrc; filnam: ',filnam(1:nlet)
+      write(3,*)' In openfil_o_mrc; nz,mz,nstack: ',nz,mz,nstack 
+      write(3,*)' In openfil_o_mrc; imgnum,mz,nstack: ',imgnum,mz,nstack
+#endif
+
+C     READ NLABL LABELS FROM FILE (<= 800 CHAR)
+      CALL LUNGETLABELS_MRC(LUN,NLABL,LABELS,IRTFLG)
+      IF (IRTFLG .NE. 0) RETURN
+  
+#if defined (SP_DBUG)
+      write(3,*)' In openfil_o_mrc; nlabl,labels: ',nlabl,labels(1:80)
+      
+      call lungetflip(lun,iflip,irtflg)
+      write(3,*) ' In openfil_o_mrcs, iflip: ',iflip
+#endif
 
 C     BARE STACK REFERENCE WITHOUT '@@' ALLOWED FROM 'ST' & 'LI'
       IF (MZ > 1 .AND. IMGNUM < -1 ) THEN 
@@ -258,9 +303,11 @@ C     ENSURE STACKED IMAGE EXISTS
          RETURN        
       ENDIF
 
-      !write(3,*)' In openfil_o_mrc, dsp :'  , dsp 
-      !write(3,*)' In openfil_o_mrc, imgnum:', imgnum 
-      !write(3,*)' In openfil_o_mrc, nstack:', nstack
+#if defined (SP_DBUG)
+      write(3,*)' In openfil_o_mrc; dsp: '  , dsp 
+      write(3,*)' In openfil_o_mrc; imgnum:', imgnum 
+      write(3,*)' In openfil_o_mrc; nstack:', nstack
+#endif
 
 C     UPDATE MZ AND NSTACK IN MRC HEADER FOR NEW STACKED IMAGE
       IF (DSP == 'N' .AND.
@@ -268,7 +315,7 @@ C     UPDATE MZ AND NSTACK IN MRC HEADER FOR NEW STACKED IMAGE
      &    (NSTACK > 0 .or. MZ == 1) .AND. 
      &    IMGNUM > NSTACK) THEN
          ! EXTENDING STACK WITH A NEW IMAGE/VOLUME
-         !write(3,*)' In openfil_o_mrc2, dsp,imgnum:', dsp,imgnum,nstack
+         !write(3,*)'In openfil_o_mrc2; dsp,imgnum: ',dsp,imgnum,nstack
          NSTACK = IMGNUM      
          CALL LUNSETNSTACK_MRC(LUN, NZ,NSTACK,IRTFLG)
          IF (IRTFLG .NE. 0) RETURN        
@@ -279,7 +326,12 @@ C     SET SPIDER IFORM IN COMMON CMBLOCK
       IF (NZ > 1) IFORM = 3 
 
 C     SET IMGNUM AND NSTACK IN STATIC HEADER
-      !write(6,*)' In openfil_o_mrc - imgnum,nstack:',imgnum,nstack 
+#if defined (SP_DBUG)
+      write(3,*)' In openfil_o_mrc; set imgnum,nstack: ',imgnum,nstack
+      write(3,*)' In openfil_o_mrc; Calling lunsetstk.mrc ----'
+      write(3,*)'  '
+#endif
+ 
       CALL LUNSETSTK_MRC(LUN,IMGNUM,NSTACK,IRTFLG)
       IF (IRTFLG .NE. 0) RETURN        
 
@@ -292,26 +344,39 @@ C        SET FLAG FOR NORMAL RETURN
 
 C     ADJUST FMIN...  FOR DIFFERENT MRC HEADER POSSIBILITIES
 C     DOES NOT PUT FILE VALUES FOR FMIN... INTO COMMON: CMBLOCK   
-C     FILE VALUES FOR FMIN... INTO COMMON: CMBLOCK SET LATER IN LUNSETCOMMON   
+C     FILE VALUES FOR FMIN... IN COMMON: CMBLOCK SET LATER WITH  
+C     LUNSETCOMMON
+
       CALL LUNGETSTATS_MRC(LUN,IMAMIT,FMINT,FMAXT,AVT,SIGT,IRTFLG)
       IF (IRTFLG .NE. 0) RETURN        
  
-      !write(3,*)' In openfil_o_mrc imami,fmin:',imami,fmin 
+#if defined (SP_DBUG)
+      write(3,*)' In openfil_o_mrc; Got imamit,fmaxt: ',imamit,fmaxt 
+#endif
 
-C     ENSURE THAT STAT'S IMAGE NUMBER IS SET CORRECTLY     
-      IF (IMAMI == 1 .AND. NSTACK <= 0) THEN
+C     ENSURE THAT STAT'S IMAGE NUMBER IS SET CORRECTLY 
+    
+      IF (IMAMIT == 1 .AND. NSTACK <= 0) THEN
 C        NOT A STACK, SO FMIN/FMAX SHOULD BE OK FOR THIS MRC FILE
          CALL LUNSET_STATSIMG_MRC(LUN,1,IRTFLG)
 
-      ELSEIF (IMAMI == 0) THEN
-C        NO IDENTIFIABLE STATS IN MRC IMAGE 
-         !write(3,*)'In openfil_o_mrc, fmin,fmax,imami:',fmin,fmax,imami
+      ELSEIF (IMAMIT == 0) THEN
+C        NO IDENTIFIABLE STATS IN MRC IMAGE
+ 
+#if defined (SP_DBUG)
+         write(3,*)' In openfil_o_mrc; imamit is 0: ',imamit
+         write(3,*)' In openfil_o_mrc; calling lunset_statsimg '
+         write(3,*)'  '
+#endif
 
          CALL LUNSET_STATSIMG_MRC(LUN,0,IRTFLG)
+
       ENDIF
 
-      !write(6,*)' In openfil_o_mrc - iform,nz: ',iform,nz,nstack 
-      !write(6,*)' In openfil_o_mrc - nx,ny,nz: ',nx,ny,nz,nstack 
+#if defined (SP_DBUG)
+      write(3,*)' From openfil_o_mrc; iform,nz: ',iform,nz,nstack 
+      write(3,*)' From openfil_o_mrc; nx,ny,nz: ',nx,ny,nz,nstack 
+#endif
 
 C     SET FLAG FOR NORMAL RETURN	
       IRTFLG = 0
@@ -342,15 +407,16 @@ C     INCLUSION FOR OPTIONAL MPI INITIALIZATION.
 
 C     WANT TO OPEN EXISTING MRC FILE FOR STREAM ACCESS
         
-c     write(6,*)' Opening old MRC file: ',FILNAM(1:nlet),
-c     &          '  Convert:',disp  
+      !write(3,*)' Opening old MRC file: ',filnam(1:nlet),
+      !&         '  Disp:',disp  
 
-      IRTFLG = 999   ! DO NOT ECHO OPENING INFO
+      !IRTFLG = 0
+      IRTFLG = 999   ! DO NOT ECHO OPENING INFO  (sept 2025 al)
       CALL OPSTREAMFILE(.FALSE.,FILNAM(1:NLET),NULL,LUN,
      &                  'UNFORMATTED',DISP,' ',.TRUE.,IRTFLG)
 
-      !write(6,*)' Opened  old MRC file: ',FILNAM(1:nlet),
-c     &           '  Convert:',DISP,' Irtflg: ',irtflg  
+      !write(3,*)' Opened  old MRC file: ',filnam(1:nlet),
+      !&         ' Disp:',disp,' Irtflg: ',irtflg  
       IF (IRTFLG .NE. 0) RETURN
 
 #ifdef USE_MPI
@@ -378,6 +444,197 @@ C     READ OVERALL HEADER FROM MRC FILE
 
 
 
+@
+
+
+1.10
+log
+@IRTFLG = 999   ! DO NOT ECHO OPENING INFO  (sept 2025 al)[D[D
+@
+text
+@d110 4
+a113 2
+      !write(6,*)' In openfil_o_mrc; nlet,filnam: ',nlet,filnam(:nlet)
+      !write(6,*)' In openfil_o_mrc; imgnum,nstack: ',imgnum,nstack
+d116 4
+a119 1
+      !write(6,*)' In openfil_o_mrc, call loadhed_mrc, disp:',disp
+d124 3
+a126 1
+      !write(6,*)' In openfil_o_mrc; mapc,mapr,maps: ',mapc,mapr,maps
+d139 4
+a142 1
+         !write(6,*)' In openfil_o_mrc, call loadhed_mrc, disp:',disp
+d148 4
+a151 1
+        !write(6,*)' In openfil_o_mrc; mapc,mapr,maps: ',mapc,mapr,maps
+d176 4
+a179 2
+      !write(6,*)' In openfil_o_mrc; mrcmode: ',mrcmode
+      !write(6,*)' In openfil_o_mrc; size (x,y,z),mz: ',nx,ny,nzmrc,mz
+a186 1
+
+d190 4
+a193 2
+      !write(6,*)' In openfil_o_mrc; iversion,ispg: ', iversion,ispg
+      !write(6,*)' In openfil_o_mrc; nsymbt, nlabl: ', nsymbt, nlabl
+d195 1
+d197 2
+a198 1
+C     GET MRC FILE PARAMETERS:  NZ,MZ, & NSTACK.(HANDLES .mrcs FILES OK)
+d202 5
+a206 3
+      !write(6,*)' In openfil_o_mrc; filnam: ',filnam(1:nlet)
+      !write(6,*)' In openfil_o_mrc; nz,mz,nstack: ',nz,mz,nstack !!!!!
+      !write(6,*)' In openfil_o_mrc; imgnum,mz,nstack: ',imgnum,mz,nstack
+d210 4
+a213 2
+      IF (IRTFLG .NE. 0) RETURN  
+      !write(6,*)' In openfil_o_mrc; nlabl,labels: ',nlabl,labels(1:80)
+d215 3
+a217 2
+      !call lungetflip(lun,iflip,irtflg)
+      !write(6,*) ' In  openfil_o_mrcs, iflip: ',iflip
+d234 5
+a238 3
+      !write(6,*)' In openfil_o_mrc; dsp: '  , dsp 
+      !write(6,*)' In openfil_o_mrc; imgnum:', imgnum 
+      !write(6,*)' In openfil_o_mrc; nstack:', nstack
+d246 1
+a246 1
+         !write(6,*)' In openfil_o_mrc2; dsp,imgnum: ', dsp,imgnum,nstack
+d257 6
+a262 1
+      !write(6,*)' In openfil_o_mrc; imgnum,nstack: ',imgnum,nstack 
+d275 1
+a275 1
+C     FILE VALUES FOR FMIN... INTO COMMON: CMBLOCK SET LATER IN 
+d281 7
+a287 4
+      !write(6,*)' In openfil_o_mrc; imami,fmin: ',imami,fmin 
+
+C     ENSURE THAT STAT'S IMAGE NUMBER IS SET CORRECTLY     
+      IF (IMAMI == 1 .AND. NSTACK <= 0) THEN
+d291 8
+a298 3
+      ELSEIF (IMAMI == 0) THEN
+C        NO IDENTIFIABLE STATS IN MRC IMAGE 
+         !write(6,*)'In openfil_o_mrc, fmin,fmax,imami:',fmin,fmax,imami
+d301 1
+d304 4
+a307 2
+      !write(6,*)' In openfil_o_mrc; iform,nz: ',iform,nz,nstack 
+      !write(6,*)' In openfil_o_mrc; nx,ny,nz: ',nx,ny,nz,nstack 
+d338 1
+a338 1
+      !write(6,*)' Opening old MRC file: ',filnam(1:nlet),
+d346 1
+a346 1
+      !write(6,*)' Opened  old MRC file: ',filnam(1:nlet),
+@
+
+
+1.9
+log
+@DEBUG output added, nlabl and irtflg returned values fixed
+@
+text
+@d105 1
+a105 1
+C     SET READ TO CONVERT TO LITTLE ENDEDNESS
+d113 1
+a113 1
+C     OPEN EXISTING FILE, CREATE HEADER OBJECT, AND CHECK ENDEDNESS 
+d297 2
+a298 2
+c     write(6,*)' Opening old MRC file: ',FILNAM(1:nlet),
+c     &          '  Convert:',disp  
+d300 2
+a301 2
+      irtflg = 0
+      !IRTFLG = 999   ! DO NOT ECHO OPENING INFO
+d305 2
+a306 2
+c      write(6,*)' Opened  old MRC file: ',filnam(1:nlet),
+c     &          '  Convert:',DISP,' Irtflg: ',irtflg  
+@
+
+
+1.8
+log
+@code for fmin... retrieval altered
+@
+text
+@d4 3
+d12 1
+a12 1
+C=* Copyright 1985-2019  Health Research Inc.,                         *
+d14 1
+a14 1
+C=* Email: spider@@health.ny.gov                                        *
+d89 1
+a89 1
+      INTEGER                 :: ISPG,INOW,IGO,IEND,ILAB
+d110 2
+a111 2
+      !write(3,*)' In openfil_o_mrc, nlet,filnam:',nlet,filnam(:nlet)
+      !write(3,*)' In openfil_o_mrc, imgnum:',imgnum
+d119 1
+a119 1
+      !write(3,*)' In openfil_o_mrc, mapc,r,s: ',mapc,mapr,maps
+d138 1
+a138 1
+         !write(3,*)' In openfil_o_mrc, mapc,r,s: ',mapc,mapr,maps
+d163 2
+a164 2
+      !write(6,*)' In openfil_o_mrc, mrcmode: ',mrcmode
+      !write(3,*)' In openfil_o_mrc, size (x,y,z),mz: ',nx,ny,nzmrc,mz
+a171 5
+      !write(3,*)' In openfil_o_mrc, imgnum,mz: ',imgnum,mz
+
+C     READ NLABL LABELS FROM FILE (<= 800 CHAR)
+      CALL LUNGETLABELS_MRC(LUN,NLABL,LABELS,IRTFLG)
+      IF (IRTFLG .NE. 0) RETURN        
+d175 3
+a177 2
+      !write(3,*)' In openfil_o_mrc, ispg,iversion: ', ispg,iversion
+      !write(6,*)' In openfil_o_mrc, nsymbt, nlabl: ', nsymbt, nlabl
+d184 11
+a194 3
+      !write(3,*)' In openfil_o_mrc, filnam: ',filnam(1:nlet)
+      !write(3,*)' In openfil_o_mrc, nz,mz,nstack: ',nz,mz,nstack !!!!!
+      !write(3,*)' In openfil_o_mrc,imgnum,mz,nstack: ',imgnum,mz,nstack
+d211 3
+a213 3
+      !write(3,*)' In openfil_o_mrc, dsp :'  , dsp 
+      !write(3,*)' In openfil_o_mrc, imgnum:', imgnum 
+      !write(3,*)' In openfil_o_mrc, nstack:', nstack
+d221 1
+a221 1
+         !write(3,*)' In openfil_o_mrc2, dsp,imgnum:', dsp,imgnum,nstack
+d232 1
+a232 1
+      !write(6,*)' In openfil_o_mrc - imgnum,nstack:',imgnum,nstack 
+d245 3
+a247 1
+C     FILE VALUES FOR FMIN... INTO COMMON: CMBLOCK SET LATER IN LUNSETCOMMON   
+d251 1
+a251 1
+      !write(3,*)' In openfil_o_mrc imami,fmin:',imami,fmin 
+d260 1
+a260 1
+         !write(3,*)'In openfil_o_mrc, fmin,fmax,imami:',fmin,fmax,imami
+d265 2
+a266 2
+      !write(6,*)' In openfil_o_mrc - iform,nz: ',iform,nz,nstack 
+      !write(6,*)' In openfil_o_mrc - nx,ny,nz: ',nx,ny,nz,nstack 
+d300 2
+a301 1
+      IRTFLG = 999   ! DO NOT ECHO OPENING INFO
+d305 2
+a306 2
+      !write(6,*)' Opened  old MRC file: ',FILNAM(1:nlet),
+c     &           '  Convert:',DISP,' Irtflg: ',irtflg  
 @
 
 

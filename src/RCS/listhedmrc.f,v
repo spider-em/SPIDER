@@ -1,9 +1,14 @@
-head	1.4;
+head	1.5;
 access;
 symbols;
 locks; strict;
 comment	@c @;
 
+
+1.5
+date	2025.11.02.20.43.27;	author dean;	state Exp;
+branches;
+next	1.4;
 
 1.4
 date	2019.12.31.19.59.55;	author leith;	state Exp;
@@ -49,23 +54,25 @@ desc
 @
 
 
-1.4
+1.5
 log
-@Data type (Mode)
+@added common block variables (not in header)
 @
 text
 @
 C **********************************************************************
 C 
-C  LISTHEDMRC   NEW FOR MRC SUPPORT             OCT 2019  ArDean Leith
-C                                                                     
+C  LISTHEDMRC  NEW FOR MRC SUPPORT              OCT 2019  ArDean Leith
+C              ADDED SPIDER SPECIFIC LOCS       OCT 2025  ArDean Leith
+C                 (NOT IN FILE)                                         
+C                        
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2019  Health Research Inc.,                         *
+C=* Copyright 1985-2025  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@@health.ny.gov                                        *
+C=* Email:                                                             *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -97,12 +104,12 @@ C  1    NX          # OF COLUMNS    (FASTEST CHANGING IN MAP)
 C  2    NY          # OF ROWS
 C  3    NZ          # OF SECTIONS   (SLOWEST CHANGING IN MAP)
 C  4    MODE        DATA TYPE
-C                   0   IMAGE:  8-BIT BYTES RANGE -128 -->127 (SIGNED)                  
+C                   0   IMAGE:  8-BIT BYTES RANGE -128 -->127 (SIGNED)   C               
 C                   1   IMAGE: 16-BIT INTEGERS HALFWORDS                
 C                   2   IMAGE: 32-BIT REALS                    
-C                   6   IMAGE: UNSIGNED 8-BIT BYTES RANGE 0 -->255        
-C                   3   TRANSFORM: COMPLEX 16-BIT INTEGERS (UNSUPPORTED)   
-C                   4   TRANSFORM: COMPLEX 32-BIT REALS    (UNSUPPORTED)     
+C                   6   IMAGE: UNSIGNED 8-BIT BYTES RANGE 0 -->255       C 
+C                   3   TRANSFORM: COMPLEX 16-BIT INTEGERS (UNSUPPORTED) C  
+C                   4   TRANSFORM: COMPLEX 32-BIT REALS    (UNSUPPORTED) C    
 C  5    NXSTART     # OF FIRST COLUMN  IN MAP 
 C  6    NYSTART     # OF FIRST ROW     IN MAP       
 C  7    NZSTART     # OF FIRST SECTION IN MAP       
@@ -110,7 +117,7 @@ C  8    MX          # OF INTERVALS ALONG X
 C  9    MY          # OF INTERVALS ALONG Y
 C 10    MZ          # OF INTERVALS ALONG Z    (>1 FOR STACK)
 C 11-13 CELLA       CELL DIMENSIONS IN ANGSTROMS
-C 14-16 CELLB       CELL ANGLES IN DEGREES  (PHI,THETA,PSI)                        
+C 14-16 CELLB       CELL ANGLES IN DEGREES  (PHI,THETA,PSI)              C          
 C 17    MAPC        AXIS CORRESPONDING TO COLUMNS  (1,2,3 FOR X,Y,Z)
 C 18    MAPR        AXIS CORRESPONDING TO ROWS     (1,2,3 FOR X,Y,Z)
 C 19    MAPS        AXIS CORRESPONDING TO SECTIONS (1,2,3 FOR X,Y,Z)
@@ -170,6 +177,7 @@ CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 C     IMPLICIT NONE
 
 #include "LUNHDR.INC"
+
       INCLUDE 'CMBLOCK.INC'
       INCLUDE 'CMLIMIT.INC'
 
@@ -182,6 +190,8 @@ C     IMPLICIT NONE
       LOGICAL               :: BIGENDFILE,SAMEENDFILE
       CHARACTER(LEN=MAXNAM) :: FILNAM
       CHARACTER(LEN=800)    :: LABELS
+      CHARACTER(LEN=80)     :: OUTSTR
+      
       CHARACTER(LEN=4)      :: CSTR
       CHARACTER(LEN=1)      :: NULL = CHAR(0)
         
@@ -201,6 +211,8 @@ C     IMPLICIT NONE
 
       INTEGER               :: LNBLNKN    ! FUNCTION
       LOGICAL               :: ISMRCFILE  ! FUNCTION
+
+      integer               :: idsp,isbare,img_in_stats,nstack    
 
 
 C     OPEN INPUT FILE
@@ -300,6 +312,7 @@ C     GET MAP TYPE
       RMS      = TRANSFER(MRC_HEADER(55),FVAL) ! DEVIATION FROM MEAN       
       NLABL    = MRC_HEADER(56)
 
+       
       IF (NLABL > 0) THEN
 C        GET LABELS
          CALL LUNGETLABELS_MRC(LUN,NLABL,LABELS,IRTFLG)
@@ -329,6 +342,7 @@ C     WRITE OUT CONVERSION INFORMATION
          WRITE(NOUT,*)' On little ended architecture,',
      &                ' Reading little ended file.'
       ENDIF
+      WRITE(NOUT,*)'  '
 
 
 C     WRITE OUT HEADER INFORMATION
@@ -338,21 +352,26 @@ C     WRITE OUT HEADER INFORMATION
       IF     (MRCMODE == 0) THEN
         WRITE(NOUT,*) ' Data type (Mode) ..........................' //
      &               '    0: 8-bit signed integers, Range -128 --> 127'
+
       ELSEIF (MRCMODE == 1) THEN
         WRITE(NOUT,*) ' Data type .................................' //
-     &                '     1: 16-bit signed integers'
+     &                '      1: 16-bit signed integers'
+
       ELSEIF (MRCMODE == 2) THEN
         WRITE(NOUT,*) ' Data type ................................ ' //
-     &                '     2: 32-bit reals '
+     &                '      2: 32-bit reals '
+
       ELSEIF (MRCMODE == 3) THEN
         WRITE(NOUT,*) ' Data type  ................................' //
-     &                '     3: Complex 16-bit integers'
+     &                '      3: Complex 16-bit integers'
+
       ELSEIF (MRCMODE == 4) THEN
         WRITE(NOUT,*) ' Data type  ................................' //
-     &                '     4: Complex 32-bit reals'
+     &                '      4: Complex 32-bit reals'
+
       ELSEIF (MRCMODE == 6) THEN
         WRITE(NOUT,*) ' Data type  ................................' //
-     &                '    6 : 16-bit unsigned integers'
+     &                '      6 : 16-bit unsigned integers'
       ENDIF
 
       WRITE(NOUT,1001) NX,NY,NZ
@@ -377,13 +396,13 @@ C     WRITE OUT HEADER INFORMATION
 1007  FORMAT(2X,'Fast, medium, slow axes .................. ',3I7)
 
       WRITE(NOUT,1008) DMIN,DMAX  
-1008  FORMAT(2X,'Min & max  density ....................... ',2F23.11)
+1008  FORMAT(2X,'Min & max  density .......................',2F23.11)
 
       WRITE(NOUT,1009) DMEAN,RMS
-1009  FORMAT(2X,'Mean & RMS density ....................... ',2F23.11)
+1009  FORMAT(2X,'Mean & RMS density .......................',2F23.11)
 
       WRITE(NOUT,1092) ANG1,ANG2,ANG3,ANG4,ANG5,ANG6
-1092  FORMAT(2X,'Angles (Phi,Theta,Psi) ...............     ',6F8.2)
+1092  FORMAT(2X,'Angles (Phi,Theta,Psi) ...................   ',6F8.2)
 
       WRITE(NOUT,1010) ORX,ORY,ORZ
 1010  FORMAT(2X,'Origins .................................. ',3F10.2)
@@ -392,12 +411,13 @@ C     WRITE OUT HEADER INFORMATION
 1011  FORMAT(2X,'Space group, extra header bytes .......... ',2I7)
 
       WRITE(NOUT,1091) IMGSTATS 
-1091  FORMAT(2X,'Image used for stats ** .................. ',2I7)
+1091  FORMAT(2X,'Image used for stats ** .................. ',I7)
+
       WRITE(NOUT,1012) CAXIS 
 1012  FORMAT(2X,'Data origin ** ..........................        ',A)
 
       WRITE(NOUT,1013) MACHST
-1013  FORMAT(2X,'Machine stamp ............................ ',I12)
+1013  FORMAT(2X,'Machine stamp ............................',I12)
 
       WRITE(NOUT,1014) MAP
 1014  FORMAT(2X,'Map type..................................       ',A)
@@ -406,19 +426,43 @@ C     WRITE OUT HEADER INFORMATION
 1015  FORMAT(2X,'MRC version ..............................     ',I7)
 
       WRITE(NOUT,1016) EXTTYP 
-1016  FORMAT(2X,'ExtType .....................................    ',A)
+1016  FORMAT(2X,'ExtType ..................................       ',A)
 
-      WRITE(NOUT,1017) NLABL 
-1017  FORMAT(2X,'Number of labels ......................... ',I7)
+      WRITE(NOUT,1022) NLABL
+1022  FORMAT(2X,'Number of labels .........................  ',I7)
+
+      idsp    = mrc_header(257)
+      isbare  = mrc_header(258)
+      imgnum  = mrc_header(258)
+      nstack  = mrc_header(260)
+
+      WRITE(NOUT,*) ' '
+
+      WRITE(NOUT,1018) idsp 
+1018  FORMAT(2X,'Old or New File    (OLD: 0) (NEW: 1) ** .... ',I7)
+
+      WRITE(NOUT,1019)  isbare  
+1019  FORMAT(2X,'Bare stack         (1: TRUE)         ** .... ',I7)
+
+      WRITE(NOUT,1020) imgnum 
+1020  FORMAT(2X,'Image in header    (-2: NOT A STACK) ** .... ',I7)
+
+      WRITE(NOUT,1021) nstack 
+1021  FORMAT(2X,'Max image in stack (-2: NOT A STACK) ** .... ',I7)
+
+      WRITE(NOUT,*) ' '
 
       IF (NLABL > 0) THEN
          IEND = lnblnkn(LABELS)
 
-         WRITE(NOUT,1031)
-1031     FORMAT('  Labels:')
-
-         WRITE(NOUT,1032) LABELS(1:IEND)
-1032     FORMAT(3X,100(A80))
+         DO ILABL = 1,NLABL 
+            ILOC = (ILABL - 1) * 80 + 1
+            OUTSTR = LABELS(ILOC: ILOC+80)
+            OUTSTR = ADJUSTL(OUTSTR)
+            OUTSTR = TRIM(OUTSTR)  
+            WRITE(NOUT,1031) ILABL,OUTSTR
+1031        FORMAT('  Label:', I5,'     ',A80)
+         ENDDO
       ENDIF
 
       WRITE(NOUT,*) ' '
@@ -426,6 +470,87 @@ C     WRITE OUT HEADER INFORMATION
       CLOSE(LUN)
 
       END
+
+@
+
+
+1.4
+log
+@Data type (Mode)
+@
+text
+@d4 4
+a7 2
+C  LISTHEDMRC   NEW FOR MRC SUPPORT             OCT 2019  ArDean Leith
+C                                                                     
+d12 1
+a12 1
+C=* Copyright 1985-2019  Health Research Inc.,                         *
+d14 1
+a14 1
+C=* Email: spider@@health.ny.gov                                        *
+d46 1
+a46 1
+C                   0   IMAGE:  8-BIT BYTES RANGE -128 -->127 (SIGNED)                  
+d49 3
+a51 3
+C                   6   IMAGE: UNSIGNED 8-BIT BYTES RANGE 0 -->255        
+C                   3   TRANSFORM: COMPLEX 16-BIT INTEGERS (UNSUPPORTED)   
+C                   4   TRANSFORM: COMPLEX 32-BIT REALS    (UNSUPPORTED)     
+d59 1
+a59 1
+C 14-16 CELLB       CELL ANGLES IN DEGREES  (PHI,THETA,PSI)                        
+d119 1
+d132 2
+d154 2
+d254 1
+d284 1
+d294 1
+d297 2
+a298 1
+     &                '     1: 16-bit signed integers'
+d301 2
+a302 1
+     &                '     2: 32-bit reals '
+d305 2
+a306 1
+     &                '     3: Complex 16-bit integers'
+d309 2
+a310 1
+     &                '     4: Complex 32-bit reals'
+d313 1
+a313 1
+     &                '    6 : 16-bit unsigned integers'
+d338 1
+a338 1
+1008  FORMAT(2X,'Min & max  density ....................... ',2F23.11)
+d341 1
+a341 1
+1009  FORMAT(2X,'Mean & RMS density ....................... ',2F23.11)
+d344 1
+a344 1
+1092  FORMAT(2X,'Angles (Phi,Theta,Psi) ...............     ',6F8.2)
+d353 2
+a354 1
+1091  FORMAT(2X,'Image used for stats ** .................. ',2I7)
+d359 1
+a359 1
+1013  FORMAT(2X,'Machine stamp ............................ ',I12)
+d368 1
+a368 1
+1016  FORMAT(2X,'ExtType .....................................    ',A)
+d370 23
+a392 2
+      WRITE(NOUT,1017) NLABL 
+1017  FORMAT(2X,'Number of labels ......................... ',I7)
+d397 8
+a404 5
+         WRITE(NOUT,1031)
+1031     FORMAT('  Labels:')
+
+         WRITE(NOUT,1032) LABELS(1:IEND)
+1032     FORMAT(3X,100(A80))
+d412 1
 @
 
 

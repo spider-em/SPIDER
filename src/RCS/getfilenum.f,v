@@ -1,4 +1,4 @@
-head	1.5;
+head	1.6;
 access;
 symbols
 	pre_mrcs:1.5
@@ -20,6 +20,11 @@ symbols
 locks; strict;
 comment	@c @;
 
+
+1.6
+date	2025.10.25.15.35.25;	author dean;	state Exp;
+branches;
+next	1.5;
 
 1.5
 date	2018.10.03.14.34.07;	author leith;	state Exp;
@@ -51,9 +56,10 @@ desc
 @@
 
 
-1.5
+1.6
 log
-@email_health_dept
+@defined (SP_DBUGIO)
+added  GET_IMG_STK subroutine
 @
 text
 @
@@ -81,8 +87,7 @@ C=* General Public License for more details.                           *
 C=* You should have received a copy of the GNU General Public License  *
 C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
-C *******************************************************************C **********************************************************************
-C
+C **********************************************************************
 C
 C    GETFILENUM(FILNAM,IMGNUM,CALLERRT,IRTFLG)  
 C
@@ -138,7 +143,305 @@ C         NO NUMBER AT END OF FILNAM OR > 10 DIGITS
        END
 
 
+C ************************* GET_IMG_STK *******************************
+C
+C   GET_IMG_STK(FILNAM,FIL_DIRS,FIL_BASE,FIL_EXT,
+C               ISMRC,LOCAST,NSTK,IRTFLG)
+C
+C   PURPOSE:    FINDS FILE NUMBER AT END OF FILENAME
+C    
+C   PARAMETERS: FILNAM     CHAR. VARIABLE FILE NAME         (SENT)
+C               FIL_NOAT   CHAR. VARIABLE FILE NAME         (RET)
+C               FIL_DIRS   CHAR. VARIABLE FILE NAME         (RET)
+C               FIL_BASE   CHAR. VARIABLE FILE NAME         (RET)
+C               FIL_EXT    CHAR. VARIABLE FILE NAME         (RET)
+C               ISMRC      NUMBER IN FILE NAME              (RET.)
+C               LOCAST     LOCATION OF * IN FILE NAME       (RET.)
+C               NSTK       STACK IMG NUMBER FROM FILE NAME  (RET.)
+C                          -2 :  AST IN STACK   
+C                          -1 :  NOT A STACK   (NO @@)
+C                           0 :  BARE STACK
+C                          >1 :  STACKED IMAGE NUMBER
+C               CALLERRT   CALL ERRT IF ERROR               (SENT)
+C               IRTFLG     ERROR FLAG                       (RET.)
+C  
+C     IF PRESENT, EXTRACT STACK FILENAME AND NUMBER e.g. from
+C     056@@file.mrcs       or file3321@@100.mrcs  or /dir/fileaa@@21 or
+C     /dir/fileaa@@21.mrcs or /dir/056@@file         etc 
+C
+C23456789 123456789 123456789 123456789 123456789 123456789 123456789 12
+C--*********************************************************************
 
+      SUBROUTINE GET_IMG_STK(FILNAM,FIL_NOAT,FIL_DIRS,FIL_BASE,FIL_EXT,
+     &                ISMRC,LOCAST,NSTK,IRTFLG)
+
+      IMPLICIT NONE
+
+      INCLUDE 'CMBLOCK.INC'
+      INCLUDE 'CMLIMIT.INC'
+
+      CHARACTER(LEN=*)      :: FILNAM,FIL_DIRS,FIL_BASE,FIL_EXT
+      CHARACTER(LEN=MAXNAM) :: FIL_NOAT
+      INTEGER               :: LOCAT,NSTK,IRTFLG
+
+      INTEGER               :: LOCSLASH,NLEN,IGO,LOCDOT,IEND,IASTSB4
+      INTEGER               :: IERR,NE,LOCAST,IDIGS,ilen,ILENT
+      LOGICAL               :: ISMRC,GOT_EXT
+      CHARACTER(LEN=1)      :: NULL = CHAR(0)
+ 
+      INTEGER               :: lnblnkn
+
+      NLEN     = lnblnkn(FILNAM)
+
+C     FIND ENDING LOCATION OF  DIRECTORY(S) IN FILNAM_AT
+      LOCSLASH = INDEX(FILNAM(1:NLEN),'/',BACK=.TRUE.)
+
+C     STRIP OFF DIRECTORY(S)
+      FIL_DIRS(1:) = NULL
+      IF (LOCSLASH > 0) FIL_DIRS = FILNAM(1:LOCSLASH+1)
+
+      !write(3,*)'0000000000000000000'
+      !write(3,*)' In get_img_stk; locslash:',locslash
+      !ilent = lnblnkn(fil_dirs)
+      !write(3,*)' In get_img_stk; fil_dirs: ', fil_dirs(1:ilent)
+
+C     FIND BEGINNING LOCATION OF EXTENSION IN FILNAM
+
+      IEND     = NLEN
+      LOCDOT   = INDEX(FILNAM(1:NLEN),'.',BACK=.TRUE.)
+      GOT_EXT  = (LOCDOT > 0)
+
+      !write(3,*)' In get_img_stk; nlen,locdot,ilent:',nlen,locdot,ilent
+
+      IF (LOCDOT > 0) FIL_EXT = FILNAM(LOCDOT+1:NLEN)
+      
+      !write(3,*)' in get_img_stk; nlen,locdot,ilent:',nlen,locdot,ilent
+         
+      ISMRC = .FALSE.
+      IF ((( (INDEX(FIL_EXT,'mrc') ) > 0) .OR. 
+     &      ((INDEX(FIL_EXT,'MRC') ) > 0) ))
+     &     ISMRC = .TRUE.
+
+C     STRIP OFF DIRECTORY(S) and EXTENSION
+      IF (LOCDOT .GT. 0 ) IEND = LOCDOT - 1 
+      FIL_BASE  = FILNAM(1:IEND) // NULL
+
+      IEND      = lnblnkn(FIL_BASE)
+      LOCAT     = INDEX(FIL_BASE(1:IEND),'@@')
+      LOCAST    = INDEX(FIL_BASE(1:IEND),'*')
+
+#if defined (SP_DBUGIO)
+      write(3,*)' In get_img_stk; locslash,locdot:',
+     &                            locslash,locdot
+      write(3,*)' In get_img_stk; locat,locast:',locat,locast
+
+      ilent = lnblnkn(filnam)
+      write(3,*)' In get_img_stk; filnam: ',   filnam(1:ilent)
+      ilent = lnblnkn(fil_dirs)
+      write(3,*)' In get_img_stk; fil_dirs: ', fil_dirs(1:ilent)
+      ilent = lnblnkn(fil_base)
+      write(3,*)' In get_img_stk; fil_base: ', fil_base(1:ilent) 
+      ilent = lnblnkn(fil_ext)
+      write(3,*)' In get_img_stk; fil_ext: ',  fil_ext(1:ilent) 
+#endif
+
+      IRTFLG   = 0
+
+      IF (LOCAT <= 0) THEN
+ 
+         !write(3,*) '  1111111111111111111111111 '
+
+         FIL_NOAT  = FILNAM
+         LOCAST    = INDEX(FIL_NOAT,'*')
+         NSTK      = -1   ! NOT A STACK
+         GOTO 999    !RETURN
+
+      ELSEIF (LOCAT == 1 ) THEN
+C        BARESTACK AT START OF FILE BASENAME
+
+         !write(3,*) '  222222222222222222222 '
+ 
+         NSTK      = -1      ! BARESTACK
+         FIL_BASE  = FIL_BASE(2:IEND)
+         ILENT     = lnblnkn(FIL_NOAT)
+         IF (GOT_EXT) FIL_NOAT = FIL_NOAT(1:ILENT) // '.' // FIL_EXT
+         LOCAST    = INDEX(FIL_NOAT,'*')
+         !RETURN
+
+      ELSEIF (LOCAT == IEND ) THEN
+C        BARESTACK AT END OF FILE BASENAME
+
+        !write(3,*) '  33333333333333333333333 '
+
+         NSTK      = -1      ! BARESTACK
+         FIL_BASE  = FIL_BASE(1:IEND-1) // NULL
+         ILENT     = lnblnkn(FIL_DIRS)
+         FIL_NOAT  = FIL_DIRS(1:ILENT) // FIL_BASE 
+         ILENT     = lnblnkn(FIL_NOAT)
+         IF (GOT_EXT) FIL_NOAT = FIL_NOAT(1:ILENT) // '.' // FIL_EXT
+         LOCAST    = INDEX(FIL_NOAT,'*')
+         GOTO 999    !RETURN
+
+      ENDIF
+
+      !write(3,*) '  33333  to  4444444 '
+
+     
+      IASTSB4 = VERIFY(FIL_BASE(1:LOCAT-1),'*',.TRUE.) 
+      IF ((LOCAT > 1) .AND. (IASTSB4 == 0)) THEN
+C        ONLY '*'s  AT START OF FILE BASENAME
+
+         write(3,*) ' 44444444444444444 '
+
+         NSTK      = -2      ! (*)@@
+         FIL_BASE  = FIL_BASE(LOCAT+1:IEND) // NULL
+         ILENT     = lnblnkn(FIL_DIRS)
+         FIL_NOAT  = FIL_DIRS(1:ILENT) // FIL_BASE 
+         ILENT     = lnblnkn(FIL_NOAT)
+         IF (GOT_EXT) FIL_NOAT = FIL_NOAT(1:ILENT) // '.' // FIL_EXT
+         LOCAST    = INDEX(FIL_NOAT,'*')
+         GOTO 999    !RETURN
+      ENDIF
+
+      !write(3,*) '   4444444 to  55555555555 '
+
+
+      IASTSB4 = VERIFY(FIL_BASE(LOCAT+1:IEND),'*') 
+      IF ((LOCAT > 1) .AND. (IASTSB4 == 0)) THEN
+C        ONLY '*'s  AT END OF FILE BASENAME
+
+#if defined (SP_DBUGIO)
+       write(3,*)' 55555555; ilen: ', ilen
+       write(3,*)' 55555555; iastsb4,locat: ', iastsb4,locat
+       write(3,*)' 55555555; iastsb4,fil_base: ', iastsb4,fil_base
+       write(3,*)' 55555555; fil_base(1:locat) ', fil_base(1:locat)
+#endif
+         NSTK      = -2       ! @@(*)
+         FIL_BASE  = FIL_BASE(1:LOCAT-1) // NULL
+         ILENT     = lnblnkn(FIL_DIRS)
+         FIL_NOAT  = FIL_DIRS(1:ILENT) // FIL_BASE 
+         ILENT     = lnblnkn(FIL_NOAT)
+         IF (GOT_EXT) FIL_NOAT = FIL_NOAT(1:ILENT) // '.' // FIL_EXT
+         LOCAST    = INDEX(FIL_NOAT,'*')
+         GOTO 999    !RETURN
+      ENDIF
+
+      !write(3,*) '   5555555555   TO  7777777777777 '
+
+
+      IDIGS = VERIFY(FIL_BASE(1:LOCAT-1),'1234567890') 
+      IF ((LOCAT > 1) .AND. (IDIGS == 0)) THEN
+C        ONLY DIGITS  AT START OF FILE BASENAME BEFORE @@
+ 
+         !write(3,*) '  777777777777777 '
+
+          READ(FIL_BASE(1:LOCAT-1),'(I10)',IOSTAT=IERR) NSTK
+         IF (IERR .NE. 0) THEN
+             WRITE(NOUT,*)
+     &          '*** CAN NOT GET STK NUMBER FROM: ',FIL_BASE(1:LOCAT)
+             CALL ERRT(100,'GET_IMG_STK',NE)
+             IRTFLG = 1
+             RETURN
+         ENDIF
+
+         FIL_BASE  = FIL_BASE(LOCAT+1:) // NULL
+         ILENT     = lnblnkn(FIL_DIRS)
+         FIL_NOAT  = FIL_DIRS(1:ILENT) // FIL_BASE 
+         ILENT     = lnblnkn(FIL_NOAT)
+         IF (GOT_EXT) FIL_NOAT = FIL_NOAT(1:ILENT) // '.' // FIL_EXT
+         LOCAST    = INDEX(FIL_NOAT,'*')
+         GOTO 999    !RETURN
+      ENDIF
+
+ 
+
+      IDIGS = VERIFY(FIL_BASE(LOCAT+1:IEND),'1234567890') 
+      IF ((LOCAT < IEND) .AND. (IDIGS == 0)) THEN
+C        ONLY DIGITS  AT END OF FILE BASENAME AFTER @@
+ 
+       !write(3,*)' 9999; locat,idigs,iend:', locat,idigs,iend
+       !write(3,*)' 9999; fil_base ',  fil_base
+
+       !write(3,*)' 9999; fil_base(1:locat-1): ', fil_base(1:locat-1)
+
+       !write(3,*)' 9999; fil_base(locat+1:iend) ',
+       !&                 fil_base(locat+1:iend)
+
+        write(3,*) '  88888888888888888 '
+
+         READ(FIL_BASE(LOCAT+1:IEND),'(I10)',IOSTAT=IERR) NSTK
+         IF (IERR .NE. 0) THEN
+             WRITE(NOUT,*)
+     &         '*** CAN NOT GET STK NUMBER FROM: ',FIL_BASE(LOCAT:IEND)
+             CALL ERRT(100,'GET_IMG_STK',NE)
+             IRTFLG = 1
+             RETURN
+         ENDIF
+
+         FIL_BASE  = FIL_BASE(1:LOCAT-1) // NULL
+     
+         ! ilent = lnblnkn(fil_base)
+         !write(3,*)' 99997777; fil_base: ', fil_base
+
+         ILENT     = lnblnkn(FIL_DIRS)
+         FIL_NOAT  = FIL_DIRS(1:ILENT) // FIL_BASE 
+
+         ILENT     = lnblnkn(FIL_NOAT)
+         IF (GOT_EXT) FIL_NOAT = FIL_NOAT(1:ILENT) // '.' // FIL_EXT
+ 
+        LOCAST    = INDEX(FIL_BASE,'*')
+
+        !ilent = lnblnkn(fil_noat)
+        !write(3,*)' 999999999999; fil_noat:', fil_noat(1:ilent)
+        !ilent = lnblnkn(fil_base)
+        !write(3,*)' 99999999 nstk,irtflg: ', nstk,irtflg,locast
+
+        GOTO 999    
+ 
+        !RETURN
+      ENDIF
+
+      write(3,*) '  Should not get to this line!!!!!! '
+
+
+ 999  CONTINUE
+
+#if defined (SP_DBUGIO)
+      ilen = lnblnkn(fil_noat)
+      write(3,*)' End get_img_stk; fil_noat: ',    fil_noat(1:ilen)
+      ilen = lnblnkn(fil_dirs)
+      write(3,*)' End get_img_stk; fil_dirs: ',    fil_dirs(1:ilen)
+      ilen = lnblnkn(fil_base)
+      write(3,*)' End get_img_stk; fil_base: ',    fil_base(1:ilen)
+      ilen = lnblnkn(fil_ext)
+      write(3,*)' End get_img_stk; fil_ext: ',     fil_ext(1:ilen)
+
+      write(3,*)' End get_img_stk; nstk,irtflg: ', nstk,irtflg
+
+      LOCAST = INDEX(FIL_BASE,'*')
+     
+      write(3,*)' End get_img_stk; locast: ', locast
+
+      write(3,*)' '
+#endif
+
+      END
+
+
+
+@
+
+
+1.5
+log
+@email_health_dept
+@
+text
+@d26 1
+a26 2
+C *******************************************************************C **********************************************************************
+C
+d80 285
 @
 
 
