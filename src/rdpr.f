@@ -1,45 +1,47 @@
 
 C++*********************************************************************
 C
-C  RDPR.F -- CREATED 2/8/90 ARDEAN LEITH 
-C	  -- ADD ON-LINE HELP                3/29/93 MAHIEDDINE LADJADJ  
-C         -- CONVERTED FROM READCH                  DEC 96 ARDEAN LEITH
-C         -- F90 CHANGES                            OCT 97 ARDEAN LEITH
-C         -- STRIPS COMMENT                         AUG 99 ARDEAN LEITH
-C         -- LUNDONOW ADDED                         OCT 99 ARDEAN LEITH
-C         -- TRAILING BLANKS IN COMMENT REMOVED     NOV 99 ARDEAN LEITH
-C         -- PUT IN <1> VARIABLE HANDLING           SEP 00 ARDEAN LEITH
-C         -- MULTIPLE VARIABLE SUBSTITUTION         JAN 01 ARDEAN LEITH
-C         -- USED PROC_GETLINE                      JAN 01 ARDEAN LEITH
-C         -- FLAG FOR ; OK                          MAR 01 ARDEAN LEITH
-C         -- ADDED FILNAMSUB                        APR 01 ARDEAN LEITH
-C         -- ADDED VERBOSE FOR ;                    APR 01 ARDEAN LEITH
-C         -- DELAYED PROMPT FOR .NOT. VERBOSE       JUN 01 ARDEAN LEITH
-C         -- MOVED SSUPCASE LATER                   SEP 01 ARDEAN LEITH
-C         -- NO PROMPT FOR .OP COMMENT LINES        MAR 02 ARDEAN LEITH
-C         -- SYMPAR REWRITTEN                       JUN 02 ARDEAN LEITH
-C         -- NO SYMPAR FOR 'RR'                     AUG 02 ARDEAN LEITH
-C         -- '[]' --> '<>'                          SEP 02 ARDEAN LEITH
-C         -- PARAMETERS CHANGED                     APR 05 ARDEAN LEITH
-C         -- [] DEFAULT FOR VARIABLES               OCT 05 ARDEAN LEITH
-C         -- NDOLINE                                MAY 07 ARDEAN LEITH
-C         -- ?prompt?[  FR BUG                      JUN 07 ARDEAN LEITH
-C         -- REMOVED IMCx33 OBSOLETE SYNTAX         JUN 09 ARDEAN LEITH
-C	  -- REMOVED ON-LINE HELP                   AUG 09 ARDEAN LEITH  
-C         -- $DATEXT x11 BUG                        AUG 09 ARDEAN LEITH
-C         -- '@@' SUPPORT                           NOV 09 ARDEAN LEITH
-C         -- NDOLINE                                NOV 09 ARDEAN LEITH
-C         -- VMS COMMAND DOES NOT <> --> []         SEP 10 ARDEAN LEITH
-C         -- ! COMMENT DELIMITER                    DEC 11 ARDEAN LEITH
-C         -- RECURSIVE FILNAMSUB                    MAR 12 ARDEAN LEITH
-C         -- IRTFLG 654321                          MAR 12 ARDEAN LEITH
+C  RDPR.F -- CREATED 2/8/90 ArDean Leith 
+C	  -- ADD ON-LINE HELP               3/29/93 Mahieddine Ladjadj 
+C         -- CONVERTED FROM READCH                 DEC 96 ArDean Leith
+C         -- F90 CHANGES                           OCT 97 ArDean Leith
+C         -- STRIPS COMMENT                        AUG 99 ArDean Leith
+C         -- LUNDONOW ADDED                        OCT 99 ArDean Leith
+C         -- TRAILING BLANKS IN COMMENT REMOVED    NOV 99 ArDean Leith
+C         -- PUT IN <1> VARIABLE HANDLING          SEP 00 ArDean Leith
+C         -- MULTIPLE VARIABLE SUBSTITUTION        JAN 01 ArDean Leith
+C         -- USED PROC_GETLINE                     JAN 01 ArDean Leith
+C         -- FLAG FOR ; OK                         MAR 01 ArDean Leith
+C         -- ADDED FILNAMSUB                       APR 01 ArDean Leith
+C         -- ADDED VERBOSE FOR ;                   APR 01 ArDean Leith
+C         -- DELAYED PROMPT FOR .NOT. VERBOSE      JUN 01 ArDean Leith
+C         -- MOVED SSUPCASE LATER                  SEP 01 ArDean Leith
+C         -- NO PROMPT FOR .OP COMMENT LINES       MAR 02 ArDean Leith
+C         -- SYMPAR REWRITTEN                      JUN 02 ArDean Leith
+C         -- NO SYMPAR FOR 'RR'                    AUG 02 ArDean Leith
+C         -- '[]' --> '<>'                         SEP 02 ArDean Leith
+C         -- PARAMETERS CHANGED                    APR 05 ArDean Leith
+C         -- [] DEFAULT FOR VARIABLES              OCT 05 ArDean Leith
+C         -- NDOLINE                               MAY 07 ArDean Leith
+C         -- ?prompt?[  FR BUG                     JUN 07 ArDean Leith
+C         -- REMOVED IMCx33 OBSOLETE SYNTAX        JUN 09 ArDean Leith
+C         -- REMOVED ON-LINE HELP                  AUG 09 ArDean Leith 
+C         -- $DATEXT x11 BUG                       AUG 09 ArDean Leith
+C         -- '@@' SUPPORT                          NOV 09 ArDean Leith
+C         -- NDOLINE                               NOV 09 ArDean Leith
+C         -- VMS COMMAND DOES NOT <> --> []        SEP 10 ArDean Leith
+C         -- ! COMMENT DELIMITER                   DEC 11 ArDean Leith
+C         -- RECURSIVE FILNAMSUB                   MAR 12 ArDean Leith
+C         -- IRTFLG 654321                         MAR 12 ArDean Leith
+C         -- ADDED DEBUG_IO OUTPUT                 OCT 25 ArDean Leith
+C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2012  Health Research Inc.,                         *
+C=* Copyright 1985-2025  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
+C=* Email:                                                             *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -58,36 +60,37 @@ C
 C  RDPR(PROMPT,NCHAR,ANS,UPPER,WANTSUB,SAYPRMT,SAYANS,ENDATSEMI,IRTFLG)
 C
 C  PURPOSE: OUTPUTS PROMPT
-C           READS AN ALPHANUMERIC STRING FROM STORED PROC. LINE, TERMINAL,
-C              OR PROMPT.
-C           ECHO & SKIP LINES WHICH ONLY CONTAIN A COMMENT AT START OF LINE
+C           READS AN ALPHANUMERIC STRING FROM STORED PROC. LINE,
+C           TERMINAL,  OR PROMPT.
+C           ECHO & SKIP LINES WHICH ONLY CONTAIN A COMMENT AT 
+C           START OF LINE
 C           HANDLES INTERACTIVE HELP
 C           CAN ECHO LINE TO CURRENT INTERACTIVE DO-LOOP IFLE.
-C           CONVERTS OLD @B01[X11] PROC. ARG. FORMAT TO TO NEW: () ARG.  
+C           CONVERTS OLD @B01[X11] PROC. ARG. FORMAT TO TO NEW: () ARG.
 C           CONVERTS OLD <> VARIABLE FORMAT TO NEW [] VARIABLE FORMAT
-C           CAN INVOKE VARIABLE SUBSTITUTION FOR [string]. 
+C           CAN INVOKE VARIABLE SUBSTITUTION FOR [string].
 C           CAN CONVERT TO UPPERCASE
 C           CONVERTS OLD X REGISTER TO  [] VARIABLE FORMAT
 C           SUBSTITUTES FOR {***[]} AND ${ENV} STRINGS
-C               
-C           RETURNS NCHAR=LENGTH OF STRING WITHOUT TRAILING BLANKS OR COMMENT. 
+C           RETURNS NCHAR=LENGTH OF STRING WITHOUT TRAILING BLANKS
+C           OR COMMENT.
 C           COMMENT IS LIMITED TO 80 CHAR.
 C           VARIABLE VALUE RESPONSE IS LIMITED TO 160 CHAR.
 C             
 C           REGISTER SUBSTITUTION OCCURS IN RDPRINC
 C            
 C  PARAMETERS:  PROMPT    INPUT PROMPT                     (SENT)
-C               NCHAR     LAST NON_BLANK CHAR IN           (RETURNED)
-C                            ANS RESPONSE BEFORE COMMENT
+C               NCHAR     LAST NON_BLANK CHAR IN ANS       (RETURNED)
+C                         RESPONSE BEFORE COMMENT
 C               ANS       USER RESPONSE                    (RETURNED)
 C               GETANS    READ ANSWER (NOT PROMPT)         (SENT)
 C               UPPER     CONVERT TO UPPERCASE             (SENT)
 C               WANTSUB   WANT SYM. PARAMETER SUBSTITUTION (SENT)
-C                             HERE NOW (USUAL)
+C                         HERE NOW                         (USUAL)
 C               SAYPRMT   ECHO PROMPT TO OUTPUT            (SENT)
 C               SAYANS    ECHO RAW ANSWER TO OUTPUT        (SENT)
 C               ENDATSEMI IGNORE SEMICOLON COMMENT         (SENT) 
-C                            (FOR vms.f)
+C                            (FOR vms.f or SYS)
 C               IRTFLG    RETURN FLAG (0 IS NORMAL)        (RETURNED)
 C
 C  CALLED BY:   RDPRMC -> RDPR -> SUBSYMPAR &  SSUPCAS & FILNAMSUB
@@ -109,7 +112,7 @@ C23456789012345678901234567890123456789012345678901234567890123456789012
 C--*********************************************************************
 
       SUBROUTINE RDPR(PROMPT,NCHAR,ANS,
-     &       GETANS,UPPER,WANTSUB,SAYPRMT,SAYANS,ENDATSEMI,STRIP,IRTFLG)
+     &     GETANS,UPPER,WANTSUB,SAYPRMT,SAYANS,ENDATSEMI,STRIP,IRTFLG)
 
       INCLUDE 'CMBLOCK.INC'
 
@@ -127,11 +130,16 @@ C--*********************************************************************
 
       LEGACYREGS = (IRTFLG .NE. -999)  ! DO NOT CONVERT x**
       ACCEPTCR   = (IRTFLG == 654321)  ! ACCEPT <CR> FOR RDPRI & M
-  
+
+#undef SP_DBUGIO
+
+#if defined (SP_DBUGIO)
+      write(3,*)' Starting rdpr; irtflg,acceptcr: ',irtflg,acceptcr
+#endif
+      IRTFLG = 0
+ 
       IDOL = INDEX(PROMPT,'$') - 1
       IF (IDOL .LE. 0) IDOL = LEN(PROMPT)
-
-      IRTFLG = 0
 
 10    CONTINUE
 C     PROMPT OUTPUT IS DELAYED IN BATCH TO IGNORE COMMENT / BLANK LINES
@@ -184,12 +192,18 @@ C     (IF ; IS PROCEEDED BY SPACE MAYBE THE USER INPUT A BLANK??)
       NCHARA  = NCHAR           ! NOTHING BEFORE ; FLAG
       IF (LOCSEMI > 0) NCHARA = lnblnk(ANS(1:LOCSEMI-1))
 
-      !write(6,*) 'rdpr, nchara,locsemi:',nchara,locsemi,acceptcr
-      !write(6,*) 'rdpr, ANS(NCHARA:NCHARA):',ANS(NCHARA:NCHARA),':'
+#if defined (SP_DBUGIO)
+      write(3,*)' In rdpr; nchar,nchara,locsemi: ',nchar,nchara,locsemi
+      if (nchara > 0) then
+        write(3,*) ' In rdpr; ans(nchara:nchara): ',ans(nchara:nchara)
+      endif
+#endif
 
-      IF (ACCEPTCR .AND. 
-     &   (NCHARA == 0 .OR. ANS(NCHARA:NCHARA) == '*') ) THEN
+C     IF (ACCEPTCR .AND. 
+C     &  (NCHARA == 0 .OR. ANS(NCHARA:NCHARA) == '*') ) THEN
+C     kludge for use with gfort debugger if nchara <= 0 Oct 2025
 
+      IF (ACCEPTCR .AND. (NCHARA <= 0)) THEN
 C        ACCEPT <CR> or *  RESPONSE BEFORE COMMENT
          IF (MYPID <= 0 .AND. SAYPRMT .AND. COPT == 'B') THEN
             WRITE(NOUT,95)  PROMPT(1:IDOL),': ',ANS(1:NCHAR)
@@ -197,7 +211,15 @@ C        ACCEPT <CR> or *  RESPONSE BEFORE COMMENT
          ENDIF
          NCHAR  = 0
          IRTFLG = 0
-         !write(6,*) 'rdpr, nchar:',nchar,irtflg
+         RETURN
+
+      ELSEIF (ACCEPTCR .AND. ANS(NCHARA:NCHARA) == '*')  THEN
+C        ACCEPT <CR> or *  RESPONSE BEFORE COMMENT
+         IF (MYPID <= 0 .AND. SAYPRMT .AND. COPT == 'B') THEN
+            WRITE(NOUT,95)  PROMPT(1:IDOL),': ',ANS(1:NCHAR)
+         ENDIF
+         NCHAR  = 0
+         IRTFLG = 0
          RETURN
 
       ELSEIF (LOCSEMI == 1 .AND. ENDATSEMI) THEN
@@ -206,7 +228,7 @@ C        NOTHING BEFORE COMMENT
 C           ECHO COMMENT
             IF (SAYPRMT .AND. COPT == 'B') 
      &          WRITE(NOUT,90,ADVANCE='NO')  PROMPT(1:IDOL)
-	    IF (NOUT .NE. 0)  WRITE(NOUT,91) ANS(1:NCHAR)
+            IF (NOUT .NE. 0)  WRITE(NOUT,91) ANS(1:NCHAR)
 91          FORMAT(' ',A)
          ENDIF
 C        READ ANOTHER INPUT LINE
@@ -262,6 +284,7 @@ C        MUST COPY INPUT LINE TO CURRENT INTERACTIVE DO-LOOP FILE
          WRITE(LUNDONOW,*) ANS(1:NCHAR)
          NDOLINE = NDOLINE + 1
          !write(6,*) ' rdpr lundo: ',ANS(1:NCHAR),':',NDOLINE !!!!
+
       ELSEIF ((COPT == 'I' .AND. NDOLINE > 0)) THEN
          NDOLINE = NDOLINE + 1
          !write(6,*) ' rdpr ndoline: ',ANS(:NCHAR),':',NDOLINE !!!!
@@ -400,7 +423,7 @@ C           PROBABLE REGISTER START x or X
 
 
 
-C      *********************** DECOMMENT ********************************
+C      *********************** DECOMMENT *******************************
 
        SUBROUTINE DECOMMENT(CINPUT,NCHAROUT,LOCSEMI)
 

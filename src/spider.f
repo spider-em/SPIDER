@@ -7,10 +7,10 @@ C                                                                      *
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
-C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2020  Health Research Inc.,                         *
+C=* SPIDER System Authors:  Joachim Frank, ArDean Leith & Tapu Shaikh  *
+C=* Copyright 1985-2025  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@health.ny.gov                                        *
+C=* Email:                                                             *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -75,11 +75,12 @@ C       COMMON BLOCK SPACE RESERVATION USED AT ALBANY, IS NOW ONLY 5 MB.
 C       (MOST ROUTINES NOW USE RUN-TIME ALLOCATION OF MEMORY WHICH 
 C       IS INDEPENDENT OF THE COMMON BLOCK AND MAXDI ASSIGNMENT.
 C       WE USUALLY HAVE > 2 GB RAM AVAILABLE ON ALBANY MACHINES
- 
+C       NAME MAX_UNLABELED_COM IS MORE EASILY SEARCHABLE IN SOURCE FILES
+        INTEGER, PARAMETER  :: MAX_UNLABELED_COM = 5000000
         INTEGER, PARAMETER  :: MAXDI = 5000000
-        INTEGER             :: PLINEGO(MAXDI/5)
-        CHARACTER           :: PDATA(4*4*MAXDI/5)
-        COMMON                 PLINEGO,PDATA
+        INTEGER             :: PLINEGO(MAXDI/5)   ! 1  million ints
+        CHARACTER           :: PDATA(4*4*MAXDI/5) ! 16 million char
+        COMMON                 PLINEGO,PDATA      ! 20 million bytes
 
 C       @@@@@@@@@@@@@@@@@@@  DECLARATIONS @@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 
@@ -159,7 +160,7 @@ C       @@@@@@@@@@@@@@@@@@@@@@@@@@ DATA STATEMENTS @@@@@@@@@@@@@@@@@@@@
 C       @@@@@@@@@@@@@@@@@@@@@@ VERSION INITIALIZATION @@@@@@@@@@@@@@@@@
 
 CHERE               123456789 123456789 123456789 1234567890 
-        DATA CVERS/'VERSION:  UNIX 26.06  ISSUED:  6/30/2020'/
+        DATA CVERS/'VERSION:  UNIX 27.00  ISSUED:  9/26/2025'/
 
         DATA RESULM/'results'/
         DATA LOGM/'LOG'/
@@ -175,7 +176,7 @@ C       SOME DO LOOP PARAMETERS
 
 C       @@@@@@@@@@@@@@@@@@@@@@@@@@@  CODE @@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 
-        IN_PARALLEL = .FALSE.
+        IN_PARALLEL = .FALSE.DEF
         ONLYONE_RED = .TRUE.
         ONLYONE_WRT = .TRUE.
 
@@ -192,22 +193,15 @@ C       NOT USING MPI
         MYPID = -1
 #endif
 
-#ifdef SP_MP
-C       NEEDED BY PGI 2013.10 COMPILER
 
-#ifndef USE_MPI
-#ifndef __APPLE__
-#if defined(SP_IFC) || defined(__INTEL_COMPILER)
-        isiz1 = kmp_get_stacksize()
-        CALL kmp_set_stacksize(65536)
-        isiz2 = kmp_get_stacksize()
-#else
-	isiz1 = omp_get_stack_size()
-	CALL omp_set_stack_size(65536)
-	isiz2 = omp_get_stack_size()
-#endif
-        !write(6,*) ' OMP Stack size: ',isiz1,' -->',isiz2
-#endif
+#ifdef SP_MP
+#ifdef SP_GFORTRAN
+c         isize = omp_get_stack_size()
+c        WRITE(6,*) ' Number of threads -----: ', isize
+c        WRITE(3,*) ' Number of threads -----: ', isize
+c
+c        call omp_set_stack_size(65536)
+c        CALL kmp_set_stacksize(65536)
 #endif
 #endif
 
@@ -239,27 +233,27 @@ C       INITIALIZE SOME COMMON BLOCK DATA ELEMENTS (SEE: setmode.f)
         LEGACYPAR      = .FALSE. ! () IN DO NO LONGER! DEC 2010
         USE_FBS_INTERP = .FALSE. ! NEW JUL 2011
         NECHO          = 0       ! COUNTER FOR LOG FILE OUTPUT
-        MAXDIM         = MAXDI   ! SET SIZE OF COMMON BUFFER
         NUMFFTWTH      = 0       ! NUMBER OF FFTW3 THREADS
         NULL           = CHAR(0)
         NQ12           = CHAR(34) // CHAR(39)   ! QUOTES
         MRC_AXIS       = 'UL L'
+        MAXDIM         = MAX_UNLABELED_COM  ! SET SIZE OF COMMON BUFFER
 
-C       SET ISEED  TO INITIAL "RANDOM" VALUE USING CLOCK
 #if defined (SP_GFORTRAN)  || defined(__GFORTRAN__)
-        CALL RANDOM_SEED(SIZE = N)
-        ALLOCATE(ISEED(N))
-        CALL SYSTEM_CLOCK(COUNT = ICLOCK)
-        ISEED = ICLOCK + 37 * (/ (I - 1, I = 1, N) /)
-        CALL RANDOM_SEED(PUT = ISEED)
-        DEALLOCATE(ISEED)
+         CALL RANDOM_SEED()
+C        ALLOCATE(ISEED(N))
+C        CALL SYSTEM_CLOCK(COUNT = ICLOCK)
+C        ISEED = ICLOCK + 37 * (/ (I - 1, I = 1, N) /)
+C        CALL RANDOM_SEED(PUT = ISEED)
+C        DEALLOCATE(ISEED)
 #else
+C       SET ISEED  TO INITIAL "RANDOM" VALUE USING CLOCK
         CALL DATE_AND_TIME(VALUES=ITIME)       ! GET CURRENT TIME
         ISEED(1) = ITIME(4) * (360000*ITIME(5) + 6000*ITIME(6) + 
      &             100*ITIME(7) + ITIME(8))
         IF (ISEED(1) == 0 .AND. ISEED(2) == 0) THEN
 C          KLUDGE TO PREVENT ERROR ON SOME INTEL PROCESSORS
-           write(0,*) ' Using default random number seed'
+           WRITE(0,*) ' Using default random number seed'
            CALL RANDOM_SEED()
         ELSE
            CALL RANDOM_SEED(PUT = ISEED)
@@ -358,7 +352,7 @@ C           PRINT OUT HEADING WITH VERSION AND RELEASE DATES
 C          GET THE PROJECT AND DATA EXTENSION FROM USER
            NLOG       = 0
            FCHAR(1:3) = 'NC' // CHAR(0)
-           CALL DRIV1(MAXDIM)
+           CALL DRIV1(MAX_UNLABELED_COM)
            NLOG       = NLOGP
         ENDIF
 
@@ -555,7 +549,7 @@ C       RESET FFTW3 CACHE
         CALL FMRS_DEPLAN(IRTFLG)
 
 C       TSWITCH IS MAIN SELECTION PROGRAM FOR OPERATIONS OUTSIDE MAIN
-        CALL TSWITCH(IWHICH,ICOM,MAXDIM,IRTFLG)
+        CALL TSWITCH(IWHICH,ICOM,MAX_UNLABELED_COM,IRTFLG)
  
 C       IF OPERATION FOUND OUTSIDE OF SPIDER MAIN, GET NEXT OPERATION
         IF (IRTFLG == 0) GOTO 5000

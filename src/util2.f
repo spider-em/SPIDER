@@ -227,7 +227,8 @@ C           INPUT BACKGROUND VALUE
         GOTO 9000
 
 C       OPERATION ----------- COPY  ------------------------------ 'CP' 
-3       CALL COPY1(MAXDIM)              
+
+3       CALL COPY1              
         GOTO 9000
 
 C       OPERATION -------- INSERT -------------------------------- 'IN' 
@@ -367,7 +368,7 @@ C       OPEN SECOND INPUT FILE
      &              'TOP LEFT COORDINATES',IRTFLG)
 
         CALL PATCH(LUN1,LUN2,NSAM1,NROW1,NSLICE1, NSAM2,NROW2,
-     &             NSLICE2, NSAMS,NROWS,NSLICES, 0,0,FCHAR(4:4),
+     &             NSLICE2, NSAMS,NROWS,NSLICES, 0,0.0,FCHAR(4:4),
      &             FMIN1,FMAX1,.FALSE.)
 
 C       SET UNDETERMINED STATISTICS FLAG

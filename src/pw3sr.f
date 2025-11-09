@@ -8,7 +8,6 @@ C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
 C=* Copyright 1985-2018  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -34,8 +33,8 @@ C--*********************************************************************
         SUBROUTINE PW3SR(Q,NX,NY,NZ,MODE)
 
         IMPLICIT NONE
-        REAL         :: Q(NX+2-MOD(NX,2),NY,NZ)
-        INTEGER      :: NX,NY,NZ
+        INTEGER      :: NX,NY,NZ !GFORT ERROR IF NOT BEFOR Q,  Sept 2025 al
+        REAL         :: Q(NX+2-MOD(NX,2),NY,NZ)!GFORT ERROR,  Sept 2025 al
         CHARACTER    :: MODE
 
         LOGICAL      :: EVENY,EVENZ,WANTLOG,WANT2,WANTPH

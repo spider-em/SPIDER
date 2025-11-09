@@ -8,14 +8,15 @@ C           ERROR MESSAGES                         NOV 10 ArDean Leith
 C           NORMVALSP ADDED                        AUG 11 ArDean Leith
 C           NORMVALSP ADDED                        AUG 11 ArDean Leith
 C           USED SETPRMB, IMPLICIT                 JUL 19 ArDean Leith
+C           ADDED DEBUG OUTPUT                     OCT 25 ArDean Leith
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2019  Health Research Inc.,                         *
+C=* Copyright 1985-2025  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@health.ny.gov                                        *
+C=* Email:                                                             *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -42,7 +43,7 @@ C        FMAX         MAXIMUM OF VOLUME                        (RET.)
 C        FMIN         MINIMUM OF VOLUME                        (RET.)
 C        AV           AVERAGE OF VOLUME                        (RET.)
 C
-C    NOTE:    THIS USES UNLABELED COMMON!!
+C    NOTE:    THIS USES LEGACY UNLABELED COMMON!!
 C             SIG RETURNED IN COMMON  (LEGACY ISSUE)
 C
 C--*********************************************************************
@@ -51,23 +52,24 @@ C--*********************************************************************
 
       IMPLICIT NONE
 
-      INTEGER          :: LUN,NX,NY,NZ
-      REAL             :: FMAX,FMIN,AV
+      INTEGER            :: LUN,NX,NY,NZ,nynz
+      REAL               :: FMAX,FMIN,AV
 
-      REAL             :: BUF        
-      COMMON BUF(1)
+      INTEGER, PARAMETER :: MAX_UNLABELED_COM = 5000000
+C     Sept 2025 al to fix for Gfort warning on threaded use
+      REAL , SAVE        :: BUF(MAX_UNLABELED_COM) ! LEGACY COMMON BLOCK
 
-      INTEGER          :: NSAMC,NROWC,IREC,NLABEL,IFORM,IMAMI,IHIST
-      REAL             :: FMAXC,FMINC,AVC,SIG
+      INTEGER            :: NSAMC,NROWC,IREC,NLABEL,IFORM,IMAMI,IHIST
+      REAL               :: FMAXC,FMINC,AVC,SIG
       COMMON /MASTER/NSAMC,NROWC,IREC,NLABEL,IFORM,IMAMI,FMAXC,FMINC,
      &                    AVC,SIG,IHIST
 
-      INTEGER          :: LUNT,NIN,NOUT
+      INTEGER            :: LUNT,NIN,NOUT
       COMMON /UNITS/LUNT,NIN,NOUT
 
-      DOUBLE PRECISION :: DAV,DAV2,DTOP,FNALL,DTEMP
-      REAL             :: B,DIFF 
-      INTEGER          :: NE,IRECT,K
+      DOUBLE PRECISION   :: DAV,DAV2,DTOP,FNALL,DTEMP
+      REAL               :: B,DIFF 
+      INTEGER            :: NE,IRECT,K
 
       FNALL = FLOAT(NX) * FLOAT(NY) * FLOAT(NZ)
       IF (FNALL <= 0) THEN
@@ -76,6 +78,12 @@ C--*********************************************************************
          RETURN
       ENDIF
 
+#if defined(SP_DBUGIO)
+      nynz = ny * nz
+      write(3,'(A,5i6)')   '  In norm3; nx,ny,nz,nynz: ',nx,ny,nz,nynz
+      write(3,'(A,f12.2)') '  In norm3; fnall: ',fnall
+#endif
+
       DAV  = 0.0
       DAV2 = 0.0
 
@@ -83,7 +91,9 @@ C--*********************************************************************
       FMAX = -FMIN
 
       DO IRECT = 1,NY*NZ
+
          CALL REDLIN(LUN,BUF,NX,IRECT)
+
          DO K = 1,NX
             B    = BUF(K)
             FMAX = MAX(B,FMAX)
@@ -94,11 +104,11 @@ C--*********************************************************************
       ENDDO
 
       AV    = DAV / FNALL
-      AVC   = AV
-      FMAXC = FMAX
-      FMINC = FMIN
+      AVC   = AV            ! SET IN COMMON /MASTER/
+      FMAXC = FMAX          ! SET IN COMMON /MASTER/
+      FMINC = FMIN          ! SET IN COMMON /MASTER/
 
-      DTOP  = DAV2 - DAV * DAV / FNALL
+      DTOP  = DAV2 - DAV * DAV / FNALL   ! NOT IN COMMON /MASTER/
 
       DIFF  = FMAX - FMIN
       IF (DIFF <= TINY(DIFF)) THEN
@@ -117,21 +127,26 @@ C        DIVISION BY ZERO
 
       ELSE
 C        CAN CALCULATE SIG
-         SIG = DSQRT( DTOP / DBLE(FNALL - 1.0))
+         SIG = DSQRT( DTOP / DBLE(FNALL - 1.0)) ! NOT IN COMMON /MASTER/
       ENDIF
 
+C     VALUES ARE SET IN COMMON BY NAME ABOVE ! SET IN COMMON /MASTER/
 
-      !write(6,*)' In norm3, before setprmb, fmin,fmax: ',fmin,fmax
 
-C     VALUES ARE SET IN COMMON BY NAME ABOVE
+#if defined(SP_DBUGIO)
+      write(3,'(A,5(2x,i6),f8.2)')
+     &     '  In norm3; lun,nx,ny,irect,k,b: ',lun,nx,ny,irect,k,b
 
-C     WRITE(3,90) FMIN,FMAX,AV,SIG
-90    FORMAT('  FMIN: ', 1PG10.3,
-     &       '  FMAX: ', 1PG10.3,
-     &       '  AV: ',   1PG12.5,
-     &       '  SIG: ',  1PG12.5)
+      write(3,90) fmin,fmax,av,sig
+90    format('  Fmin: ', 1PG10.3,
+     &       '  Fmax: ', 1PG10.3,
+     &       '  Av: ',   1PG12.5,
+     &       '  Sig: ',  1PG12.5)
 
-C     SET VALUES IN FILE HEADER
+      write(3,*)' In norm3; Calling setprmb; lun,fmax: ',lun,fmax
+#endif
+
+C     PLACE STAT VALUES IN FILE HEADER
       CALL SETPRMB(LUN,FMAX,FMIN,AV,SIG)
 
       END

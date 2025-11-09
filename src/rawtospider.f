@@ -17,7 +17,7 @@ C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
 C=* Copyright 1985-2010  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
+C=* Email: spider@health.ny.gov                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -57,6 +57,7 @@ C--*********************************************************************
  
        NULL = CHAR(0)
 
+       !write(6,*) '  in rawtospider, luns:',lunold,lunnew
 C      GET FILENAME FOR EXISTING RAW IMAGE FILE
        CALL FILERD(FILOLD,NLET,DATEXC,'EXISTING RAW~9',IRTFLG)
        IF (IRTFLG .NE. 0) RETURN
@@ -136,6 +137,9 @@ C      OPEN RAW FILE AS DIRECT ACCESS, UNFORMATTED REC.
        CALL OPAUXFILE(.FALSE.,FILOLD,CHAR(0),LUNOLD,LENOPEN,'O',
      &                   ' ',.TRUE.,IRTFLG)
        IF (IRTFLG .NE. 0) GOTO 9999
+
+       !write(6,*) '  in rawtospider, mode,modea:',mode,modea
+
 
        IF (MODE .EQ. 8) THEN
 C         FOR 8 BIT RAW INTEGER INPUT 

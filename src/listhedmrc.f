@@ -1,15 +1,17 @@
 
 C **********************************************************************
 C 
-C  LISTHEDMRC   NEW FOR MRC SUPPORT             OCT 2019  ArDean Leith
-C                                                                     
+C  LISTHEDMRC  NEW FOR MRC SUPPORT              OCT 2019  ArDean Leith
+C              ADDED SPIDER SPECIFIC LOCS       OCT 2025  ArDean Leith
+C                 (NOT IN FILE)                                         
+C                        
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2019  Health Research Inc.,                         *
+C=* Copyright 1985-2025  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@health.ny.gov                                        *
+C=* Email:                                                             *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -40,21 +42,23 @@ C
 C  1    NX          # OF COLUMNS    (FASTEST CHANGING IN MAP)
 C  2    NY          # OF ROWS
 C  3    NZ          # OF SECTIONS   (SLOWEST CHANGING IN MAP)
+C
 C  4    MODE        DATA TYPE
-C                   0   IMAGE:  8-BIT BYTES RANGE -128 -->127 (SIGNED)                  
-C                   1   IMAGE: 16-BIT INTEGERS HALFWORDS                
-C                   2   IMAGE: 32-BIT REALS                    
-C                   6   IMAGE: UNSIGNED 8-BIT BYTES RANGE 0 -->255        
-C                   3   TRANSFORM: COMPLEX 16-BIT INTEGERS (UNSUPPORTED)   
-C                   4   TRANSFORM: COMPLEX 32-BIT REALS    (UNSUPPORTED)     
-C  5    NXSTART     # OF FIRST COLUMN  IN MAP 
-C  6    NYSTART     # OF FIRST ROW     IN MAP       
-C  7    NZSTART     # OF FIRST SECTION IN MAP       
+C                   0   IMAGE:  8-BIT BYTES RANGE -128 -->127 (SIGNED)   
+C                   1   IMAGE: 16-BIT INTEGERS HALFWORDS     
+C                   2   IMAGE: 32-BIT REALS    
+C                   6   IMAGE: UNSIGNED 8-BIT BYTES RANGE 0 -->255  
+C                   3   TRANSFORM: COMPLEX 16-BIT INTEGERS (UNSUPPORTED)
+C                   4   TRANSFORM: COMPLEX 32-BIT REALS    (UNSUPPORTED)
+C    
+C  5    NXSTART     # OF FIRST COLUMN  IN MAP
+C  6    NYSTART     # OF FIRST ROW     IN MAP
+C  7    NZSTART     # OF FIRST SECTION IN MAP  
 C  8    MX          # OF INTERVALS ALONG X
 C  9    MY          # OF INTERVALS ALONG Y
 C 10    MZ          # OF INTERVALS ALONG Z    (>1 FOR STACK)
 C 11-13 CELLA       CELL DIMENSIONS IN ANGSTROMS
-C 14-16 CELLB       CELL ANGLES IN DEGREES  (PHI,THETA,PSI)                        
+C 14-16 CELLB       CELL ANGLES IN DEGREES  (PHI,THETA,PSI)            
 C 17    MAPC        AXIS CORRESPONDING TO COLUMNS  (1,2,3 FOR X,Y,Z)
 C 18    MAPR        AXIS CORRESPONDING TO ROWS     (1,2,3 FOR X,Y,Z)
 C 19    MAPS        AXIS CORRESPONDING TO SECTIONS (1,2,3 FOR X,Y,Z)
@@ -99,12 +103,12 @@ C        RMS   < 0.0                         RMS       UNDETERMINED
 C
 C     Bytes 213 and 214 contain 4 `nibbles' (half-bytes) indicating 
 C     the representation of float, complex, integer and character 
-C     datatypes. Bytes 215 and 216 are unused. The CCP4 library contains 
-C     a general representation of datatypes, but in practice it is 
+C     datatypes. Bytes 215 and 216 are unused. The CCP4 library contains
+C     a general representation of data types, but in practice it is 
 C     safe to use 0x44 0x44 0x00 0x00 for little endian machines, and 
 C     0x11 0x11 0x00 0x00 for big endian machines. The CCP4 library 
 C     uses this information to automatically byte-swap data if 
-C     appropriate, when tranferring data files between machines.  
+C     appropriate, when tranferring data files between machines.
 C
 C23456789012345678901234567890123456789012345678901234567890123456789012
 CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
@@ -114,6 +118,7 @@ CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 C     IMPLICIT NONE
 
 #include "LUNHDR.INC"
+
       INCLUDE 'CMBLOCK.INC'
       INCLUDE 'CMLIMIT.INC'
 
@@ -126,6 +131,8 @@ C     IMPLICIT NONE
       LOGICAL               :: BIGENDFILE,SAMEENDFILE
       CHARACTER(LEN=MAXNAM) :: FILNAM
       CHARACTER(LEN=800)    :: LABELS
+      CHARACTER(LEN=80)     :: OUTSTR
+      
       CHARACTER(LEN=4)      :: CSTR
       CHARACTER(LEN=1)      :: NULL = CHAR(0)
         
@@ -140,11 +147,14 @@ C     IMPLICIT NONE
       REAL                  :: PIXSIZX,PIXSIZY,PIXSIZZ
       REAL                  :: ORX,ORY,ORZ
       INTEGER               :: IANGLE,IMGSTATS,NLABL,IVERSION
+      INTEGER               :: IXTRA29,IXTRA30,IXTRA31,IXTRA32
       CHARACTER(LEN=4)      :: MAP 
       CHARACTER(LEN=4)      :: CAXIS,EXTTYP
 
       INTEGER               :: LNBLNKN    ! FUNCTION
       LOGICAL               :: ISMRCFILE  ! FUNCTION
+
+      integer               :: idsp,isbare,img_in_stats,nstack    
 
 
 C     OPEN INPUT FILE
@@ -209,8 +219,11 @@ C     POINT TO HEADER OBJECT
 
       ISPG     = MRC_HEADER(23) 
       NSYMBT   = MRC_HEADER(24) 
+
+C     GET CONTENT OF EXTRA HEADER LOCATION: 25  (AS INTEGER) 
       IMGSTATS = MRC_HEADER(25)                     ! SPIDER DEFINED
 
+C     GET CONTENT OF EXTRA HEADER LOCATION: 26  (AS CHAR STRING) 
       CAXIS    = TRANSFER(MRC_HEADER(26),CSTR(1:4)) ! SPIDER DEFINED
 
 C     GET EXTTYP (NOW 'MRCO')
@@ -218,6 +231,12 @@ C     GET EXTTYP (NOW 'MRCO')
 
 C     GET VERSION NUMBER 
       IVERSION = MRC_HEADER(28) 
+
+C     GET CONTENT OF EXTRA HEADER LOCATION: 29-32 (AS INTEGERS) 
+      IXTRA29  = MRC_HEADER(29) ! NOT REPORTED BELOW 
+      IXTRA30  = MRC_HEADER(30) ! NOT REPORTED BELOW 
+      IXTRA31  = MRC_HEADER(31) ! NOT REPORTED BELOW 
+      IXTRA32  = MRC_HEADER(32) ! NOT REPORTED BELOW
 
 C     GET IANGLE
       IANGLE   = MRC_HEADER(42)
@@ -244,6 +263,7 @@ C     GET MAP TYPE
       RMS      = TRANSFER(MRC_HEADER(55),FVAL) ! DEVIATION FROM MEAN       
       NLABL    = MRC_HEADER(56)
 
+       
       IF (NLABL > 0) THEN
 C        GET LABELS
          CALL LUNGETLABELS_MRC(LUN,NLABL,LABELS,IRTFLG)
@@ -273,6 +293,7 @@ C     WRITE OUT CONVERSION INFORMATION
          WRITE(NOUT,*)' On little ended architecture,',
      &                ' Reading little ended file.'
       ENDIF
+      WRITE(NOUT,*)'  '
 
 
 C     WRITE OUT HEADER INFORMATION
@@ -282,28 +303,33 @@ C     WRITE OUT HEADER INFORMATION
       IF     (MRCMODE == 0) THEN
         WRITE(NOUT,*) ' Data type (Mode) ..........................' //
      &               '    0: 8-bit signed integers, Range -128 --> 127'
+
       ELSEIF (MRCMODE == 1) THEN
         WRITE(NOUT,*) ' Data type .................................' //
-     &                '     1: 16-bit signed integers'
+     &                '      1: 16-bit signed integers'
+
       ELSEIF (MRCMODE == 2) THEN
         WRITE(NOUT,*) ' Data type ................................ ' //
-     &                '     2: 32-bit reals '
+     &                '      2: 32-bit reals '
+
       ELSEIF (MRCMODE == 3) THEN
         WRITE(NOUT,*) ' Data type  ................................' //
-     &                '     3: Complex 16-bit integers'
+     &                '      3: Complex 16-bit integers'
+
       ELSEIF (MRCMODE == 4) THEN
         WRITE(NOUT,*) ' Data type  ................................' //
-     &                '     4: Complex 32-bit reals'
+     &                '      4: Complex 32-bit reals'
+
       ELSEIF (MRCMODE == 6) THEN
         WRITE(NOUT,*) ' Data type  ................................' //
-     &                '    6 : 16-bit unsigned integers'
+     &                '      6 : 16-bit unsigned integers'
       ENDIF
 
       WRITE(NOUT,1001) NX,NY,NZ
-1001  FORMAT(2X,'Columns, rows, sections ..................  ',3(I7,1X))
+1001  FORMAT(2X,'Columns, rows, sections (NX,NY,NZ) ....... ',3(I7,1X))
 
       WRITE(NOUT,1003) NXSTART,NYSTART,NZSTART
-1003  FORMAT(2X,'Starting columns, rows, sections ......... ',3I7)
+1003  FORMAT(2X,'Starting column, row, section ............ ',3I7)
 
       WRITE(NOUT,1004) MX,MY,MZ 
 1004  FORMAT(2X,'Intervals (MX,MY,MZ) .....................  ',3I7)
@@ -321,13 +347,13 @@ C     WRITE OUT HEADER INFORMATION
 1007  FORMAT(2X,'Fast, medium, slow axes .................. ',3I7)
 
       WRITE(NOUT,1008) DMIN,DMAX  
-1008  FORMAT(2X,'Min & max  density ....................... ',2F23.11)
+1008  FORMAT(2X,'Min & max  density .......................',2F23.11)
 
       WRITE(NOUT,1009) DMEAN,RMS
-1009  FORMAT(2X,'Mean & RMS density ....................... ',2F23.11)
+1009  FORMAT(2X,'Mean & RMS density .......................',2F23.11)
 
       WRITE(NOUT,1092) ANG1,ANG2,ANG3,ANG4,ANG5,ANG6
-1092  FORMAT(2X,'Angles (Phi,Theta,Psi) ...............     ',6F8.2)
+1092  FORMAT(2X,'Angles (Phi,Theta,Psi) ...................   ',6F8.2)
 
       WRITE(NOUT,1010) ORX,ORY,ORZ
 1010  FORMAT(2X,'Origins .................................. ',3F10.2)
@@ -336,12 +362,13 @@ C     WRITE OUT HEADER INFORMATION
 1011  FORMAT(2X,'Space group, extra header bytes .......... ',2I7)
 
       WRITE(NOUT,1091) IMGSTATS 
-1091  FORMAT(2X,'Image used for stats ** .................. ',2I7)
+1091  FORMAT(2X,'Image or volume in DMIN,DMAX ** ........... ',I7)
+
       WRITE(NOUT,1012) CAXIS 
 1012  FORMAT(2X,'Data origin ** ..........................        ',A)
 
       WRITE(NOUT,1013) MACHST
-1013  FORMAT(2X,'Machine stamp ............................ ',I12)
+1013  FORMAT(2X,'Machine stamp ............................',I12)
 
       WRITE(NOUT,1014) MAP
 1014  FORMAT(2X,'Map type..................................       ',A)
@@ -350,19 +377,43 @@ C     WRITE OUT HEADER INFORMATION
 1015  FORMAT(2X,'MRC version ..............................     ',I7)
 
       WRITE(NOUT,1016) EXTTYP 
-1016  FORMAT(2X,'ExtType .....................................    ',A)
+1016  FORMAT(2X,'ExtType ..................................       ',A)
 
-      WRITE(NOUT,1017) NLABL 
-1017  FORMAT(2X,'Number of labels ......................... ',I7)
+      WRITE(NOUT,1022) NLABL
+1022  FORMAT(2X,'Number of labels .........................  ',I7)
+
+      idsp    = mrc_header(257)
+      isbare  = mrc_header(258)
+      imgnum  = mrc_header(258)
+      nstack  = mrc_header(260)
+
+      WRITE(NOUT,*) ' '
+
+      WRITE(NOUT,1018) idsp 
+1018  FORMAT(2X,'Old or New File    (OLD: 0) (NEW: 1) ** .... ',I7)
+
+      WRITE(NOUT,1019)  isbare  
+1019  FORMAT(2X,'Bare stack         (1: TRUE)         ** .... ',I7)
+
+      WRITE(NOUT,1020) imgnum 
+1020  FORMAT(2X,'Image in header    (-2: NOT A STACK) ** .... ',I7)
+
+      WRITE(NOUT,1021) nstack 
+1021  FORMAT(2X,'Max image in stack (-2: NOT A STACK) ** .... ',I7)
+
+      WRITE(NOUT,*) ' '
 
       IF (NLABL > 0) THEN
          IEND = lnblnkn(LABELS)
 
-         WRITE(NOUT,1031)
-1031     FORMAT('  Labels:')
-
-         WRITE(NOUT,1032) LABELS(1:IEND)
-1032     FORMAT(3X,100(A80))
+         DO ILABL = 1,NLABL 
+            ILOC = (ILABL - 1) * 80 + 1
+            OUTSTR = LABELS(ILOC: ILOC+80)
+            OUTSTR = ADJUSTL(OUTSTR)
+            OUTSTR = TRIM(OUTSTR)  
+            WRITE(NOUT,1031) ILABL,OUTSTR
+1031        FORMAT('  Label:', I5,'     ',A80)
+         ENDDO
       ENDIF
 
       WRITE(NOUT,*) ' '
@@ -370,3 +421,4 @@ C     WRITE OUT HEADER INFORMATION
       CLOSE(LUN)
 
       END
+

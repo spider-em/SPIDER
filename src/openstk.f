@@ -17,9 +17,9 @@ C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2016  Health Research Inc.,                         *
+C=* Copyright 1985-2025  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
+C=* Email:                                                             *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -81,6 +81,7 @@ C--*********************************************************************
         CHARACTER (LEN=MAXNAM)   :: FILNOAT,FILNPE
         CHARACTER (LEN=2*MAXNAM) :: MSG
 	LOGICAL                  :: EX,ISDIGI,CALLERRTRED,INDXD
+        INTEGER                  :: IMUSED
 
 #ifdef USE_MPI
         include 'mpif.h'
@@ -272,8 +273,16 @@ C	      FOR DISP=Z, DO NOT STOP THE BATCH JOB BY CALLING ERRT
            ENDIF
 
 C          OPEN EXISTING OVERALL STACK FILE, RETURNS MAXIM IN NSTACK
+
+           !write(3,*)'    '
+           !write(3,*)' --------- open old before openfil------------------'
+
 	   CALL OPENFIL(0,FILNOAT,LUN, NX,NY,NZ,NSTACK,
      &                  ITYPE,'O',.FALSE.,IRTFLGT)
+
+           !write(3,*)' --------- open old after openfil------------------'
+           !write(3,*)' In openstk,lun,nstack,irt.:',lun,nstack,irtflgt
+
            IF (IRTFLGT .NE. 0)  RETURN
 
            IF (NSTACK <= -2) THEN
@@ -297,19 +306,23 @@ C             STOP IF REQUESTED IMAGE NOT IN STACK
 C          SET OFFSET INTO LUNSTK FOR THIS STACKED IMAGE
 
            CALL LUNSETIMGOFF(LUN,IMGNUM,NX,IRTFLGT)
-           IF (IRTFLGT .NE. 0) RETURN
+           !write(3,*)' In openstk,lun,imgnum,nx,irt:',lun,imgnum,irtflgt
+            IF (IRTFLGT .NE. 0) RETURN
 
 C          GET SPECIFIED IMAGE HEADER FROM STACK FILE LOCATION
            CALL LUNREDHED(LUN,NX,IMGNUM,CALLERRTRED,IRTFLGT)
+
+           !write(3,*)' In openstk,lun,imgnum,tred+++:',lun,imgnum,callerrtred
+
            IF (IRTFLGT .NE. 0) RETURN
 
 C          RECOVER IMAGE PARAMETERS FROM SPECIFIC IMAGE HEADER
 
 C          GET IMUSED FOR THIS CURRENT IMAGE
+           IMUSED = IMGNUM
            CALL LUNGETINUSE(LUN,IMUSED,IRTFLGT)
 
-
-           !write(6,*) '  in openstk, imgnum,imused:',imgnum,imused
+           !write(3,*)' In openstk,lun,imgnum,imused----:',lun,imgnum,imused
 
            IF (IMUSED .NE. IMGNUM) THEN
 C             NO EXISTING IMAGE WITHIN STACK??
@@ -318,6 +331,8 @@ C             NO EXISTING IMAGE WITHIN STACK??
 C                SOME VERY OLD STACKS DID NOT HAVE IMGNUM IN THEM
                  CALL LUNGET25(LUN,IVAL,IRTFLGT)
 
+                 !write(3,*)' After lunget25,lun,ival,irtflgt:',lun,ival,irtflgt
+
                  IF (IVAL .NE. 1) THEN
 C                   STACK MAY LACK IMAGE OR HAS BAD EM2EM HEADER
 
@@ -325,7 +340,7 @@ C                   GET RECORD INFO (CAN BE FROM OVERALL HEADER)
                     CALL LUNGETLAB(LUN,NDUM1,NDUM2,NRECS,
      &                                 NDUM3,NDUM4,IRTFLGT)
 
-                    !write(6,*) '  imgnum,nrecs:',imgnum,nrecs,disp
+                    !write(3,*)' In openstk, imgnum,nrecs,disp:',imgnum,nrecs,disp(1:1)
 
                     IF (IMGNUM > 0 .AND. NRECS <= 0 .AND.
      &                   DISP == 'Z') THEN

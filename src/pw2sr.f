@@ -9,7 +9,7 @@ C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
 C=* Copyright 1985-2018  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
+C=* Email: spider@health.ny.gov                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -41,8 +41,8 @@ C       FOR FOURIER FILE, LSD = NX+2-MOD(NX,2)   eg: 16=18  17=18
         IMPLICIT NONE
         INCLUDE 'CMBLOCK.INC'
 
+        INTEGER      :: NX,NY,LSD !GFORT ERROR IF NOT BEFOR Q,  Sept 2025 al
         REAL         :: Q(LSD,NY)
-        INTEGER      :: NX,NY,LSD
         CHARACTER    :: MODE
 
         INTEGER      :: J,I,JN,II,JJ,JB,NXD2,NYD2
@@ -238,8 +238,8 @@ C       -------------------- PW2SR ------------------------
         SUBROUTINE  PW2SR(Q,NX,NY,MODE)
 
         IMPLICIT NONE
+        INTEGER      :: NX,NY   !GFORT ERROR IF NOT BEFOR Q,  Sept 2025 al
         REAL         :: Q(NX+2-MOD(NX,2), NY)
-        INTEGER      :: NX,NY
         CHARACTER*1  :: MODE
 
         INTEGER      :: NNNN,NSC,J,I,JJ,II,JB

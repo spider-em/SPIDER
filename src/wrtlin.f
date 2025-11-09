@@ -1,18 +1,21 @@
 
 C++*********************************************************************
-C   WRTLIN.F             IOSTAT ADDED              DEC 97 ArDean Leith
-C                        FILE NAME FOR ERROR       SEP 02 ArDean Leith
-C                        ENDEDNESS                 FEB 03 ArDean Leith
-C                        ONLYONE_WRT               NOV 08 ArDean Leith
-C                        MRC SUPPORT               JUL 19 ArDean Leith
-C                        MORE MRC SUPPORT          DEC 19 ArDean Leith
+C   WRTLIN.F      IOSTAT ADDED                  DEC 1997  ArDean Leith
+C                 FILE NAME FOR ERROR           SEP 2002  ArDean Leith
+C                 ENDEDNESS                     FEB 2003  ArDean Leith
+C                 ONLYONE_WRT                   NOV 2008  ArDean Leith
+C                 MRC SUPPORT                   JUL 2019  ArDean Leith
+C                 MORE MRC SUPPORT              DEC 2019  ArDean Leith
+C                 FIXED MRC NBYT_PER_VAL BUG    SEP 2025  ArDean Leith
+C                 MRC I1BUF UNSAFE IN THREADS   SEP 2025  ArDean Leith
+C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2019  Health Research Inc.,                         *
+C=* Copyright 1985-2025  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@health.ny.gov                                        *
+C=* Email:                                                             *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -57,7 +60,7 @@ C--*********************************************************************
       END MODULE WRTLIN_PIPE_STUFF
 
 
-C     ---------------------- WRTLIN -------------------------------------
+C     ---------------------- WRTLIN ------------------------------------
 
       SUBROUTINE WRTLIN(LUNT,BUF,NB,IREC)
 
@@ -73,6 +76,7 @@ C     USE INLINE BUFFER COMMON AREA
 
       INTEGER         :: IERR,LUNC,NIN,NOUT,NECHO,IFOUND,NPROC,NDAT
       INTEGER         :: LUNARA,LUNSTK,LUNARB,LUNFLIP
+
       COMMON /IOERR/  IERR
       COMMON /UNITS/  LUNC,NIN,NOUT,NECHO,IFOUND,NPROC,NDAT
       COMMON /LUNARA/ LUNARA(100),LUNSTK(100),LUNARB(100),LUNFLIP(100)
@@ -114,6 +118,13 @@ C       TO IREC TO GET THE CORRECT RECORD NUMBER
 
         IERR = 0
         IF (MYPID <= 0) THEN
+
+#if defined (SP_DBUG)
+        if (i < 2) then
+          write(3,*)' In wrtlin; lun,lunflip(lun),nb,i:  ', 
+     &                           lun,lunflip(lun),nb,i 
+        endif
+#endif
            IF (LUNFLIP(LUN) == 0) THEN
               WRITE(LUN,REC=I,IOSTAT=IERR) BUF
            ELSE
@@ -154,7 +165,7 @@ C     PURPOSE:  WRITE BUF TO STREAM ACCESS MRC IMAGE/VOLUME FILE
 
       IMPLICIT NONE
 
-      INCLUDE 'CMLIMIT.INC'   ! NEED: NBUFSIZ
+      INCLUDE 'CMLIMIT.INC'   ! NEED: NBUFSIZ  =  45000
 
       INTEGER         :: LUN,NB,IREC
       REAL            :: BUF(NB)
@@ -163,23 +174,23 @@ C     PURPOSE:  WRITE BUF TO STREAM ACCESS MRC IMAGE/VOLUME FILE
       INTEGER *8      :: LUNMRCPOS
       INTEGER         :: LUNMRCNBYT
       COMMON /LUNMRC/    LUNMRCPOS(100),LUNMRCNBYT(100)
+
       INTEGER         :: LUNARA,LUNSTK,LUNARB,LUNFLIP
       COMMON /LUNARA/   LUNARA(100),LUNSTK(100),LUNARB(100),LUNFLIP(100)
 
-      INTEGER *1      :: I1BUF(NBUFSIZ)
-      INTEGER *2      :: I2BUF(NBUFSIZ)
+      INTEGER *1, SAVE :: I1BUF(NBUFSIZ)
+      INTEGER *2, SAVE :: I2BUF(NBUFSIZ)
 
-      INTEGER         :: I,IX,IRTFLG
-      INTEGER         :: NBYT_PER_VAL,NBYT_PER_REC,MRCMODE,NX,NE
-      INTEGER *8      :: IPOSMRC
+      INTEGER          :: I,IX,IRTFLG
+      INTEGER          :: NBYT_PER_VAL,NBYT_PER_REC,NX,NE
+      INTEGER *8       :: IPOSMRC
 
 C     LUNARA CARRIES NX (PIXELS IN X)
       NX = ABS(LUNARA(LUN))
 
 C     DIFFERENT MRC MODES DIFFER IN DATA LENGTHS
-      MRCMODE      = LUNMRCNBYT(LUN)   
-      NBYT_PER_VAL = ABS(MRCMODE)
-      NBYT_PER_REC = NBYT_PER_VAL * NX
+      NBYT_PER_VAL     = ABS(LUNMRCNBYT(LUN))
+      NBYT_PER_REC     = NBYT_PER_VAL * NX
 
 C     FILE POSITION TO BEGIN WRITING DEPENDS ON IREC AND ORIGIN
 
@@ -205,13 +216,13 @@ C        MRC FILE NEEDS 32 BIT REAL VALUES
 C        MRC FILE NEEDS  16 BIT, INTEGER*2 VALUES        
 
          I2BUF(1:NB) = BUF(1:NB)   
-         IF (MYPID <= 0) WRITE(LUN, POS=IPOSMRC,IOSTAT=IERR) I2BUF(1:NB)
+         IF (MYPID <= 0) WRITE(LUN,POS=IPOSMRC,IOSTAT=IERR) I2BUF(1:NB)
 
       ELSEIF (NBYT_PER_VAL == 1) THEN         
 C        MRC FILE NEEDS   8 BIT INTEGER*1 VALUES 
 
          I1BUF(1:NB) = BUF(1:NB)   
-         IF (MYPID <= 0) WRITE(LUN,POS=IPOSMRC,IOSTAT=IERR)I1BUF(1:NB)
+         IF (MYPID <= 0) WRITE(LUN,POS=IPOSMRC,IOSTAT=IERR) I1BUF(1:NB)
  
       ENDIF
 

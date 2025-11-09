@@ -16,14 +16,15 @@ C                LABBYT >= 10000000) TRAP       MAR 2011  ArDean Leith
 C                MAXNAM                         JUL 2014  ArDean Leith
 C                EM2EM BUG RECOVERY SUPPORT     AUG 2014  ArDean Leith
 C                MRC SUPPORT                    MAY 2019  ArDean Leith
+C                MRC SUPPORT FIXED              SEP 2025  ArDean Leith
 C                    
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2019 Health Research Inc.,                          *
+C=* Copyright 1985-2025 Health Research Inc.,                          *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@health.ny.gov                                        *
+C=* Email:                                                             *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -53,10 +54,10 @@ C     ------------------------- LUNSETLAB -----------------------------
 C     ------------------------- LUNGETLAB -----------------------------
 C     ------------------------- LUNGETTYPE ----------------------------
 C     ------------------------- LUNSETTYPE ----------------------------
-C     ------------------------- LUNGETISTACK ----------------------------
-C     ------------------------- LUNSETISTACK ----------------------------
+C     ------------------------- LUNGETISTACK --------------------------
+C     ------------------------- LUNSETISTACK --------------------------
 C     ------------------------- LUNGETSTK -----------------------------
-C     ------------------------- LUNSET25 ---------------------------
+C     ------------------------- LUNSET25 ------------------------------
 C     ------------------------- LUNSETINUSE ---------------------------
 C     ------------------------- LUNGETINUSE ---------------------------
 C     ------------------------- LUNGETMAXIM ---------------------------
@@ -88,7 +89,9 @@ C     ------------------------- LUNWRTINDX ----------------------------
 C     ------------------------- LUNGETINDXTOP -------------------------
 C     ------------------------- LUNSETINDXTOP -------------------------
 C     ------------------------- LUNSETVALS ----------------------------
-C     ------------------------- LUNSETIMGOFF -------------------------
+C     ------------------------- LUNSETIMGOFF --------------------------
+C     ------------------------- LUNSETFLIP ----------------------------
+C     ------------------------- LUNGETFLIP ----------------------------
 C      
 C     STATIC LOCATION    257 -- IDSP
 C                        258 -- ISBARE
@@ -118,7 +121,7 @@ C     INITIALIZES OFFSETS IN LUNARA,LUNSTK,LUNARB & LUNFLIP ARRAYS
 
       INTEGER  :: LUN,IVALA,IVALSTK,IVALLUN,IVALFLIP,IRTFLG
 
-      INTEGER  :: LUNARA(100),LUNSTK(100),LUNARB(100),LUNFLIP(100)
+      INTEGER  ::     LUNARA(100),LUNSTK(100),LUNARB(100),LUNFLIP(100)
       COMMON /LUNARA/ LUNARA,LUNSTK,LUNARB,LUNFLIP
 
       LUNARA(LUN)  = IVALA
@@ -141,8 +144,8 @@ C     OVERALL HEADER TO ENSURE THAT LUNGETHEDOFF SUCCEEDS
 
       INTEGER      :: LUN,NX,IMGNUM,IRTFLG 
 
-      INTEGER      :: LUNARA(100),LUNSTK(100),LUNARB(100) 
-      COMMON /LUNARA/ LUNARA,LUNSTK,LUNARB
+      INTEGER      :: LUNARA(100),LUNSTK(100),LUNARB(100),LUNFLIP(100)  
+      COMMON /LUNARA/ LUNARA,LUNSTK,LUNARB,LUNFLIP
 
       INTEGER      :: IERR 
       COMMON /IOERR/  IERR
@@ -154,12 +157,14 @@ C     OVERALL HEADER TO ENSURE THAT LUNGETHEDOFF SUCCEEDS
 C     SET PROPER  OFFSET IN LUNSTK
       LUNSTKSAV   = LUNSTK(LUN)
       LABRECSAV   = LUNARA(LUN)
-      !write(3,*) ' In labrecsav:',lunstksav,labrecsav,lun
+      !write(6,*) ' In labrecsav:',lunstksav,labrecsav,lun
 
 C     FIND PROPER IMGNUM OFFSET 
       CALL LUNGETHEDOFF(LUN,NX,IMGNUM,
      &                  LUNARA(LUN),LUNSTK(LUN),IRTFLG)
-      !write(3,*) ' In lunredhdr, imgnum:',imgnum
+
+      !write(6,*) ' In lunredhdr, imgnum--------:',imgnum
+
       IF (IRTFLG .NE. 0) RETURN
 
 C     POINT TO HEADER OBJECT
@@ -190,7 +195,9 @@ C        LENT IS REMAINING LENGTH OF HEADER TO BE FILLED
 
 C     REPLACE OFFSETS IN LUNARA & LUNSTK    
       LUNARA(LUN) = LABRECSAV
-      LUNSTK(LUN) = LUNSTKSAV 
+      LUNSTK(LUN) = LUNSTKSAV
+ 
+      ! write(6,*) ' In lunredhed:',lun,header(27)
 
       END
 
@@ -331,7 +338,8 @@ C     SHOULD ONLY BE CALLED FOR STACKS!
 
       INCLUDE 'CMBLOCK.INC'
 
-      COMMON /LUNARA/ LUNARA(100),LUNSTK(100),LUNARB(100)
+      INTEGER  ::     LUNARA,LUNSTK,LUNARB,LUNFLIP
+      COMMON /LUNARA/ LUNARA(100),LUNSTK(100),LUNARB(100),LUNFLIP(100)
 
 C     GET RECORD INFO (CAN BE FROM OVERALL HEADER)
       CALL LUNGETLAB(LUN,LABREC,INDXREC,NRECS,NDUM1,NDUM2,IRTFLG)
@@ -387,6 +395,7 @@ C     ------------------------- LUNGETTYPE ----------------------------
 #include "LUNHDR.INC"
 
       INTEGER   :: LUN,ITYPE,IRTFLG 
+      LOGICAL  :: IS_MRC
 
 C     DETERMINE IF MRC OR SPIDER HEADER OBJECT
       CALL LUNGETIS_MRC(LUN,IS_MRC,IRTFLG)
@@ -573,8 +582,8 @@ C     WRITES HEADER OBJECT TO SPECIFIED IMAGE HEADER
 
 #include "LUNHDR.INC"
 
-      INTEGER      :: LUNARA,LUNSTK,LUNARB
-      COMMON /LUNARA/ LUNARA(100),LUNSTK(100),LUNARB(100)
+      INTEGER ::      LUNARA,LUNSTK,LUNARB,LUNFLIP
+      COMMON /LUNARA/ LUNARA(100),LUNSTK(100),LUNARB(100),LUNFLIP(100)
 
       INCLUDE 'CMBLOCK.INC'
 
@@ -582,6 +591,7 @@ C     WRITES HEADER OBJECT TO SPECIFIED IMAGE HEADER
       COMMON /IOERR/ IERR
 
       INTEGER  :: LUN,NX,IMGNUM,IRTFLG
+
 
       INTEGER  :: LUNSTKSAV,LABRECSAV,IRECT,ILOC,LENT
       LOGICAL  :: IS_MRC
@@ -664,14 +674,19 @@ C     ------------------------- LUNGETINUSE ----------------------------
 #include "LUNHDR.INC"
 
       INTEGER  :: LUN,INUSE,IRTFLG
+      integer  :: iwas
 
 C     POINT TO HEADER OBJECT
       CALL LUNGETOBJ(LUN,HEADER,IRTFLG)
       IF (IRTFLG .NE. 0) RETURN
  
+      iwas = inuse
+ 
 C     GET STACK RELATED LOCATIONS
       INUSE = HEADER(27) 
 
+C      write(6,*)' In getinuse, lun,hd27--99:',
+C     &            lun,header(27),iwas,' -->',inuse 
       IRTFLG = 0
       END
 
@@ -682,6 +697,7 @@ C     ------------------------- LUNSETINUSE ----------------------------
 #include "LUNHDR.INC"
 
       INTEGER  :: LUN,INUSE,IRTFLG
+      LOGICAL  :: IS_MRC
 
 C     DETERMINE IF MRC OR SPIDER HEADER OBJECT
       CALL LUNGETIS_MRC(LUN,IS_MRC,IRTFLG)
@@ -744,6 +760,7 @@ C     ------------------------- LUNSETMAXIM ----------------------------
 #include "LUNHDR.INC"
 
       INTEGER  :: LUN,MAXIM,IRTFLG
+      LOGICAL  :: IS_MRC
 
 C     DETERMINE IF MRC OR SPIDER HEADER OBJECT
       CALL LUNGETIS_MRC(LUN,IS_MRC,IRTFLG)
@@ -793,7 +810,8 @@ C     COMPLICATED SINCE I DO NOT WANT TO ALTER CURRENT FILE HEADER OBJECT
       INCLUDE 'CMLIMIT.INC'
       COMMON /IOBUF/ BUF(NBUFSIZ)
 
-      COMMON /LUNARA/ LUNARA(100),LUNSTK(100),LUNARB(100)
+      INTEGER ::      LUNARA,LUNSTK,LUNARB,LUNFLIP
+      COMMON /LUNARA/ LUNARA(100),LUNSTK(100),LUNARB(100),LUNFLIP(100)
 
       COMMON /IOERR/  IERR
 
@@ -1003,7 +1021,7 @@ C     GET RETURN VALUES
       IRTFLG = 0
       END
 
-C     ------------------------- LUNGETPIXSIZ ----------------------------
+C     ------------------------- LUNGETPIXSIZ -------------------------
 
       SUBROUTINE LUNGETPIXSIZ(LUN,PIXSIZ,IRTFLG)
 
@@ -1033,7 +1051,7 @@ C     GET RETURN VALUES
       IRTFLG = 0
       END
 
-C     ------------------------- LUNSETPIXSIZ ----------------------------
+C     ------------------------- LUNSETPIXSIZ -------------------------
 
       SUBROUTINE LUNSETPIXSIZ(LUN,PIXSIZ,IRTFLG)
 
@@ -1474,7 +1492,13 @@ C        NOTE THAT ALPHA-NUMERICAL DATA (ABCD) WILL BE WRITTEN (DCBA)
 
 C     RECOVER TITLE FROM CLINE
       FILETITLE = CLINE(21:180)
+      !write(6,*) 'In lungettitle - cline(21:180):',cline(21:180),'||'
+      !write(6,*) 'In lungettitle - filetitle:',filetitle,'||'
+
       LENTIT    = lnblnkn(FILETITLE)
+
+      !write(6,*) 'In lungettitle - lentit:',lentit
+      !write(6,*) 'In lungettitle - filetitle:',filetitle,'||'
 
       IRTFLG = 0
       END
@@ -1599,7 +1623,7 @@ C     ------------------------- LUNSAYINFO ----------------------------
       CHARACTER * 2    TYPE
       CHARACTER *12    CDAT
       CHARACTER *8     CTIM
-      CHARACTER *160   CTIT
+      CHARACTER *160   CTIT_LOCAL
 
       CHARACTER(LEN=MAXNAM):: FILNAM
 
@@ -1662,8 +1686,17 @@ C     RETRIEVE CURRENT FILENAME (INCLUDES IMGNUM IF STACKED IMAGE)
 
 C     RECOVER FILE DATE, TIME & TITLE FROM HEADER
       CALL LUNGETDATE(LUN,CDAT,CTIM,IRTFLG)
-      CALL LUNGETTITLE(LUN,CTIT,LENTIT,IRTFLG)
+
+c     write(6,*)'In lunsayinfo - lun,lentit,irtflg: ',lun,lentit,irtflg
+c     ctit_local = 'cow'
+c     write(6,*)'In lunsayinfo - ctit_local:',ctit_local,'}}'
+
+      CALL LUNGETTITLE(LUN,CTIT_LOCAL,LENTIT,IRTFLG)
       
+c     write(6,*)' In lunsayinfo - lun,lentit,irtflg: ',
+c     &                           lun,lentit,irtflg
+c     write(6,*)'In lunsayinfo - ctit_local: ',ctit_local(1:lentit),'||'
+
 C     GET RECORD INFO
       CALL LUNGETLAB(LUN,LABREC,INDXREC,NRECS,LABBYT,LENBYT,IRTFLG)
 
@@ -1716,7 +1749,8 @@ C           FILENAME BUT NO TITLE
          ELSE IF (LENT > 0 .AND. LENT < 70) THEN
 C           HAS FILENAME AND TITLE THAT FIT ON ONE LINE
             IF (MYPID <= 0) THEN
-               WRITE(NOUT,*) ' ',FILNAM(:NLET),'     /',CTIT(:LENTIT)
+               WRITE(NOUT,*) ' ',FILNAM(:NLET),
+     &                       '     /',CTIT_LOCAL(:LENTIT)
             ENDIF
 
 
@@ -1726,8 +1760,8 @@ C           FILENAME AND TITLE DO NOT FIT ON SINGLE LINE
             LENT = MIN(80,LENTIT)
 
             IF (MYPID <= 0) THEN
-               WRITE(NOUT,*) ' ',CTIT(1:LENT)
-               IF (LENTIT > 80)  WRITE(NOUT,*) ' ',CTIT(81:LENTIT)
+               WRITE(NOUT,*) ' ',CTIT_LOCAL(1:LENT)
+               IF (LENTIT > 80) WRITE(NOUT,*) ' ',CTIT_LOCAL(81:LENTIT)
             ENDIF
 
          ENDIF
@@ -1797,13 +1831,15 @@ C           SIMPLE IMAGE
       END
 
 
-C     ------------------------- LUNSETCOMMON ----------------------------
+C     ------------------------- LUNSETCOMMON -------------------------
 
       SUBROUTINE LUNSETCOMMON(LUN,IRTFLG)
 
 #include "LUNHDR.INC"
 
       INCLUDE 'CMBLOCK.INC'
+
+      INTEGER           :: LUN,IRTFLG
 
       CHARACTER(LEN=12) :: CDUM
       CHARACTER(LEN=1)  :: NULL = CHAR(0)
@@ -1853,7 +1889,7 @@ C     DATE NOT PASSED IN COMMON ANY MORE AS COMMON IS ONLY 10 CHAR.
 C     RECOVER ANGLES
       CALL LUNGETANG(LUN,IANGLE,PHI,THETA,PSI,XOFF,YOFF,ZOFF, 
      &               KANGLE,IRTFLG)
-      IF (IRTFLG .NE. 0) RETURN
+      IF (IRTFLG .NE.  0) RETURN
 
 C     SET REGISTER VALUES AS NEEDED
       CALL REG_SET(1,FLOAT(NSAMC),  NULL, IRTFLG)
@@ -1888,6 +1924,7 @@ C           LABBYT, LABREC, NREC, DATE, TIME, IMGNUM, INUSE
       REAL, POINTER           :: HEADERT(:) 
 
       IRTFLG = 1
+      ! write(6,*)'In lunsethdr; call lungetobj; lun,lunt: ',lun,lunt
 
 C     POINT TO HEADER OBJECT
       CALL LUNGETOBJ(LUN,HEADER,IRTFLG)
@@ -1896,6 +1933,8 @@ C     POINT TO HEADER OBJECT
       IF (LUNT > 0 .AND. LUNT <= 100) THEN
 C        COPY ALL HEADER BUFFER SPACES UP TO LENBUF
 C        POINT TO TRANSFER HEADER OBJECT
+
+         !write(6,*)' In lunsethdr; call lungetobj; lunt: ',lunt
 
          CALL LUNGETOBJ(LUNT,HEADERT,IRTFLG)
          IF (IRTFLG .NE. 0) THEN
@@ -1960,7 +1999,8 @@ C     CLEARS ALL INDEX RECORDS
 
 #include "LUNHDR.INC"
 
-      COMMON /LUNARA/ LUNARA(100),LUNSTK(100),LUNARB(100)
+      INTEGER  ::     LUNARA,LUNSTK,LUNARB,LUNFLIP
+      COMMON /LUNARA/ LUNARA(100),LUNSTK(100),LUNARB(100),LUNFLIP(100)
 
       INCLUDE 'CMBLOCK.INC'
 
@@ -2020,7 +2060,9 @@ C     ----------- LUNWRTINDX --------------------------------------
 C     SETS INDEX FOR A SPECIFIED IMGNUM 
 
       INCLUDE 'CMBLOCK.INC'
-      COMMON /LUNARA/ LUNARA(100),LUNSTK(100),LUNARB(100)
+
+      INTEGER  ::     LUNARA,LUNSTK,LUNARB,LUNFLIP
+      COMMON /LUNARA/ LUNARA(100),LUNSTK(100),LUNARB(100),LUNFLIP(100)
  
       INTEGER :: INDXBUF(NX)
 
@@ -2082,10 +2124,11 @@ C     RETURNS INDEX FOR A SPECIFIED IMGNUM
 
       INCLUDE 'CMBLOCK.INC'
 
-      COMMON /LUNARA/ LUNARA(100),LUNSTK(100),LUNARB(100)
+      INTEGER  ::     LUNARA,LUNSTK,LUNARB,LUNFLIP
+      COMMON /LUNARA/ LUNARA(100),LUNSTK(100),LUNARB(100),LUNFLIP(100)
  
       INTEGER  :: LUN,IMGNUM,INDX,NX,IRTFLG
-
+      
 C     AUTOMATIC ARRAY
       INTEGER  :: INDXBUF(NX)
 
@@ -2144,7 +2187,7 @@ C     POINT TO HEADER OBJECT
       IF (IRTFLG .NE. 0) RETURN
 
 C     SET INUSE RELATED LOCATION
-      HEADER(25) = -1 
+      HEADER(25) =  -1 
 
       IRTFLG = 0
       END
@@ -2223,12 +2266,11 @@ C     SETS DUPLICATE LUN OPEN  IN LUNARB(LUN)
       INTEGER  :: LUN,LUNB,IRTFLG
 
       INTEGER  :: LUNARA,LUNSTK,LUNARB,LUNFLIP
-
       COMMON /LUNARA/ LUNARA(100),LUNSTK(100),LUNARB(100),LUNFLIP(100)
 
       LUNARB(LUN) = LUNB
 
-      !write(3,*) ' In lunsetlunb, lun,lunb: ',lun,lunb,lunarb(lun)
+      !write(6,*) ' In lunsetlunb, lun,lunb: ',lun,lunb,lunarb(lun)
 
       IRTFLG      = 0
       END
@@ -2243,7 +2285,6 @@ C     GETS DUPLICATE LUN OPEN  IN LUNARB(LUN)
       INTEGER  :: LUN,LUNB,IRTFLG
 
       INTEGER  :: LUNARA,LUNSTK,LUNARB,LUNFLIP
-
       COMMON /LUNARA/ LUNARA(100),LUNSTK(100),LUNARB(100),LUNFLIP(100)
 
       LUNB   = LUNARB(LUN)
@@ -2261,11 +2302,10 @@ C     SETS FLIP IN LUNFLIP(LUN)
       INTEGER  :: LUN,IFLIP,IRTFLG
 
       INTEGER  :: LUNARA,LUNSTK,LUNARB,LUNFLIP
-
       COMMON /LUNARA/ LUNARA(100),LUNSTK(100),LUNARB(100),LUNFLIP(100)
 
       LUNFLIP(LUN) = IFLIP
-
+      
       IRTFLG       = 0
       END
 

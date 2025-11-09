@@ -1,31 +1,34 @@
 
 C **********************************************************************
 C
-C COPYFROMMRC   MODIFIED FROM COPYMRC             FEB 02 ArDean Leith         
-C               ISSWAB ADDED                      JUL 02 ArDean Leith
-C               FLIP QUESTION                     MAR 03 ArDean Leith
-C               BAD IRECMRC4 & FLIP               SEP 03 ArDean Leith
-C               SCALING                           JAN 05 ArDean Leith
-C               I*8                               SEP 08 ArDean Leith
-C               NPIX8                             DEC 08 ArDean Leith
-C               BOTLEFT OPTION                    MAY 12 ArDean Leith
-C               STREAM IO                         FEB 13 ArDean Leith
-C               VOL BUG                           JUN 13 ArDean Leith
-C               VOL BUG FIXED                     JUL 13 ArDean Leith
-C               MODE 6 STACK SUPPORT              SEP 14 ArDean Leith
-C               IPOSMRC INTEGER *8                JAN 15 ArDean Leith
-C               BOTLEFT DEFAULT                   JUL 15 ArDean Leith
-C               2015 STACK SUPPORT                JUL 15 ArDean Leith
-C               STACK END BUG                     OCT 15 ArDean Leith
-C               'MRCV'                            DEC 15 ArDean Leith
-C               REWRITE FOR NATIVE MRC SUPPORT    JAN 20 ArDean Leith
+C COPYFROMMRC  MODIFIED FROM COPYMRC             FEB 2002 ArDean Leith
+C              ISSWAB ADDED                      JUL 2002 ArDean Leith
+C              FLIP QUESTION                     MAR 2003 ArDean Leith
+C              BAD IRECMRC4 & FLIP               SEP 2003 ArDean Leith
+C              SCALING                           JAN 2005 ArDean Leith
+C              I*8                               SEP 2008 ArDean Leith
+C              NPIX8                             DEC 2008 ArDean Leith
+C              BOTLEFT OPTION                    MAY 2012 ArDean Leith
+C              STREAM IO                         FEB 2013 ArDean Leith
+C              VOL BUG                           JUN 2013 ArDean Leith
+C              VOL BUG FIXED                     JUL 2013 ArDean Leith
+C              MODE 6 STACK SUPPORT              SEP 2014 ArDean Leith
+C              IPOSMRC INTEGER *8                JAN 2015 ArDean Leith
+C              BOTLEFT DEFAULT                   JUL 2015 ArDean Leith
+C              2015 STACK SUPPORT                JUL 2015 ArDean Leith
+C              STACK END BUG                     OCT 2015 ArDean Leith
+C              'MRCV'                            DEC 2015 ArDean Leith
+C              REWRITE FOR NATIVE MRC SUPPORT    JAN 2020 ArDean Leith
+C              DEBUG OUTPUT ADDED                SEP 2025 ArDean Leith
+C              LUNCP=0, NO COPY FROM MRC HEADER  SEP 2025 ArDean Leith
+c
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2020 Health Research Inc.,                          *
+C=* Copyright 1985-2025 Health Research Inc.,                          *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@health.ny.gov                                        *
+C=* Email:                                                             *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -66,6 +69,7 @@ C***********************************************************************
         COMMON /IOBUF/ BUF(NBUFSIZ)
 
         INTEGER                  :: LUN1,LUN2,LUNDOC,LUNXM1,LUNXM2
+        INTEGER                  :: LUNCP  ! sept 2025
 
         LOGICAL                  :: VERBOSE_SAVE,ASKNAM
         LOGICAL                  :: IS_MRC,IS_ACTUALLY_A_VOL,IS_BARE
@@ -96,7 +100,7 @@ C***********************************************************************
 
 C       OPEN FIRST INPUT MRC FILE 
 
-        PROMPT  = 'MRC INPUT FILE OR TEMPLATE (E.G. STK@****)~~9'
+        PROMPT  = 'MRC INPUT FILE OR TEMPLATE (E.G. *@STK)~~9'
         CALL FILERD(FILNAM1,NLET1,NULL, PROMPT,IRTFLG)
         IF (IRTFLG .NE. 0) GOTO 999
 
@@ -123,8 +127,8 @@ C       APPEND .mrc IF NEEDED
 C       NSTACK1 RET:  -2   IS NON-STACK IMAGE,  -1 IS STACKED IMG,                  
 C                    >= 0 IS CURRENT MAX. IMG # FOR STACK             
 
-        !write(3,'(a,5i5)')' In copyfrommrc, nstack1,ngot1,img1:',
-        !&                                      nstack1,ngot1,img1
+       !write(6,*)' In copyfrommrc; nstack1,ngot1,img1: ',
+       !&                           nstack1,ngot1,img1
  
 C       BE SURE INPUT IS MRC
         CALL LUNGETIS_MRC(LUN1,IS_MRC,IRTFLG)
@@ -133,13 +137,17 @@ C       BE SURE INPUT IS MRC
            GOTO 999
         ENDIF
 
+        !write(6,*)' In copyfrommrc, is_mrc:',is_mrc
+
+
 C	OPEN FIRST SPIDER OUTPUT FILE
         NSTACK2 =  1   ! PARAMETER NOT USED ON INPUT
         DISP    = 'U'          
         IMG2    = IMG1
+        LUNCP   = 0    ! CAN NOT COPY FROM MRC HEADER
 
         IF (NSTACK1 >= 0) THEN
-           PROMPT = 'SPIDER OUTPUT FILE OR TEMPLATE (E.G. STK@****)~~9'
+           PROMPT = 'SPIDER OUTPUT FILE OR TEMPLATE (E.G. STK@*)~~9'
         ELSE
            PROMPT = 'SPIDER OUTPUT FILE~'
         ENDIF
@@ -176,22 +184,23 @@ C           TREAT THIS IMAGE AS A VOLUME NOT A STACK
         ENDIF
 
         ASKNAM = .FALSE.
-        CALL OPFILES(LUN1,LUN2,LUNDOC,LUNXM2, 
+        CALL OPFILES(LUNCP,LUN2,LUNDOC,LUNXM2, 
      &             ASKNAM,FILNAM2,NLET2,DISP,
      &             IFORM1,NX1,NY1,NZ1,NSTACK2,
      &             FILNAM2,
      &             FOUROK, ILIST2,NILMAX, 
      &             NDUM,NGOT2,IMG2, IRTFLG)
  
-C       NSTACK2 RET:  -2   IS NON-STACK IMAGE,  -1 IS STACKED IMG,                  
+C       NSTACK2 RET: -2   IS NON-STACK IMAGE,  
+C                    -1   IS STACKED IMG              
 C                    >= 0 IS CURRENT MAX. IMG # FOR STACK             
 
-        !write(6,'(A,4i6)')' Out nstack2,ngot2,img2:',nstack2,ngot2,img2
+        !write(6,*)'In opfiles; nstack2,ngot2,img2: ',nstack2,ngot2,img2
 
         CALL WHICH_HAND_MRC(LUN1,FILNAM1,CAXIS,IRTFLG)
         IF (IRTFLG .NE. 0) GOTO 999
 
-        !write(3,*) ' Mrc data axis: ',caxis
+        !write(6,*) ' Mrc data axis: ',caxis
 
         IF (NZ1 <= 1) THEN       ! IMAGE(S) INPUT
            CALL RDPRMC(CSTR,NC,.TRUE.,'DATA ORIGIN CORNER (UL/LL)', 
@@ -232,19 +241,20 @@ C          VOLUME OUTPUT
         DO                ! LOOP OVER ALL IMAGES/STACKS
 
 C          DO NOT REPORT FILE INFO IF WHOLE STACK (VERBOSE IN COMMON)
-	   !!!IF (NSTACK1 > 0 .AND. NSTACK2 >= 0) VERBOSE = .FALSE. 
+           !!!IF (NSTACK1 > 0 .AND. NSTACK2 >= 0) VERBOSE = .FALSE. 
 
 C          COPY THE DESIRED NUMBER OF DATA RECORDS (MRC OK)
            DO IREC = 1,NY1 * NZ1
               CALL REDLIN(LUN1,BUF,NX1,IREC)
               CALL WRTLIN(LUN2,BUF,NX1,IREC)
            ENDDO
-           !write(3,*)' in copyfrommrc,ilist.:   ',ilist1(:3),ilist2(:3) 
-           !write(3,*)' in copyfrommrc,filnam1:  ',filnam1(1:20)
-           !write(3,*)' in copyfrommrc,filnam2:  ',filnam2(1:20)
-           !write(3,*)' in copyfrommrc,ngot1..2: ',ngot1,ngot2 
-           !write(3,*)' In copyfrommrc,nindx1..2:',nindx1,nindx2 
-           !write(3,*)' in copyfrommrc,img1..2:  ',img1,img2 
+
+           !write(6,*)' In copyfrommrc; ilist: ',ilist1(:3),ilist2(:3)
+           !write(6,*)' In copyfrommrc; filnam1:  ',filnam1(:20)
+           !write(6,*)' In copyfrommrc; filnam2:  ',filnam2(:20)
+           !write(6,*)' In copyfrommrc; ngot1..2: ',ngot1,ngot2 
+           !write(6,*)' In copyfrommrc; nindx1..2:',nindx1,nindx2 
+           !write(6,*)' in copyfrommrc; img1..2:  ',img1,img2 
 
 C          OPEN NEXT SET OF I/O FILES, UPDATES NINDX1 & NINDX2 
            CALL NEXTFILES(NINDX1,NINDX2,  ILIST1,ILIST2, 
@@ -255,9 +265,9 @@ C          OPEN NEXT SET OF I/O FILES, UPDATES NINDX1 & NINDX2
 
            !if (irtflg .ne. 0) then
            !write(6,'(A,4i6)') 
-!     &        ' Nextfiles img1,img2,irtflg:',img1,img2,irtflg
+           !&        ' Nextfiles; img1,img2,irtflg: ',img1,img2,irtflg
            !write(6,'(A,4i6)') 
-!     &        ' Nextfiles nindx1,nindx2:',nindx1,nindx2
+           !&        ' Nextfiles; nindx1,nindx2: ',nindx1,nindx2
            !endif
 
            IF (IRTFLG .NE. 0) EXIT      ! ERROR / END OF INPUT STACK

@@ -101,7 +101,8 @@ C       OPEN FIRST INPUT STACK TO GET SIZING NEEDED FOR OUTPUT FILE
         CLOSE(LUN1)
 
         nlet1 = nlet + 1
-        !write(6,*)'  opened filolds:',nlet1,filolds(1:nlet1)
+        !write(6,*)'  Opened first in:',nlet1,filolds(1:nlet1)
+       write(3,*)'  Opened first input stack:',filolds
 
         IMG2GO = 1
         CALL RDPRI1S(IMG2GO,NOT_USED,
@@ -124,9 +125,6 @@ C	OPEN OUTPUT STACK
            GOTO 9999
         ENDIF
 
-
-        !write(6,*)'  Opened filnew:',nlet2,filnew(1:nlet2)
-
         IMG2 = IMG2GO   ! STARTING OUTPUT IMAGE NUMBER
 
 C       LOOP OVER ALL INPUT STACKS (1...NSTKS)
@@ -143,8 +141,8 @@ C          OPEN BARE INPUT STACK
            CALL OPFILEC(0,ASKNAM,FILOLDS,LUN1,'O',LTYPE,
      &                  LX,LY,LZ,NSTACK1,' ',FOUROK,IRTFLG)
            
-c          write(3,*)'  Opened bare input stack:',filolds(1:nlet+5), 
-c     &                  ' nstack1:',nstack1,irtflg
+           !write(3,*)'  Opened bare input stack:',nstack1,filolds                  
+
            IF (IRTFLG .NE. 0) RETURN
 
 C          MUST CONTAIN  SAME SIZE AND TYPE OF IMAGES/VOLUMES
@@ -160,10 +158,14 @@ C             OPEN NEXT IMAGE IN INPUT STACK
               NSTACK1_1 = 0            ! STACKED IMAGE
               CALL INTTOCHAR(IMG1,CNUM,NLETC,1)
               FILOLDS = FILOLD(1:NLET) // '@' // CNUM(1:NLETC)
+
+              !write(3,*)'  ========== Opening stacked input:',lun1,filolds 
+
               CALL OPFILEC(0,ASKNAM,FILOLDS,LUN1,'O',LTYPE,
      &                  LX,LY,LZ,NSTACK1_1,' ',FOUROK,IRTFLG)
-c             write(3,*)'  Opened stacked input :',filolds(1:nlet+5), 
-c&                  ' nstack1_1:',nstack1_1,irtflg
+
+              !write(3,*)'  Opened stacked input:',nstack1_1,filolds 
+
               IF (IRTFLG .NE. 0) RETURN
 
 C             GET OVERALL HEADER FROM THE NEW STACK FILE
@@ -189,9 +191,9 @@ C             PUT IMAGE INUSE IN THIS IMAGE'S HEADER OBJECT
 C             PUSH HEADER OBJECT INFO INTO NEW STACKED FILE
               CALL LUNWRTHED(LUN2,NX,IMG2,IRTFLG)
 
-c             write(3,*)'  In copytostk 2, img2,irtflg:',img2,irtflg,ny
-c             call lungethedoff(lun2,nx,img2, lunaraoff,lunstkoff,irtflg)
-c             write(3,*)'  In copytostk 3 --:',img2,lunaraoff,lunstkoff
+              !write(3,*)'  In copytostk 2, img2,irtflg:',img2,irtflg,ny
+              !call lungethedoff(lun2,nx,img2, lunaraoff,lunstkoff,irtflg)
+              !write(3,*)'  In copytostk 3 --:',img2,lunaraoff,lunstkoff
 
 C             COPY THE DATA RECORDS
               DO IREC = 1,NY * NZ

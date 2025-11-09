@@ -1,5 +1,7 @@
 C **********************************************************************
 C *  GETDEFOCUS.F
+C *  THIS CODE IS A MESS!  SEGFAULTS and COMPILER ERRORS!! 
+C *  I ABANDONED TRYING TO FIX IT! al
 C=**********************************************************************
 C=* From: SPIDER - MODULAR IMAGE PROCESSING SYSTEM                     *
 C=* Copyright (C)2002, L. Joyeux & P. A. Penczek                       *
@@ -45,6 +47,9 @@ CC==X is X coordinates!
       	REAL       VALUE(NUMBER), ENV(NUMBER), VALUE2(NUMBER),X(NUMBER)
       	REAL      PS, CS, LAMBDA, CONTRAST, DZLOW1, DZHIGH1, DZINC, DZ
      	 REAL      DZLOW, DZHIGH,XXX,XSCORE
+
+C        GFORT WILL NOT ACCEPT REAL PARAMETERS FOR LOOPING   Sept 2025 al
+      	INTEGER      IDZLOW, IDZHIGH,IDZINC, IDZ
       	REAL      GETDEFOCUS
 	COMMON /SEARCH_RANGE/ DZLOW1,DZHIGH1,NMB
       	INTEGER          I, J, L, ISTART,ISTOP,ISWI
@@ -61,16 +66,25 @@ CC==X is X coordinates!
         ENDIF
 
         DO
-           DO DZ = DZLOW, DZHIGH, DZINC
+C           GFORT WILL NOT ACCEPT REAL PARAMETERS FOR LOOPING   Sept 2025 al
+            IDZLOW  = DZLOW    ! buggy change of limits ,,, redefined below al
+	    IDZHIGH = DZHIGH 
+	    IDZINC  = DZINC
+	    
+            DO IDZ  = IDZLOW, IDZHIGH, IDZINC
+	      DZ    = IDZ
+	      
               CALL CTF_SIGNAL1(VALUE,X,NUMBER, PS, CS, 
      &                      LAMBDA, DZ, CONTRAST)
 
               IF (ISWI.EQ.0) THEN
                   DO L = ISTART, ISTOP
-                     DIFF=DIFF+(VALUE(L)*DBLE(VALUE(L))*ENV(L)-
-CCC=CHECK ENVELOPE EFFECT
-C		DIFF=DIFF+(VALUE(L)*DBLE(VALUE(L))-
-     &                    DBLE(VALUE2(L)))**2
+		  
+CCC                     DIFF=DIFF+(VALUE(L)*DBLE(VALUE(L))*ENV(L)-
+CCC=CHECK ENVELOPE EFFECT  was buggy?? sept 2025
+
+ 		        DIFF = DIFF+(VALUE(L)*DBLE(VALUE(L))-
+     &                      DBLE(VALUE2(L)))**2
                   ENDDO
                   IF (DIFF<DIFFMIN .OR. DZ .EQ. DZLOW) THEN
                      GETDEFOCUS = DZ

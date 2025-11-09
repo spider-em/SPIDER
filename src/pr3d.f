@@ -17,7 +17,6 @@ C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
 C=* Copyright 1985-2016  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -85,7 +84,7 @@ C--*********************************************************************
 
         CALL SET_MPI(ICOMM,MYPID,MPIERR)
 
-        WANTSQRTS = (FSCOP == .TRUE.)
+        WANTSQRTS = FSCOP  ! WANTSQRTS = (FSCOP == .TRUE.) ILLEGAL ON GFORT Sept 2025 al
 
 C       INPUT FIRST IMAGE
         MAXIM = 0

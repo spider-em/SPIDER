@@ -6,13 +6,15 @@ C                  ECHO                            APR 16 ArDean Leith
 C                  WORKS ON VOLUME SLICES NOW      JAN 18 ArDean Leith
 C                  WORKS ON MRC IMAGES NOW         DEC 19 ArDean Leith
 C                  EXTRACTED DISP()                JAN 20 ArDean Leith
+C                  RENAMED GRAY                    OCT 25 ArDean Leith
+C
 C **********************************************************************
 C=* AUTHOR: A. LEITH                                                   *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
 C=* Copyright 1985-2020  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@health.ny.gov                                        *
+C=* Email:                                                             *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -63,10 +65,13 @@ C--*********************************************************************
         LOGICAL               :: CALLERRT = .TRUE.
         LOGICAL               :: erri2
 
-        CHARACTER(LEN=17)     :: FILTMP = 'JUNK_FOR_JPG.gray' 
+        CHARACTER(LEN=17)     :: FILTMP    = 'jnk_temp_jpg.gray' 
+        CHARACTER(LEN=5)      :: ENDIANMSB = ' msb ' 
+        CHARACTER(LEN=5)      :: ENDIANLSB = ' lsb ' 
+        CHARACTER *5          :: ENDIAN
  
         INTEGER               :: lnblnkn
-
+ 
         ISLICE = 1
         IF (NZ > 1) THEN
 C          THIS IS A VOLUME
@@ -126,22 +131,33 @@ C          GET NAME FOR JPEG FILE
         CALL INTTOCHAR(NX, STRNX, NC2,1)
         CALL INTTOCHAR(NY, STRNY, NC3,1)
 
+        ENDIAN = ENDIANMSB
+        !!!IF (
+        ENDIAN = ENDIANLSB
+
         IF (VERBOSET) THEN
-           WRITE(COMLIN,8005) STRNX(:NC2),STRNY(:NC3),
+           WRITE(COMLIN,8005) STRNX(:NC2),STRNY(:NC3),ENDIAN,
      &                        FILTMP,FILNEW(1:NLETN)
+     
 8005       FORMAT( 
      &     ' convert -verbose -depth 32 -size ',A,'x',A, 
      &     ' -define quantum:format=floating-point ',
-     &     '-define quantum:scale=65536.0 -endian msb ',
-     &     A,' ',A )
+     &     '-define quantum:scale=65536.0 -endian ',A,
+     &     ' ',A,' ',A )
+
+cc 2025   &     '-define quantum:scale=65536.0 -endian msb ',
+
         ELSE
-           WRITE(COMLIN,8006) STRNX(:NC2),STRNY(:NC3),
+           WRITE(COMLIN,8006) STRNX(:NC2),STRNY(:NC3),ENDIAN,
      &                        FILTMP,FILNEW(1:NLETN)
+     
 8006       FORMAT( 
      &     ' convert -depth 32 -size ',A,'x',A, 
      &     ' -define quantum:format=floating-point ',
-     &     '-define quantum:scale=65536.0 -endian msb ',
-     &     A,' ',A, ' >& /dev/null' )
+     &     '-define quantum:scale=65536.0 -endian',A,' ',
+     &     A,' ',A, '  >& /dev/null' )
+
+cc 2025   &     '-define quantum:scale=65536.0 -endian msb ',
 
         ENDIF
 

@@ -2,15 +2,16 @@
 C++*********************************************************************
 C
 C INTTOCHAR.F   -- NEW 7 Jan 99 ArDean Leith
-CC                 AVOIDS SGI'S MEMORY LEAK aug 02 ArDean Leith
-
+C                  AVOIDS SGI'S MEMORY LEAK aug 2002  ArDean Leith
+C                  DEBUG OUTPUT             sep 2025  ArDean Leith
+C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Copyright 1985-2025  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
+C=* Email:                                                             *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -32,8 +33,8 @@ C    PURPOSE:       CONVERT INTEGER TO A CHARACTER STRING
 C
 C    PARAMETERS:
 C        NUMBER     INTEGER NUMBER                                (SENT)
-C        STRING     OUTPUT STRING                                 (SENT) 
-C        NLET       NUMBER OF CHARAcTERS IN OUTPUT STRING         (RET.)
+C        STRING     OUTPUT STRING                                 (RET.) 
+C        NLET       NUMBER OF CHARACTERS IN OUTPUT STRING         (RET.)
 C                   (<0 INDICATES ERROR)
 C        MINLEN     MINIMUM LENGTH OF OUTPUT STRING               (SENT)
 C
@@ -46,9 +47,14 @@ C--*********************************************************************
 
         SUBROUTINE INTTOCHAR(NUMBER,STRING,NLET,MINLEN)
 
-        CHARACTER (LEN=*) ::       STRING
-        INTEGER, PARAMETER::       MAXSTR = 10
-        CHARACTER (LEN=MAXSTR) ::  CTEMP,CZEROS
+        INTEGER                :: NUMBER,NLET,MINLEN
+        CHARACTER (LEN=*)      :: STRING
+
+        INTEGER, PARAMETER     :: MAXSTR = 10
+        CHARACTER (LEN=MAXSTR) :: CTEMP,CZEROS
+
+        INTEGER                :: NZ,IGO
+
 
         DATA CZEROS/'0000000000'/
 
@@ -60,11 +66,17 @@ C       FIND NUMBER OF LEADING ZEROS (IF ANY)
 
         IGO  = (MAXSTR-NLET+1)
         NLET = NLET + NZ
+        
+c        write(6,*) ' Inttochar  number,minlen,nlet,nz: ', 
+c     &                          number,minlen,nlet,nz
 
 C       CHECK FOR OVERFLOW OF STRING
         IF (NLET .GT. LEN(STRING) .OR. NLET .GT. MAXSTR) GOTO 999
 
 C       I10 MUST BE SAME AS MAXSTR!!
+
+c       write(3,*)' inttochar maxstr: ',maxstr
+
         WRITE(CTEMP,'(I10)',ERR=999) NUMBER
 
         IF (NZ .GT. 0) THEN
@@ -73,6 +85,9 @@ C          MUST PREFIX ZERO'S
         ELSE
            STRING = CTEMP(IGO:MAXSTR) 
         ENDIF
+
+c       write(6,*) ' inttochar number,nlet,string,nlet:',
+c       &                      number,nlet,string,nlet
 
         RETURN
 

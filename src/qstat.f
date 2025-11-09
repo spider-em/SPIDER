@@ -1,18 +1,19 @@
 
 C++*********************************************************************
 C
-C    QSTAT.F           LONG FILE NAMES JAN             89 ArDean Leith
-C                      MODIFIED FOR STACKS             98 ArDean Leith
-C                      ==,NSAM,IMPLICIT                16 ArDean Leith
-C                      (IN HEADER) MSG                 19 ArDean Leith
-C
+C    QSTAT.F           LONG FILE NAMES JAN           1989 ArDean Leith
+C                      MODIFIED FOR STACKS           1998 ArDean Leith
+C                      ==,NSAM,IMPLICIT              2016 ArDean Leith
+C                      (IN HEADER) MSG               2019 ArDean Leith
+C                      DEBUG OUTPUT                  2025 ArDean Leith
+C                      FLOWCHART                     2025 ArDean Leith
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2019  Health Research Inc.,                         *
+C=* Copyright 1985-2025  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@health.ny.gov                                        *
+C=* Email:                                                             *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -36,6 +37,41 @@ C                  NX,NY        X & Y DIMENSIONS OF IMAGE
 C                  NZ           Z DIMENSION  OF IMAGE
 C                  NSTACK       STACK/MAXIM INDICATOR
 C
+C     USED BY: FS 
+C     QSTAT
+C        v
+C     OPFILES Uses (E.G. STK@****)~~9  prompt for filename
+C             '~9' in last 3 char. of prompt accepts extension on filename 
+C        v
+C        ` ->  FILERD  
+C        v      ` ->  ECHONAME 
+C        |
+C        ` ->  FILELIST
+C        v 
+C        |  MRC file:       *.MRC or *.MRCS
+C        ` -> OPFILES_MRC
+C                 |
+C                 |  Templated stack:  **@STK.MRC
+C                 ` ---> FILGET_AT --> OPFILEC --> OPENFIL_MRC --> OPENFIL_O_MRC C                 |                                            --> OPENFIL_N_MRC
+C                 |
+C                 |  Whole barestack:  @STK.MRC 
+C                 ` ---> FILGET_AT --> OPFILEC --> OPENFIL_MRC --> OPENFIL_O_MRC
+C                 |                                            --> OPENFIL_N_MRC
+C                 | 
+C                 |  File template:    IMG***.MRC
+C                 ` ---> FILGET_AT --> OPFILEC --> OPENFIL_MRC --> OPENFIL_O_MRC
+C                 |                                            --> OPENFIL_N_MRC
+C                 | 
+C                 |  Simple file:      IMG001.MRC
+C        |        ` -----------------> OPFILEC --> OPENFIL_MRC --> OPENFIL_O_MRC C        |                                                     --> OPENFIL_N_MRC
+C        | 
+C        v
+C      NORM3
+C        ` -> REDLIN
+C        | 
+C        v
+C      REPORTSTAT
+C
 C--*******************************************************************
 
       SUBROUTINE QSTAT(LUN1,LUNM,LUNDOC,LUNXM1)
@@ -53,7 +89,7 @@ C--*******************************************************************
       INTEGER               :: ILIST1(NIMAX)
       INTEGER               :: NILMAX,NLET1,IFORM1,NX1,NY1,NZ1
       INTEGER               :: NDUM,NGOT1,IMG1,IRTFLG
-      INTEGER               :: NXM,NYM,NZM,MAXIMM,ninndx1,npoint
+      INTEGER               :: NXM,NYM,NZM,MAXIMM,npoint
 
       INTEGER               :: ICOMM, MYPID, MPIERR
       INTEGER               :: NSTACK1, IMAMI1, IFORMM, NINDX1, NLET 
@@ -63,6 +99,8 @@ C--*******************************************************************
       CHARACTER (LEN=1)     :: NULL = CHAR(0)
 
       CALL SET_MPI(ICOMM,MYPID,MPIERR) ! SETS ICOMM AND MYPID
+
+      !write(6,*)' In qstat 0; --------- 0'
 
 C     OPEN INPUT FILE
       NILMAX = NIMAX
@@ -74,16 +112,17 @@ C     OPEN INPUT FILE
      &             FOUROK, ILIST1,NILMAX, 
      &             NDUM,NGOT1,IMG1, IRTFLG)
  
-      !write(6,'(a,8i5)')' nstack1,ngot1,img1:',nstack1,ngot1,img1
-      !write(3,'(a,8i5)')' In qstat; ngot,nstack,img:',nstack1,ngot1,img1
-      !write(3,'(a,8i5)')' In qstat; ilist1:',ilist1(1:5)
+      !write(6,*)' In qstat; ilist1:',ilist1(1:5)
+      !write(6,*)' In qstat; ngot1,nstack1,img1:',ngot1,nstack1,img1
+      !write(6,*)' In qstat; irtflg:',irtflg
+
       IF (IRTFLG .NE. 0) RETURN
       
 
       IMAMI1 = IMAMI   ! FROM CMBLOCK
 
       IF (FCHAR(4:4) == 'M') THEN
-C        FIND STATISTICS UNDER A MASKED AREA
+C        FIND STATISTICS UNDER A MASKED AREA -------------------
 
 C        OPEN MASK INPUT FILE
          CALL OPFILEC(0,.TRUE.,FILNAMM,LUNM,'O',IFORMM,
@@ -99,7 +138,7 @@ C        OPEN MASK INPUT FILE
       ISFIRST = .TRUE.
        
       NINDX1  = 1
-      DO                ! LOOP OVER ALL IMAGES/STACKS
+      DO                ! LOOP OVER ALL IMAGES/STACKS -----------
 
         IF (FCHAR(4:4) == 'M') THEN
            CALL NORMM(LUN1,LUNM,NX1,NY1,NZ1,
@@ -122,7 +161,6 @@ C        OPEN MASK INPUT FILE
            CALL NORM3(LUN1,NX1,NY1,NZ1,FMAX,FMIN,AV)
         ENDIF
 
-        !write(3,'(a,8i5)')' In qstat; ngot,nstack,img:',nstack1,ngot1,img1
         CALL REPORTSTAT(NEWCALC, FMIN,FMAX,AV,SIG)
 
 C       OPEN NEXT INPUT FILE, UPDATE NINDX1 
@@ -132,9 +170,13 @@ C       OPEN NEXT INPUT FILE, UPDATE NINDX1
      &                LUN1,    0,  
      &                FILNAM1, 'O',
      &                IMG1,    IRTFLG)
+
+       !write(6,*)' In qstat; ngot1,nstack1,img1: ',ngot1,nstack1,img1
+       !write(6,*)' In qstat; nindx1,irtflg: ',nindx1,irtflg
+ 
         IF (IRTFLG .NE. 0) EXIT      ! ERROR / END OF INPUT STACK
         IMAMI1 = IMAMI
-
+           
       ENDDO
 
 9999  CLOSE(LUN1)

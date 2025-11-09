@@ -1,14 +1,14 @@
 C++*********************************************************************
 C
 C LNBLNKN.F   -- NEW FEB 1999                       AUTHOR: ARDEAN LEITH
-C                ADDED TAB TRAP NOV 00                      ARDEAN LEITH                        
+C                ADDED TAB TRAP NOV 00                      ARDEAN LEITH C                BUG FIXED      SEP 25                      TAPU          
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2010  Health Research Inc.,                         *
+C=* Copyright 1985-2025  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
+C=* Email:                                                             *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -37,19 +37,31 @@ C--*********************************************************************
        INTEGER FUNCTION LNBLNKN(STRING)
 
        CHARACTER *(*) STRING
+       INTEGER        LENN,LENB,IDX
 
 C      FIND LOCATION OF LAST NON-NULL, PRINTING CHARACTER IN STRING
- 
        LNBLNKN = lnblnk(STRING)
+
+C      Check for null character inside string
        LENN    = INDEX(STRING,CHAR(0)) 
        IF (LENN .GE. 1 .AND. LENN .LE. LNBLNKN) LNBLNKN = LENN - 1
 
-       IF (LNBLNKN .GT. 0 .AND. STRING(LNBLNKN:LNBLNKN) .LE. CHAR(32))
-     &    THEN
+C      If lnblnkn is 0, then string(lnblnkn:lnblnkn) below will be invalid
+       IF (LNBLNKN .LE. 0) THEN
+          LNBLNKN = 0
+          RETURN
+       ENDIF
+
+C      IF (STRING(LNBLNKN:LNBLNKN) .LE. CHAR(32)) THEN
+       IF (ICHAR(STRING(LNBLNKN:LNBLNKN)) .LE. 32) THEN
 C         LAST POSITION IS STILL NON PRINTING
           LENB = LNBLNKN
-          DO LNBLNKN = LENB,1,-1
-             IF (STRING(LNBLNKN:LNBLNKN) .GT. CHAR(32)) RETURN
+          DO IDX = LENB,1,-1
+C            IF (STRING(LNBLNKN:LNBLNKN) .GT. CHAR(32)) THEN
+             IF (ICHAR(STRING(idx:idx)) .GT. 32) THEN
+                LNBLNKN = IDX
+                RETURN
+             ENDIF
           ENDDO
           LNBLNKN = 0 
        ENDIF

@@ -3,12 +3,16 @@
 #        This is the definitive source listing for source files
 #        compiled into SPIDER. Additional objects are also found
 #        within the corresponding source files.
- 
+#        First time run as is, then invert: lunsetmrchdr.o and lunsethdr.o
+#        and run again.  This may work?
+# 
+# $(LIB)(lunsetmrchdr.o) \
+
 ELEMENTS =  \
- $(LIB)(spider.o)    \
- $(LIB)(openinln.o)  \
  $(LIB)(lunsethdr.o) \
  $(LIB)(lunsetmrchdr.o) \
+ $(LIB)(spider.o)    \
+ $(LIB)(openinln.o)  \
  $(LIB)(fftw3.o)     \
  $(LIB)(lundoc.o)    \
  $(LIB)(apsh_tool.o) \
@@ -158,11 +162,9 @@ ELEMENTS =  \
  $(LIB)(copyf.o)   \
  $(LIB)(copyfromnik.o) \
  $(LIB)(copyfromtif.o) \
- $(LIB)(copyfromxplo.o)\
  $(LIB)(copypos.o)     \
  $(LIB)(copytojpg.o)   \
  $(LIB)(copytostk.o)   \
- $(LIB)(copytoxplor.o) \
  $(LIB)(copytovol.o)   \
  $(LIB)(copyr.o) \
  $(LIB)(copyu.o) \
@@ -342,7 +344,6 @@ ELEMENTS =  \
  $(LIB)(getdocdat.o)  \
  $(LIB)(getdoclist.o) \
  $(LIB)(getfilenum.o) \
- $(LIB)(gethedccp4.o) \
  $(LIB)(getima_q.o) \
  $(LIB)(getlbno.o)  \
  $(LIB)(getlab.o)   \

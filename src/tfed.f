@@ -4,7 +4,7 @@ C            IMPROPER PS BUG FIXED               SEP   10 ArDean Leith
 C            PROMPTS IMPROVED                    MAY   12 ArDean Leith
 C            CTF ED                              JUN   12 ArDean Leith
 C            DEF. DOC FILE COMMENTS CHANGED      APR   13 ArDean Leith
-C                                                            
+C            GETDEFOCUS VERY BUGGY                                                              
 C=**********************************************************************
 C=* From: SPIDER - MODULAR IMAGE PROCESSING SYSTEM                     *
 C=* Copyright (C)2002, Z. Huang & P. A. Penczek                        *

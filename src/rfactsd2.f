@@ -19,7 +19,6 @@ C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
 C=* Copyright 1985-2016  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -351,7 +350,7 @@ C           WRITE GNUPLOT FILE OUTPUT
 
             DO  L=1,INC
                IF (LR(L) .NE. 0) THEN
-                  WRITE(LUNGP,195) ,L,RVAL(L),FSCVAL(L)
+                  WRITE(LUNGP,195) L,RVAL(L),FSCVAL(L)
 195               FORMAT(' ',I5,'  ',F7.2,' ',F10.3)
                ENDIF
            ENDDO

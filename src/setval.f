@@ -249,7 +249,8 @@ C         OUTPUT FILE MUST EXIST, IT IS NOT CREATED HERE.
           CALL LUNGETIS_MRC(LUN2,IS_MRC2,IRTFLG)
           IF (IRTFLG .NE. 0) GOTO 9000
 
-          IF (IS_MRC .NE. IS_MRC2) THEN
+C          IF (IS_MRC .NE. IS_MRC2) THEN !gfort error,  Sept 2025 al
+          IF (IS_MRC .NEQV. IS_MRC2) THEN 
              CALL ERRT(101,'INPUT/OUTPUT MUST BE SAME MRC/SPIDER',IDUM)
              IRTFLG =1
              GOTO 9000

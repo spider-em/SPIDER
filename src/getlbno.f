@@ -8,9 +8,9 @@ C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2015  Health Research Inc.,                         *
+C=* Copyright 1985-2025  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
+C=* Email: spider@health.ny.gov                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -43,11 +43,18 @@ C--*********************************************************************
         CHARACTER(LEN=80) :: TEMP1
         LOGICAL           :: ISDIGI
 
-        LBNO   = -1
-        IRTFLG = 0
+        INTEGER           :: LBNO,IRTFLG
+        INTEGER           :: NCHAR1,IGO,NCHAR
+
+
+        IRTFLG = 0        ! UNUSED?
+        LBNO   = -1       ! ERROR RETURN
 
 C       FIND LAST NON-BLANK            
         NCHAR1 = lnblnk(STRING)
+        
+C       WHAT IF IT IS ZERO?
+        IF (NCHAR1 .LE. 0) RETURN
 
         TEMP1 = STRING(1:NCHAR1)
         CALL SSUPCAS(TEMP1)
@@ -61,8 +68,12 @@ C       FIND LAST NON-BLANK
            NCHAR = 3
         ENDIF 
 
+        !write(3,*)' In getlbno: igo,temp1,string:', igo, temp1,string
+
         READ(TEMP1(IGO+2:IGO+2+NCHAR-1),8000) LBNO
 8000    FORMAT(I6)
+
+        !write(3,*)' In getlbno: string,lbno:', temp1,string
 
 	END
 

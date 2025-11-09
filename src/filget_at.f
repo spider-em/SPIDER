@@ -8,7 +8,6 @@ C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
 C=* Copyright 1985-2011  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@health.ny.gov                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -56,7 +55,7 @@ C
 C     APPEND IMAGE NUMBER TO BARE STACK FILE NAME
 C     (INTTOCHAR ALSO RETURNS NEW VALUE FOR NLET)
 C
-C     ***@STK.MRC or aaa/***@STK.MRC
+C     ???@STK.MRC or aaa/???@STK.MRC   ! GFORT DID NOT ACCEPT * HERE Sept 2025
 C        @STK.MRC or aaa/@STK.MRC
 C         IMG***.MRC ??
 

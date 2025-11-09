@@ -1,20 +1,20 @@
  
 C++*********************************************************************
 C
-C NEXTVERSION.F                                                  3/2/94
-C                       ADDED CXNUMB                AUG 00 ARDEAN LEITH
-C                       NEXTRESULTS IN BIN DIR      FEB 09 ARDEAN LEITH
-C                       OUTPUT FORMATTING           AUG 14 ARDEAN LEITH
-C                       OUTPUT FORMATTING,DELETE    JAN 16 ARDEAN LEITH
+C NEXTVERSION.F         ORIGINAL                  3/2/94
+C                       ADDED CXNUMB              AUG 2000 ARDEAN LEITH
+C                       NEXTRESULTS IN BIN DIR    FEB 2009 ARDEAN LEITH
+C                       OUTPUT FORMATTING         AUG 2014 ARDEAN LEITH
+C                       OUTPUT FORMATTING,DELETE  JAN 2016 ARDEAN LEITH
 C
 C **********************************************************************
-C *  AUTHOR: MAHIEDDINE LADJADJ                                            *
+C=*  AUTHOR: MAHIEDDINE LADJADJ                                        *
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2016  Health Research Inc.,                         *
+C=* Copyright 1985-2025  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
+C=* Email:                                                             *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -89,9 +89,20 @@ C          RESULTS EXTENSION SET BY CALLER
 
 C       SET DEFAULT VALUE USING LAST 3 DIGITS OF SYSTEM CLOCK
         CALL SYSTEM_CLOCK(INUMB,IDUM,IDUM)
+
+        !write(6,*)' In nextversion 1; inumb,nchar: ',inumb,nchar
+
         INUMB                   = MOD(INUMB,1000)
+
+        !write(6,*)' In nextversion 2; inumb,nchar: ',inumb,nchar
+
         FILOUT(NCHAR+1:NCHAR+1) = '.' 
+
+        !write(6,*)' In nextversion 3; inumb,nchar: ',inumb,nchar,nlet
+
         CALL INTTOCHAR(INUMB,FILOUT(NCHAR+2:NCHAR+4),NLET,3)
+
+        !write(6,*)' In nextversion 4; nchar,filout: ',nchar, filout
 
 #ifndef SP_IBMSP3
 C       OMIT THIS FOR NOW ON PARALLEL ARCH. al Oct 00
@@ -137,9 +148,6 @@ C       READ THE FILE FILENAME.NBR' FOUND AND STORED IN SPIDER_JUNK.TMP
 C       DELETE THE TEMP FILE.
         CLOSE(LUNT,STATUS='DELETE')
 
-C       DELETE THE TEMP FILE.
-cc      SCRIPT = 'rm -f SPIDER_JUNK.TMP' // NULL
-cc      CALL system(SCRIPT)  NO LONGER NEEDED AFTER STATUS=DELETE
 
 #endif
 

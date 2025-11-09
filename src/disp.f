@@ -1,15 +1,18 @@
 
+
 C++*********************************************************************
 C
-C  DISP.F  -- EXTRACTED FROM COPYTOJPED            Jan 20 ArDean Leith
+C  DISP.F  -- EXTRACTED FROM COPYTOJPED           Jan 2020 ArDean Leith
+C          -- IRTFLG 654321                       Oct 2025 ArDean Leith
+C          -- REMOVE MRC EXTENSION                Oct 2025 ArDean Leith
 C
 C **********************************************************************
 C=* AUTHOR: A. LEITH                                                   *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2020  Health Research Inc.,                         *
+C=* Copyright 1985-2025  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@health.ny.gov                                        *
+C=* Email:                                                             *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -49,9 +52,9 @@ C--*********************************************************************
         CHARACTER(LEN=160)    :: COMLIN
  
         CHARACTER(LEN=1)      :: NULL = CHAR(0)
-        LOGICAL               :: VERBOSET,WANTOUT
+        LOGICAL               :: VERBOSET,WANTOUT,SAYIT
         INTEGER               :: NX,NY,NZ,MAXIM,ITYPE,IRTFLG,NLET,NLETC
-        INTEGER               :: lnblnkn,NLETO
+        INTEGER               :: lnblnkn,NLETO,IGOEXT,NDUM
 
         INTEGER, PARAMETER    :: LUN1   = 14 
         INTEGER, PARAMETER    :: LUN2   = 15 
@@ -65,10 +68,21 @@ C--*********************************************************************
 
 C       OPEN INPUT FILE, WHOLE STACK NOT ALLOWED
         MAXIM = 0
+        ITYPE = 0   ! ?
         CALL OPFILEC(0,.TRUE.,FILOLD,LUN1,'O',ITYPE,
      &               NX,NY,NZ,MAXIM,'SPIDER OR MRC INPUT',
      &               .FALSE.,IRTFLG)
         IF (IRTFLG .NE. 0) RETURN
+
+        IF (NZ > 1) THEN
+           CALL ERRT(101,'CAN NOT DISPLAY A VOLUME',NDUM)
+           RETURN
+        ENDIF
+
+#if defined (SP_DBUGIO)
+        nletc = lnblnkn(filold)
+        write(3,*)' In disp; nletc,filold: ',nletc,filold(:nletc)
+#endif
 
         IF (IMAMI .NE. 1) 
      &      CALL NORM3(LUN1,NX,NY,NZ,FMAX,FMIN,AV)
@@ -76,24 +90,48 @@ C       OPEN INPUT FILE, WHOLE STACK NOT ALLOWED
 C       IF MRC AND ORIGIN IS 'LL' FLIP ORIGIN FOR DISPLAY
         CALL LUNFLIPORG_MRC(LUN1,NX,NY,NZ,.FALSE.,IRTFLG)
 
-C       JPEG OUTPUT FILE NAME
+C       CREATE JPEG OUTPUT FILE NAME
         NLET   = lnblnkn(FILOLD)
+        IGOEXT = SCAN(FILOLD,'.')
+        IF(IGOEXT > 0 .AND. IGOEXT < NLET) NLET = IGOEXT - 1
+
+#if defined (SP_DBUGIO)
+        write(3,*)' In disp; nlet,filold(:nlet): ',nlet,filold(:nlet)
+#endif
+
         FILNEW = FILOLD(:NLET) // '.jpg'
         NLET   = NLET + 4
 
+       ! FILNEW = 'jnk_temp_for_display.jpg'
+       ! NLET   = lnblnkn(FILNEW)
+
+#if defined (SP_DBUGIO)
+        write(3,*)' In disp; nlet,filnew(:nlet): ', nlet,filnew(:nlet)
+#endif
+
 C       CONVERT IMAGE FILE INTO JPG FILE
-        VERBOSET = .FALSE.
+C       COPYTOJPG HAS A DELAY NEAR END SINCE AN INTERMEDIATE FILE .gray
+C       IS CREATED TO HANDLE FLOATING POINTS AND NEGATIVE VALUES
+
+        !!!!!!!!!!!!!VERBOSET = .FALSE.
+        VERBOSET = .TRUE.
         CALL COPYTOJPG(LUN1,LUN2,FILNEW,NX,NY,NZ, VERBOSET,IDELAY)
 
-        IRTFLG = -999   ! KEEP LOWERCASE
+        IRTFLG = 654321   ! KEEP LOWERCASE AND ACCEPT <CR>
         CALL RDPRMC(OPTIONS,NLETO,.TRUE.,
      &          'IMAGEMAGICK DISPLAY OPTIONS (or <CR>)',NULL,IRTFLG)
 
         WRITE(COMLIN,90) OPTIONS(1:NLETO),FILNEW(1:NLET)
 90      FORMAT( ' display ', A,' ',A, ' &' )
 
-C       DO NOT ECHO COMLIN
-        CALL CSVMS(COMLIN,.FALSE.,IRTFLG)
+#if defined (SP_DBUGIO)
+        write(3,*)' In disp; comlin: ',comlin
+        !sayit = .TRUE.
+#endif
+
+C       SAYIT: ECHO COMLIN TO OUTPUT
+        SAYIT = .FALSE.
+        CALL CSVMS(COMLIN,SAYIT,IRTFLG)
 
         END
 
@@ -130,7 +168,7 @@ C       ----------------- DISP_RELION ---------------------------------
      &              NULL,IRTFLG)
         IF (IRTFLG .NE. 0) RETURN
 
-        WRITE(COMLIN,90) ,FILELINE(1:NLET1), OPTIONS(1:NLET2)
+        WRITE(COMLIN,90) FILELINE(1:NLET1), OPTIONS(1:NLET2)
 90      FORMAT( ' relion_display --i ', A,' ',A, ' &' )
 
 C       DO NOT ECHO COMLIN

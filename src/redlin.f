@@ -1,21 +1,23 @@
 
 C++*********************************************************************
-C   REDLIN.F     USED IOSTAT                    12/8/1997 ArDean Leith
-C                F90 CHANGES                    4/7/1998  ArDean Leith
-C                ENDEDNESS                      FEB 2003  ArDean Leith
-C                MPI CHANGES                    OCT 2008  ArDean Leith
-C                REDLIN_SEL                     NOV 2011  ArDean Leith
-C                MRC SUPPORT                    MAY 2019  ArDean Leith
-C                MORE MRC SUPPORT               DEC 2019  ArDean Leith
-C                REDLIN_SEL HANDLES MRC NOW     JUN 2020  ArDean Leith
-C
+C   REDLIN.F   USED IOSTAT                      12/8/1997 ArDean Leith
+C              F90 CHANGES                      4/7/1998  ArDean Leith
+C              ENDEDNESS                        FEB 2003  ArDean Leith
+C              MPI CHANGES                      OCT 2008  ArDean Leith
+C              REDLIN_SEL                       NOV 2011  ArDean Leith
+C              MRC SUPPORT                      MAY 2019  ArDean Leith
+C              MORE MRC SUPPORT                 DEC 2019  ArDean Leith
+C              REDLIN_SEL HANDLES MRC NOW       JUN 2020  ArDean Leith
+C              FIXED MRC MRCTYP NAME CONFUSION  SEP 2025  ArDean Leith
+C              ADD DEBUG OUTPUT                 OCT 2025  ArDean Leith
+C                
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2020  Health Research Inc.,                         *
+C=* Copyright 1985-2025  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@health.ny.gov                                        *
+C=* Email:                                                             *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -58,7 +60,8 @@ C         3   16    INTEGERS  (COMPLEX) FFT    NOT SUPPORTED
 C         4   32    REALS     (COMPLEX) FFT    NOT SUPPORTED      
 C         6   16    INTEGER*2 (UNSIGNED)        -2
 C
-C-**********************************************************************
+C23456789 123456789 123456789 123456789 123456789 123456789 123456789 12
+C--*********************************************************************
 
       SUBROUTINE REDLIN(LUNT,BUF,NB,IREC)
 
@@ -87,7 +90,7 @@ C     INCLUSION FOR OPTIONAL MPI INITIALIZATION.
       INTEGER         :: MYPID = -1
 #include "MPI_INIT.INC"
 
-      IF (ISINLINE(LUNT)) THEN
+      IF (ISINLINE(LUNT))  THEN
 C        USE INLINED BUFFER FOR I/O (SEE OPENINLN.F)
          CALL INLN_REDLIN(LUNT,BUF,NB,IREC)
          RETURN
@@ -96,29 +99,67 @@ C        USE INLINED BUFFER FOR I/O (SEE OPENINLN.F)
 C     FOR LUN EQUIVALENT INPUT == OUTPUT
       LUN = LUNARB(LUNT)
 
-      IF (LUNMRCPOS(LUN) == 0) THEN
+
+#undef SP_DBUGIO
+
+c#if defined(SP_DBUGIO)
+c       if (irec < 2) then
+c         write(3,'(A,5i10)')'  In redlin; lun,lunt,lunmrcpos(lun):',
+c     &                                    lun,lunt,lunmrcpos(lun)  
+c         write(3,'(A,5i6)') '  In redlin; lun,lunflip(lun):',
+c     &                                    lun,lunflip(lun) 
+c         write(3,'(A,5i6)') '  In redlin; nb,irec: ', nb,irec 
+c       endif
+c#endif
+
+      IF (LUNMRCPOS(LUN) == 0) THEN  ! -------- For SPIDER input ------
 
 C       DIRECT ACCESS SPIDER FILE
 C       ADD LUNARA(LUN) (FOR LABEL REC) AND LUNSTK (FOR STACK OFFSET)
 C       TO IREC TO GET THE CORRECT RECORD NUMBER
+
         I = IREC + LUNARA(LUN) + LUNSTK(LUNT)
 
-C       USING IOSTAT; IERR IS SET TO ZERO ON EACH SUCCESSFUL READ. DEC 97 al
+C       USING IOSTAT; IERR ISZEROED ON EACH SUCCESSFUL READ. DEC 97 al
 C       IF USING MPI .AND. ONLYONE_RED IS .FALSE. IT ALWAYS READS
 C       OTHERWISE, USING MPI, READS ONLY ON PROCESSOR MYPID = 0 
 
         IF (MYPID <= 0) READ(LUN,REC=I,IOSTAT=IERR) BUF
 
-      ELSE
+#if defined(SP_DBUGIO)
+        if (irec < 2) then
+          write(3,'(A,5i6)')'  In redlin; lun,nb,i: ',lun,nb,i
+        endif
+#endif
+ 
+
+      ELSE ! --------------------- For MRC input ---------------
 
 C        DIRECT ACCESS MRC FILE
          CALL REDLIN_MRC(LUN,BUF,NB,IREC, MYPID,IERR)
 
-      ENDIF
 
+      ENDIF  ! ------------------ For SPIDER & MRC input ------------
+          
       IF (LUNFLIP(LUN) == 1) THEN
 C        FLIP INPUT BYTES IN BUF ARRAY
-         CALL FLIPBYTESI(BUF,NB,IRTFLG)
+
+#if defined(SP_DBUGIO)
+         if (irec < 2 ) then
+         write(3,'(A,5f16.2)')'  In redlin before flip; buf(1),buf(5):',
+     &                                                  buf(1),buf(5) 
+      endif
+#endif
+
+         CALL FLIPBYTESI(BUF,NB,IRTFLG) 
+
+#if defined(SP_DBUGIO)
+         if (irec < 2 ) then
+         write(3,'(A,5f16.2)')'  In redlin  after flip; buf(1),buf(5):',
+     &                                                  buf(1),buf(5) 
+         endif
+#endif
+ 
       ENDIF
 
 #ifdef USE_MPI
@@ -145,25 +186,26 @@ C     PURPOSE:  READ STREAM ACCESS MRC IMAGE/VOLUME FILE INTO BUF
       REAL            :: BUF(NB)
       INTEGER         :: MYPID,IERR
 
-      INTEGER *8      :: LUNMRCPOS
+      INTEGER *8      :: LUNMRCPOS 
       INTEGER         :: LUNMRCNBYT
       COMMON /LUNMRC/    LUNMRCPOS(100),LUNMRCNBYT(100)
+
       INTEGER         :: LUNARA,LUNSTK,LUNARB,LUNFLIP
       COMMON /LUNARA/   LUNARA(100),LUNSTK(100),LUNARB(100),LUNFLIP(100)
 
-      INTEGER *1      :: I1BUF(NBUFSIZ)
-      INTEGER *2      :: I2BUF(NBUFSIZ)
+      INTEGER *1, SAVE :: I1BUF(NBUFSIZ)
+      INTEGER *2, SAVE :: I2BUF(NBUFSIZ)
 
-      INTEGER         :: NBYT_PER_VAL,NBYT_PER_REC,MRCTYP,NX
-      INTEGER *8      :: IPOSMRC
+      INTEGER          :: NBYT_PER_VAL,NBYT_PER_REC,NX
+
+      INTEGER *8       :: IPOSMRC
 
 C     LUNARA SIGN DENOTES IMAGE ORIGIN
       NX = ABS(LUNARA(LUN))
 
 C     DIFFERENT MRC MODES DIFFER IN DATA LENGTHS
-      MRCTYP       = LUNMRCNBYT(LUN)   
-      NBYT_PER_VAL = ABS(MRCTYP)
-      NBYT_PER_REC = NBYT_PER_VAL * NX
+      NBYT_PER_VAL     = ABS(LUNMRCNBYT(LUN))
+      NBYT_PER_REC     = NBYT_PER_VAL * NX
 
 C     FILE POSITION TO BEGIN READING DEPENDS ON IREC
 
@@ -179,6 +221,24 @@ C        ORIGIN IS UPPER LEFT
          IERR = 1
          RETURN
       ENDIF
+
+#if defined(SP_DBUGIO)       
+      if (irec < 2 .or. irec .eq. 224) then
+
+        write(3,'(A,5i6)')'  In redlin_mrc; nb,irec:',
+     &                                      nb,irec
+
+        write(3,'(A,5i6)')'  In redlin_mrc; lun,lunara(lun),nx:',
+     &                                      lun,lunara(lun),nx
+
+
+       write(3,'(A,5i6)')'  In redlin_mrc; nbyt_per_val,nbyt_per_rec:',
+     &                                      nbyt_per_val,nbyt_per_rec 
+
+        write(3,'(A,5i10)')'  In redlin_mrc; lunmrcpos(lun),iposmrc:',
+     &                                       lunmrcpos(lun),iposmrc 
+      endif
+#endif
 
 C     READ STREAM ACCESS MRC IMAGE/VOLUME FILE
 
@@ -202,22 +262,15 @@ C        MRC FILE CONTAINS 8 BIT INTEGER*1 VALUES
          BUF(1:NB) = I1BUF(1:NB)        ! SPIDER NEEDS REALS
  
       ENDIF
+
+#if defined(SP_DBUGIO)
+      if (irec < 2) then
+        write(3,'(A,i5,3f10.3)')'  In redlin_mrc; irec,buf(1),buf(5):',
+     &                                            irec,buf(1),buf(5) 
+      endif
+#endif
    
       END
-
-
-c      if (irec==1) write(3,'(A,2X,3i9)')
-c     &            '  In redlin, lunflip(lun):',lunflip(lun)
-c      if (irec==1) write(3,'(A,2X,5i9)')
-c     &            '  In redlin, irec,lunmrcpos(),iposmrc:',
-c     &                          irec,lunmrcpos(lun),iposmrc
-c      if (irec==2) write(6,*)' irec,mrctyp,nbyt_per_val,nbyt_per_rec:'
-c     &                        ,irec,mrctyp,nbyt_per_val,nbyt_per_rec,nx
-c      if (irec==1) write(6,*)' irec,lunmrcpos,ipos: ',
-c     &                         irec,lunmrcpos(lun),iposmrc
-c     if (irec==1) write(3,'(A,2X,i9,f8.1)')
-c     &            '  In redlin, i1buf,buf:',i1buf(1),buf(1)
-
 
 
 C     ----------------------------- REDLIN1P  ------------------------
@@ -283,6 +336,7 @@ C     USE INLINE BUFFER COMMON AREA
 
 C     INCLUSION FOR OPTIONAL MPI INITIALIZATION.  
       INTEGER    :: MYPID = -1
+
 #include "MPI_INIT.INC"
 
 C     USE REDLIN FOR BOTH SPIDER AND MRC FILES

@@ -1,15 +1,17 @@
 
-C ++********************************************************************
+C **********************************************************************
 C
 C OPSTREAMFILE  STREAM IO                        FEB 2013 ArDean Leith
 C               CONVERT LITTLE ENDED OPTION      JAN 2018 ArDean Leith
+C               ADDED DEBUG OUTPUT               OCT 2025 ArDean Leith
+C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2019  Health Research Inc.,                         *
+C=* Copyright 1985-2025  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@health.ny.gov                                        *
+C=* Email:                                                             *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -63,7 +65,7 @@ C***********************************************************************
         INTEGER           :: LENE,IRTFLGT,LUN,IDUM,LENOPEN,LENOPENFILE
         INTEGER           :: LENOPN,LENREC
 
-        CALL SET_MPI(ICOMM,MYPID,MPIERR) ! SETS ICOMM AND MYPID  #ifdef USE_MPI
+        CALL SET_MPI(ICOMM,MYPID,MPIERR) ! SETS ICOMM AND MYPID
 
         SAYIT = (IRTFLG .NE. 999)
 
@@ -121,6 +123,7 @@ C       SET STATUS FOR OPEN
 
         IF (DISP(1:1) == 'S') STATVAR = 'SCRATCH'
 
+
         IF (DISP(1:1) == 'O') THEN
 C          CHECK FOR FILE EXISTENCE 
            IF (MYPID <= 0) THEN
@@ -143,20 +146,35 @@ C          CHECK FOR FILE EXISTENCE
               RETURN
 
            ENDIF
-           STATVAR = 'OLD'
+           STATVAR = 'OLD'  
         ENDIF
 
 C       OPEN FILE FOR STREAM ACCESS
 
-C       COMPUTE RECL UNITS (DIFFERS WITH OS &A COMPILER FLAGS)
+#if defined(SP_DBUG)
+        write(3,*)' In opstreamfile; Disp,Statvar,Formvar: ', 
+     &                               disp,' :',statvar,' :',formvar
+
+        write(3,*)' In opstreamfile; convert_to_big,convert_to_little:',
+     &                           convert_to_big,' :',convert_to_little
+#endif
+
+#if defined(SP_BACK)
+ 
+        !CALL BACKTRACE
+#endif
+
+C       COMPUTE RECL UNITS (DIFFERS WITH OS & COMPILER FLAGS)
         LENOPN = LENOPENFILE(LENREC)
 
         IF (MYPID <= 0) THEN
-           IF (STATVAR == 'SCRATCH') THEN
+
+           IF (STATVAR == 'SCRATCH') THEN   !----- SCRATCH FILE ----
+
               IF (CONVERT_TO_LITTLE) THEN
 C                FORCE OUTPUT TO LITTLE_ENDIAN
 
-	         OPEN(UNIT=LUN,STATUS=STATVAR,
+                 OPEN(UNIT=LUN,STATUS=STATVAR,
      &             CONVERT='LITTLE_ENDIAN',
      &             FORM=FORMVAR, ACCESS='STREAM',
      &             IOSTAT=IRTFLGT)
@@ -164,23 +182,24 @@ C                FORCE OUTPUT TO LITTLE_ENDIAN
               ELSEIF (CONVERT_TO_BIG) THEN
 C                FORCE OUTPUT TO BIG_ENDIAN
 
-	         OPEN(UNIT=LUN,STATUS=STATVAR,
+                 OPEN(UNIT=LUN,STATUS=STATVAR,
      &             CONVERT='BIG_ENDIAN',
      &             FORM=FORMVAR, ACCESS='STREAM',
      &             IOSTAT=IRTFLGT)
 
-	      ELSE
+              ELSE
 
-	         OPEN(UNIT=LUN,STATUS=STATVAR,
+                 OPEN(UNIT=LUN,STATUS=STATVAR,
      &             FORM=FORMVAR, ACCESS='STREAM',
      &             IOSTAT=IRTFLGT)
               ENDIF
-           ELSE
+
+           ELSE    ! ----------- NOT A SCRATCH FILE -------------
 
               IF (CONVERT_TO_LITTLE) THEN
 C               FORCE OUTPUT TO LITTLE_ENDIAN
 
-	        OPEN(UNIT=LUN,FILE=FILNAM(1:NCHAR),STATUS=STATVAR,
+                OPEN(UNIT=LUN,FILE=FILNAM(1:NCHAR),STATUS=STATVAR,
      &             CONVERT='LITTLE_ENDIAN',
      &             FORM=FORMVAR, ACCESS='STREAM', 
      &             IOSTAT=IRTFLGT)
@@ -188,13 +207,13 @@ C               FORCE OUTPUT TO LITTLE_ENDIAN
               ELSEIF (CONVERT_TO_BIG) THEN
 C                FORCE OUTPUT TO BIG_ENDIAN
 
-	         OPEN(UNIT=LUN,FILE=FILNAM(1:NCHAR),STATUS=STATVAR,
+                 OPEN(UNIT=LUN,FILE=FILNAM(1:NCHAR),STATUS=STATVAR,
      &             CONVERT='BIG_ENDIAN',
      &             FORM=FORMVAR, ACCESS='STREAM',
      &             IOSTAT=IRTFLGT)
 
               ELSE
-	         OPEN(UNIT=LUN,FILE=FILNAM(1:NCHAR),STATUS=STATVAR,
+                 OPEN(UNIT=LUN,FILE=FILNAM(1:NCHAR),STATUS=STATVAR,
      &             FORM=FORMVAR, ACCESS='STREAM', 
      &             IOSTAT=IRTFLGT)
 
@@ -206,7 +225,6 @@ C                FORCE OUTPUT TO BIG_ENDIAN
 #ifdef USE_MPI
         CALL BCAST_MPI('OPSTREAMFILE','IRTFLGT', IRTFLGT,1, 'I',ICOMM)
 #endif
-
 
         IF (IRTFLGT .NE. 0) THEN
            WRITE(NOUT,90) FORMVAR(1:1), FILNAM(:NCHAR)
@@ -221,6 +239,11 @@ C                FORCE OUTPUT TO BIG_ENDIAN
         ENDIF
  
         IRTFLG = 0
+
+#if defined(SP_DBUG)
+        write(3,*)' Leaving opstreamfile; irtflg: ',irtflg
+        write(3,*)
+#endif
 
         END
 

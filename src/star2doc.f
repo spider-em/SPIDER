@@ -9,14 +9,14 @@ C              MAXLENVAR = 40 --> 120            OCT 2015 ARDEAN LEITH
 C              NVARSTAR BUG                      OCT 2015 ARDEAN LEITH
 C              INTEGER OVERFOW HACK              NOV 2015 ARDEAN LEITH
 C              _ NOT _rln                        SEP 2016 ARDEAN LEITH
-C                                                                 
+C              GFORT:  NONNEGATIVE STRING WIDTH  SEP 2025 ARDEAN LEITH 
+                                                               
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2016  Health Research Inc.,                         *
+C=* Copyright 1985-2025  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -355,7 +355,9 @@ C           INTERPRET TOKENS AS FLOATS, PLACE IN DLIST
                CTOKEN = ADJUSTL(VARTMP(IWHICH))
                NCHAR  = lnblnkn(CTOKEN)
 
-               READ(CTOKEN(1:NCHAR),'(I)') IDLIST
+C              Gfort Error: Nonnegative width required..  al Sept 2025
+C              READ(CTOKEN(1:NCHAR),'(I)') IDLIST
+               READ(CTOKEN(1:NCHAR),'(I12)') IDLIST
                DLIST(ILOC) = IDLIST
  
                !write(6,*)' Token:',ctoken(1:nchar),i,iloc,idlist

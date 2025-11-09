@@ -12,7 +12,6 @@ C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
 C=* Copyright 1985-2011  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -323,8 +322,10 @@ C      FILLS TOKENS ARRAY WITH CONSECUTIVE TOKENS FROM A LINE
        IMPLICIT NONE
        INCLUDE 'CMBLOCK.INC'
 
-       CHARACTER(LEN=NLET)      :: RECLIN          ! TOKEN LINE  (SENT)
+
        INTEGER                  :: NLET            ! LINE LENGTH (SENT)
+       CHARACTER(LEN=NLET)      :: RECLIN          ! TOKEN LINE  (SENT)
+
        INTEGER                  :: MAXLENTOK,NTOKSMAX  ! (SENT)
        CHARACTER(LEN=MAXLENTOK) :: TOKENS(NTOKSMAX)! TOKEN FIELDS
        LOGICAL                  :: INSIDE          ! DELIM IS INSIDE (SENT)
@@ -393,7 +394,8 @@ C      WILL PARTITION SUCH FIELDS INTO MULTIPLE TOKENS.
        IMPLICIT NONE
        INCLUDE 'CMBLOCK.INC'
 
-       CHARACTER(LEN=NLET)      :: RECLIN          ! TOKEN LINE  (SENT)
+C       BUGGY 2025??CHARACTER(LEN=NLET)      :: RECLIN          ! TOKEN LINE  (SENT)
+       CHARACTER(LEN=*)      :: RECLIN          ! TOKEN LINE  (SENT)
        INTEGER                  :: NLET            ! LINE LENGTH (SENT)
        INTEGER                  :: MAXLENTOK,NTOKSMAX  ! (SENT)
        CHARACTER(LEN=MAXLENTOK) :: TOKENS(NTOKSMAX)! TOKEN FIELDS

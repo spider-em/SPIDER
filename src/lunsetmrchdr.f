@@ -1,15 +1,21 @@
-C++*********************************************************************
+C++********************************************************************
 C
-C LUNSETMRCHDR.F    DERIVED FROM LUNSETHDR.F    JUN 2019  ArDean Leith
-C                   NATIVE MRC FILE SUPPORT     JUL 2019  ArDean Leith
-C                    
+C LUNSETMRCHDR.F  DERIVED FROM LUNSETHDR.F        JUN 2019 ArDean Leith
+C                 NATIVE MRC FILE SUPPORT         JUL 2019 ArDean Leit
+C                 NVIDIA COMPILER CHANGES         SEP 2025 Tapu Shaikh
+C                 NVIDIA COMPILER CHANGES UNDONE  SEP 2025 ArDean Leith
+C                 DEBUG OUTPUT CHANGED,CTIT_LOCAL SEP 2025 ArDean Leith
+C                 NBYT, NBYT_PER_VAL CONFUSED     SEP 2025 ArDean Leith
+C                 DEBUG OUTPUT ADDED              OCT 2025 ArDean Leith
+C                 LUNSETFILE SET (27)             OCT 2025 ArDean Leith
+C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2020 Health Research Inc.,                          *
+C=* Copyright 1985-2025 Health Research Inc.,                          *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@health.ny.gov                                        *
+C=* Email:                                                             *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -69,7 +75,8 @@ C     ------------------------- LUNSETNSTACK_MRC -------------------
 C     ------------------------- LUNSETCOMMON_MRC ------------------- 
 C     ------------------------- LUNGETLABELS_MRC ------------------- 
 C     ------------------------- LUNSAYINFO_MRC --------------------- 
-C
+C     ------------------------- LUNGETMODSIZES_MRC -----------------
+
 C  REAL LOCATIONS:      
 C
 C      CELLAX   = TRANSFER(MRC_HEADER(11),FVAL)  ! PIXEL SIZE * NX
@@ -104,7 +111,7 @@ C      ORZ      = TRANSFER(MRC_HEADER(52),FVAL)
 C
 C      MAP      = TRANSFER(MRC_HEADER(53),CSTR(1:4))
 C
-C      RMS      = TRANSFER(MRC_HEADER(55),FVAL) ! DEVIATION FROM MEAN DENSITY          
+C      RMS      = TRANSFER(MRC_HEADER(55),FVAL) ! DEVIATION FROM MEAN DENSITY   
 C
 C
 C
@@ -180,6 +187,9 @@ C     READS MRC IMAGE HEADER FROM FILE INTO MRC HEADER OBJECT
 
       INTEGER * 8  :: IPOSMRC
 
+      character(len=4) :: caxis
+
+ 
 C     INCLUSION FOR OPTIONAL MPI INITIALIZATION.  
       INTEGER      :: MYPID = -1
 #include "MPI_INIT.INC"
@@ -207,7 +217,13 @@ C       ALWAYS BROADCASTS IF ONLYONE_RED IS .TRUE. WHEN USING MPI
       ENDIF
 #endif
 
-      !write(3,*)' In lunredhed_mrc, mrc_header:',mrc_header(1:9)
+
+
+#if defined(SP_DBUG)
+       caxis = transfer(mrc_header(26),caxis) 
+       write(3,*)' In lunredhed_mrc, mrc_header: ',mrc_header(26)
+       write(3,*)' In lunredhed_mrc, caxis:',caxis
+#endif
 
       IF (MYPID <= 0 .AND. IRTFLG .NE. 0 .AND. CALLERRT) THEN
          CALL ERRT(102,'I/O ERROR ON FILE HEADER',IRTFLG)
@@ -222,17 +238,18 @@ C     ----------- LUNWRTHED_MRC ---------------------------------------
 
       SUBROUTINE LUNWRTHED_MRC(LUN,IRTFLG)
 
-C     WRITES HEADER OBJECT INTO FILE'S MRC IMAGE HEADER
+C     WRITES HEADER OBJECT INTO MRC FILE'S HEADER (ONLY HAS 1 HEADER)
 
 #include "LUNHDR.INC"
 
       INTEGER    :: LUN,IRTFLG
 
-      INTEGER *8 :: IPOSMRC 
+      INTEGER *8 :: IPOSMRC = 1    ! LONG INTEGER
       real       :: fval
 
 C     INCLUSION FOR OPTIONAL MPI INITIALIZATION.  
-      INTEGER      :: MYPID = -1
+      INTEGER    :: MYPID = -1
+
 #include "MPI_INIT.INC"
 
 C     POINT TO HEADER OBJECT
@@ -240,14 +257,20 @@ C     POINT TO HEADER OBJECT
       IF (IRTFLG .NE. 0) RETURN
 
 C     WRITE HEADER RECORD FROM MRC_HEADER INTO MRC FILE 
-      IPOSMRC = 1
 
       IF (MYPID <= 0) 
      &    WRITE(LUN, POS=IPOSMRC,IOSTAT=IRTFLG) MRC_HEADER(1:256)
-      !write(3,*)' In lunwrthed_mrc, header(25): ',mrc_header(25),lun   
+
+#if defined(SP_DBUGIO)
+      write(3,*) ' '
+      write(3,*) ' In lunwrthed_mrc; iposmrc,irtflg: ',iposmrc,irtflg
+      write(3,*) ' In lunwrthed_mrc; header(25): ',    mrc_header(25)
+      write(3,*) ' '
+      !CALL BACKTRACE
+#endif
+
 
 #ifdef USE_MPI
-
       IF (ONLYONE_RED) THEN
 C       ALWAYS BROADCASTS IF ONLYONE_RED IS .TRUE. WHEN USING MPI
         CALL BCAST_MPI('LUNWRTHED_MRC','MRC_HEADER',MRC_HEADER,256,'I',
@@ -256,9 +279,11 @@ C       ALWAYS BROADCASTS IF ONLYONE_RED IS .TRUE. WHEN USING MPI
      &                  ICOMM,MPIERR)
       ENDIF
 #endif
+
       !fval = transfer(mrc_header(20),fval)
 
       IF (MYPID <= 0 .AND. IRTFLG .NE. 0) THEN
+
          CALL ERRT(102,'WRITING TO MRC FILE HEADER',IRTFLG)
          IRTFLG = 1
       ENDIF
@@ -296,11 +321,11 @@ C     POINT TO HEADER OBJECT
 
 C     ------------------ LUNGETPOSINFO_MRC ----------------------------
 
-      SUBROUTINE LUNGETPOSINFO_MRC(LUN,NBYT,IHEDLEN,IRTFLG)
+      SUBROUTINE LUNGETPOSINFO_MRC(LUN,NBYT_PER_VAL,IHEDLEN,IRTFLG)
 
 #include "LUNHDR.INC"
      
-      INTEGER         :: LUN,NBYT,IHEDLEN,IRTFLG
+      INTEGER         :: LUN,NBYT_PER_VAL,IHEDLEN,IRTFLG
 
       INTEGER         :: NSYMBT,MRCMODE
 
@@ -320,17 +345,51 @@ C     CALCULATE NUMBER OF BYTES IN AN IMAGE VALUE (<0 == UNSIGNED)
       MRCMODE = MRC_HEADER(4)
 
       IF     (MRCMODE == 0) THEN
-         NBYT =  1           ! SIGNED    8 BIT INTEGER*1 
+         NBYT_PER_VAL =  1         ! SIGNED    8 BIT INTEGER*1
+ 
       ELSEIF (MRCMODE == 1) THEN
-         NBYT =  2           ! SIGNED   16 BIT INTEGER*2
+         NBYT_PER_VAL =  2         ! SIGNED   16 BIT INTEGER*2
+
       ELSEIF (MRCMODE == 6) THEN
-         NBYT = -2           ! UNSIGNED 16 BIT INTEGER*2
+         NBYT_PER_VAL = -2         ! UNSIGNED 16 BIT INTEGER*2
+
       ELSEIF (MRCMODE == 2) THEN
-         NBYT =  4           ! REAL*4  
+         NBYT_PER_VAL =  4         ! REAL*4
+  
       ELSE
-         NBYT   = 0          ! NOT A VALID MRC FILE
+         NBYT_PER_VAL = 0          ! NOT A VALID MRC FILE
          IRTFLG = 1
+         RETURN
       ENDIF
+
+      IRTFLG = 0
+      END
+
+
+C     ------------------ LUNSET_HEDPOS_MRC ----------------------------
+
+      SUBROUTINE LUNSET_HEDPOS_MRC(LUN,IRTFLG)
+
+      IMPLICIT NONE
+     
+      INTEGER        :: LUN,IRTFLG
+
+      INTEGER * 8    :: LUNMRCPOS 
+      INTEGER        :: LUNMRCNBYT
+      COMMON /LUNMRC/   LUNMRCPOS(100),LUNMRCNBYT(100)
+
+      INTEGER        :: LUNARA,LUNSTK,LUNARB,LUNFLIP
+      COMMON /LUNARA/   LUNARA(100),LUNSTK(100),LUNARB(100),LUNFLIP(100)
+
+      INTEGER        :: NX,NY,NZ
+
+      CALL LUNGETSIZE_MRC(LUN,NX,NY,NZ,IRTFLG)
+      IF (IRTFLG .NE. 0) RETURN
+
+      LUNARA(LUN)    = NX
+
+C     NO STACK OFFSET NEEDED
+      LUNMRCPOS(LUN) = 1
 
       IRTFLG = 0
       END
@@ -341,12 +400,13 @@ C     ------------------ LUNSETPOS_MRC ----------------------------
 
       IMPLICIT NONE
      
-      INTEGER         :: LUN,IMGNUM,IRTFLG
+      INTEGER        :: LUN,IMGNUM,IRTFLG
 
-      INTEGER * 8     :: LUNMRCPOS 
-      INTEGER         :: LUNMRCNBYT
-      COMMON /LUNMRC/    LUNMRCPOS(100),LUNMRCNBYT(100)
-      INTEGER         :: LUNARA,LUNSTK,LUNARB,LUNFLIP
+      INTEGER * 8    :: LUNMRCPOS 
+      INTEGER        :: LUNMRCNBYT
+      COMMON /LUNMRC/   LUNMRCPOS(100),LUNMRCNBYT(100)
+
+      INTEGER        :: LUNARA,LUNSTK,LUNARB,LUNFLIP
       COMMON /LUNARA/   LUNARA(100),LUNSTK(100),LUNARB(100),LUNFLIP(100)
 
       INTEGER         :: NBYT,IHEDLEN,NBYT_PER_VAL,NBYT_PER_REC
@@ -359,16 +419,16 @@ C     THIS IS NOT A STANDARD MRC DEFINED HEADER POSITION!!
       IF (IRTFLG .NE. 0) RETURN
 
 C     GET NUMBER OF BYTES IN AN IMAGE VALUE AND HEADER LENGTH
-      CALL LUNGETPOSINFO_MRC(LUN,NBYT,IHEDLEN,IRTFLG)
+      CALL LUNGETPOSINFO_MRC(LUN,NBYT_PER_VAL,IHEDLEN,IRTFLG)
       IF (IRTFLG .NE. 0) RETURN
 
 C     NZ IS ADJUSTED FOR RELION .mrcs FILES IF NEEDED
       CALL LUNGETSIZE_MRC(LUN,NX,NY,NZ,IRTFLG)
       IF (IRTFLG .NE. 0) RETURN
 
-      LUNMRCNBYT(LUN) = NBYT       ! PRESERVES NEGATIVE FOR SIGN
+      LUNMRCNBYT(LUN) = NBYT_PER_VAL  ! PRESERVES NEGATIVE FOR SIGN
 
-      NBYT_PER_VAL    = ABS(NBYT)   
+      NBYT_PER_VAL    = ABS(NBYT_PER_VAL)   
       NBYT_PER_REC    = NBYT_PER_VAL * NX
 
  
@@ -380,6 +440,7 @@ C        ORIGIN AT UPPER LEFT, POSITION AT ONE RECORD BEFORE IMAGE
          IF (IMGNUM <= 1) THEN
 C          NO STACK OFFSET NEEDED
            LUNMRCPOS(LUN) = IHEDLEN - NBYT_PER_REC + 1
+
          ELSE
 C          STACKED FILE OFFSET NEEDED 
            LUNMRCPOS(LUN) = IHEDLEN + 
@@ -406,13 +467,12 @@ C          STACKED FILE OFFSET NEEDED
          ENDIF   ! END OF: IF (IMGNUM <= 1)
       ENDIF
 
-      !write(3,*) ' In lunsetpos_mrc, imgnum,lunmrcpos(lun): ',
-      !&                               imgnum,lunmrcpos(lun)
-
-      !write(3,*)' In lunsetpos_mrc, ihedlen,nx,ny,nz,nbyt,imgnum:',
-      !&                              ihedlen,nx,ny,nz,nbyt,imgnum
-      !write(3,*)' In lunsetpos_mrc, nbyt_per_rec:', nbyt_per_rec
-      !write(3,*)' In lunsetpos_mrc lunmrcpos:',lunmrcpos(lun)
+      !write(3,*)' In lunsetpos_mrc; imgnum,lunmrcpos(lun): ',
+      !&                             imgnum,lunmrcpos(lun)
+      !write(3,*)' In lunsetpos_mrc; ihedlen,nx,ny,nz,nbyt,imgnum: ',
+      !&                             ihedlen,nx,ny,nz,nbyt,imgnum
+      !write(3,*)' In lunsetpos_mrc; nbyt_per_rec: ', nbyt_per_rec
+      !write(3,*)' In lunsetpos_mrc; lunmrcpos: ',lunmrcpos(lun)
 
       IRTFLG = 0
       END
@@ -423,13 +483,14 @@ C     ------------------------- LUNFLIPORG_MRC ------------------------
 
 #include "LUNHDR.INC"
 
-      INTEGER         :: LUN,NX,NY,NZ,IRTFLG
-      LOGICAL         :: RESET
+      INTEGER        :: LUN,NX,NY,NZ,IRTFLG
+      LOGICAL        :: RESET
 
-      INTEGER * 8     :: LUNMRCPOS 
-      INTEGER         :: LUNMRCNBYT
-      COMMON /LUNMRC/    LUNMRCPOS(100),LUNMRCNBYT(100)
-      INTEGER         :: LUNARA,LUNSTK,LUNARB,LUNFLIP
+      INTEGER * 8    :: LUNMRCPOS 
+      INTEGER        :: LUNMRCNBYT
+      COMMON /LUNMRC/   LUNMRCPOS(100),LUNMRCNBYT(100)
+
+      INTEGER        :: LUNARA,LUNSTK,LUNARB,LUNFLIP
       COMMON /LUNARA/   LUNARA(100),LUNSTK(100),LUNARB(100),LUNFLIP(100)
 
       CHARACTER(LEN=4)  :: CAXIS
@@ -455,7 +516,7 @@ C       GET AXIS ORIGIN IN FILE NOT A STANDARD MRC DEFINED POSITION!!
 
         IF (CAXIS(1:1) == 'L') THEN    
 C         ORIGIN AT LOWER LEFT, BUT POSITION AT ONE RECORD BEFORE IMAGE
-
+          NBYT_PER_REC   = LUNMRCNBYT(LUN)
           LUNMRCPOS_SAV  = LUNMRCPOS(LUN)
           LUNMRCPOS(LUN) = LUNMRCPOS(LUN) - NZ * NY * NBYT_PER_REC
 
@@ -480,7 +541,13 @@ C     PURPOSE:  QUERIES HEADER LOCATION THAT SPECIFIES MRC FILE
       INTEGER         :: LUNMRCNBYT
       COMMON /LUNMRC/    LUNMRCPOS(100),LUNMRCNBYT(100)
 
-      IS_MRC = (LUNMRCPOS(LUN) .NE. 0)
+C     Handle invalid index (LUN=0, etc.)  Sept 2025
+      IF (LUN >= LBOUND(LUNMRCPOS, 1) .AND. 
+     &    LUN <= UBOUND(LUNMRCPOS, 1)) THEN
+          IS_MRC = (LUNMRCPOS(LUN) .NE. 0)
+      ELSE
+          IS_MRC = .FALSE.
+      ENDIF
 
       IRTFLG = 0
       END
@@ -499,12 +566,17 @@ C     POINT TO HEADER OBJECT
       MAPC = MRC_HEADER(17)
       MAPR = MRC_HEADER(18)
       MAPS = MRC_HEADER(19)
-      ! write(6,*) ' In lungetmap_mrc, map c,r,s: ',mapc,mapr,maps
+
+#if defined(SP_DBUG)
+        write(3,*) ' In lungetmap_mrc; mrc_header 17,18,19:  ',
+     &        mrc_header(17),' ',mrc_header(18),' ',mrc_header(19)      
+        write(3,*) ' In lungetmap_mrc; map c,r,s: ',mapc,mapr,maps
+#endif
 
       IRTFLG = 0
       END
 
-C     ------------------------- WHICH_HAND_MRC ----------------------------
+C     ------------------------- WHICH_HAND_MRC ------------------------
 
       SUBROUTINE WHICH_HAND_MRC(LUN,FILNAM,CAXIS,IRTFLG)
 
@@ -521,29 +593,41 @@ C               BEFORE LUNSETPOS_MRC
 
       LOGICAL             :: ISMRCSFILE
 
-C     SET AXIS ORIGIN LOCATION & VOLUME HANDEDNESS BEFORE LUNSETPOS_MRC
+C     SET AXIS ORIGIN LOCATION & VOLUME HANDEDNESS BEFORE 
+C              CALLING LUNSETPOS_MRC
 
 C     SEE IF RELION COMPATIBLE IMAGE/STACK (ALWAYS 'UL L')
       ISMRCSFILE = (INDEX(FILNAM,'.MRCS') > 1  .OR.
      &              INDEX(FILNAM,'.mrcs') > 1)
+        
+#if defined(SP_DBUG)
+      write(3,*)' In lunwhichhand_mrc; ismrcsfile: ',ismrcsfile
+      write(3,*)' In lunwhichhand_mrc; caxis   1111111: ',caxis
+#endif
 
       IF (ISMRCSFILE) THEN
 C        RELION COMPATIBLE IMAGE/STACK (ALWAYS 'UL L')
          CAXIS = 'UL L'
+
          CALL LUNSETHAND_MRC(LUN,CAXIS,IRTFLG)
-       
+         !write(3,*)' In which_hand_mrc; called sethand 22222: ',caxis
+      
       ELSE
 C        SEE IF FILE HEADER ALREADY HAS CAXIS SET
          CALL LUNGETHAND_MRC(LUN,CAXIS,IRTFLG)
          IF (IRTFLG .NE. 0) RETURN
 
          IF (INDEX(CAXIS,'L') == 0) THEN
-C           CAXIS DOES NOT CONTAIN: 'UL L', 'UL R', 'LL L' or 'LL R' (ALWAYS HAS L)
+C           CAXIS DOES NOT CONTAIN: 'UL L', 'UL R', 'LL L' or 'LL R'
+C                (ALWAYS HAS L)
+
 C           SET ORIGIN & HANDEDNESS TO CURRENT DEFAULT MRC_AXIS
             CAXIS = MRC_AXIS
             CALL LUNSETHAND_MRC(LUN,CAXIS,IRTFLG)
-         ENDIF       
-      ENDIF
+
+            !write(3,*)' In which_hand_mrc; called sethand 3333: ',caxis
+        ENDIF       
+      ENDIF 
 
       END     
 
@@ -567,7 +651,9 @@ C     POINT TO HEADER OBJECT
 
       MRC_HEADER(26) = TRANSFER(CAXIS(1:4),I4V)
 
-      !write(3,*)' In lunsethand_mrc, caxis: ',mrc_header(26),caxis
+#if defined(SP_DBUG)
+      write(3,*)' In lunsethand_mrc; in header(26) caxis: ',caxis
+#endif
 
       IRTFLG = 0
       END
@@ -591,7 +677,8 @@ C     POINT TO HEADER OBJECT
       IF (IRTFLG .NE. 0) RETURN
 
       CAXIS(1:4) = TRANSFER(MRC_HEADER(26),CSTR(1:4))
-      !write(3,*)' In lungethand_mrc, lun,caxis: ',lun,caxis
+
+      !write(3,*)' In lungethand_mrc; lun,caxis: ',lun,caxis
 
       IRTFLG = 0
       END
@@ -675,12 +762,10 @@ C               123456789 123456789 123456789 123456789
          MRC_HEADER(INOW) = TRANSFER(CVAL(1:4),I4V)
       ENDDO
 
-      !write(3,*)' In lunsetstk_mrc, iversion: ',mrc_header(23),nstack
-
       IRTFLG = 0
       END
 
-C     ------------------------- LUNSETMODSIZ_MRC ----------------------------
+C     ------------------------- LUNSETMODSIZ_MRC -----------------------
 
       SUBROUTINE LUNSETMODSIZ_MRC(LUN,MRCMODE,NX,NY,NZMRC,
      &                            MX,MY,MZ,IRTFLG)
@@ -701,23 +786,18 @@ C     POINT TO HEADER OBJECT
       MRC_HEADER(9)  = MY    ! NO. OF INTERVALS ALONG Y
       MRC_HEADER(10) = MZ    ! NO. OF INTERVALS ALONG Z (>1 = STACK)
 
-      !write(6,*) ' In lunsetmodsiz_mrc: ',mrcmode,nx,ny,nz,mx,my,mz
+      !write(3,*) ' In lunsetmodsiz_mrc: ',mrcmode,nx,ny,nz,mx,my,mz
 
       IRTFLG = 0
       END
 
-C     ------------------------- LUNSETMODE_MRC ----------------------------
+C     ------------------------- LUNSETMODE_MRC ------------------------
 
       SUBROUTINE LUNSETMODE_MRC(LUN,MRCMODE,IRTFLG)
 
 #include "LUNHDR.INC"
 
-      INTEGER         :: LUN,MRCMODE,IRTFLG
-
-      INTEGER * 8     :: LUNMRCPOS 
-      INTEGER         :: LUNMRCNBYT
-      COMMON /LUNMRC/    LUNMRCPOS(100),LUNMRCNBYT(100)
-
+      INTEGER  :: LUN,MRCMODE,IRTFLG
 
 C     POINT TO HEADER OBJECT
       CALL LUNGETOBJ_MRC(LUN,MRC_HEADER,IRTFLG)
@@ -725,34 +805,33 @@ C     POINT TO HEADER OBJECT
 
       MRC_HEADER(4) = MRCMODE
 
-      !write(3,*) ' In lunsetmode_mrc: ',mrcmode
+      !write(3,*) ' In lunsetmode_mrc; mrcmode: ',mrcmode
 
       IRTFLG = 0
       END
 
 
-C     ------------------------- LUNGETMODSIZ_MRC ----------------------
+C     ------------------------- LUNGETMODSIZES_MRC --------------------
 
-      SUBROUTINE LUNGETMODSIZ_MRC(LUN,MRCMODE,NX,NY,NZMRC,
-     &                            MX,MY,MZ,IRTFLG)
+      SUBROUTINE LUNGETMODSIZES_MRC(LUN,NX,NY,NZ,
+     &                                  MX,MY,MZ,IRTFLG)
 
 #include "LUNHDR.INC"
 
-      INTEGER  :: LUN,MRCMODE,NX,NY,NZMRC,MX,MY,MZ,IRTFLG
+      INTEGER  :: LUN,NX,NY,NZ, MX,MY,MZ,IRTFLG
 
 C     POINT TO HEADER OBJECT
       CALL LUNGETOBJ_MRC(LUN,MRC_HEADER,IRTFLG)
       IF (IRTFLG .NE. 0) RETURN
 
-      MRCMODE = MRC_HEADER(4)
       NX      = MRC_HEADER(1)
       NY      = MRC_HEADER(2)
-      NZMRC   = MRC_HEADER(3)  ! NO. OF IMAGES IN RELION mrcs FILES!
+      NZ      = MRC_HEADER(3)  ! NO. OF IMAGES IN RELION mrcs FILES! 
       MX      = MRC_HEADER(8)  ! NO. OF INTERVALS ALONG X
       MY      = MRC_HEADER(9)  ! NO. OF INTERVALS ALONG Y
       MZ      = MRC_HEADER(10) ! NO. OF INTERVALS ALONG Z (>1 = STACK)
 
-      !write(6,*) ' In lungetmodsiz_mrc: ',mrcmode,nx,ny,nz,mx,my,mz
+      !write(3,*) ' In lungetmodsizes_mrc: ',mrcmode,nx,ny,nz,mx,my,mz
 
       IRTFLG = 0
       END
@@ -771,12 +850,12 @@ C     POINT TO HEADER OBJECT
 
       MRCMODE = MRC_HEADER(4)
 
-      !write(6,*) ' In lungetmod_mrc: ',mrcmode
+      !write(3,*) ' In lungetmod_mrc; mrcmode: ',mrcmode
 
       IRTFLG = 0
       END
 
-C     ------------------------- LUNGETVIN_MRC ----------------------------
+C     ------------------------- LUNGETVIN_MRC -------------------------
 
       SUBROUTINE LUNGETVIN_MRC(LUN,IVERSION,ISPG,NSYMBT,NLABL,IRTFLG)
 
@@ -796,7 +875,7 @@ C     (23)  ISPG == 401      STACK OF EM VOLUMES
       NSYMBT   = MRC_HEADER(24)  ! NO. OF ADDITIONAL HEADER BYTES
       NLABL    = MRC_HEADER(56)  ! NO. OF LABELS
 
-      ! write(6,*) ' In lungetvin_mrc, iversion', iversion
+      ! write(3,*) ' In lungetvin_mrc; iversion', iversion
 
       IRTFLG = 0
       END
@@ -821,7 +900,7 @@ C     (23)  ISPG == 401      STACK OF EM VOLUMES
       MRC_HEADER(24) = NSYMBT ! NUMBER OF ADDITIONAL HEADER BYTES
       MRC_HEADER(56) = NLABL  ! NO. OF LABELS
 
-      !write(3,*) ' In lunsetvin_mrc, iversion', iversion,ispg
+      !write(3,*) ' In lunsetvin_mrc; iversion', iversion,ispg
 
       IRTFLG = 0
       END
@@ -845,7 +924,6 @@ C     GET ISBARE FROM HEADER OBJECT STATIC LOCATION
 
       IRTFLG = 0
       END
-
 
 C     --------------------- LUNSETISBARE_MRC -------------------------
 
@@ -872,23 +950,33 @@ C     SET ISBARE IN MRC HEADER OBJECT (STATIC AREA)
 
 C     ------------------------- LUNSETFILE_MRC -----------------------
 
-      SUBROUTINE LUNSETFILE_MRC(LUN,FILNAM,DSP,IRTFLG)
+      SUBROUTINE LUNSETFILE_MRC(LUN,FILNAM, DSP,IRTFLG)
 
 #include "LUNHDR.INC"
 
       INTEGER                :: LUN,IRTFLG
       CHARACTER(LEN=*)       :: FILNAM
       CHARACTER(LEN=1)       :: DSP
+      CHARACTER(LEN=1)       :: NULL = CHAR(0)
 
-      INTEGER                :: NLET
+      INTEGER                :: NLET,LOCDOT
+      CHARACTER(LEN=4)       :: FIL_EXT
 
-      IF (FILNAM(1:1) .NE. CHAR(0)) THEN
+      IF (FILNAM(1:1) .NE. NULL) THEN
 C        SET CURRENT FILENAME IN HEADER OBJECT 
          NLET           = LNBLNKN(FILNAM)
          LUNFILNAM(LUN) = FILNAM(1:NLET)
+
+#if defined(NEVER_SP_DBUGIO)
+C23456
+         write(3,*) '  '
+         ilent = lnblnkn(filnam)
+         write(3,*)' In lunsetfile; filnam: ', filnam(1:ilent)
+         write(3,*)' In lunsetfile; lunfilnam(lun): ', lunfilnam(lun)
+#endif
       ENDIF
 
-      IF (DSP .NE. CHAR(0)) THEN
+      IF (DSP .NE. NULL) THEN
 
 C        POINT TO HEADER OBJECT
          CALL LUNGETOBJ_MRC(LUN,MRC_HEADER,IRTFLG)
@@ -898,7 +986,23 @@ C        SET DSP IN STATIC HEADER OBJECT
          MRC_HEADER(257) = 0
          IF (DSP == 'N') MRC_HEADER(257) = 1
 
+         IF (FILNAM(1:1) .NE. NULL) THEN
+            NLET     = LNBLNKN(FILNAM)
+            LOCDOT   = INDEX(FILNAM(1:NLET),'.',BACK=.TRUE.)
+
+            IF (LOCDOT > 0) THEN
+               FIL_EXT = FILNAM(LOCDOT+1:NLET)
+               NLET    = lnblnkn(FIL_EXT)
+
+               IF (NLET < 4) FIL_EXT(4:4) = ' '         
+               MRC_HEADER(27) = TRANSFER(FIL_EXT(1:4),I4V)
+            ENDIF
+         ENDIF
+
+
       ENDIF
+
+
 
       IRTFLG = 0
       END
@@ -954,11 +1058,13 @@ C     ------------------------- LUNSET_STATSIMG_MRC -------------------
 
       INTEGER  :: LUN,IMGSTATS,IRTFLG
 
+C     IMGSTATS IS THE CURRENT STACKED OR MAIN IMAGE NUMBER IN STATS
+
 C     POINT TO MRC HEADER OBJECT
       CALL LUNGETOBJ_MRC(LUN,MRC_HEADER,IRTFLG)
       IF (IRTFLG .NE. 0) RETURN
 
-      !write(3,*)' In lunset_statsimg_mrc, imgstats: ',imgstats
+      !write(3,*)' In lunset_statsimg_mrc; imgstats: ',imgstats
           
 C     SET MRC_HEADER VALUE
       MRC_HEADER(25) = IMGSTATS ! LOCATION: 25  IMGNUM FOR STATISTICS
@@ -973,6 +1079,7 @@ C     ------------------------- LUNGET_STATSIMG_MRC -------------------
 #include "LUNHDR.INC"
 
       INTEGER  :: LUN,IMGSTATS,IMGNUM,NSTACK,IRTFLG
+C     IMGSTATS IS THE CURRENT STACKED OR MAIN IMAGE NUMBER IN STATS
 
 C     POINT TO MRC HEADER OBJECT
       CALL LUNGETOBJ_MRC(LUN,MRC_HEADER,IRTFLG)
@@ -986,17 +1093,19 @@ C     GET MRC_HEADER VALUE
       IRTFLG = 0
       END
 
-C     ------------------------- LUNSETSTATS_MRC ----------------------------
+C     ------------------------- LUNSETSTATS_MRC -----------------------
 
       SUBROUTINE LUNSETSTATS_MRC(LUN,IMAMIT,FMINT,FMAXT,AVT,SIGT,IRTFLG)
 
 #include "LUNHDR.INC"
 
       INTEGER  :: LUN,IMAMIT,IRTFLG
-      REAL     :: FMINT,FMAXT,AVT,SIGT
+      REAL     :: FMINT,FMAXT,AVT,SIGT,f21
 
       INTEGER  :: MZ,NSTACK,IMGNUM,IVERSION,IMGSTATS
       INTEGER  :: I4V
+
+C     IMGSTATS IS THE CURRENT STACKED OR MAIN IMAGE NUMBER IN STATS
 
 C     POINT TO MRC HEADER OBJECT
       CALL LUNGETOBJ_MRC(LUN,MRC_HEADER,IRTFLG)
@@ -1027,24 +1136,22 @@ C        NEED IMGNUM FOR IMGSTATS
 
       ENDIF
 
-      !write(3,*)' In lunsetstats_mrc, imgnum,stats:',imgnum,imgstats
-
-
 C     SET NUMBER OF IMAGE IN STATS
       CALL LUNSET_STATSIMG_MRC(LUN,IMGSTATS,IRTFLG)
       IF (IRTFLG .NE. 0) RETURN
        
+
       IRTFLG = 0
       END
 
-C     ------------------------- LUNGETSTATS_MRC ----------------------------
+C     ------------------------- LUNGETSTATS_MRC -----------------------
 
       SUBROUTINE LUNGETSTATS_MRC(LUN,IMAMIT,FMINT,FMAXT,AVT,SIGT,IRTFLG)
 
 #include "LUNHDR.INC"
 
       INTEGER  :: LUN,IMAMIT,IRTFLG
-      REAL     :: FMINT,FMAXT,AVT,SIGT
+      REAL     :: FMINT,FMAXT,AVT,SIGT,f21
 
       INTEGER  :: IMGSTATS,IMGNUM,NSTACK
 
@@ -1061,7 +1168,7 @@ C     GET MRC_HEADER VALUES
 C     MRC FILE ENCODES IMAMI IN RELATIVE VALUES FOR MIN/MAX      
       IMAMIT = 1
       IF (FMAXT < FMINT) IMAMIT = 0
-      IF (AVT   < FMINT) IMAMIT = 0
+      IF (AVT   < FMINT)  IMAMIT = 0
       IF (SIGT  < 0.0)   IMAMIT = 0
 
 C     IF ALL ZERO STATISTICS ARE PROBABLY NOT SET!! 
@@ -1074,6 +1181,20 @@ C     ARE STATS FOR THE CURRENT MRC IMAGE?
 C        THIS IS A MRC STACKED IMAGE BUT IMG NOT = IMG IN STATISTICS
          IMAMIT = 0
          !FMAXT  = FMINT - 1
+
+#if defined(SP_DBUG)
+!      f21 = TRANSFER(mrc_header(21),f21)
+
+!      write(3,'(A,I5,2X,F8.1,2X,F8.2)')
+!     &     '  In lunGetstats_mrc; lun,fmaxt,mrc_header(21):',
+!     &        lun,fmaxt,f21
+
+!      write(3,'(A,I5,2X,3(2x,I8))')
+!     &     '  In lunGetstats_mrc; nstack,imgnum,imgstats,imamit:',
+!     &                            nstack,imgnum,imgstats,imamit
+C      write(3,*)'  '
+#endif
+
          CALL LUNSETSTATS_MRC(LUN,IMAMIT,FMINT,FMAXT,AVT,SIGT,IRTFLG)
 
       ELSEIF (NSTACK > 1 .AND. IMGNUM < 0 ) THEN
@@ -1082,9 +1203,24 @@ C        THIS IS A MRC STACK BUT NO IMAGE SPECIFIED
          FMAXT  = FMINT - 1
       ENDIF
 
-      !write(3,*)' In lungetstats_mrc stats:',fmint,fmaxt,avt,sigt
-      !write(3,*)' In lungetstats_mrc fmin,fmax,imami:',fmint,fmaxt,imamit
-      !write(3,*)' In lungetstats_mrc imgstats,imgnum: ',imgstats,imgnum
+#if defined(SP_DBUG)
+
+!      f21 = TRANSFER(mrc_header(21),f21)
+!      write(3,'(A,I5,2X,F8.1,2X,F8.2)')
+!     &     '  In lunGetstats_mrc; lun,fmaxt,mrc_header(21):',
+!     &        lun,fmaxt,f21
+
+!      write(3,'(A,3I7)')
+!     &     '  In lunGetstats_mrc;  mrc_header 17,18,19: ',
+!     &         mrc_header(17),mrc_header(18),mrc_header(19)
+
+!      write(3,'(A,I5,2X,3(2x,I8))')
+!     &     '  In lunGetstats_mrc; nstack,imgnum,imgstats,imamit:',
+!     &                            nstack,imgnum,imgstats,imamit
+
+!      write(3,*)' Leaving lunGetstats_mrc ------'
+!      write(3,*)'  '
+#endif
 
       IRTFLG = 0
       END
@@ -1126,6 +1262,26 @@ C     SET MRC_HEADER VALUES
 C     PUT UNKNOWN STAT'S IMAGE NUMBER IN FILE HEADER         
       CALL LUNSET_STATSIMG_MRC(LUN,0,IRTFLG)
       IF (IRTFLG .NE. 0) RETURN
+
+#if defined(SP_BACK)
+      CALL BACKTRACE 
+#endif
+ 
+#if  defined(SP_DBUG)
+      f21 = TRANSFER(mrc_header(21),f21)
+!      write(3,'(A,I5,2X,F8.1,2X,F8.2)')
+!     &     '  In lunZerostats_mrc; lun,fmax,mrc_header(21):',
+!     &        lun,fmax,f21
+
+!      write(3,'(A,3I7)')
+!     &     '  In lunZerostats_mrc;  mrc_header 17,18,19: ',
+!     &         mrc_header(17),mrc_header(18),mrc_header(19)
+
+!      write(3,*)' Leaving lunZerostats_mrc ------'
+!      write(3,*)'  '
+#endif
+
+
 
       IRTFLG = 0
       END
@@ -1200,11 +1356,11 @@ C     POINT TO HEADER OBJECT
       CELLAY = PIXSIZ * NY
       CELLAZ = PIXSIZ * NZ
 
-c      write(3,*) ' In lunsetpixsiz_mrc, nx...: ',nx,ny,nz
-c      write(3,*) ' In lunsetpixsiz_mrc, sizex...: ',
-c     &                                   sizex,sizey,sizez
-c      write(3,*) ' In lunsetpixsiz_mrc, cellax...: ',
-c     &                                   cellax,cellay,cellaz
+!      write(3,*) ' In lunsetpixsiz_mrc, nx...: ',nx,ny,nz
+!      write(3,*) ' In lunsetpixsiz_mrc, sizex...: ',
+!     &                                  sizex,sizey,sizez
+!      write(3,*) ' In lunsetpixsiz_mrc, cellax...: ',
+!     &                                  cellax,cellay,cellaz
 
 
 C     SET HEADER VALUES FOR PIXEL SIZE * NO. PIXELS IN CELL
@@ -1240,14 +1396,14 @@ C     POINT TO HEADER OBJECT
       CELLAY = SIZEY * NY
       CELLAZ = SIZEZ * NZ
 
-c      write(3,*) ' In lunsetpixsiz_mrc, nx...: ',nx,ny,nz
-c      write(3,*) ' In lunsetpixsiz_mrc, sizex...: ',
-c     &                                   sizex,sizey,sizez
-c      write(3,*) ' In lunsetpixsiz_mrc, cellax...: ',
-c     &                                   cellax,cellay,cellaz
+!      write(3,*) ' In lunsetpixsiz_mrc; nx...: ',nx,ny,nz
+!      write(3,*) ' In lunsetpixsiz_mrc; sizex...: ',
+!     &                                  sizex,sizey,sizez
+!      write(3,*) ' In lunsetpixsiz_mrc; cellax...: ',
+!     &                                  cellax,cellay,cellaz
 
 
-C     SET HEADER VALUES FOR PIXEL SIZE * NO. PIXELS IN CELL
+!     SET HEADER VALUES FOR PIXEL SIZE * NO. PIXELS IN CELL
       MRC_HEADER(11) = TRANSFER(CELLAX, IV4)
       MRC_HEADER(12) = TRANSFER(CELLAY, IV4)
       MRC_HEADER(13) = TRANSFER(CELLAZ, IV4)
@@ -1256,8 +1412,7 @@ C     SET HEADER VALUES FOR PIXEL SIZE * NO. PIXELS IN CELL
       END
 
 
-
-C     ------------------------- LUNSETANGS_MRC ----------------------------
+!     ------------------------- LUNSETANGS_MRC ------------------------
 
       SUBROUTINE LUNSETANGS_MRC(LUN,NANG,ANGS,IRTFLG)   !UNUSED??
 
@@ -1287,7 +1442,7 @@ C     SET HEADER VALUES FOR ANGLES
       IRTFLG = 0
       END
 
-C     ------------------------- LUNGETANGS_MRC ----------------------------
+C     ------------------------- LUNGETANGS_MRC ------------------------
 
       SUBROUTINE LUNGETANGS_MRC(LUN,NANG,ANGS,IRTFLG)  !! UNUSED
 
@@ -1317,7 +1472,7 @@ C     RETRIEVE HEADER VALUES FOR ANGLES
       IRTFLG = 0
       END
 
-C     ------------------------- LUNGETSIZE_MRC ----------------------------
+C     ------------------------- LUNGETSIZE_MRC ------------------------
 
       SUBROUTINE LUNGETSIZE_MRC(LUN,NX,NY,NZ,IRTFLG)
 
@@ -1352,12 +1507,12 @@ C     RETRIEVE CURRENT FILENAME (INCLUDES IMGNUM IF STACKED IMAGE)
      &    INDEX(FILNAM(1:NLET),'.MRCS') > 0) THEN 
          NZ = 1    ! RELION MRC IMAGE STACK
       ENDIF
-      !write(3,*) ' In lunsetmrchdr, filnam:',filnam(1:nlet), nz
+      !write(3,*) ' In lunsetmrchdr; filnam: ',filnam(1:nlet), nz
 
       IRTFLG = 0
       END
 
-C     ------------------------- LUNGETVALS_R_MRC ------------------------
+C     ------------------------- LUNGETVALS_R_MRC ----------------------
 
       SUBROUTINE LUNGETVALS_R_MRC(LUN,IGO,NVAL,BUFOUT,IRTFLG)
 
@@ -1422,7 +1577,7 @@ C     GET REAL RETURN VALUES
       IRTFLG = 0
       END
 
-C     ------------------------- LUNSETVALS_R_MRC ------------------------
+C     ------------------------- LUNSETVALS_R_MRC ----------------------
 
       SUBROUTINE LUNSETVALS_R_MRC(LUN,IGO,NVAL,BUFVALS,IRTFLG)
 
@@ -1473,7 +1628,7 @@ C     HACK FOR TRANSLATING MRC IAPLOC INSTEAD OF SPIDER LOCATIONS
 
 C     SET HEADER VALUES WRITTEN AS I*4
       DO I = IGOMRC,IEND
-         !write(6,*) ' bufvals: ',jenis(i),bufvals(i-igomrc+1)
+         !write(3,*) ' Bufvals: ',jenis(i),bufvals(i-igomrc+1)
 
          IF (JENIS(I) == 2) THEN
             MRC_HEADER(I) = TRANSFER(BUFVALS(I-IGOMRC+1),I4V)   
@@ -1492,7 +1647,7 @@ C           CONVERT REAL VALUE TO INTEGER
       IRTFLG = 0
       END
 
-C     ------------------------- LUNGETTYPE_MRC ----------------------------
+C     ------------------------- LUNGETTYPE_MRC ------------------------
 
       SUBROUTINE LUNGETTYPE_MRC(LUN,ITYPE,IRTFLG)
 
@@ -1513,65 +1668,75 @@ C     RETURN FILE TYPE USING SPIDER'S CONVENTION
       IRTFLG = 0
       END
 
-C     ------------------------- LUNGETSTK_MRC----------------------------
+C     ------------------------- LUNGETSTK_MRC -------------------------
 
-       SUBROUTINE LUNGETSTK_MRC(LUN,MZ,NSTACK,IMGNUM,IRTFLG)
+       SUBROUTINE LUNGETSTK_MRC(LUN,MZ,NSTK,ISTK,IRTFLG)
 
 #include "LUNHDR.INC"
 
-      INTEGER   :: LUN,MZ,NSTACK,IMGNUM,IRTFLG
+      INTEGER   :: LUN,MZ,NSTK,IMGNUM,IRTFLG
 
 C     POINT TO MRC HEADER OBJECT
       CALL LUNGETOBJ_MRC(LUN,MRC_HEADER,IRTFLG)
       IF (IRTFLG .NE. 0) RETURN
 
 C     GET RETURN VALUES
-      MZ     = MRC_HEADER(10)    ! CAN BE NSTACK 
-      IMGNUM = MRC_HEADER(259)   ! CURRENT IMAGE IN HEADER
-      NSTACK = MRC_HEADER(260)   ! NUMBER OF IMAGES/VOLUMES IN STACK
+      MZ   = MRC_HEADER(10)    ! CAN BE NSTK 
+      ISTK = MRC_HEADER(259)   ! CURRENT IMG/VOL IN HEADER
+      NSTK = MRC_HEADER(260)   ! NUMBER OF IMAGES/VOLUMES IN STACK
 
       IRTFLG = 0
       END
 
-C     ------------------------- LUNSETSTK_MRC----------------------------
+C     ------------------------- LUNSETSTK_MRC--------------------------
 
-      SUBROUTINE LUNSETSTK_MRC(LUN,IMGNUM,NSTACK,IRTFLG)
+      SUBROUTINE LUNSETSTK_MRC(LUN,ISTK,NSTK,IRTFLG)
 
 #include "LUNHDR.INC"
 
-      INTEGER  :: LUN,IMGNUM,NSTACK,IRTFLG
+      INTEGER  :: LUN,ISTK,NSTK,IRTFLG
 
 C     POINT TO MRC HEADER OBJECT
       CALL LUNGETOBJ_MRC(LUN,MRC_HEADER,IRTFLG)
       IF (IRTFLG .NE. 0) RETURN
 
 C     SET STACK RELATED STATIC HEADER VALUES
-      MRC_HEADER(259) = IMGNUM  ! CURRENT IMAGE IN HEADER
-      MRC_HEADER(260) = NSTACK  ! NUMBER OF IMAGES/VOLUMES IN STACK
+      MRC_HEADER(259) = ISTK  ! CURRENT IMG/VOL IN HEADER
+      MRC_HEADER(260) = NSTK  ! NUMBER OF IMAGES/VOLUMES IN STACK
  
-      ! write(3,*)' In lunsetstk_mrc, nstack: ',nstack
+      ! write(3,*)' In lunsetstk_mrc; istk,nstk: ',istk,nstk
 
       IRTFLG = 0
       END
 
-C     ------------------------- LUNGETNSTACK_MRC----------------------------
+C     ------------------------- LUNGETNSTACK_MRC ----------------------
 
-       SUBROUTINE LUNGETNSTACK_MRC(LUN, NX,NY,NZ,MZ,NSTACK,IRTFLG)
+       SUBROUTINE LUNGETNSTACK_MRC(LUN, NX,NY,NZ, NZ3,NSTK_FLG,IRTFLG)
 
-C      PURPOSE: GET SPIDER'S NSTACK FROM MRC HEADER INFO 
+C      PURPOSE: GET SPIDER'S NSTACK FROM MRC HEADER INFO (NOT FILE)
 C               MRC FILES LACK STANDARD ENCODING FOR STACK SIZE
 C               AND SOME VOLUMES LOOK LIKE STACKS SO THIS IS COMPLEX!!
-
-C      RETURNS:   NZ   MZ    NSTACK 
+C
+C      RETURNS:   NX,NY,NZ, NZ3,NSTK_FLG 
+C
+C      VARIABLES FOR MRC 2014
+C                 ISPG (23)   NZ (3)     MZ (10)
+C       IMAGE           0      1          1
+C       IMAGE STACK     0     NSTK       NSTK
+C       VOLUME (Z)      1     NZ         NZ
+C       VOLUME STACK  401     NZ*NSTK    NZ/NSTK
+       
+C      IMPLICIT NONE
 
 #include "LUNHDR.INC"
       INCLUDE 'CMLIMIT.INC'
 
-      INTEGER                :: LUN,NX,NY,NZ,MZ,NSTACK,IRTFLG
+      INTEGER                :: LUN,NX,NY,NZ, MZ,NSTK_FLG,IRTFLG
 
       CHARACTER (LEN=MAXNAM) :: FILNAM     
       CHARACTER (LEN=1)      :: DSP
-      INTEGER                :: NZMRC,NLET,IVERSION,ISPG
+      CHARACTER (LEN=4)      :: cloc27
+      INTEGER                :: NZ3,NLET,IVERSION,ISPG
 
       INTEGER                :: lnblnkn   ! FUNCTION
 
@@ -1582,69 +1747,154 @@ C     POINT TO MRC HEADER OBJECT
 C     GET HEADER VALUES
       NX       = MRC_HEADER(1) 
       NY       = MRC_HEADER(2) 
-      NZMRC    = MRC_HEADER(3)   ! NO. OF IMAGES IN RELION mrcs FILES!
-      MZ       = MRC_HEADER(10)  ! CAN BE EITHER NSTACK OR NZ 
+      NZ3      = MRC_HEADER(3)   ! NO. OF IMAGES IN RELION mrcs FILES!
+
+      MZ       = MRC_HEADER(10)  ! CAN BE EITHER NSTK OR NZ 
+      cloc27   = TRANSFER(MRC_HEADER(27),cloc27)   
       IVERSION = MRC_HEADER(28)
       ISPG     = MRC_HEADER(23)
-      !write(3,*)' In lungetnstack, :', iversion,ispg
-      !write(3,*)' In lungetnstack, :', nzmrc,mz,nz,nstack
+
+#if defined(SP_DBUGIO)
+C23456
+      write(3,*)  '  '
+      write(3,*)' In lungetnstack; iversion,ispg: ', iversion,ispg
+      write(3,*)' In lungetnstack; nz3,mz:        ', nz3,mz
+#endif
 
 C     GET CURRENT FILE NAME FROM LUNFILNAM COMMON
       CALL LUNGETFILE_MRC(LUN,FILNAM,NLET,DSP,IRTFLG)
       IF (IRTFLG .NE. 0) RETURN
-      !write(3,*)' In lungetnstack, nlet,filnam:', nlet,filnam(1:nlet)
 
-      IF (INDEX(FILNAM(1:NLET),'.mrcs') > 0 .OR.
-     &    INDEX(FILNAM(1:NLET),'.MRCS') > 0) THEN
-C        HACK FOR RELION mrcs IMAGE STACKS HAVING NZ > 1
+#if defined(SP_DBUGIO)
+C23456
+      write(3,*)' In lungetnstack; dsp,nlet:        ', dsp,nlet
+      write(3,*)' In lungetnstack; filnam:          ', filnam(1:nlet)
+#endif
+
+
+      IF (IVERSION >= 20140 .AND. ISPG == 0) THEN
+C        IMAGE OR IMAGES STACK
+
+         IF (NZ3 == 1 .AND. MZ == 1) THEN ! --------------------
+C           SINGLE IMAGE FILE - MRC VERSION 20140
+            NZ       = 1
+            NSTK_FLG = -2
+
+#if defined(SP_DBUGIO)
+            write(3,*)' In lungetnstack 11; nz,nstk_flg:', nz,nstk_flg
+#endif
+
+         ELSEIF (NZ3 == 1 .AND. MZ > 1) THEN  ! ------------
+C           IMAGE STACK FILE IN - MRC VERSION 20140
+            NZ       = 1
+            NSTK_FLG = MZ
+
+#if defined(SP_DBUGIO)
+            write(3,*)' In lungetnstack 22; nz,nstk_flg:', nz,nstk_flg
+#endif
+         ENDIF
+
+
+      ELSEIF (IVERSION >= 20140 .AND. ISPG == 1) THEN  ! ------------
+C        SINGLE VOLUME FILE - MRC VERSION 20140
+         NZ       = NZ3  ! nz3=348 mz=348  ispg=1 ll 
+         NSTK_FLG = -2
+
+#if defined(SP_DBUGIO)
+         write(3,*)' In lungetnstack 33; nz,nstk_flg:', nz,nstk_flg
+#endif
+
+
+      ELSEIF (IVERSION >= 20140 .AND. ISPG >= 401 ) THEN ! ----------
+C        STACK OF VOLUMES IN FILE - MRC VERSION 20140
+
+         NZ       = MZ
+         NSTK_FLG = NZ3 / MZ
+
+#if defined(SP_DBUGIO)
+         write(3,*)' In lungetnstack 44; nz,nstk_flg:', nz,nstk_flg
+#endif
+
+
+
+      ELSEIF (INDEX(FILNAM(1:NLET),'.mrcs') > 0 .OR.
+     &        INDEX(FILNAM(1:NLET),'.MRCS') > 0) THEN ! ----------
+
+C        MAY NEED HACK FOR RELION mrcs IMAGE STACKS HAVING NZ > 1
 C        IN RELION  THIS WAS A STACK OF IMAGES NOT A VOLUME
-         NZ     = 1        ! DO NOT WANT TO OVERWRITE THIS??
-         NSTACK = NZMRC    ! WAS NZ IN FILE
+C          NZ       = 1        
+C          MZ       = 1
+C          NSTK_FLG = NZ3      ! WAS NZ IN FILE
+
+         NZ       = 1
+         NSTK_FLG = NZ3
+
+#if defined(SP_DBUGIO)
+         write(3,*)' In lungetnstack 55; nz,nstk_flg:', nz,nstk_flg
+#endif 
+ 
 
       ELSEIF (INDEX(FILNAM(1:NLET),'.map') > 0 .OR.
-     &        INDEX(FILNAM(1:NLET),'.MAP') > 0) THEN
+     &        INDEX(FILNAM(1:NLET),'.MAP') > 0) THEN  ! ----------
 C        HACK FOR EMD VOLUME 
-         NZ     = NZMRC    ! DO NOT WANT TO OVERWRITE THIS??
-         NSTACK = -2       ! WAS NZ IN FILE
-         !write(3,*)' In lungetnstack 1, :', nz,nstack
 
-      ELSEIF (INDEX(FILNAM(1:NLET),'@') > 0 .AND. 
-     &        NZMRC == 1 .AND. MZ == 1) THEN
+         NZ       = NZ3      ! 
+         NSTK_FLG = -2       ! ???????
+
+#if defined(SP_DBUGIO)
+         write(3,*)' In lungetnstack 66; nz,nstk_flg:', nz,nstk_flg
+#endif
+
+      ELSEIF (INDEX(FILNAM(1:NLET),'@') >0 .AND. 
+     &        NZ3 == 1 .AND. MZ == 1) THEN            ! ----------
 C        HACK FOR IMAGE STACKS CONTAINING ONLY ONE IMAGE
-         NZ     = 1        ! 
-         NSTACK = 1        !  
-         !write(3,*)' In lungetnstack 2, :', nz,nstack
+         NZ       = 1        ! 
+         NSTK_FLG = 1        ! 
+ 
+#if defined(SP_DBUGIO)
+         write(3,*)' In lungetnstack 77; nz,nstk_flg:', nz,nstk_flg
+#endif
 
-      ELSEIF (ISPG == 0 .AND. MZ > 1 .AND. IVERSION == 20140) THEN
-C        STACK OF IMAGES IN NEW MRC FORMAT VERSION
-         NZ     = 1
-         NSTACK = MZ
-         !write(3,*)' In lungetnstack 3, :', nz,nstack
+      ELSEIF (MZ > 1 .AND. NZ3 == MZ) THEN            ! ----------
+C        SINGLE VOLUME                            
+         NZ       = NZ3
+         NSTK_FLG = -2     ! NOT STACK, RETURN NEGATIVE (-2)
 
-      ELSEIF (ISPG >= 410) THEN
-C        STACK OF VOLUMES IN NEW MRC FORMAT VERSION
-         NZ     = NZMRC
-         NSTACK = MZ
-         !write(3,*)' In lungetnstack 4, :', nz,nstack
+#if defined(SP_DBUGIO)
+         write(3,*)' In lungetnstack 88; nz,nstk_flg:', nz,nstk_flg
+#endif
 
-      ELSEIF (MZ > 1 .AND. NZMRC == MZ) THEN
-C        VOLUME 
-         NZ     = NZMRC
-         NSTACK = -2
-         !write(3,*)' In lungetnstack 5, :', nz,nstack
-
-      ELSE
+      ELSE                                            ! ----------
 C        VOLUME/IMAGE.  NOT A STACK
-         NZ     = NZMRC
-         NSTACK = -2     ! NOT STACK, RETURN NEGATIVE (-2)
-         !write(3,*)' In lungetnstack 6, :', nz,nstack
+         NZ       = NZ3
+         NSTK_FLG = -2     ! NOT STACK, RETURN NEGATIVE (-2)
+
+#if defined(SP_DBUGIO)
+         write(3,*)' In lungetnstack 99; nz,nstk_flg:', nz,nstk_flg
+#endif
       ENDIF
 
-      !write(3,*)' In lungetnstack, ispg,nz,nstack:',ispg,nz,nstack
+
+#if defined(SP_DBUGIO)
+C23456  
+      write(3,*)' In lungetnstack 99999; dsp,nlet: ', dsp,nlet
+      write(3,*)' In lungetnstack 99999; filnam:   ', filnam(1:nlet)
+      write(3,*)' In lungetnstack 99999; iversion,ispg:', iversion,ispg
+      write(3,*)' In lungetnstack 99999; loc27:        ', loc27
+
+      write(3,*)' In lungetnstack 99999, nz,mz:    ', nz,mz
+      write(3,*)' In lungetnstack 99999, nstk_flg; ', nstk_flg
+      write(3,*)  '    '
+#endif
+
       IRTFLG = 0
       END
 
-C     ------------------------- LUNSETNSTACK_MRC----------------------------
+
+
+
+
+C     -------------------- LUNSETNSTACK_MRC --------------------------
 
        SUBROUTINE LUNSETNSTACK_MRC(LUN, NZ,NSTACK,IRTFLG)
 
@@ -1681,7 +1931,7 @@ C        A RELION COMPATIBLE IMAGE STACK
          NZMRC  = NSTACK         
          MZ     = 1
 
-      ELSEIF (NSTACK >= 1 .AND. NZ == 1 .AND.
+      ELSEIF (NSTACK >= 1 .AND. NZ == NSTACK .AND.
      &        IVERSION == 20140 .AND. ISPG == 0) THEN
 C        A 2014 STANDARD STACK OF IMAGES
          NZMRC  = NZ                     
@@ -1828,50 +2078,86 @@ C     SET RESERVED REGISTER VALUES AS NEEDED (SELDOM USED NOW??)
       IRTFLG = 0
       END
 
-C     ------------------------- LUNGETLABELS_MRC ----------------------------
+C     ------------------------- LUNGETLABELS_MRC -----------------------
 
       SUBROUTINE LUNGETLABELS_MRC(LUN,NLABL,LABELS,IRTFLG)
 
 #include "LUNHDR.INC"
 
       INTEGER            :: LUN,NLABL,IRTFLG 
-      CHARACTER(LEN=800) :: LABELS
+C     CHARACTER(LEN=800) :: LABELS    ; GFORT COMPILER ERROR SEPT 2025
+      CHARACTER(LEN=*)   :: LABELS
 
       INTEGER            :: INOW,I,IGO,IEND,IFLIP
+      INTEGER            :: IGOL,IENDL,IGOH,IENDH,IL
+
       CHARACTER(LEN=4)   :: CSTR
 
 C     POINT TO MRC HEADER OBJECT
       CALL LUNGETOBJ_MRC(LUN,MRC_HEADER,IRTFLG)
       IF (IRTFLG .NE. 0) RETURN
 
-      IF (NLABL > 0) THEN
-C        GET LABELS
+      IRTFLG = 1    ! Default error return Sept 2025
 
-         INOW = 1
-         DO I = 57,56 + NLABL * 20      ! 57...57+2*20
-            LABELS(INOW:INOW+3) = TRANSFER(MRC_HEADER(I),CSTR(1:4))
-            INOW = INOW + 4
-         ENDDO
+      !write(3,*)' In lungetlabels_mrc, nlabl:',nlabl
 
-         CALL LUNGETFLIP(LUN,IFLIP,IRTFLG)
-         IF (IFLIP == 1 ) THEN
-            IEND = NLABL * 80
-            CALL REVERSEBYTES(LABELS,IEND,IRTFLG)
-         ENDIF
-
-C        STRIP LEADING BLANKS FROM LABELS (UNTIDY HACK)
-         DO ILAB=1,NLABL
-            IGO  = (ILAB - 1) * 80 + 1
-            IEND = IGO + 80 - 1
-            DO I = IGO,IEND
-               IF (LABELS(I:I) .NE. ' ') THEN
-                   LABELS(IGO:IEND) = LABELS(I:IEND)
-                  EXIT
-               ENDIF
-            ENDDO
-         ENDDO
- 
+      IF (NLABL < 0 .OR. NLABL > 80) THEN
+          write(3,*) ' In lungetlabels_mrc, Bad nlabl: ',nlabl
+          RETURN  ! Stop if we would overflow
       ENDIF
+
+C     GET THE EXISTING NLABL LABELS
+
+      IGOL  = 1
+      IENDL = NLABL * 20
+
+      IGOH  = 57
+      IENDH = 56 + NLABL * 20
+
+      IL    = -3
+
+      !write(3,*)' In lungetlabels_mrc, len(labels):',len(labels)
+      !write(3,*)' In lungetlabels_mrc, nlabl,igoh,iendh,il: ',
+      !&                                 nlabl,igoh,iendh,il 
+ 
+      DO IH = IGOH,IENDH      ! 57...57+2*20
+
+        IL = IL + 4
+
+        !write(3,*)' In lungetlabels_mrc, ih,il:',ih,il
+ 
+        LABELS(IL:IL+3) = TRANSFER(MRC_HEADER(IH),CSTR(1:4))
+
+        !write(3,*)' In lungetlabels_mrc, ih,il,labels: ',
+        !&                                ih,il,labels(il:il+3) 
+      ENDDO
+      IGOL  = 1
+
+      !write(3,*)' In lungetlabels_mrc, labels(1:80): ',
+      !&                                labels(1:80) 
+
+      CALL LUNGETFLIP(LUN,IFLIP,IRTFLG)
+
+      IF (IFLIP == 1 ) THEN
+c        write(3,*) ' In lungetlabels, iflip: ',iflip
+
+         IEND = NLABL * 80
+         CALL REVERSEBYTES(LABELS,IEND,IRTFLG)
+      ENDIF
+
+C     STRIP LEADING BLANKS FROM LABELS (UNTIDY HACK)
+      DO ILAB = 1,NLABL
+         IGO  = (ILAB - 1) * 80 + 1
+         IEND = IGO + 80 - 1
+         IF (IEND > LEN(LABELS)) RETURN   ! Stop if overflow
+
+         DO I = IGO,IEND
+            IF (LABELS(I:I) .NE. ' ') THEN
+                LABELS(IGO:IEND) = LABELS(I:IEND)
+                EXIT
+            ENDIF
+         ENDDO
+      ENDDO
 
       IRTFLG = 0
       END
@@ -1883,7 +2169,8 @@ C     ------------------------- LUNSAYINFO_MRC ------------------------
       INCLUDE 'CMLIMIT.INC'
       INCLUDE 'CMBLOCK.INC'
 
-      INTEGER              :: LUN,SAYIT,IRTFLG
+      INTEGER              :: LUN,IRTFLG
+      LOGICAL              :: SAYIT
 
       INTEGER              :: ITYPE,NSTACK,NX,NY,NZ,IMGNUM
       INTEGER              :: LENLABEL1,HEDBYT
@@ -1909,7 +2196,11 @@ C     SET ICOMM AND MYPID
 
 C     RETRIEVE SPIDER'S ITYPE  
       CALL LUNGETTYPE_MRC(LUN,ITYPE,IRTFLG)
-      !write(6,*) 'In lunsayinfo_mrc,  type:',itype
+
+#if defined(SP_DBUGIO)
+C23456      
+      !write(3,*) 'In lunsayinfo_mrc   0 | type:',itype
+#endif
 
 C     RETRIEVE MRC MODE 
       CALL LUNGETMODE_MRC(LUN,MRCMODE,IRTFLG)
@@ -1928,18 +2219,31 @@ C     RETRIEVE MRC MODE
 
 C     RETRIEVE CURRENT HEADER NSTACK & IMGNUM
       CALL LUNGETSTK_MRC(LUN,MZ,NSTACK,IMGNUM,IRTFLG)
-      !write(3,*)' In lunsayinfo,  mz,nstack,imgnum 1:',mz,nstack,imgnum
+
+#if defined(SP_DBUGIO)
+C23456      
+      write(3,*)' In lunsayinfo_mrc  1 | mz,nstack,imgnum: ',
+     &                                   mz,nstack,imgnum
+#endif
 
 C     RETRIEVE SIZE
       CALL LUNGETNSTACK_MRC(LUN, NX,NY,NZ,MZ,NSTACK,IRTFLG)
-      !write(3,*)' In lunsayinfo,  mz,nstack,imgnum 2:',mz,nstack,imgnum
+
+#if defined(SP_DBUGIO)
+C23456      
+      write(3,*)' In lunsayinfo_mrc   2 | nz,mz,nstack:     ',
+     &                                    nz,mz,nstack 
+#endif
 
       IF     (ITYPE == 1 .AND. NSTACK > 0) THEN
           TYPEF = 'MRC-' // MODE_STR // ' S2'
+
       ELSEIF (ITYPE == 3 .AND. NSTACK > 0) THEN
           TYPEF = 'MRC-' // MODE_STR // ' S3'
+
       ELSEIF (ITYPE == 1) THEN
           TYPEF = 'MRC-' // MODE_STR // ' 2'
+
       ELSEIF (ITYPE == 3) THEN
           TYPEF = 'MRC-' // MODE_STR // ' 3'
       ENDIF
@@ -1951,7 +2255,14 @@ C     GET DATA ORIGIN & HANDEDNES
 
 C     RETRIEVE CURRENT FILENAME (INCLUDES IMGNUM IF STACKED IMAGE)
       CALL LUNGETFILE_MRC(LUN,FILNAM,NLET,DSP,IRTFLG)
-      !write(3,*) ' In lungetfile, nlet,filnam:', nlet,filnam(1:nlet)
+
+#if defined(SP_DBUGIO)
+C23456
+      write(3,*)' In lunsayinfo_mrc   3 | nlet,filnam: ',
+     &                                    nlet,filnam(1:nlet)
+
+      write(3,*) ' '
+#endif
       
 C     GET HEADER EXTRA LENGTH = NSYMBT 
       CALL LUNGETVIN_MRC(LUN,IVERSION,ISPG,NSYMBT,NLABL,IRTFLG)
@@ -1998,7 +2309,17 @@ C           SIMPLE IMAGE
       ENDIF     ! END OF USE_SPIRE
 
 
-      !write(3,*) ' In lunsayinfo - imgnum,nstack,mz:',imgnum,nstack,mz
+#if defined(SP_DBUGIO)
+      write(3,*) ' '
+      write(3,*)' In lunsayinfo_mrc   4 | imgnum,nstack,mz: ',
+     &                                    imgnum,nstack,mz
+      write(3,*)' In lunsayinfo_mrc   4 | filnam: ',filnam(:nlet)
+      write(3,*) ' '
+#endif
+
+
+
+
       IF (VERBOSE .AND. IFOUND .NE. -4) THEN
 C         PRINT FILE OPENING INFORMATION
 
@@ -2013,7 +2334,8 @@ C           HAS FILENAME BUT NO LABEL1
          ELSEIF (LENT > 0 .AND. LENT < 70) THEN
 C           HAS FILENAME AND LABEL1 THAT FIT ON ONE LINE
             IF (MYPID <= 0) THEN
-             WRITE(NOUT,*) ' ',FILNAM(:NLET),'     /',LABEL1(:LENLABEL1)
+               WRITE(NOUT,*) ' ',FILNAM(:NLET),'     /',
+     &                       LABEL1(1:LENLABEL1)
             ENDIF
 
          ELSEIF (LENT > 0) THEN
@@ -2025,7 +2347,14 @@ C           HAS FILENAME AND LABEL1 THAT DO NOT FIT ON SINGLE LINE
             ENDIF
          ENDIF
 
-      !write(3,*)' In lunsayinfo - imgnum,nstack,mz:',imgnum,nstack,mz
+
+#if defined(SP_DBUGIO)
+         write(3,*)' In lunsayinfo_mrc   5 | imgnum,nstack,mz:',
+     &                                       imgnum,nstack,mz
+         write(3,*) '  '
+#endif
+
+
 
          IF (NSTACK >= 0 .AND. IMGNUM == 0 .AND. NZ > 1) THEN
 C           OVERALL STACKED VOLUME FILE
@@ -2054,14 +2383,44 @@ C           STACKED VOLUME
      &                ' HEADER BYTES: ',I0,'  AXIS:(',A,')')
             ENDIF
 
+         ELSE IF (IMGNUM == 1 .AND. NSTACK < 0 ) THEN
+C           SIMPLE IMAGE
+
+#if defined(SP_DBUGIO)
+            write(3,*)' In lunsayinfo_mrc   6 | nz,mz:',
+     &                                          nz,mz
+            write(3,*)' In lunsayinfo_mrc   6 | imgnum,nstack:',
+     &                                          imgnum,nstack
+            write(3,*) ' '
+#endif
+
+            IF (MYPID <= 0) THEN
+               WRITE(NOUT,921)TYPEF(:LT),NX,NY,  DTP,
+     &                        HEDBYT,CAXIS(:2)
+921            FORMAT('  (',A,') ',2(I0,1X), 2X,A,
+     &                ' HEADER BYTES: ',I0,'  AXIS:(',A,')')
+            ENDIF
+
+
+
          ELSE IF (IMGNUM > 0) THEN
 C           STACKED IMAGE
+
+#if defined(SP_DBUGIO)
+            write(3,*)' In lunsayinfo_mrc  7 | nz,mz:',
+     &                                         nz,mz
+            write(3,*)' In lunsayinfo_mrc  7 | imgnum,nstack:',
+     &                                         imgnum,nstack
+            write(3,*) ' '
+#endif
+
             IF (MYPID <= 0) THEN
                WRITE(NOUT,920)TYPEF(:LT),NX,NY, IMGNUM, DTP,
      &                        HEDBYT,CAXIS(:2)
 920            FORMAT('  (',A,') ',2(I0,1X),' (@',I0,')'2X,A,
      &                ' HEADER BYTES: ',I0,'  AXIS:(',A,')')
             ENDIF
+
 
          ELSE IF (NZ > 1) THEN
 C           SIMPLE VOLUME
