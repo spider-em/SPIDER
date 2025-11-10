@@ -1,9 +1,14 @@
-head	1.4;
+head	1.5;
 access;
 symbols;
 locks; strict;
 comment	@c @;
 
+
+1.5
+date	2025.11.10.22.33.58;	author dean;	state Exp;
+branches;
+next	1.4;
 
 1.4
 date	2020.01.21.16.19.37;	author leith;	state Exp;
@@ -30,22 +35,23 @@ desc
 @@
 
 
-1.4
+1.5
 log
-@cosmetic changes
+@*** empty log message ***
 @
 text
 @C++*********************************************************************
 C
 C OPENFIL_N_MRC.F ADAPTED FROM OPENFIL           MAY 2019 ArDean Leith
+C                 DEBUG OUTPUT                   OCT 2025 ArDean Leith
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2020   Health Research Inc.,                         *
+C=* Copyright 1985-2025   Health Research Inc.,                        *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@@health.ny.gov                                        *
+C=* Email:                                                             *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -61,45 +67,69 @@ C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
 C **********************************************************************
 C
-C  OPENFIL_N_MRC(LUN,FILNAM,DATEXT, MRCMODE, NX,NY,NZ,NSTACK,
+C  OPENFIL_N_MRC(LUN,FILNAM,DATEXT, MRCMODE, NX,NY,NZ, NSTK_FLG,
 C                SCALEX,SCALEY,SCALEZ,IRTFLG
 C
 C  PURPOSE: OPEN NEW MRC FILE FOR STREAM ACCESS, LITTLE ENDED
 C
 C  PARAMETERS:
-C       LUN       LOGICAL UNIT NUMBER FOR FILNAM.               (SENT)
-C       FILNM     CHARACTER ARRAY, CONTAINING FILE NAME WITH @@  (SENT)
-C       FILNAM    CHARACTER ARRAY, CONTAINING FILE NAME NO @@    (SENT)
-C       LUN       LOGICAL UNIT NUMBER FOR FILNAM.               (SENT)
-C       NX,NY,NZ  DIMENSIONS OF IMAGE                   (SENT OR RET.)
-C       NSTACK    STACK INDICATOR                        (SENT / RET.)
-C                   ON INPUT: 
-C                     -2 : NOT A STACK  
-C                     >0 : MRC STACK
-C                   ON OUTPUT: 
-C                     -1  :  NOT A STACK 
-C                     >=0 :  MAX IMAGE NUMBER NOW IN STACK.
+C       LUN           LOGICAL UNIT NUMBER FOR FILNAM            (SENT)
+C       FILNAM        CHAR  ARRAY, CONTAINING FILE NAME NO @@    (SENT)
+C       LUN           LOGICAL UNIT NUMBER FOR FILNAM            (SENT)
+C       NX,NY,NZ      DIMENSIONS OF IMAGE/VOL             (SENT & RET)
+C
+C       NSTK_FLG      STACK INDICATOR                     (SENT / RET)
+C                     ON INPUT: 
+C                       -2 :  AST FOR NSTK  (@@* or *@@)   
+C                       -1 :  NOT A STACK   (NO @@)
+C                        0 :  BARE STACK    (@@)
+C                       >1 :  STACKED MRC IMAGE/VOLUME? NUMBER
+C
+C                     ON OUTPUT: 
+C                       -1 :  NOT A STACK 
+C                      >=0 :  MAX IMAGE NUMBER NOW IN STACK
 C 
-C       IRTFLG    ERROR RETURN FLAG.                            (RET.)
-C                   0 : NORMAL RETURN
-C                   1 : ERROR RETURN
+C       IRTFLG        ERROR RETURN FLAG.                         (RET)
+C                       0 : NORMAL RETURN
+C                       1 : ERROR RETURN
 C
-C  VARIABLES: ITYPE (TYPE)  FILE TYPE SPECIFIER. 
-C               +1    R     2-D IMAGE
-C               +3    R3    3-D VOLUME FILE
+C  VARIABLES: 
+C        ITYPE     (TYPE)  FILE TYPE SPECIFIER. 
+C             +1     R     2-D IMAGE
+C             +3     R3    3-D VOLUME FILE
 C
-C        ISPG == 0        IMAGE OR IMAGE STACK
-C        ISPG == 1        VOLUMES
-C        ISPG == 401      STACK OF EM VOLUMES
+C        ISPG == 0         IMAGE OR IMAGE STACK
+C        ISPG == 1         VOLUMES
+C        ISPG == 401       STACK OF EM VOLUMES  if Version = 20140
 C
-C        MZ   ==  1       IMAGE 
-C        MZ   >=  1       IMAGE STACK
-C        MZ   == NZ       VOLUME
-C        MZ   NZ/NUMVOLS  VOLUME STACK
+C        MZ   ==  1        IMAGE 
+C        MZ   >=  1        IMAGE STACK
+C        MZ   == 1            IMAGE STACK
+C        MZ   == NZ        VOLUME
+C        MZ   NZ/NUMVOLS   VOLUME STACK
 C
 C        DMAX  < DMIN                        MAX & MIN UNDETERMINED
 C        DMEAN < (SMALLER OF DMIN and DMAX)  DMEAN     UNDETERMINED
 C        RMS   < 0.0                         RMS       UNDETERMINED
+C
+C  MRC FILE HEADER:
+C     MZ identifies the # of sections along Z in 
+C     each of the volumes that are in a volume stack
+C
+C     2014 MRC STANDARD (IVERSION = 20140)    
+C                       ISPG(23)  NZ(3)          MZ(10)
+C       Single image       0       1              1
+C       Image stack        0       1              >= 1
+C       Single volume      1      >1 (#SLICES)    = NZ
+C       Volume stack      401     >1*#VOLS        = NZ / #VOLS  
+C
+C     RELION STANDARD -  MRCS     (IVERSION = 1)
+C                        ISPG     NZ             MZ
+C       Single image       0       1              1
+C       Image stack        0       1              >= 1
+C       Single volume      0      >1 (#SLICES)    = NZ??
+C       No Volume stack    0      >1*#VOLS        = NZ / #VOLS  
+C
 C
 C  CALL TREE:   
 C     OPFILEC --> OPENFIL_MRC --> OPENFIL_O_MRC -->
@@ -110,7 +140,7 @@ C--*********************************************************************
 
       SUBROUTINE OPENFIL_N_MRC(LUN,FILNAM,
      &                         MRCMODE,
-     &                         NX,NY,NZ,NSTACK,
+     &                         NX,NY,NZ, NSTK_FLG,
      &                         SCALEX,SCALEY,SCALEZ,IRTFLG)
  
 C     PURPOSE: OPEN NEW MRC FILE FOR STREAM ACCESS, LITTLE ENDED
@@ -121,19 +151,30 @@ C     PURPOSE: OPEN NEW MRC FILE FOR STREAM ACCESS, LITTLE ENDED
       INCLUDE 'CMLIMIT.INC'
  
       INTEGER                 :: LUN,MRCMODE
-      CHARACTER(LEN=*)        :: FILNAM
-      INTEGER                 :: NX,NY,NZ,NSTACK
+
+      CHARACTER(LEN=*),INTENT(IN) :: FILNAM
+
+      INTEGER                 :: NX,NY,NZ, NSTK_FLG
       REAL                    :: SCALEX,SCALEY,SCALEZ
       INTEGER                 :: IRTFLG
 
       LOGICAL                 :: WANTUL,IS_MRCS 
       INTEGER                 :: NLABL,NSYMBT,MACHST,NE,IOFFSET
-      INTEGER                 :: MX,MY,MZ,IVERSION,NZMRC
-      INTEGER                 :: NSYMBYT,ISPG
+      INTEGER                 :: MX,MY,MZ,IVERSION
+      INTEGER                 :: NSYMBYT,ISPG,LNBLNKN,ILENT
+
       CHARACTER(LEN=1)        :: NULL = CHAR(0)
 
 
-      !write(3,*)' In openfil_n_mrc, filnam,nstack: ',filnam,nz,nstack
+      ILENT = LNBLNKN(FILNAM)
+
+#if defined (SP_DBUGIO)
+      write(3,*)'  '
+      write(3,*)' In openfil_n_mrc; nx,ny,nz,nstk_flg: ', 
+     &                              nx,ny,nz,nstk_flg
+      !write(3,*)' In openfil_n_mrc; ilent:  ',ilent
+       write(3,*)' In openfil_n_mrc; filnam: ',filnam(1:ilent)
+#endif
 
 C     OPEN NEW MRC FILE FOR STREAM ACCESS, LITTLE ENDED
 
@@ -150,68 +191,94 @@ C     SO: MZ = NZ / NUMBER OF VOLUMES
 C     I AM TRYING TO HANDLE ALL COMMON FOULED UP MRC STACKS
       MX  = NX
       MY  = NY
-
-      !write(3,*)' In openfil_n_mrc, filnam: ',filnam,nx,ny,nz,nstack
-
+ 
 C     SEE IF USER WANTS RELION COMPATIBLE IMAGE/STACK
       IS_MRCS = (INDEX(FILNAM,'MRCS') > 1  .OR.
      &           INDEX(FILNAM,'mrcs') > 1)
 
-      !write(3,*)' In openfil_n_mrc, filnam: ',is_mrcs, nstack
-      IF ( IS_MRCS .OR. (NZ > 1 .AND. NSTACK > 1) )  THEN
+#if defined (SP_DBUGIO)
+      write(3,*)' In openfil_n_mrc, is_mrcs: ',is_mrcs
+#endif
+
+C     PUT FILENAME IN STATIC AREA OF THE HEADER OBJECT
+      CALL LUNSETFILE_MRC(LUN,FILNAM,NULL,IRTFLG)
+      IF (IRTFLG .NE. 0) RETURN
+
+      IF ( IS_MRCS .OR. (NZ > 1 .AND. NSTK_FLG > 1) )  THEN
 C        HACK TO CREATE RELION COMPATIBLE STACKS
          IVERSION = 1
-         ISPG     = 0    
-         NZMRC    = MAX(NSTACK,1)        ! NUMBER OF IMAGES 
-         MZ       = NSTACK
-         !write(3,*)' In openfil_n_mrc, ismrcs,nstack,nzmrc: ', is_mrcs, nstack,nzmrc
-      ELSEIF (NZ == 1 .AND. NSTACK < 0) THEN
+         ISPG     = 0
+         NZ       = MAX(NSTK_FLG,1)    ! NUMBER OF IMAGES NOT SLICES!
+         MZ       = NZ
+
+#if defined (SP_DBUGIO)
+         write(3,*)' In openfil_n_mrc, is_mrcs,nz: ',is_mrcs,nz
+#endif
+ 
+      ELSEIF (NZ == 1 .AND. NSTK_FLG < 0) THEN
 C        JUST A SINGLE IMAGE
          IVERSION = 20140        
          ISPG     = 0    
-         NZMRC    = 1           ! IMAGE           
-         MZ       = 1
-         NSTACK   = -2
-      ELSEIF (NZ == 1 .AND. NSTACK >= 1) THEN
+         NZ       = 1            ! IMAGE (NOT A VOLUME OR STACK)        
+         MZ       = 1            ! IMAGE (NOT A VOLUME)
+         NSTK_FLG = -2           ! NOT A STACK
+
+
+#if defined (SP_DBUGIO)
+         write(3,*)' In openfil_n_mrc, nz,nstk_flg: ',nz,nstk_flg
+#endif
+
+      ELSEIF (NZ == 1 .AND. NSTK_FLG >= 1) THEN
 C        A 2014 STANDARD IMAGE STACK
          IVERSION = 20140        
          ISPG     = 0    
-         NZMRC    = NZ          ! IMAGE           
-         MZ       = NSTACK
-      ELSEIF (NZ > 1 .AND. NSTACK < 0 ) THEN
-C        SINGLE VOLUME
+         NZ       = 1            ! IMAGE (NOT A VOLUME) (SINGLE SLICE) 
+         MZ       = NSTK_FLG     ! STACK SIZE, NUMBER OF IMAGES IN STACK
+
+      ELSEIF (NZ > 1 .AND. NSTK_FLG < 0 ) THEN
+C        A 2014 SINGLE VOLUME
          IVERSION = 20140
          ISPG     = 1    
-         NZMRC    = NZ          ! NUMBER OF IMAGES??
-         MZ       = NZ
-         NSTACK   = -2
-         !write(3,*)' In openfil_n_mrc, nstack,nzmrc: ', nstack,nzmrc,nz
-      ELSEIF (NZ > 1 .AND. NSTACK > 0 ) THEN
-C        STACK OF EM VOLUMES
-         IVERSION = 20140       ! SO NZ IS NOT FOR STACK
+C        MZ       = MZ           ! VOLUME 
+         NSTK_FLG = -1           ! NOT A STACK
+
+      ELSEIF (NZ > 1 .AND. NSTK_FLG > 0 ) THEN
+C        A 2014 STACK OF EM VOLUMES  (WHAT SOFTWARE USES VOLUME STACKS?)
+         IVERSION = 20140        ! SO NZ IS NOT FOR STACK
          ISPG     = 401    
-         NZMRC    = NZ          ! NUMBER OF VOLUMES
-         MZ       = NZ * NSTACK
-         NSTACK   = MZ          ! STACK SIZE
+C        NZ       = NZ           ! NUMBER OF VOLUMES
+         MZ       = NZ * NSTK_FLG
+         NSTK_FLG = MZ           ! STACK SIZE  (MASY BE WRONG)
+
       ELSE 
-         CALL ERRT(102,'BAD STACK OR VOLUME PARAMETERS',NSTACK)
+         CALL ERRT(102,'BAD STACK OR VOLUME PARAMETERS',NSTK_FLG)
          IRTFLG = 1
          RETURN
       ENDIF
-
-      !write(3,*)' In openfil_n_mrc, set:', nx,ny,nz,MX,MY,MZ
-
+ 
 C     MODE IS ALWAYS 32 BIT REAL FOR NEW FILES (FOR NOW)
-      CALL LUNSETMODSIZ_MRC(LUN,MRCMODE,NX,NY,NZMRC,
+      CALL LUNSETMODSIZ_MRC(LUN,MRCMODE,NX,NY,NZ,
      &                                  MX,MY,MZ,IRTFLG)
       IF (IRTFLG .NE. 0) RETURN
+
+#if defined (SP_DBUGIO)
+      write(3,*)' End openfil_n_mrc; nstk_flg: ', nstk_flg
+      write(3,*)' end openfil_n_mrc; nx,ny,NZ: ', nx,ny,nz
+      write(3,*)' End openfil_n_mrc; mx,my,mz: ', mx,my,mz
+#endif
+
 
 C     SET EXTRA HEADER BYTES, NO. OF LABELS USED, VERSION, ETC
       NSYMBT = 0                      ! RESET BY LUNSETXXX_MRC
       NLABL  = 1                      ! RESET BY LUNSETXXX_MRC
-      !write(3,*)' In oprnfil_n, set:', iversion,ispg,nzmrc,mz,nstack
+
       CALL LUNSETVIN_MRC(LUN,IVERSION,ISPG,NSYMBT,NLABL,IRTFLG)
       IF (IRTFLG .NE. 0) RETURN
+
+#if defined (SP_DBUGIO)
+      !write(3,*)' End openfil_n; iversion,ispg,nlabl: ',
+      ! &                         iversion,ispg,nlabl
+#endif
 
 C     SET:  N?START,CELLANGS,AXES,NSYMBYT,MAP,MACHST,LABELS,...
       CALL LUNSETXXX_MRC(LUN,IRTFLG)
@@ -233,6 +300,129 @@ C     SET FLAG FOR NORMAL RETURN
 
 
 
+@
+
+
+1.4
+log
+@cosmetic changes
+@
+text
+@d4 1
+d10 1
+a10 1
+C=* Copyright 1985-2020   Health Research Inc.,                         *
+d12 1
+a12 1
+C=* Email: spider@@health.ny.gov                                        *
+d28 1
+a28 1
+C  OPENFIL_N_MRC(LUN,FILNAM,DATEXT, MRCMODE, NX,NY,NZ,NSTACK,
+d34 15
+a48 12
+C       LUN       LOGICAL UNIT NUMBER FOR FILNAM.               (SENT)
+C       FILNM     CHARACTER ARRAY, CONTAINING FILE NAME WITH @@  (SENT)
+C       FILNAM    CHARACTER ARRAY, CONTAINING FILE NAME NO @@    (SENT)
+C       LUN       LOGICAL UNIT NUMBER FOR FILNAM.               (SENT)
+C       NX,NY,NZ  DIMENSIONS OF IMAGE                   (SENT OR RET.)
+C       NSTACK    STACK INDICATOR                        (SENT / RET.)
+C                   ON INPUT: 
+C                     -2 : NOT A STACK  
+C                     >0 : MRC STACK
+C                   ON OUTPUT: 
+C                     -1  :  NOT A STACK 
+C                     >=0 :  MAX IMAGE NUMBER NOW IN STACK.
+d50 18
+a67 16
+C       IRTFLG    ERROR RETURN FLAG.                            (RET.)
+C                   0 : NORMAL RETURN
+C                   1 : ERROR RETURN
+C
+C  VARIABLES: ITYPE (TYPE)  FILE TYPE SPECIFIER. 
+C               +1    R     2-D IMAGE
+C               +3    R3    3-D VOLUME FILE
+C
+C        ISPG == 0        IMAGE OR IMAGE STACK
+C        ISPG == 1        VOLUMES
+C        ISPG == 401      STACK OF EM VOLUMES
+C
+C        MZ   ==  1       IMAGE 
+C        MZ   >=  1       IMAGE STACK
+C        MZ   == NZ       VOLUME
+C        MZ   NZ/NUMVOLS  VOLUME STACK
+d73 19
+d101 1
+a101 1
+     &                         NX,NY,NZ,NSTACK,
+d112 4
+a115 2
+      CHARACTER(LEN=*)        :: FILNAM
+      INTEGER                 :: NX,NY,NZ,NSTACK
+d121 3
+a123 2
+      INTEGER                 :: MX,MY,MZ,IVERSION,NZMRC
+      INTEGER                 :: NSYMBYT,ISPG
+d127 9
+a135 1
+      !write(3,*)' In openfil_n_mrc, filnam,nstack: ',filnam,nz,nstack
+d152 1
+a152 3
+
+      !write(3,*)' In openfil_n_mrc, filnam: ',filnam,nx,ny,nz,nstack
+
+d157 9
+a165 2
+      !write(3,*)' In openfil_n_mrc, filnam: ',is_mrcs, nstack
+      IF ( IS_MRCS .OR. (NZ > 1 .AND. NSTACK > 1) )  THEN
+d168 9
+a176 5
+         ISPG     = 0    
+         NZMRC    = MAX(NSTACK,1)        ! NUMBER OF IMAGES 
+         MZ       = NSTACK
+         !write(3,*)' In openfil_n_mrc, ismrcs,nstack,nzmrc: ', is_mrcs, nstack,nzmrc
+      ELSEIF (NZ == 1 .AND. NSTACK < 0) THEN
+d180 10
+a189 4
+         NZMRC    = 1           ! IMAGE           
+         MZ       = 1
+         NSTACK   = -2
+      ELSEIF (NZ == 1 .AND. NSTACK >= 1) THEN
+d193 5
+a197 4
+         NZMRC    = NZ          ! IMAGE           
+         MZ       = NSTACK
+      ELSEIF (NZ > 1 .AND. NSTACK < 0 ) THEN
+C        SINGLE VOLUME
+d200 6
+a205 7
+         NZMRC    = NZ          ! NUMBER OF IMAGES??
+         MZ       = NZ
+         NSTACK   = -2
+         !write(3,*)' In openfil_n_mrc, nstack,nzmrc: ', nstack,nzmrc,nz
+      ELSEIF (NZ > 1 .AND. NSTACK > 0 ) THEN
+C        STACK OF EM VOLUMES
+         IVERSION = 20140       ! SO NZ IS NOT FOR STACK
+d207 4
+a210 3
+         NZMRC    = NZ          ! NUMBER OF VOLUMES
+         MZ       = NZ * NSTACK
+         NSTACK   = MZ          ! STACK SIZE
+d212 1
+a212 1
+         CALL ERRT(102,'BAD STACK OR VOLUME PARAMETERS',NSTACK)
+d216 1
+a216 3
+
+      !write(3,*)' In openfil_n_mrc, set:', nx,ny,nz,MX,MY,MZ
+
+d218 1
+a218 1
+      CALL LUNSETMODSIZ_MRC(LUN,MRCMODE,NX,NY,NZMRC,
+d222 7
+d232 1
+a232 1
+      !write(3,*)' In oprnfil_n, set:', iversion,ispg,nzmrc,mz,nstack
+d235 5
 @
 
 
