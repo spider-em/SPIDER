@@ -731,7 +731,6 @@ ELEMENTS =  \
  $(LIB)(seeds.o) \
  $(LIB)(sen3a.o) \
  $(LIB)(setenv.o) \
- $(LIB)(sethedccp4.o) \
  $(LIB)(sethead.o) \
  $(LIB)(setlab.o)  \
  $(LIB)(setmode.o) \

@@ -1662,7 +1662,11 @@ C       FIND FIRST CHARACTER IN FILENAME
         NFSTRT = INDEX(STR(1:NCHAR),'@',BACK=.TRUE.) + 1
 
 C       SUBSTITUTE FOR ALL SYM. VAR. IN STR
-        !write(6,*) ' Checking: ',STR(NFSTRT:NCHAR)
+
+#if defined(SP_AGL)
+         write(3,*) ' Checking: ',STR(NFSTRT:NCHAR)
+#endif
+
         CALL SUBSYMPAR(STR(NFSTRT:NCHAR),PNAMEM,NCT,0,IRTFLG)
 
 C       WILL STOP IN FILNAMANDEXT ON ERRT
@@ -1670,7 +1674,10 @@ C       WILL STOP IN FILNAMANDEXT ON ERRT
 
 C       TRY TO FIND PROCEDURE IN USER'S DIRECTORY & PROJECT EXTENSION
 
-        !write(6,*) ' Checking: ',pname(NFSTRT:NCHAR)
+#if defined(SP_AGL)
+        write(3,*) ' Checking: ',pname(NFSTRT:NCHAR)
+#endif
+
         IF (MYPID <= 0) INQUIRE(FILE=PNAME,EXIST=EX)
         CALL BCAST_MPI('SPIDER','EX',EX,1,'L',ICOMM)
 

@@ -80,8 +80,9 @@ C     Sept 2025 al to fix for Gfort warning on threaded use
 
 #if defined(SP_DBUGIO)
       nynz = ny * nz
-      write(3,'(A,5i6)')   '  In norm3; nx,ny,nz,nynz: ',nx,ny,nz,nynz
-      write(3,'(A,f12.2)') '  In norm3; fnall: ',fnall
+      write(3,*) ' In norm3; nx,ny,nz: ',nx,ny,nz
+      write(3,*) ' In norm3; ny x nz:  ',nynz
+      write(3,*) ' In norm3; fnall:    ',fnall
 #endif
 
       DAV  = 0.0
@@ -134,8 +135,8 @@ C     VALUES ARE SET IN COMMON BY NAME ABOVE ! SET IN COMMON /MASTER/
 
 
 #if defined(SP_DBUGIO)
-      write(3,'(A,5(2x,i6),f8.2)')
-     &     '  In norm3; lun,nx,ny,irect,k,b: ',lun,nx,ny,irect,k,b
+      !write(3,'(A,5(2x,i6),f8.2)')
+      !&     ' In norm3; lun,nx,ny,irect,k,b: ',lun,nx,ny,irect,k,b
 
       write(3,90) fmin,fmax,av,sig
 90    format('  Fmin: ', 1PG10.3,

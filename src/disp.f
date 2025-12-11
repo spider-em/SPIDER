@@ -70,7 +70,7 @@ C       OPEN INPUT FILE, WHOLE STACK NOT ALLOWED
         MAXIM = 0
         ITYPE = 0   ! ?
         CALL OPFILEC(0,.TRUE.,FILOLD,LUN1,'O',ITYPE,
-     &               NX,NY,NZ,MAXIM,'SPIDER OR MRC INPUT',
+     &               NX,NY,NZ,MAXIM,'SPIDER OR MRC INPUT~6',
      &               .FALSE.,IRTFLG)
         IF (IRTFLG .NE. 0) RETURN
 

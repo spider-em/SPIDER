@@ -112,9 +112,14 @@ C     OPEN INPUT FILE
      &             FOUROK, ILIST1,NILMAX, 
      &             NDUM,NGOT1,IMG1, IRTFLG)
  
-      !write(6,*)' In qstat; ilist1:',ilist1(1:5)
-      !write(6,*)' In qstat; ngot1,nstack1,img1:',ngot1,nstack1,img1
-      !write(6,*)' In qstat; irtflg:',irtflg
+#if defined (SP_DBUGIO)
+      write(3,*)' In qstat; ilist1:',ilist1(1:5)
+      write(3,*)' In qstat; ngot1,nstack1,img1:',ngot1,nstack1,img1
+
+      write(3,*)' In qstat; ngot1,nstack1,img1:',ngot1,nstack1,img1
+
+      write(3,*)' In qstat; irtflg:',irtflg
+#endif
 
       IF (IRTFLG .NE. 0) RETURN
       
@@ -162,6 +167,7 @@ C        OPEN MASK INPUT FILE
         ENDIF
 
         CALL REPORTSTAT(NEWCALC, FMIN,FMAX,AV,SIG)
+        IF (VERBOSE) WRITE(NOUT,*) ' '
 
 C       OPEN NEXT INPUT FILE, UPDATE NINDX1 
         CALL NEXTFILE(NINDX1,   ILIST1, 
@@ -171,9 +177,14 @@ C       OPEN NEXT INPUT FILE, UPDATE NINDX1
      &                FILNAM1, 'O',
      &                IMG1,    IRTFLG)
 
-       !write(6,*)' In qstat; ngot1,nstack1,img1: ',ngot1,nstack1,img1
-       !write(6,*)' In qstat; nindx1,irtflg: ',nindx1,irtflg
- 
+#if defined (SP_DBUGIO)
+        write(3,*)' In qstat; nindx1,ilist1(1): ',nindx1, ilist1(1)
+        write(3,*)' In qstat; ngot1,nstack1:    ',ngot1,nstack1
+        write(3,*)' In qstat; img1:             ',img1
+        write(3,*)' In qstat; irtflg:           ',irtflg
+        !write(3,*)' In qstat;     stop'
+#endif
+
         IF (IRTFLG .NE. 0) EXIT      ! ERROR / END OF INPUT STACK
         IMAMI1 = IMAMI
            

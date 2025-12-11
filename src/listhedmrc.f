@@ -123,10 +123,10 @@ C     IMPLICIT NONE
       INCLUDE 'CMLIMIT.INC'
 
       INTEGER               :: LUN,IRTFLG
+
       INTEGER               :: NX,NY,NZ,ITYPE,MAXIM,NE
-      LOGICAL               :: IS_MRC
       REAL                  :: FVAL
-      INTEGER               :: IEND
+      INTEGER               :: IEND,ILEN1,ILEN2
       LOGICAL               :: BIGENDARCH,BIGENDED
       LOGICAL               :: BIGENDFILE,SAMEENDFILE
       CHARACTER(LEN=MAXNAM) :: FILNAM
@@ -150,17 +150,18 @@ C     IMPLICIT NONE
       INTEGER               :: IXTRA29,IXTRA30,IXTRA31,IXTRA32
       CHARACTER(LEN=4)      :: MAP 
       CHARACTER(LEN=4)      :: CAXIS,EXTTYP
+      CHARACTER(LEN=1)      :: CDSP
 
       INTEGER               :: LNBLNKN    ! FUNCTION
       LOGICAL               :: ISMRCFILE  ! FUNCTION
 
-      integer               :: idsp,isbare,img_in_stats,nstack    
+      integer               :: idsp,isbare,img_in_stats,nstk    
 
 
 C     OPEN INPUT FILE
       CALL OPFILEC(0,.TRUE.,FILNAM,LUN,'O',ITYPE,
      &             NX,NY,NZ,
-     &             MAXIM,'MRC',.FALSE.,IRTFLG)
+     &             MAXIM,'MRC~9~8',.FALSE.,IRTFLG)
       IF (IRTFLG .NE. 0) RETURN
 
       IF (.NOT. ISMRCFILE(FILNAM)) THEN
@@ -226,7 +227,7 @@ C     GET CONTENT OF EXTRA HEADER LOCATION: 25  (AS INTEGER)
 C     GET CONTENT OF EXTRA HEADER LOCATION: 26  (AS CHAR STRING) 
       CAXIS    = TRANSFER(MRC_HEADER(26),CSTR(1:4)) ! SPIDER DEFINED
 
-C     GET EXTTYP (NOW 'MRCO')
+C     GET EXTTYP (MAY BE:  'MRCO')
       EXTTYP   = TRANSFER(MRC_HEADER(27),CSTR(1:4))
 
 C     GET VERSION NUMBER 
@@ -266,7 +267,7 @@ C     GET MAP TYPE
        
       IF (NLABL > 0) THEN
 C        GET LABELS
-         CALL LUNGETLABELS_MRC(LUN,NLABL,LABELS,IRTFLG)
+         CALL LUNGET_LABELS_MRC(LUN,NLABL,LABELS,IRTFLG)
       ENDIF
 
 C     GET CURRENT ARCHITECTURE ENDED-NESS
@@ -296,9 +297,10 @@ C     WRITE OUT CONVERSION INFORMATION
       WRITE(NOUT,*)'  '
 
 
+
+
 C     WRITE OUT HEADER INFORMATION
-      WRITE(NOUT,*) ' *  = Derived from actual header '
-      WRITE(NOUT,*) ' ** = From SPIDER specific header location  '
+      WRITE(NOUT,*) ' ** = A SPIDER specific MRC header location  '
 
       IF     (MRCMODE == 0) THEN
         WRITE(NOUT,*) ' Data type (Mode) ..........................' //
@@ -326,19 +328,19 @@ C     WRITE OUT HEADER INFORMATION
       ENDIF
 
       WRITE(NOUT,1001) NX,NY,NZ
-1001  FORMAT(2X,'Columns, rows, sections (NX,NY,NZ) ....... ',3(I7,1X))
+1001  FORMAT(2X,'Columns, rows, sections (NX,NY,NZ) .......  ',3(I7,1X))
 
       WRITE(NOUT,1003) NXSTART,NYSTART,NZSTART
 1003  FORMAT(2X,'Starting column, row, section ............ ',3I7)
 
       WRITE(NOUT,1004) MX,MY,MZ 
-1004  FORMAT(2X,'Intervals (MX,MY,MZ) .....................  ',3I7)
+1004  FORMAT(2X,'Intervals (MX,MY,MZ) .....................   ',3I7)
 
       WRITE(NOUT,1005) PIXSIZX,PIXSIZY,PIXSIZZ 
-1005  FORMAT(2X,'Pixel sizes (X,Y,Z) * .................... ',3F10.2)
+1005  FORMAT(2X,'Pixel sizes (X,Y,Z) ......................  ',3F10.2)
 
       WRITE(NOUT,1026) CELLAX,CELLAY,CELLAZ 
-1026  FORMAT(2X,'Cell sizes ............................... ',3F10.2)
+1026  FORMAT(2X,'Cell sizes ...............................  ',3F10.2)
 
       WRITE(NOUT,1006) CELLAB,CELLAB,CELLAB 
 1006  FORMAT(2X,'Cell angles .............................. ',3F10.2)
@@ -347,7 +349,7 @@ C     WRITE OUT HEADER INFORMATION
 1007  FORMAT(2X,'Fast, medium, slow axes .................. ',3I7)
 
       WRITE(NOUT,1008) DMIN,DMAX  
-1008  FORMAT(2X,'Min & max  density .......................',2F23.11)
+1008  FORMAT(2X,'Min & Max  density .......................',2F23.11)
 
       WRITE(NOUT,1009) DMEAN,RMS
 1009  FORMAT(2X,'Mean & RMS density .......................',2F23.11)
@@ -359,13 +361,13 @@ C     WRITE OUT HEADER INFORMATION
 1010  FORMAT(2X,'Origins .................................. ',3F10.2)
 
       WRITE(NOUT,1011) ISPG,NSYMBT 
-1011  FORMAT(2X,'Space group, extra header bytes .......... ',2I7)
+1011  FORMAT(2X,'Space group, extra header bytes ..........  ',2I7)
 
       WRITE(NOUT,1091) IMGSTATS 
-1091  FORMAT(2X,'Image or volume in DMIN,DMAX ** ........... ',I7)
+1091  FORMAT(2X,'Stacked img/vol in Min/Max stats ** .......  ',I7)
 
       WRITE(NOUT,1012) CAXIS 
-1012  FORMAT(2X,'Data origin ** ..........................        ',A)
+1012  FORMAT(2X,'Data origin ** ...........................       ',A)
 
       WRITE(NOUT,1013) MACHST
 1013  FORMAT(2X,'Machine stamp ............................',I12)
@@ -377,29 +379,31 @@ C     WRITE OUT HEADER INFORMATION
 1015  FORMAT(2X,'MRC version ..............................     ',I7)
 
       WRITE(NOUT,1016) EXTTYP 
-1016  FORMAT(2X,'ExtType ..................................       ',A)
+1016  FORMAT(2X,'Extension Type ...........................       ',A)
 
       WRITE(NOUT,1022) NLABL
 1022  FORMAT(2X,'Number of labels .........................  ',I7)
 
       idsp    = mrc_header(257)
+      !dsp    = TRANSFER(mrc_header(257),cstr(1:1))
+
       isbare  = mrc_header(258)
-      imgnum  = mrc_header(258)
-      nstack  = mrc_header(260)
+      istk    = mrc_header(259)
+      nstk    = mrc_header(260)
 
       WRITE(NOUT,*) ' '
 
       WRITE(NOUT,1018) idsp 
-1018  FORMAT(2X,'Old or New File    (OLD: 0) (NEW: 1) ** .... ',I7)
+1018  FORMAT(2X,'Old, New or Read-only File: 0,1,-1   ** ..  ',I7)
+                               
+      WRITE(NOUT,1019) isbare   
+1019  FORMAT(2X,'Bare stack: 1, Not Bare: 0           ** ..  ',I7)
 
-      WRITE(NOUT,1019)  isbare  
-1019  FORMAT(2X,'Bare stack         (1: TRUE)         ** .... ',I7)
+      WRITE(NOUT,1020) istk 
+1020  FORMAT(2X,'Istk, Latest Img/Vol (Not stack: <1) ** ..  ',I7)
 
-      WRITE(NOUT,1020) imgnum 
-1020  FORMAT(2X,'Image in header    (-2: NOT A STACK) ** .... ',I7)
-
-      WRITE(NOUT,1021) nstack 
-1021  FORMAT(2X,'Max image in stack (-2: NOT A STACK) ** .... ',I7)
+      WRITE(NOUT,1021) nstk 
+1021  FORMAT(2X,'Nstk, Stack size (Not stack: <1)     ** ..  ',I7)
 
       WRITE(NOUT,*) ' '
 
@@ -418,7 +422,27 @@ C     WRITE OUT HEADER INFORMATION
 
       WRITE(NOUT,*) ' '
 
-      CLOSE(LUN)
+      !size map#version#27 ISPG  nz3&mz nstk_flg nz,nstk_flg
+
+      IEND  = lnblnkn(FILNAM)
+
+      ILEN1 = lnblnkn(CAXIS)
+      IF (ILEN1 == 0) CAXIS = '    '
+
+      ILEN2 = lnblnkn(EXTTYP)
+      IF (ILEN2 == 0) EXTTYP = '    '
+
+      WRITE(NOUT,7000) FILNAM(1:IEND), 
+     &                 IVERSION,  ISPG, NZ, MZ, 
+     &                 CAXIS,idsp,isbare,istk,nstk,EXTTYP,MAP
+
+7000  FORMAT(2X,' File: ',A,T50,
+     &    '  VERS:',I5,'  ISPG:',I3,'  NZ:',I6,'  MZ:',I6,
+     &    '  CAXIS: |',A4,'|   OLD:',I2,
+     &    '  BARE:',I1,' ISTK:',I6,'  NSTK:',I5,
+     &    '  EXT: |',A4,'|  MAP: |',A4,'|')
+ 
+9999  CLOSE(LUN)
 
       END
 

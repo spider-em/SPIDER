@@ -1,15 +1,16 @@
+
 C***********************************************************************
 C
-C OPENFIL_MRC.F ADAPTED FROM OPENFIL             MAY 2019 ArDean Leith
-C               BUGS FIXED lnblnkn               SEP 2025 ArDean Leith 
-C               DEBUG OUTPUT                     OCT 2025 ArDean Leith
-C               REMOVED  GETMRCIMGNUM            OCT 2025 ArDean Leith
+C OPENFIL_MRC F ADAPTED FROM OPENFIL            MAY 2019 ArDean Leith
+C               BUGS FIXED lnblnkn              SEP 2025 ArDean Leith 
+C               DEBUG OUTPUT                    OCT 2025 ArDean Leith
+C               REWRITTEN                       NOV 2025 ArDean Leith
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2025  Health Research Inc.,                         *
+C=* Copyright 1985-2025  Health Research InC ,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email:                                                             *
 C=*                                                                    *
@@ -27,118 +28,151 @@ C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
 C **********************************************************************
 C
-C  OPENFIL_MRC(LUNT,FILNAM,NLET,NX,NY,NZ, NSTK_FLG, ITYPE,DSPT,IRTFLG
+C  OPENFIL_MRC(LUNT,FILPAT, DSP,   NX,NY,NZ, NSTK, 
+C              ISTK,IS_BARE, ITYPE, IRTFLG)
 C
 C  PURPOSE:        OPEN NEW OR OLD MRC DATA FILE FOR RANDOM ACCESS(IO)
-C                  ONLY USED IN: OPFILEC!
 C
 C  PARAMETERS:
 C        LUNT      UNIT NUMBER FOR FILNAM                       (SENT)
-C        FILNAM    FULL FILE NAME                      
-C                    (STACKS HAVE @ EXCEPT FOR MRCS)            (SENT)
+C
+C        FILPAT    FULL FILE NAME (MAY HAVE @ OR *)                      C                    (STACKS HAVE @ EXCEPT FOR MRCS)            (SENT)
+C
+C        DSP       CHAR VAR:  O/R/N FOR OLD/READ/NEW            (SENT)
 C
 C        NX,NY,NZ  DIMENSIONS OF IMAGE/VOL               (SENT OR RET)
 C
-C        NSTK_FLG  STACK INDICATOR  (NOT SENT)                   (RET)
-C                  ON OUTPUT: 
-C                     -2 :  NOT A STACK   (NO @)
-C                     -1 :  AST FOR NSTK  (@* or *@)   
-C                     =0 :  BARE STACK (NO IMAGE SPECIFIED)
-C                     >0 :  CURRENT STACK SIZE
-C 
-C        ITYPE     SPIDER FILE TYPE SPECIFIER.                   (RET)
-C        DSPT      CHAR VAR. CONTAINING DISPOSITION             (SENT)
-C     
+C        NSTK      STACK SIZE.                           (SENT OR RET)
+C
+C        ISTK      STACK IMG/VOL NUMBER                  (SENT OR RET)
+C
+C        IS_BARE   BARE STACK.                           (SENT OR RET)   C
+C        ITYPE     SPIDER FILE TYPE SPECIFIER                    (RET)
+C
 C        IRTFLG    ERROR RETURN FLAG.                            (RET)
 C                    0 : NORMAL RETURN
 C                    1 : ERROR RETURN
 C  VARIABLES:
 C
-C  CALL TREE:   
-C     OPFILEC --> OPENFIL_MRC --> OPENFIL_O_MRC -->
-C                             --> OPENFIL_N_MRC -->
+C  OPENFIL_MRC  CALL TREE: 
+C         
+C    OPFILEC        OPFILES_MRC   COPYTOMRC
+C       |             |              |
+C    OPENFIL_MRC <----' <-------------
+C       |           
+C       |-> GET_FILNAM_INFO
+C       |
+C       |-> LUNNEWHED
+C       |                       
+C       IF (OLD OR NEW ISTK) 
+C              -> OPENFIL_O_MRC 
+C                    -> LOADHED_MRC        
+C                    -> LUNGET_MAP_MRC  
+C                    -> LUNSETFLIP_MRC 
+C                    -> LOADHED_MRC        
+C                    -> LUNGET_MAP_MRC  
+C                    -> LUNSETFLIP_MRC 
+C                    -> LUNSET_FILE_MRC    
+C                    -> LUNGET_MODE_MRC 
+C                    -> LUNGET_VIN_MRC 
+C                    -> LUNGET_LABELS_MRC  
+C                    -> LUNGET_MODSIZES_MRC 
+C                    -> LUNGET_2014_MRC
+C                    -> LUNSET_2014_MRC      (NSTK MAY INCREASE)
+C                    -> LUNGET_STATS_MRC
+C                IF (DSP/=R) -> LUNSET_STATSIMG_MRC 
+C
+C       IF (NEW)  
+C              -> OPENFIL_N_MRC 
+C                    -> OPSTREAMFIL     
+C                    -> LUNSET_FILE_MRC
+C                    -> LUNSET_MODSIZE_MRC 
+C                    -> LUNSET_VIN_MRC   
+C                    -> LUNSET_XXX_MRC 
+C                    -> LUNZERO_STATS_MRC
+C
+C       |-> LUNSET_STK_260_MRC
+C       |-> LUNSET_ISBARE_MRC
+C       |-> WHICH_HAND_MRC
+C        IF (DSP == R) 
+C                -> LUNSET_HEDPOS_MRC
+C        ELSE
+C                -> LUNSET_POS_MRC
+C                -> LUNWRTHED_MRC
+C       |-> LUNGET_TYPE_MRC
+C       |-> LUNSET_COMMON_MRC
+C       |-> LUNSAYINFO_MRC
+C
 C
 C23456789 123456789 123456789 123456789 123456789 123456789 123456789 12
 C--*********************************************************************
 
-      SUBROUTINE OPENFIL_MRC(LUNT,FILNAM,NLET,NX,NY,NZ, NSTK_FLG,
-     &                       ITYPE, DSPT,IRTFLG)
+      SUBROUTINE OPENFIL_MRC(LUNT,FILPAT,DSP, 
+     &                        NX,NY,NZ, 
+     &                        NSTK, ISTK, IS_BARE,
+     &                        ITYPE, IRTFLG)
 
       IMPLICIT NONE
 
       INCLUDE 'CMBLOCK.INC'
       INCLUDE 'CMLIMIT.INC'
 
-      CHARACTER(LEN=*)        :: FILNAM
-      INTEGER                 :: LUNT,NLET, NX,NY,NZ,NSTK_FLG,ITYPE
-      INTEGER                 :: IRTFLG
-      CHARACTER(LEN=1)        :: DSP,DSPT
+      CHARACTER(LEN=*)        :: FILPAT
+      CHARACTER(LEN=1)        :: DSP
+      INTEGER                 :: LUNT, NX,NY,NZ, NSTK, LIST_VAL 
+      LOGICAL                 :: IS_BARE
+      INTEGER                 :: ITYPE,IRTFLG
 
-      CHARACTER(LEN=MAXNAM)   :: FIL_NOAT,FIL_DIRS,FIL_BASE
-      CHARACTER(LEN=4)        :: FIL_EXT
-      INTEGER                 :: LOCAT, LOCAST, IMGNUM,NSTK_MAX
-      LOGICAL                 :: IS_MRC,IS_STK,ISBARESTK
+      LOGICAL                 :: IS_STK
  
-      INTEGER                 :: LUN,NE,I,MAXIM,ilent
-      CHARACTER(LEN=2)        :: DISP
+      INTEGER                 :: LUN,NE,I,ilent
       CHARACTER(LEN=4)        :: CAXIS
 
-      INTEGER                 :: MRCMODE
+      INTEGER                 :: MRCMODE,ISTK
       REAL                    :: SCALEX,SCALEY,SCALEZ
       LOGICAL                 :: ISBARE,EX,ISOPEN
-      INTEGER                 :: LUNOP,LENT,IMGNUMT,MZT
+      INTEGER                 :: LUNOP,LENT,ISTKT,MZT
       LOGICAL                 :: WANTUL
 
       LOGICAL                 :: ISDIGI   ! FUNCTIONS
       INTEGER                 :: lnblnkn  ! FUNCTIONS  
 
+      CHARACTER(LEN=MAXNAM)   :: FILNAM
+      CHARACTER(LEN=MAXNAM)   :: FIL_NOAT,FIL_DIRS,FIL_BASE,FIL_EXT 
+      LOGICAL                 :: IS_MRC, IS_MRCS
+
 
 C     WANT TO OPEN OLD OR NEW MRC FILE FOR STREAM ACCESS
            
       LUN = LUNT
-      DSP = DSPT      ! MAY BE ALTERED BELOW
-
 
 #if defined(SP_DBUGIO)
-      !ilent = len(filnam)
-      !write(3,*)' In openfil_mrc, ilent for filnam: ',ilent
-      !ilent = len(fil_noat)
-      !write(3,*)' In openfil_mrc, ilent for fil_noat: ',ilent
-      if (dsp == 'N') then
-         write(3,*)' In openfil_mrc, nx,ny,nz: ',nx,ny,nz
-         write(3,*)' '
-      endif
+       write(3,*)' In openfil_mrc, filpat:   ',trim(filpat)
+       write(3,*)' In openfil_mrc, list_val: ',list_val
+       write(3,*)' '
 #endif
+      CALL GET_FILNAM_INFO(FILPAT, LIST_VAL, 
+     &                     FIL_NOAT,FIL_DIRS,FIL_BASE,FIL_EXT,
+     &                     IS_MRC, IS_MRCS, IS_BARE, 
+     &                     ISTK,   IRTFLG)
 
-C     GET_FILNAM_NSTK RETURNS NSTK_FLG AND OTHER STACK INFO
-C                  -2 :  NOT A STACK   (NO @)
-C                  -1 :  AST FOR NSTK  (@* or *@)   
-C                   0 :  BARE STACK    (@ OR MRCS WITHOUT @)
-C                  >0 :  STACKED IMAGE NUMBER
-
-      CALL GET_FILNAM_NSTK(FILNAM,FIL_NOAT,FIL_DIRS,FIL_BASE,FIL_EXT,
-     &                     IS_MRC,LOCAST, IS_STK ,NSTK_FLG, IRTFLG)
+      FILNAM = FIL_NOAT
 
 #if defined(SP_DBUGIO)
-      write(3,*)' In openfil_mrc, get_filnam_nstk returned ----------'
-      write(3,*)' In openfil_mrc; got is_mrc,locast: ',is_mrc,locast
-      write(3,*)' In openfil_mrc; got is_stk,nstk_flg: ',is_stk,nstk_flg
-      ilent = len(fil_noat)
-      write(3,*)' In openfil_mrc; got fil_noat: ',fil_noat(:ilent)
-      write(3,*) '  '
+       write(3,*)' In openfil_mrc, filnam:   ',trim(filnam)
+      !write(3,*)' In openfil_mrc, nx,ny,nz: ',nx,ny,nz
+      !write(3,*)' In openfil_mrc, lun:      ',lun
+       write(3,*)' In openfil_mrc, istk:     ',istk
+       write(3,*)' In openfil_mrc, list_val: ',list_val
+       write(3,*)' '
 #endif
-      
+     
 C     CREATE A MRC HEADER OBJECT FOR THIS LUN (CAN REUSE EXISTING)
       CALL LUNNEWHED_MRC(LUN,IRTFLG)
       IF (IRTFLG .NE. 0) RETURN
           
-C     PUT ISBARE IN STATIC (OFF-FILE) AREA OF THE HEADER OBJECT
-      ISBARE = (NSTK_FLG == 0)
-      CALL LUNSETISBARE_MRC(LUN,ISBARE,IRTFLG)
-      IF (IRTFLG .NE. 0) RETURN
-
       EX = .FALSE.
-      IF (DSP == 'N') THEN
+      IF (DSP == 'N'  .AND. FILNAM(1:1) .NE. '_') THEN
 C        MAY BE OPENING A NEW IMAGE IN AN EXISTING STACK?
 C        SEE IF THE MRC STACK ALREADY EXISTS
          INQUIRE(FILE=FILNAM,EXIST=EX,OPENED=ISOPEN,NUMBER=LUNOP)
@@ -153,48 +187,43 @@ C        SEE IF THE MRC STACK ALREADY EXISTS
          ENDIF
       ENDIF
 
-      IF (DSP == 'O' .OR. (DSP == 'N' .AND. EX)) THEN  !-----------
-C        OPEN AN ALREADY EXISTING MRC FILE, RETURNS NSTK_FLG
+
+
+
+      IF (DSP == 'O' .OR. DSP == 'R' .OR. 
+     &   (DSP == 'N' .AND. EX)) THEN  ! ---------------------- OLD
+C        OPEN AN ALREADY EXISTING MRC FILE, RETURNS: ISTK, NSTK_OLD
 
 #if defined (SP_DBUGIO)
          write(3,*)' In openfil_mrc; B4 openfil_o_mrc -------'
+         write(3,*)' In openfil_mrc, filnam:   ', trim(filnam)
+         write(3,*)' In openfil_mrc, dsp:      ', dsp
+         write(3,*)' In openfil_mrc, istk:     ', istk
+         write(3,*)
 #endif
 
-         IMGNUM = 0    ! NOT USED
-C        NSTK_FLG      IS NOT NEEDED BY OR SENT TO: OPENFIL_O_MRC ???
-         CALL OPENFIL_O_MRC(LUN,FIL_NOAT,NLET,DSP,IMGNUM,
-     &                     NX,NY,NZ, NSTK_FLG,IRTFLG)
-
+         CALL OPENFIL_O_MRC(LUN,FILNAM,DSP,
+     &                     NX,NY,NZ,
+     &                     NSTK,ISTK, IS_BARE, ITYPE,IRTFLG)
+ 
 #if defined (SP_DBUGIO)
-        !ilent = lnblnkn(fil_noat)
-        !write(3,*)' Back openfil_mrc; fil_noat: ',fil_noat(:ilent)
-         write(3,*)' Back in openfil_mrc; imgnum, nz:', 
-     &                                    imgnum, nz
-         write(3,*)' Back in openfil_mrc; nstk_flg,irtflg:', 
-     &                                    nstk_flg,irtflg
-         write(3,*)' Back in openfil_mrc; Calling lungetstk_mrc '
+         write(3,*)'  '
+         write(3,*)' Back in openfil_mrc; filnam:      ', trim(filnam)
+         write(3,*)' Back in openfil_mrc; nz:          ', nz
+         write(3,*)' Back in openfil_mrc; nstk,istk:   ', nstk,istk 
+         write(3,*)' Back in openfil_mrc; is_bare:     ', is_bare
          write(3,*)'  '
 #endif
 
-         CALL LUNGETSTK_MRC(LUN,MZT,NSTK_MAX,IMGNUMT,IRTFLG)
-    
+         NSTK = MAX(ISTK,NSTK)   ! USED BELOW
+        
 #if defined (SP_DBUGIO)
-         write(3,*)' Back in openfil_mrc; mzt,imgnum: ',mzt,imgnum
-         write(3,*)' Back in openfil_mrc; nstk_max,irtflg: ',
-     &                                    nstk_max,irtflg
-#endif
-
-         IF (NSTK_MAX > 0) THEN
-            NSTK_MAX = MAX(IMGNUM,NSTK_MAX)   ! USED BELOW
-         ENDIF
-
-#if defined (SP_DBUGIO)
-         write(3,*)' In openfil_mrc; nstk_max: ', nstk_max
-         write(3,*)' '
+         write(3,*)' In openfil_mrc; nstk_new: ', nstk 
+         write(3,*)' ' 
 #endif
 
 
-      ELSEIF (DSP == 'N') THEN  !---------------------------------
+      ELSEIF (DSP == 'N') THEN  !----------------------------- NEW
 C        OPEN AND INITIALIZE A NEW MRC FILE AND IMAGE
 
          SCALEX   = 1.0    ! ?????????
@@ -202,76 +231,59 @@ C        OPEN AND INITIALIZE A NEW MRC FILE AND IMAGE
          SCALEZ   = 1.0
          MRCMODE  = 2      ! USE 32 BIT REALS ALWAYS FOR NOW???
 
-         IMGNUM   = 1
-         IF (NSTK_FLG > 0) IMGNUM = NSTK_FLG
-         NSTK_MAX = IMGNUM
+         NSTK     = ISTK
+         IF (IS_BARE .AND. NSTK < 1) THEN
+             NSTK = 1
+             ISTK = 1
+         ENDIF
 
-
-#if defined (SP_DBUGIO)
-         ilent = lnblnkn(fil_noat)
-         write(3,*)' In openfil_mrc, B4 openfil_n_mrc; ilent: ',ilent 
-
-         write(3,*)' In openfil_mrc, B4 openfil_n_mrc; fil_noat: ',
-     &                                           fil_noat(:ilent)
-
-         write(3,*)' In openfil_mrc, B4 openfil_n_mrc; nz,nstk_flg: ',
-     &                                                 nz,nstk_flg
-#endif
-
-         CALL OPENFIL_N_MRC(LUN,FIL_NOAT,
+         CALL OPENFIL_N_MRC(LUN,FILNAM,DSP,
      &                      MRCMODE,
-     &                      NX,NY,NZ, NSTK_FLG,
+     &                      NX,NY,NZ, 
+     &                      NSTK,ISTK, IS_BARE, ITYPE,
      &                      SCALEX,SCALEY,SCALEZ,IRTFLG)
 
-         NSTK_MAX = MAX(IMGNUM,NSTK_MAX)
-
-#if defined (SP_DBUGIO)
-         write(3,*) '      '
-         write(3,*)' In openfil_mrc; nstk_flg:      ',nstk_flg 
-         write(3,*)' In openfil_mrc; irtflg,imgnum: ',irtflg,imgnum 
-         write(3,*)' In openfil_mrc; nstk_max       ', nstk_max 
-#endif
-
-      ENDIF     !--------------------------------------------
-
-      IF (IRTFLG .NE. 0) RETURN
-
-
-
-
+      ENDIF     !------------------------------------------- OLD/NEW
 
 #if defined (SP_DBUGIO)
       write(3,*) '     '
-      ilent = lnblnkn(filnam)
-      write(3,*)' In openfil_mrc, filnam:           ',filnam(:ilent)
-      write(3,*)' In openfil_mrc; nstk_flg:         ',nstk_flg 
-      write(3,*)' In openfil_mrc; irtflg,imgnum:    ',imgnum 
-      write(3,*)' In openfil_mrc; nstk_max          ', nstk_max 
+      write(3,*)' In openfil_mrc; irtflg:    ', irtflg
+      write(3,*)' In openfil_mrc, filnam:    ', trim(filnam)
+      write(3,*)' In openfil_mrc; is_bare:   ', is_bare 
+      write(3,*)' In openfil_mrc; istk,nstk: ', istk,nstk 
 #endif
 
-C     SET IMGNUM AND NSTK_MAX IN STATIC AREA OF FILE HEADER
-      CALL LUNSETSTK_MRC(LUN,IMGNUM,NSTK_MAX,IRTFLG)
+      IF (IRTFLG .NE. 0) RETURN
+
+
+C     SET ISTK AND NSTK IN STATIC AREA OF FILE HEADER
+      CALL LUNSET_STK_260_MRC(LUN,ISTK,NSTK,IRTFLG)
+      IF (IRTFLG .NE. 0) RETURN
+
+      CALL LUNSET_ISBARE_MRC(LUN,ISBARE,IRTFLG)
+      IF (IRTFLG .NE. 0) RETURN
+
+
+C     SET AXIS ORIGIN LOCATION & VOLUME HANDEDNESS BEFORE SETPOS
+      CALL WHICH_HAND_MRC(LUN,FILNAM,CAXIS,IRTFLG)
       IF (IRTFLG .NE. 0) RETURN
      
 #if defined (SP_DBUGIO)
-      write(3,*)' In openfil_mrc;  After lunsetstk_mrc ' 
+      write(3,*)  '  '
+      write(3,*)' In openfil_mrc; After lunsetstk_260  ' 
+      write(3,*)' In openfil_mrc; After which_hand_mrc '
+      write(3,*)' In openfil_mrc, filnam:   ',trim(filnam)
+      write(3,*)' In openfil_mrc, caxis:    ',caxis
+      write(3,*)' In openfil_mrc, nstk:     ',nstk
+      write(3,*)' In openfil_mrc; dsp:                ',dsp 
+      write(3,*)  ' '
 #endif
 
-C     IF (FCHAR(1:2) .NE.  '31' .AND. FCHAR(4:5) .NE.  'HE') THEN
-C     IF (FCHAR(1:2) .NE.  '31') THEN
-C     IF (FCHAR(4:5) .NE.  'HE') THEN
-C
-      IF ((FCHAR(1:2) == '31' .AND. FCHAR(4:5) == 'HE') .OR.
-     &    (FCHAR(4:9) == 'FROM M')) THEN 
+      IF (DSP == 'R') THEN    ! NON-WRITEABLE EXISTING FILE --------
 
 C        DO NOT WRITE HEADER INTO FILE, JUST SET READ/WRITE POSITION
          CALL LUNSET_HEDPOS_MRC(LUN,IRTFLG)
       
-#if defined (SP_DBUGIO)
-         write(3,*)  ' '
-         write(3,*)' In openfil_mrc; After lunset_hedpos_mrc  '
-         write(3,*) '  '
-#endif
          IF (IRTFLG .NE. 0) THEN
             LENT = lnblnkn(FILNAM)
             WRITE(NOUT,99) IRTFLG,LUN,FILNAM(:LENT)
@@ -279,28 +291,23 @@ C        DO NOT WRITE HEADER INTO FILE, JUST SET READ/WRITE POSITION
             RETURN
          ENDIF
 
-      ELSE
 
-C        SET AXIS ORIGIN LOCATION & VOLUME HANDEDNESS BEFORE SETPOS
-         CALL WHICH_HAND_MRC(LUN,FIL_NOAT,CAXIS,IRTFLG)
-         IF (IRTFLG .NE. 0) RETURN
+      ELSE                 ! WRITEABLE EXISTING OR NEW FILE --------
+
 
 #if defined (SP_DBUGIO)
-         write(3,*)  '  '
-         write(3,*)' In openfil_mrc; After which_hand_mrc '
-         ilent = lnblnkn(fil_noat)
-         write(3,*)' In openfil_mrc, fil_noat: ',fil_noat(:ilent)
-         write(3,*)' In openfil_mrc, caxis:    ',caxis
+      write(3,*)  '  '
+      write(3,*)' In openfil_mrc; calling lunset_pos_mrc ' 
+      write(3,*)' In openfil_mrc, istk,nstk:   ', istk,nstk
+      write(3,*)  ' '
 #endif
 
 C        SET READ/WRITE FILE OFFSETS FOR THIS IMAGE IN LUN COMMON 
-         CALL LUNSETPOS_MRC(LUN,NSTK_FLG,IRTFLG)
+         CALL LUNSET_POS_MRC(LUN,ISTK,IRTFLG)
          IF (IRTFLG .NE. 0) RETURN
 
 #if defined (SP_DBUGIO)
-         write(3,*)  ' '
-         write(3,*)' In openfil_mrc; After lunsetpos_mrc  '
-         write(3,*) '  '
+         write(3,*)' In openfil_mrc; calling lunwrthed: '
 #endif
 
 C        WRITE HEADER INTO FILE TO PRESERVE ANY ALTERED VALUES
@@ -311,30 +318,28 @@ C        WRITE HEADER INTO FILE TO PRESERVE ANY ALTERED VALUES
             WRITE(NOUT,99) IRTFLG,LUN,FILNAM(:LENT)
             RETURN
          ENDIF
-      ENDIF
 
-  
 #if defined (SP_DBUGIO)
-      write(3,*)' In openfil_mrc; After lunwrthed_mrc ' 
-      write(3,*)' ' 
+         write(3,*)' In openfil_mrc; After lunwrthed_mrc '
+         write(3,*)' ' 
 #endif
 
+      ENDIF              ! BOTH OLD AND NEW FILES ------------------
+
+
 C     GET IMAGE TYPE (2D/3D or FOURIER) (RETURNED TO CALLER)
-      CALL LUNGETTYPE_MRC(LUN,ITYPE,IRTFLG)
+      CALL LUNGET_TYPE_MRC(LUN,ITYPE,IRTFLG)
       IF (IRTFLG .NE. 0) RETURN
 
 C     PUT COMMON VALUES INTO COMMON AREA (NOT NEEDED IN FUTURE?)
-      CALL LUNSETCOMMON_MRC(LUN,IRTFLG)
+      CALL LUNSET_COMMON_MRC(LUN,IRTFLG)
       IF (IRTFLG .NE. 0) RETURN
 
 C     WRITE FILE OPENING INFO TO RESULTS/TERMINAL
 
-      !!!!!!!!!!!NSTK_FLG = IMGNUM
-
 #if defined (SP_DBUGIO)
-      write(3,*)' In openfil_mrc; imgnum,nstk_flg: ',
-     &                            imgnum,nstk_flg 
-      write(3,*)' In openfil_mrc; Call lunsayinfo_mrc; lun: ',lun
+      write(3,*)' In openfil_mrc; istk,nstk: ', istk,nstk 
+      write(3,*)' In openfil_mrc; Calling lunsayinfo_mrc '
       write(3,*)' '
 #endif
 
@@ -345,11 +350,12 @@ C     SET FLAG FOR NORMAL RETURN
 
 #if defined (SP_DBUGIO)
        write(3,*)'    '
-       write(3,*)' LEAVING openfil_mrc; imgnum,nstk_flg : ',
-     &                                  imgnum,nstk_flg  
+       write(3,*)' Leaving openfil_mrc; istk,nstk : ', istk,nstk 
+       write(3,*)'    '
 #endif
       
       END
+
 
 
 C     ------------------------- ISMRCFILE  ----------------------------

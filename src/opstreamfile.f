@@ -61,9 +61,13 @@ C***********************************************************************
         CHARACTER(LEN=7)  :: STATVAR
 
         INTEGER           :: ICOMM,MYPID,MPIERR,LENP,NCHAR
-        INTEGER           :: LNBLNKN
         INTEGER           :: LENE,IRTFLGT,LUN,IDUM,LENOPEN,LENOPENFILE
         INTEGER           :: LENOPN,LENREC
+
+        INTEGER           :: lnblnkn  ! FUNCTIONS  
+        integer :: my_iostat
+        character (256) :: my_iomsg
+
 
         CALL SET_MPI(ICOMM,MYPID,MPIERR) ! SETS ICOMM AND MYPID
 
@@ -151,7 +155,7 @@ C          CHECK FOR FILE EXISTENCE
 
 C       OPEN FILE FOR STREAM ACCESS
 
-#if defined(SP_DBUG)
+#if defined(SP_DBUGIO_NEVER)
         write(3,*)' In opstreamfile; Disp,Statvar,Formvar: ', 
      &                               disp,' :',statvar,' :',formvar
 
@@ -160,7 +164,6 @@ C       OPEN FILE FOR STREAM ACCESS
 #endif
 
 #if defined(SP_BACK)
- 
         !CALL BACKTRACE
 #endif
 
@@ -199,10 +202,23 @@ C                FORCE OUTPUT TO BIG_ENDIAN
               IF (CONVERT_TO_LITTLE) THEN
 C               FORCE OUTPUT TO LITTLE_ENDIAN
 
+#if defined(SP_DBUGIO_NEVER)
+      write(3,*)' In opstreamfile; convert  little:', filnam(1:nchar)
+      write(3,*)' In opstreamfile; statvar:', statvar
+      write(3,*)' In opstreamfile; formvar:', formvar
+#endif
+
                 OPEN(UNIT=LUN,FILE=FILNAM(1:NCHAR),STATUS=STATVAR,
      &             CONVERT='LITTLE_ENDIAN',
      &             FORM=FORMVAR, ACCESS='STREAM', 
-     &             IOSTAT=IRTFLGT)
+     &             IOSTAT=IRTFLGT,iomsg=my_iomsg)
+
+#if defined(SP_DBUGIO)
+                 if ( irtflgt .ne. 0) then
+                    write (3,*) 'Open failed iostat: ', irtflg, 
+     &                             ' iomsg = '//trim(my_iomsg)
+                  endif
+#endif
 
               ELSEIF (CONVERT_TO_BIG) THEN
 C                FORCE OUTPUT TO BIG_ENDIAN
@@ -240,7 +256,7 @@ C                FORCE OUTPUT TO BIG_ENDIAN
  
         IRTFLG = 0
 
-#if defined(SP_DBUG)
+#if defined(SP_DBUGIO)
         write(3,*)' Leaving opstreamfile; irtflg: ',irtflg
         write(3,*)
 #endif

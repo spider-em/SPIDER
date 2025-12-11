@@ -14,7 +14,7 @@ C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
 C=* Copyright 1985-2010  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
+C=* Email: spider@health.ny.gov                                        *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -30,7 +30,8 @@ C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
 C **********************************************************************
 C
-C     FILELIST(GETTEMPLATE,LUNDOC,FILPAT,NLETP,ILIST,NMAX,NUM,PROMPT,IRTFLG)
+C
+C FILELIST(GETTEMPLATE,LUNDOC,FILPAT,NLETP,ILIST,NMAX,NUM,PROMPT,IRTFLG)
 C
 C     PURPOSE:      INPUTS FILE NAME TEMPLATE AND NUMBERS FOR FILE
 C                   NAME LOOP.  USUALLY USED WITH FILGET.FOR
@@ -55,23 +56,23 @@ C--*********************************************************************
      &                      ILIST,NMAX,NUM,PROMPT,IRTFLG)
 
         IMPLICIT NONE
-	INCLUDE 'CMBLOCK.INC'
+        INCLUDE 'CMBLOCK.INC'
 
         LOGICAL           :: GETTEMPLATE
-	INTEGER           :: LUNDOC
-   	CHARACTER(LEN=*)  :: FILPAT
-	INTEGER           :: NLETP
+        INTEGER           :: LUNDOC
+        CHARACTER(LEN=*)  :: FILPAT
+        INTEGER           :: NLETP
 
 C       ILIST IS DIMENSIONED AS (*) HERE SO NMAX=0 IS ACCEPTED
 C**	INTEGER*4     ILIST(NMAX)      ! ACTUAL SIZE
-	INTEGER           :: ILIST(*)
-	INTEGER           :: NMAX,NUM
-   	CHARACTER(LEN=*)  :: PROMPT
-	INTEGER           :: IRTFLG
+        INTEGER           :: ILIST(*)
+        INTEGER           :: NMAX,NUM
+        CHARACTER(LEN=*)  :: PROMPT
+        INTEGER           :: IRTFLG
 
-	CHARACTER(LEN=1)  :: NULL
+        CHARACTER(LEN=1)  :: NULL
         LOGICAL           :: GOTAST
-	INTEGER           :: NSEL
+        INTEGER           :: NSEL
 
         NULL = CHAR(0)
 
@@ -105,22 +106,22 @@ C             FILL THE NUMBERS ARRAY ALSO
         END
 
 C       ********************* FILELISTA *******************************
-
+      
         SUBROUTINE FILELISTA(FILPAT,NLETP,PROMPT,LUNXM,NSEL,IRTFLG)
 
         IMPLICIT NONE
-	INCLUDE 'CMBLOCK.INC'
+        INCLUDE 'CMBLOCK.INC'
         INCLUDE 'CMLIMIT.INC'
 
-   	CHARACTER(LEN=*)  :: FILPAT   ! NAME PATTERN           (RET)
+        CHARACTER(LEN=*)  :: FILPAT   ! NAME PATTERN           (RET)
         INTEGER           :: NLETP    ! CHAR IN PATTERN        (RET)
-   	CHARACTER(LEN=*)  :: PROMPT   ! OPTIONAL PROMPT        (SENT)
+        CHARACTER(LEN=*)  :: PROMPT   ! OPTIONAL PROMPT        (SENT)
         INTEGER           :: LUNXM    ! LUN FOR SELFILE        (SENT)
         INTEGER           :: NSEL     ! # FILES IN SELFILE     (RET)
         INTEGER           :: IRTFLG   ! ERROR FLAG             (RET)
 
         CHARACTER(LEN=81)     :: PROMPT2
-	CHARACTER(LEN=1)      :: NULL
+        CHARACTER(LEN=1)      :: NULL
         INTEGER               :: lnblnkn    
         INTEGER               :: NLET,LOCAST,LOCAT
         CHARACTER(LEN=MAXNAM) :: FILNAM  
@@ -166,18 +167,18 @@ C       ********************* FILELISTB *******************************
 
         SUBROUTINE FILELISTB(LUNDOCT,ILIST,NMAX,NUM,PROMPT,IRTFLG)
 
-	INCLUDE 'CMBLOCK.INC'
-	INCLUDE 'CMLIMIT.INC'
+        INCLUDE 'CMBLOCK.INC'
+        INCLUDE 'CMLIMIT.INC'
 
-   	CHARACTER(LEN=*) ::      PROMPT
+        CHARACTER(LEN=*) ::      PROMPT
         CHARACTER(LEN=MAXNAM) :: FILLIST,PROMPT2
-	CHARACTER(LEN=1) ::      NULL
+        CHARACTER(LEN=1) ::      NULL
         LOGICAL      ::          ISCHAR,ISFILENAME,NEWFILE
         REAL, DIMENSION(2) ::    PLIST
 
 C       ILIST IS DIMENSIONED AS (1) HERE SO NMAX=0 IS ACCEPTED
 C**	INTEGER*4     ILIST(NMAX)      ! ACTUAL SIZE
-	INTEGER, DIMENSION(*) :: ILIST
+        INTEGER, DIMENSION(*) :: ILIST
 
         NULL = CHAR(0)
         
@@ -237,7 +238,7 @@ CCC           CALL LUNDOCREDSLI(LUNDOC,ILIST,NMAX,.TRUE.,1,IGO,IEND,NUM,IRTFLG)
         ELSE
 
 C          TILDE SIGN AT BEGINNING OF PROMPT OVERRIDES INPUT IN RDPRAI
-           PROMPT2 = '~' // FILLIST
+           PROMPT2 = '~' // FILLIST(1:MAXNAM-1)
 
 C          SET NUM TO NMAX FOR NUMBER OF FILES ALLOWED
            NUM = NMAX
@@ -254,19 +255,19 @@ C       ********************* FILELISTC *******************************
 
         SUBROUTINE FILELISTC(LUNDOCT,ILIST,NMAX,NUM,PROMPT,IRTFLG)
 
-	INCLUDE 'CMBLOCK.INC'
-	INCLUDE 'CMLIMIT.INC'
+        INCLUDE 'CMBLOCK.INC'
+        INCLUDE 'CMLIMIT.INC'
 
-   	CHARACTER(LEN=*) ::      PROMPT
+        CHARACTER(LEN=*) ::      PROMPT
         CHARACTER(LEN=MAXNAM) :: FILLIST,PROMPT2
-	CHARACTER(LEN=1) ::      NULL
+        CHARACTER(LEN=1) ::      NULL
         LOGICAL      ::          ISCHAR,ISFILENAME,NEWFILE
         REAL, DIMENSION(2) ::    PLIST
 
 C       ILIST IS DIMENSIONED AS (1) HERE SO NMAX=0 IS ACCEPTED
 C**	INTEGER*4     ILIST(NMAX)      ! ACTUAL SIZE
-	INTEGER, DIMENSION(*) :: ILIST
-	INTEGER, ALLOCATABLE,DIMENSION(:) :: ILISTT
+        INTEGER, DIMENSION(*) :: ILIST
+        INTEGER, ALLOCATABLE,DIMENSION(:) :: ILISTT
 
         NULL = CHAR(0)
         
@@ -319,7 +320,7 @@ C             OPEN DOC FILE
 C             RETRIEVE REGISTER 1 VALUES FROM SPECIFIED KEYS 
               IGOY  = ILIST(1)
               IENDY = ILIST(2)
-CCC           CALL LUNDOCREDSLI(LUNDOC,ILIST,NMAX,.TRUE.,1,IGO,IEND,NUM,IRTFLG)
+CCC           CALL LUNDOCREDSLI(LUNDOC,ILIST,NMAX,.TRUE.,1, CCC                                          IGO,IEND,NUM,IRTFLG)
               CALL LUNDOCREDSLC(LUNDOC,.TRUE.,ILIST,DUM,1,NMAX,
      &              .TRUE.,.FALSE.,1,1, IGOY,IENDY, NUM,MAXGOTY,IRTFLG)
            ENDIF
@@ -327,7 +328,7 @@ CCC           CALL LUNDOCREDSLI(LUNDOC,ILIST,NMAX,.TRUE.,1,IGO,IEND,NUM,IRTFLG)
         ELSE
 
 C          TILDE SIGN AT BEGINNING OF PROMPT OVERRIDES INPUT IN RDPRAI
-           PROMPT2 = '~' // FILLIST
+           PROMPT2 = '~' // FILLIST(1:MAXNAM-1)
 
 C          SET NUM TO NMAX FOR NUMBER OF FILES ALLOWED
            NUM = NMAX

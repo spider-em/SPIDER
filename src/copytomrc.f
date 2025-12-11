@@ -22,6 +22,7 @@ C              CREATES LITTLE ENDED FILES ONLY     JAN 18 ArDean Leith
 C              GETLAB PARAMETERS                   NOV 19 ArDean Leith
 C              REWRITE                             DEC 19 ArDean Leith
 C              FIXED STACKS                        OCT 25 ArDean Leith
+C              REWRITE                             DEC 25 ArDean Leith
 C
 C **********************************************************************
 C=*                                                                    *
@@ -45,60 +46,86 @@ C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
 C **********************************************************************
 C 
-C COPYTOMRC    (LUNSPI,LUNMRC,NX,NY,NZ)
-C COPYTOMRC_STK(LUNSPI,LUNMRC,NX,NY,NZ)    !!! NEVER USED
-C                                                                    
+C COPYTOMRC(LUNSPI,LUNMRC,LUNDOC,LUNXM1,LUNXM2,IRTFLG)
+C
 C PURPOSE: COPY FROM SPIDER TO MRC FILE FORMAT
 C
 C NOTES: DATA IN MRC FILE
-C        MODE   TYPES OF PIXELS IN IMAGE
+C        MODE   TYPES OF PIXELS 
 C               0 : INTEGER*1 (UNSIGNED BYTES) 
 C               1 : INTEGER*2 (SIGNED) 
 C               2 : REALS
 C               6 : INTEGER*2 (UNSIGNED)
 C
 C  CALL TREE:
-C  IF ('CP....')   
-C     |
+C
+C  IF ('CP....')   		
+C      |
 C  COPY1
-C     |
-C  IF ('CP TO MRC')    SPIDER FILE(S) TO MRC IMAGE(S) OR VOLUME(S)
-C     |
+C      |
+C  IF ('CP TO MRC')    SPIDER FILE(S) TO MRC IMG(S) / VOL(S)
+C      |
 C  COPYTOMRC
-C     |
-C     OPEN FIRST SPIDER INPUT FILE
-C     OPFILES(0,LUNSPI,LUNDOC,LUNXM1,  
-C     &       .TRUE.,FILNAM1,NLET1, 'E',
-C     &       IFORM1,NX1,NY1,NZ1,NSTACK1,
-C     &       'SPIDER INPUT FILE NAME OR TEMPLATE (e.g. SPI_STK@*)~~9'
-C     &       TRUE., ILIST1,NILMAX, 
-C     &       NOT_USED,NGOT1,IMG1, IRTFLG) 
-C     |
-C     FILERD (FILNAM2,NLET2,NULL,  
-C     &       'MRC OUTPUT FILE NAME OR TEMPLATE (e.g. MRC_STK@*.mrc)~'
-C     &       IRTFLG)
-C     OPEN FIRST MRC OUTPUT FILE 
-C     OPFILES(LUNSPI,LUNMRC,LUNDOC,LUNXM2, 
-C     &       .FALSE.,FILNAM2,NLET2,DISP,
-C     &       IFORM1,NX1,NY1,NZ1,NSTACK2,
-C     &       FILNAM2,
-C     &       .TRUE., ILIST2,NILMAX, 
-C     &       NOT_USED,NGOT2,IMG2, IRTFLG) 
-C       |
+C      |
+C      |->OPFILES          OPEN FIRST SPIDER INPUT FILE
+C           |-> FILERD
+C      |         ` ->  ECHONAME
+C      |-> FILELIST
+C      |-> LUNGETIS_MRC      
+C      |-> LUNGETISBARE
+C      |-> FILERD
+
+C      |-> OPENFIL_MRC     OPEN FIRST MRC OUTPUT FILE
+C           |-> GET_FILNAM_INFO
+C           |-> LUNNEWHED
+C           |-> OPENFIL_N_MRC 
+C               |-> OPSTREAMFIL     
+C               |-> LUNSET_FILE_MRC
+C               |-> LUNSET_MODE_MRC 
+C               |-> LUNSET_SIZE_MRC 
+C               |-> LUNSET_VIN_MRC   
+C               |-> LUNSET_XXX_MRC 
+C               |-> LUNZERO_STATS_MRC
+C           |-> LUNSET_STK_260
+C           |-> LUNSET_ISBARE_MRC
+C           |-> WHICH_HAND_MRC --> LUNSET_HAND_MRC
+C           |-> LUNSET_POS_MRC
+C           |-> LUNWRTHED_MRC
+C           |-> LUNGET_TYPE_MRC
+C           |-> LUNSET_COMMON_MRC
+C           |-> LUNSAYINFO_MRC
+C      |-> LUNSET_MODE_MRC      NEEDED HERE, SINCE NOT SENT TO OPENFIL_N
+C      |-> LUNSET_HAND_MRC      NEEDED HERE, SINCE NOT SENT TO OPENFIL_N
+C      |-> LUNSET_PIXSIZES_MRC  NEEDED HERE or somewhere above
+C      |-> LUNWRT_HED_MRC       NEEDED HERE  SINCE NOT SENT TO OPENFIL_N
+C      |-> LUNSET_POS_MRC       ?? NEEDED HERE?
+
+C THESE CALLS ONLY USED IN:
+
+C  copytomrc.f:      CALL LUNSET_MODE_MRC originally set there
+C  openfil_n_mrc.f:  CALL LUNSET_MODE_MRC may change, needed here also
+
+C  copytomrc.f:      CALL LUNSET_HAND_MRC
+C  copyfrommrc.f:    CALL LUNSET_HAND_MRC
+C  lunsetmrchdr.f:   CALL LUNSET_HAND_MRC  2x
+
+C  copytomrc.f:      CALL LUNSET_PIXSIZES_MRC   NOT IN SPIDER
+C  lunsethdr.f:      CALL LUNSET_PIXSIZ_MRC   IN SPIDER!!  DIFFERENT??
+
+C  copytomrc.f:      CALL LUNSET_POS_MRC
+C  copyfrommrc.f:    CALL LUNSET_POS_MRC 
+C  openfil_mrc.f:    CALL LUNSET_POS_MRC
+C  opfiles_mrc.f:    CALL LUNSET_POS_MRC  2x
+
 C     LOOP
-C       REDLIN
+C        REDLIN
 C        |
-C       WRTLIN
+C        WRTLIN
 C        |
-C       OPEN NEXT SPIDER INPUT & MRC OUTPUT FILES
-C        |
-C       NEXTFILES(NINDX1,NINDX2,  ILIST1,ILIST2,   
-C               .FALSE., LUNXM1,LUNXM2,
-C               NGOT1,NGOT2,    NSTACK1,NSTACK2,  
-C               LUNSPI,LUNSPI,LUNMRC, FILNAM1,FILNAM2,
-C               IMG1,IMG2, IRTFLG)
+C        NEXTFILES    OPEN NEXT SPI INPUT & MRC OUTPUT FILE
 C        |
 C     END LOOP
+C
 C23456789012345678901234567890123456789012345678901234567890123456789012
 C***********************************************************************
 
@@ -119,7 +146,7 @@ C***********************************************************************
       INTEGER                  :: LUNSPI,LUNMRC,LUNDOC,LUNXM1,LUNXM2
       INTEGER                  :: IRTFLG
 
-      INTEGER *2               :: I2MAX,I2VAL
+      INTEGER *2               :: I2VAL
       INTEGER *4               :: I4VAL
       INTEGER                  :: NC,MRCMODE,IGO,IEND,IDUM
       INTEGER                  :: NINDX1,NINDX2
@@ -131,15 +158,18 @@ C***********************************************************************
       CHARACTER (LEN=MAXNAM)   :: PROMPT 
       CHARACTER (LEN=MAXNAM)   :: FILNAM1,FILNAM2,MRCFILE
       CHARACTER (LEN=2*MAXNAM) :: COMMAN
-      LOGICAL                  :: VERBOSE_SAVE,IS_MRC,IS_BARE
+      LOGICAL                  :: VERBOSE_SAVE,IS_MRC,ASKNAM
+      LOGICAL                  :: IS_BARE_2,IS_BARE_1
       CHARACTER (LEN=1)        :: NULL = CHAR(0)
-      CHARACTER (LEN=1)        :: DISP
+      CHARACTER (LEN=1)        :: DSP
+
       CHARACTER (LEN=4)        :: CAXIS,CSTR
       INTEGER                  :: ICOMM,MYPID,MPIERR
-      INTEGER                  :: IFORM1,NX1,NY1,NZ1,NSTACK1,NSTACK2
-      INTEGER                  :: NGOT1,NGOT2,IMG1,IMG2,NILMAX,IVAL
-      INTEGER                  :: MAXIM1,MAXIM2,NLET1,NLET2
-      INTEGER                  :: LENT,NOT_USED,IRECIN
+      INTEGER                  :: IFORM1,NX1,NY1,NZ1,NSTK1,NSTK2
+      INTEGER                  :: NLIST1,NLIST2, INUM1,INUM2, NILMAX
+      INTEGER                  :: MAXIM1, NLET1,NLET2, NREC
+      INTEGER                  :: LENT,NOT_USED,IRECIN, ITYPE
+      INTEGER                  :: NSTK,ISTK1,ISTK2, irep
 
       INTEGER                  :: lnblnkn      ! FUNCTION
         
@@ -147,37 +177,38 @@ C***********************************************************************
 
       VERBOSE_SAVE = VERBOSE           ! SAVE CURRENT VERBOSITY
 
-      NILMAX  = NIMAX             ! FROM CMLIMIT
-      ALLOCATE(ILIST1(NIMAX),
-     &         ILIST2(NIMAX),
+      NILMAX  = NIMAX                  ! FROM CMLIMIT
+      ALLOCATE(ILIST1(NILMAX),
+     &         ILIST2(NILMAX),
      &         STAT=IRTFLG)
       IF (IRTFLG .NE. 0) THEN
          CALL ERRT(46,'COPYTOMRC; ILIST...',2*NIMAX)
          RETURN
       ENDIF
-
-C     OPEN FIRST INPUT FILE, DISP = 'E' DOES NOT STOP ON ERROR
+ 
+C     OPEN FIRST SPIDER FILE, DSP = 'E' DOES NOT STOP ON ERROR
       MAXIM1 = 0
-      IMG1   = 0
+      INUM1  = 0
       PROMPT =
-     &     'SPIDER INPUT FILE NAME OR TEMPLATE (e.g. SPI_STK@*)~~9'
+     &     'SPIDER INPUT FILE NAME OR TEMPLATE (e.g. SPI_STK@*)~'
       CALL OPFILES(0,LUNSPI,LUNDOC,LUNXM1,  
-     &               .TRUE.,FILNAM1,NLET1, 'O',
-     &               IFORM1,NX1,NY1,NZ1,NSTACK1,
-     &               PROMPT,
-     &              .TRUE., ILIST1,NILMAX, 
-     &               NOT_USED,NGOT1,IMG1, IRTFLG) 
+     &             .TRUE.,FILNAM1,NLET1, 'O',
+     &              IFORM1,NX1,NY1,NZ1,NSTK1,
+     &              PROMPT,
+     &             .FALSE., ILIST1,NILMAX, 
+     &              NOT_USED,NLIST1,INUM1, IRTFLG) 
 
 
 #if defined(SP_DBUGIO)
       write(3,*)' ------- RETURNED TO: COPYTOMRC --------'
       write(3,*)' In copytomrc; nx1,ny1,nz1: ',nx1,ny1,nz1
+      write(3,*)' In copytomrc; nstk1:       ',nstk1
+      write(3,*)' In copytomrc; inum1:       ',inum1
       write(3,*)' '
-
 #endif
 
       CALL LUNGETIS_MRC(LUNSPI,IS_MRC,IRTFLG)      
-      CALL LUNGETISBARE(LUNSPI,IS_BARE,IRTFLG)
+      CALL LUNGETISBARE(LUNSPI,IS_BARE_1,IRTFLG)
 
       IF (IS_MRC) THEN
          CALL ERRT(101,'OPERATION DOES NOT READ MRC FILES',IDUM)
@@ -185,9 +216,8 @@ C     OPEN FIRST INPUT FILE, DISP = 'E' DOES NOT STOP ON ERROR
       ENDIF
 
 #if defined(SP_DBUGIO)
-      !write(3,'(A,4i6)')' In nstack1; ngot1,img1:',nstack1,ngot1,img1
+      !write(3,'(A,4i6)')' In nstk1; NLIST1,INUM1:',nstk1,NLIST1,INUM1
 #endif
-
 
 C     FIND HEADER VALUES FOR THE MRC FILE
 
@@ -248,7 +278,7 @@ C        GET SECOND TOKEN (CHAR. STRING DELIMITED BY A ", ( ) ] -")
          ENDIF
          CAXIS(4:4) = 'L'
 
-         IF     (CSTR(IGO:IGO) == '0') THEN
+         if (CSTR(IGO:IGO) == '0') THEN
             CAXIS(4:4) = 'R' 
          ENDIF 
       
@@ -258,7 +288,7 @@ C        GET SECOND TOKEN (CHAR. STRING DELIMITED BY A ", ( ) ] -")
          ENDIF
       ENDIF
 
-C     FIND HEADER VALUES FOR THE MRC FILE
+C     FIND HEADER VALUES FOR THE NEW MRC FILE
 
       IF (MRCMODE == 2 .AND. MAXIM1 < 0) THEN
 C        32 BIT FLOATING POINT  IMAGE OR VOLUME (NOT WHOLE STACK)
@@ -348,54 +378,69 @@ C          NOTHING IN SPIDER HEADER?
       IF (IRTFLG .NE. 0) RETURN
 
       WRITE(NOUT,*) ' ' 
-      NSTACK2 =  1   ! UNUSED, NOT SENT
-      DISP    = 'N'  ! NEW OUTPUT FILE        
+      IF (LUNMRC <= 0 .OR. LUNMRC > 100) THEN
+         CALL ERRT(102,'PGM. ERROR: LUN MUST BE 1...100',LUNMRC)
+         RETURN
+      ENDIF
 
-C     OPEN FIRST OUTPUT FILE 
-      IMG2   = IMG1         ! DEFAULT
+C     OPEN FIRST MRC OUTPUT FILE 
+      MAXIM1 = 0
+      INUM2  = 0
+      DSP    = 'N'      ! BUT MAY ALREADY EXIST IF A STACKED FILE
+      ITYPE  =  0       ! UNUSED BY OPENFIL_MRC  ON INPUT
+      NSTK2  =  1       ! UNUSED BY OPENFIL_MRC  ON INPUT
+
       PROMPT =
-     &    'MRC OUTPUT FILE NAME OR TEMPLATE (e.g. *@file_stk.mrc)~'
+     &    'MRC OUTPUT FILE NAME OR TEMPLATE (e.g. *@file_stk.mrc)~~9'
 
-      CALL OPFILES(LUNSPI,LUNMRC,LUNDOC,LUNXM2, 
-     &              .TRUE.,FILNAM2,NLET2,DISP,
-     &              IFORM1,NX1,NY1,NZ1,NSTACK2,
-     &              PROMPT,
-     &              .FALSE., ILIST2,NILMAX, 
-     &              NOT_USED,NGOT2,IMG2, IRTFLG) 
+      CALL OPFILES(0,LUNMRC,LUNDOC,LUNXM2,  
+     &              .TRUE.,FILNAM2,NLET2, 'N',
+     &               ITYPE, NX1,NY1,NZ1, NSTK2,
+     &               PROMPT,
+     &              .TRUE., ILIST2,NILMAX, 
+     &               NOT_USED,NLIST2,INUM2, IRTFLG) 
 
+      CALL LUNGETIS_MRC(LUNMRC,IS_MRC,IRTFLG)      
+      CALL LUNGETISBARE(LUNMRC,IS_BARE_2,IRTFLG)
+
+      IF (.NOT. IS_MRC) THEN
+         CALL ERRT(101,'OPERATION ONLY CREATES MRC FILES',IDUM)
+         GOTO 999
+      ENDIF
+    
 #if defined (SP_DBUGIO)
-      write(3,*)' In copytomrc; nx1,ny1,nz1:    ', nx1,ny1,nz1
-      write(3,*)' In copytomrc; nstack2,nilmax: ', nstack2,nilmax
-      write(3,*)' In copytomrc; ngot2,img2:     ', ngot2,img2
+      write(3,*)' In copytomrc; nx1,ny1,nz1:  ', nx1,ny1,nz1
+      write(3,*)' in copytomrc; nstk2,inum2:  ', nstk2,inum2
+      write(3,*)' in copytomrc; is_bare_2:  ', is_bare_2
       write(3,*)' '
 #endif
 
-      CALL LUNSETMODE_MRC(LUNMRC,MRCMODE,IRTFLG)
-
-      CALL LUNSETHAND_MRC(LUNMRC,CAXIS,IRTFLG)
-
-      CALL LUNSETPIXSIZES_MRC(LUNMRC,SCALEX,SCALEY,SCALEZ,IRTFLG)
-
+      CALL LUNSET_PIXSIZES_MRC(LUNMRC,SCALEX,SCALEY,SCALEZ,IRTFLG)
+      CALL LUNSET_HAND_MRC(LUNMRC,CAXIS,IRTFLG)
+      CALL LUNSET_MODE_MRC(LUNMRC,MRCMODE,IRTFLG)
       CALL LUNWRTHED_MRC(LUNMRC,IRTFLG)
-
-      CALL LUNSETPOS_MRC(LUNMRC,IMG1,IRTFLG)
-
-C     SETS LUNMRCNBYT(LUN) = NBYT    ! COMMENTED OUT??
+      CALL LUNSET_POS_MRC(LUNMRC,INUM2,IRTFLG)
 
 C     DO NOT REPORT FILE INFO IF WHOLE STACK
-      IF (NSTACK1 > 0 .AND. NSTACK2 >= 0) VERBOSE = .FALSE. 
+      IF (NSTK1 > 0 .AND. NSTK2 >= 0) VERBOSE = .FALSE. 
 
       NINDX1 = 1
       NINDX2 = 1
+
+      NREC   = NY1*NZ1  ! NUMBER OF RECORDS IN IMG/VOL
+
+      irep = 0
+
       DO                ! LOOP OVER ALL IMAGES or IMAGE STACKS
+         irep = irep + 1
 
 C        COPY THE DESIRED NUMBER OF DATA RECORDS FROM EACH FILE
-         DO IRECIN = 1,NY1*NZ1   ! NUMBER OF RECORDS COPIED
+         DO IRECIN = 1,NREC   ! NUMBER OF RECORDS COPIED
 
 C           READ EACH ROW OF SPIDER INPUT FILE  (READS INPUT DATA)
             CALL REDLIN(LUNSPI,BUF,NX1,IRECIN)
 
-C           WRITE EACH ROW OF SPIDER INPUT FILE 
+C           WRITE EACH ROW FROM SPIDER INPUT FILE 
             IF (MRCMODE == 2) THEN
 C              32 BIT FLOATING POINT            (WRITES OUTPUT DATA)
                CALL WRTLIN_MRC(LUNMRC,BUF,NX1,IRECIN,MYPID,IERR)
@@ -429,22 +474,29 @@ C              16 BIT UNSIGNED INTEGER            (WRITES OUTPUT DATA)
 C        OPEN NEXT SET OF I/O FILES, UPDATES NINDX1 & NINDX2
 
 #if defined (SP_DBUGIO)
+         write(3,*)' In copytomrc; irep:   ', irep
+         write(3,*)' In copytomrc; records:', nrec
          write(3,*)' In copytomrc; calling nextfiles:',nindx1,nindx2
-         write(3,*) ' ==================  next set ===================='
+         write(3,*) ' ==================  Next set ===================='
+         
+         !if (irep > 1) exit
+         exit
+
 #endif
-                    
+ 
+                   
          CALL NEXTFILES(NINDX1,NINDX2,  ILIST1,ILIST2, 
      &                  .FALSE., LUNXM1,LUNXM2,
-     &                  NGOT1,NGOT2,    NSTACK1,NSTACK2,  
+     &                  NLIST1,NLIST2,    NSTK1,NSTK2,  
      &                  LUNSPI,LUNSPI,LUNMRC, FILNAM1,FILNAM2,
-     &                  IMG1,IMG2, IRTFLG)
+     &                  INUM1,INUM2, IRTFLG)
 
 #if defined (SP_DBUGIO)
-         write(3,*)' After nextfiles; ngot1,nstack1,img1: ',
-     &                                ngot1,nstack1,img1
-         write(3,*)' After nextfiles; ngot2,nstack2,img2: ',
-     &                                ngot2,nstack2,img2
-         write(3,*)' After nextfiles; irtflg:             ', irtflg
+         write(3,*)' After nextfiles; NLIST1,nstk1,inum1: ',
+     &                                NLIST1,nstk1,inum1
+         write(3,*)' After nextfiles; NLIST2,nstk2,inum2: ',
+     &                                NLIST2,nstk2,inum2
+         write(3,*)' After nextfiles; irtflg:           ', irtflg
 #endif
 
          IF (IRTFLG .NE. 0) EXIT      ! ERROR / END OF INPUT STACK
