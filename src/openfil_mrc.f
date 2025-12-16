@@ -56,9 +56,9 @@ C  VARIABLES:
 C
 C  OPENFIL_MRC  CALL TREE: 
 C         
-C    OPFILEC        OPFILES_MRC   COPYTOMRC
-C       |             |              |
-C    OPENFIL_MRC <----' <-------------
+C    OPFILEC        OPFILES_MRC  <--- COPYTOMRC
+C       |             |    
+C    OPENFIL_MRC <----'  
 C       |           
 C       |-> GET_FILNAM_INFO
 C       |
@@ -135,7 +135,9 @@ C--*********************************************************************
       LOGICAL                 :: WANTUL
 
       LOGICAL                 :: ISDIGI   ! FUNCTIONS
-      INTEGER                 :: lnblnkn  ! FUNCTIONS  
+      INTEGER                 :: lnblnkn  ! FUNCTIONS 
+ 
+      integer                 :: nchar  
 
       CHARACTER(LEN=MAXNAM)   :: FILNAM
       CHARACTER(LEN=MAXNAM)   :: FIL_NOAT,FIL_DIRS,FIL_BASE,FIL_EXT 
@@ -151,6 +153,8 @@ C     WANT TO OPEN OLD OR NEW MRC FILE FOR STREAM ACCESS
        write(3,*)' In openfil_mrc, list_val: ',list_val
        write(3,*)' '
 #endif
+
+      LIST_VAL = ISTK
       CALL GET_FILNAM_INFO(FILPAT, LIST_VAL, 
      &                     FIL_NOAT,FIL_DIRS,FIL_BASE,FIL_EXT,
      &                     IS_MRC, IS_MRCS, IS_BARE, 
@@ -159,13 +163,22 @@ C     WANT TO OPEN OLD OR NEW MRC FILE FOR STREAM ACCESS
       FILNAM = FIL_NOAT
 
 #if defined(SP_DBUGIO)
-       write(3,*)' In openfil_mrc, filnam:   ',trim(filnam)
+       write(3,*)' In openfil_mrc, fipat:     ',trim(filpat)
+       write(3,*)' In openfil_mrc, fil_base:  ',trim(fil_base)
+       write(3,*)' In openfil_mrc, fil_noat:  ',trim(fil_noat)
       !write(3,*)' In openfil_mrc, nx,ny,nz: ',nx,ny,nz
       !write(3,*)' In openfil_mrc, lun:      ',lun
        write(3,*)' In openfil_mrc, istk:     ',istk
        write(3,*)' In openfil_mrc, list_val: ',list_val
+
+       nchar = lnblnkn(fil_noat)
+       write(3,*)' In openfil_mrc, lnblnkn(fil_noat): ', nchar
+       nchar = lnblnkn(filnam)
+       write(3,*)' In openfil_mrc, lnblnkn(filnam): ', nchar
+
        write(3,*)' '
 #endif
+
      
 C     CREATE A MRC HEADER OBJECT FOR THIS LUN (CAN REUSE EXISTING)
       CALL LUNNEWHED_MRC(LUN,IRTFLG)
@@ -190,13 +203,17 @@ C        SEE IF THE MRC STACK ALREADY EXISTS
 
 
 
-      IF (DSP == 'O' .OR. DSP == 'R' .OR. 
+      IF (DSP == 'O' .OR. DSP == 'R' .OR. DSP == 'E' .OR. 
      &   (DSP == 'N' .AND. EX)) THEN  ! ---------------------- OLD
 C        OPEN AN ALREADY EXISTING MRC FILE, RETURNS: ISTK, NSTK_OLD
 
 #if defined (SP_DBUGIO)
          write(3,*)' In openfil_mrc; B4 openfil_o_mrc -------'
          write(3,*)' In openfil_mrc, filnam:   ', trim(filnam)
+
+         nchar = lnblnkn(filnam)
+         write(3,*)' In openfil_mrc, lnblnkn(filnam): ', nchar
+
          write(3,*)' In openfil_mrc, dsp:      ', dsp
          write(3,*)' In openfil_mrc, istk:     ', istk
          write(3,*)
@@ -255,14 +272,12 @@ C        OPEN AND INITIALIZE A NEW MRC FILE AND IMAGE
 
       IF (IRTFLG .NE. 0) RETURN
 
-
 C     SET ISTK AND NSTK IN STATIC AREA OF FILE HEADER
       CALL LUNSET_STK_260_MRC(LUN,ISTK,NSTK,IRTFLG)
       IF (IRTFLG .NE. 0) RETURN
 
       CALL LUNSET_ISBARE_MRC(LUN,ISBARE,IRTFLG)
       IF (IRTFLG .NE. 0) RETURN
-
 
 C     SET AXIS ORIGIN LOCATION & VOLUME HANDEDNESS BEFORE SETPOS
       CALL WHICH_HAND_MRC(LUN,FILNAM,CAXIS,IRTFLG)
@@ -275,7 +290,7 @@ C     SET AXIS ORIGIN LOCATION & VOLUME HANDEDNESS BEFORE SETPOS
       write(3,*)' In openfil_mrc, filnam:   ',trim(filnam)
       write(3,*)' In openfil_mrc, caxis:    ',caxis
       write(3,*)' In openfil_mrc, nstk:     ',nstk
-      write(3,*)' In openfil_mrc; dsp:                ',dsp 
+      write(3,*)' In openfil_mrc; dsp:      ',dsp 
       write(3,*)  ' '
 #endif
 
@@ -291,36 +306,50 @@ C        DO NOT WRITE HEADER INTO FILE, JUST SET READ/WRITE POSITION
             RETURN
          ENDIF
 
-
       ELSE                 ! WRITEABLE EXISTING OR NEW FILE --------
 
 
 #if defined (SP_DBUGIO)
       write(3,*)  '  '
       write(3,*)' In openfil_mrc; calling lunset_pos_mrc ' 
-      write(3,*)' In openfil_mrc, istk,nstk:   ', istk,nstk
+      write(3,*)' In openfil_mrc, istk,nstk: ', istk,nstk
       write(3,*)  ' '
 #endif
 
 C        SET READ/WRITE FILE OFFSETS FOR THIS IMAGE IN LUN COMMON 
          CALL LUNSET_POS_MRC(LUN,ISTK,IRTFLG)
+
+#if defined (SP_DBUGIO)
+         write(3,*)' In openfil_mrc; dsp:    ',dsp 
+         write(3,*)' In openfil_mrc; irtflg: ', irtflg
+#endif
          IF (IRTFLG .NE. 0) RETURN
+
 
 #if defined (SP_DBUGIO)
          write(3,*)' In openfil_mrc; calling lunwrthed: '
 #endif
 
+
 C        WRITE HEADER INTO FILE TO PRESERVE ANY ALTERED VALUES
          CALL LUNWRTHED_MRC(LUN,IRTFLG)
 
+#if defined (SP_DBUGIO)
+         write(3,*)' In openfil_mrc; After lunwrthed_mrc '
+         write(3,*)' In openfil_mrc; irtflg: ', irtflg
+         write(3,*)' ' 
+#endif
+
          IF (IRTFLG .NE. 0) THEN
             LENT = lnblnkn(FILNAM)
-            WRITE(NOUT,99) IRTFLG,LUN,FILNAM(:LENT)
+            WRITE(NOUT,99) IRTFLG,LUN,TRIM(FILNAM)
+!99         FORMAT( '  *** ERROR(',I4,') ON UNIT: ',I3,' FILE: ',A)
             RETURN
          ENDIF
 
 #if defined (SP_DBUGIO)
          write(3,*)' In openfil_mrc; After lunwrthed_mrc '
+         write(3,*)' In openfil_mrc; irtflg:    ', irtflg
          write(3,*)' ' 
 #endif
 
@@ -351,6 +380,7 @@ C     SET FLAG FOR NORMAL RETURN
 #if defined (SP_DBUGIO)
        write(3,*)'    '
        write(3,*)' Leaving openfil_mrc; istk,nstk : ', istk,nstk 
+       write(3,*)' Leaving openfil_mrc, filpat:   ',trim(filpat)
        write(3,*)'    '
 #endif
       

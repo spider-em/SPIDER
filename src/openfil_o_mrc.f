@@ -1,12 +1,13 @@
 
 
 C++*********************************************************************
-
+C
 C OPENFIL_O_MRC.F   ADAPTED FROM OPENFIL         MAY 2019 ArDean Leith
 C                   NLABEL BUG                   SEP 2025 ArDean Leith
 C                   DEBUG OUTPUT ADDED           SEP 2025 ArDean Leith
 C                   IRTFLG AND NLABL CHANGED     SEP 2025 ArDean Leith
-C.                  REWRITE.                     NOV 2025 ArDean Leith
+C                   REWRITE                      NOV 2025 ArDean Leith
+C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
@@ -148,7 +149,7 @@ C     SET READ FOR NATIVE LITTLE ENDIANNESS
       ENDED     = 'L'
       DISP(2:2) = ENDED
 
-#if defined (SP_DBUGIO)
+#if defined(SP_DBUGIO)
       write(3,*)' In openfil_o_mrc; istk:   ', istk
       write(3,*)' In openfil_o_mrc; filnam: ', trim(filnam)
       write(3,*)' In openfil_o_mrc; disp:   ', disp
@@ -160,14 +161,14 @@ C     READ EXISTING HEADER FROM FILE & LOAD IN HEADER OBJECT
        
       CALL LOADHED_MRC(LUN,FILNAM,DISP,IRTFLG)
 
-#if defined (SP_DBUGIO)
+#if defined(SP_DBUGIO)
       write(3,*)' In openfil_o_mrc; After calling loadhed_mrc 111  '
 #endif
 
 C     DETERMINE CURRENT FILE ENDED-NESS AS READ IN
       CALL LUNGET_MAP_MRC(LUN,MAPC,MAPR,MAPS,IRTFLG)
 
-#if defined (SP_DBUGIO)
+#if defined(SP_DBUGIO)
       write(3,*)' In openfil_o_mrc; mapc,mapr,maps: ',mapc,mapr,maps
 #endif
 
@@ -248,7 +249,7 @@ C     GET FILE  MODE
 C     GET FILE PARAMETERS:    IVERSION,ISPG,NSYMBT,NLABL
       CALL LUNGET_VIN_MRC(LUN,IVERSION,ISPG,NSYMBT,NLABL, IRTFLG)
 
-#if defined (SP_DBUGIO)
+#if defined(SP_DBUGIO)
       write(3,*)' In openfil_o_mrc; iversion,ispg: ', iversion,ispg
       write(3,*)' In openfil_o_mrc; nsymbt, nlabl: ', nsymbt,nlabl
 #endif
@@ -270,7 +271,7 @@ C     (SHOULD HANDLE .mrcs FILES OK)
       CALL LUNGET_2014_MRC(LUN, NX,NY,NZ3, MZ, NZ,NSTK ,IRTFLG)
       IF (IRTFLG .NE. 0) RETURN        
 
-#if defined (SP_DBUGIO)
+#if defined(SP_DBUGIO)
       write(3,*)' In openfil_o_mrc  88 ; nx,ny:  ', nx,ny
       write(3,*)' In openfil_o_mrc; 88 ; ispg:   ', ispg 
       write(3,*)' In openfil_o_mrc  88 ; nz,mz:  ', nz,mz
@@ -296,7 +297,7 @@ C     UPDATE MZ AND NSTK IN MRC HEADER OBJECT FOR NEW STACKED IMAGE
 
          NSTK = ISTK    ! EXTENDING STACK WITH A NEW IMAGE/VOLUME
 
-#if defined (SP_DBUGIO)
+#if defined(SP_DBUGIO)
          write(3,*)' In openfil_o_mrc 2 Set|   nz,nstk: ', nz,nstk
          write(3,*)' In openfil_o_mrc 2; Calling lunset_2014 ----'
 #endif
@@ -317,7 +318,7 @@ C     SET SPIDER IFORM IN COMMON CMBLOCK
       IFORM = 2
       IF (NZ > 1) IFORM = 3 
 
-#if defined (SP_DBUGIO)
+#if defined(SP_DBUGIO)
       write(3,*)'  '
       write(3,*)' In openfil_o_mrc set| lun,istk,nstk: ',lun,istk,nstk
       write(3,*)' In openfil_o_mrc Calling lunset_stk_260 ----'
@@ -334,7 +335,7 @@ C.    WITH LUNSETCOMMON
       CALL LUNGET_STATS_MRC(LUN,IMAMIT,FMINT,FMAXT,AVT,SIGT,IRTFLG)
       IF (IRTFLG .NE. 0) RETURN        
  
-#if defined (SP_DBUGIO)
+#if defined(SP_DBUGIO)
       write(3,*)' In openfil_o_mrc 4  Got imamit,fmaxt: ',imamit,fmaxt 
 #endif
 
@@ -343,7 +344,7 @@ C.    WITH LUNSETCOMMON
 
 C        SPECIAL RETURN FOR 'MRC HED' AND UNWRITABLE MRC FILES 
 
-#if defined (SP_DBUGIO)
+#if defined(SP_DBUGIO)
          write(3,*)' In openfil_o_mrc 5; istk: ',istk
          write(3,*)' In openfil_o_mrc 5; Calling lunset_statsimg '
          write(3,*)'  '
@@ -354,7 +355,7 @@ C        SET STAT'S IMAGE NUMBER IN IMAGE HEADER
          IF (IRTFLG .NE. 0) RETURN        
       ENDIF     
 
-#if defined (SP_DBUGIO)
+#if defined(SP_DBUGIO)
       write(3,*)' From openfil_o_mrc; nx,ny,nz: ', nx,ny,nz 
       write(3,*)' From openfil_o_mrc; mx,my,mz: ', nx,ny,nz 
       write(3,*)' From openfil_o_mrc; iform:    ', iform 
@@ -390,25 +391,26 @@ C     DISP  IS INPUT FOR OPSTREAMFILE USE
       INTEGER               :: NE,I
       CHARACTER(LEN=1)      :: NULL = CHAR(0)
 
-C     INCLUSION FOR OPTIONAL MPI INITIALIZATION.  
       INTEGER               :: MYPID = -1
+C     INCLUSION FOR OPTIONAL MPI INITIALIZATION.  
 #include "MPI_INIT.INC"
 
 C     WANT TO OPEN EXISTING MRC FILE FOR STREAM ACCESS
         
-#if defined (SP_DBUGIO)
-      write(3,*)' Opening old file:    ',filnam
-      write(3,*)' Opening old file; disp: ',disp  
-      write(3,*)' Opening old file; lun: ',lun  
+#if defined(SP_DBUGIO)
+      write(3,*) ' In loadhed_mrc; disp:    ',disp  
+      write(3,*) ' In loadhed_mrc; lun:     ',lun  
+      write(3,*) ' In loadhed_mrc; opening: ',trim(filnam)
 #endif
+
       IRTFLG  = 0
       !IRTFLG = 999   ! DO NOT ECHO OPENING INFO  (sept 2025 al)
-      CALL OPSTREAMFILE(.FALSE.,TRIM(FILNAM),NULL,LUN,
+      CALL OPSTREAMFILE(.FALSE.,FILNAM,NULL,LUN,
      &                  'UNFORMATTED',DISP,' ',.TRUE.,IRTFLG)
 
-#if defined (SP_DBUGIO)  
-      write(3,*)' Opened old file; disp,irtflg: ',disp,irtflg  
-      write(3,*)' Opened old file:              ',trim(filnam)
+#if defined(SP_DBUGIO)  
+      write(3,*)' In loadhed_mrc; irtflg:  ',irtflg  
+      write(3,*)' In loadhed_mrc; opened: ',trim(filnam)
 #endif
       IF (IRTFLG .NE. 0) RETURN
 

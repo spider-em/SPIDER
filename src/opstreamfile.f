@@ -4,6 +4,7 @@ C
 C OPSTREAMFILE  STREAM IO                        FEB 2013 ArDean Leith
 C               CONVERT LITTLE ENDED OPTION      JAN 2018 ArDean Leith
 C               ADDED DEBUG OUTPUT               OCT 2025 ArDean Leith
+C               ADDED DEBUG OUTPUT               DEC 2025 ArDean Leith
 C
 C **********************************************************************
 C=*                                                                    *
@@ -45,7 +46,8 @@ C***********************************************************************
         IMPLICIT NONE
 
         INCLUDE 'CMBLOCK.INC'
-       
+        INCLUDE 'CMLIMIT.INC'  
+     
         LOGICAL           :: ASKNAME
         CHARACTER(LEN=*)  :: FILNAM,EXTENT
         INTEGER           :: LUNT
@@ -54,7 +56,11 @@ C***********************************************************************
         LOGICAL           :: CALLERRT
         INTEGER           :: IRTFLG
 
-        LOGICAL           :: EX,CONVERT_TO_LITTLE,CONVERT_TO_BIG
+        CHARACTER(LEN=MAXNAM)  :: exten4
+        CHARACTER(LEN=MAXNAM)  :: trfilnam
+        CHARACTER(LEN=1)       :: c22,c23
+
+        LOGICAL           :: EX, CONVERT_TO_LITTLE,CONVERT_TO_BIG
         LOGICAL           :: SAYIT
         CHARACTER(LEN=96) :: PROMPT
         CHARACTER(LEN=80) :: EXTEN
@@ -65,8 +71,9 @@ C***********************************************************************
         INTEGER           :: LENOPN,LENREC
 
         INTEGER           :: lnblnkn  ! FUNCTIONS  
-        integer :: my_iostat
-        character (256) :: my_iomsg
+
+        INTEGER           :: MY_IOSTAT
+        CHARACTER(256)    :: MY_IOMSG
 
 
         CALL SET_MPI(ICOMM,MYPID,MPIERR) ! SETS ICOMM AND MYPID
@@ -81,6 +88,11 @@ C       DO NOT WANT TO RETURN EXTEN
 
 C       INPUT FILE NAME (IF EXTEN EXISTS IT IS ADDED)
 
+#if defined(SP_DBUGIO)
+        write(3,*)' In opstreamfile 0; askname,lunt: ', askname,lunt
+        write(3,*)' In opstreamfile 0; filnam:  |', trim(filnam),'|'
+#endif
+
         IF (ASKNAME) THEN
 C          SET PROMPT TO ALLOW FILE EXTENSION ON INPUT
            LENP   = LEN(PROMPTT)
@@ -89,16 +101,27 @@ C          SET PROMPT TO ALLOW FILE EXTENSION ON INPUT
 
            CALL FILERD(FILNAM,NCHAR,EXTEN,PROMPT(1:LENP+2),IRTFLG)
            IF (IRTFLG .NE. 0) RETURN
+
         ELSE
 C          MAY WANT TO ADD EXTENT TO FILNAM
            NCHAR = LNBLNKN(FILNAM)
            LENE  = LNBLNKN(EXTENT)
+
+#if defined(SP_DBUGIO)
+        write(3,*)' In opstreamfile 1; nchar:  ', nchar
+        write(3,*)' In opstreamfile 1; lene:   ', lene
+        write(3,*)' In opstreamfile 1; exten:  |', trim(exten), '|'
+        write(3,*)' In opstreamfile 1; filnam: |', trim(filnam),'|'
+#endif
+
            IF (LENE > 0) THEN
 C             ADD THE EXTENSION THAT IS SENT TO FILNAM
               CALL FILNAMANDEXT(FILNAM,EXTEN,FILNAM,NCHAR,
      &                          .TRUE.,IRTFLGT)
+              NCHAR = LNBLNKN(FILNAM)
            ENDIF
         ENDIF
+
 
         LUN = ABS(LUNT)
         IF ((LUN <= 0 .OR. LUN > 100) .AND.
@@ -126,26 +149,41 @@ C       SET STATUS FOR OPEN
      &     STATVAR = 'REPLACE'
 
         IF (DISP(1:1) == 'S') STATVAR = 'SCRATCH'
+        
+#if defined(SP_DBUGIO)
+        write(3,*)' In opstreamfile 3; nchar:   ', nchar
+        write(3,*)' In opstreamfile 3; tr filnam:|', trim(filnam),'|' 
+        write(3,*)' In opstreamfile 3; exten:    |', trim(exten),'|'
+        write(3,*)' In opstreamfile 3; disp,mypid :', disp,mypid
+        write(3,*)' In opstreamfile 3; to_big,to_little:',
+     &                      convert_to_big,',',convert_to_little
+        write(3,*)' '
+#endif
 
 
         IF (DISP(1:1) == 'O') THEN
+
 C          CHECK FOR FILE EXISTENCE 
            IF (MYPID <= 0) THEN
               INQUIRE (FILE=FILNAM(1:NCHAR),EXIST=EX,IOSTAT=IRTFLGT) 
            ENDIF
 
 #ifdef USE_MPI
-           CALL BCAST_MPI('OPSTREAMFILE','EX',           EX,1,'L',ICOMM)
-           CALL BCAST_MPI('OPSTREAMFILE','IRTFLGT', IRTFLGT,1,'I',ICOMM)
+           CALL BCAST_MPI('OPSTREAMFILE','EX',          EX,1,'L',ICOMM)
+           CALL BCAST_MPI('OPSTREAMFILE','IRTFLGT',IRTFLGT,1,'I',ICOMM)
 #endif
 
            IF (IRTFLGT .NE. 0) THEN
               WRITE(NOUT,*) '*** INQUIRY ERROR'
-              IF (CALLERRT)  CALL ERRT(4,'OPSTREAMFILE',IDUM)
+              WRITE (NOUT,*)' ERROR IOSTAT: ', IRTFLGT, 
+     &                      ' IOMSG: '//TRIM(MY_IOMSG)
+              IF (CALLERRT) CALL ERRT(4,'OPSTREAMFILE',IDUM)
               RETURN
         
            ELSEIF (.NOT. EX) THEN
-              WRITE(NOUT,*) '*** FILE DOES NOT EXIST: ',FILNAM(1:NCHAR)
+
+              WRITE(NOUT,*)'*** FILE DOES NOT EXIST: ',TRIM(FILNAM)
+              !WRITE (NOUT,*)' ERROR IOMSG: '// TRIM(MY_IOMSG)
               IF (CALLERRT)  CALL ERRT(100,'OPSTREAMFILE',IDUM)
               RETURN
 
@@ -155,17 +193,6 @@ C          CHECK FOR FILE EXISTENCE
 
 C       OPEN FILE FOR STREAM ACCESS
 
-#if defined(SP_DBUGIO_NEVER)
-        write(3,*)' In opstreamfile; Disp,Statvar,Formvar: ', 
-     &                               disp,' :',statvar,' :',formvar
-
-        write(3,*)' In opstreamfile; convert_to_big,convert_to_little:',
-     &                           convert_to_big,' :',convert_to_little
-#endif
-
-#if defined(SP_BACK)
-        !CALL BACKTRACE
-#endif
 
 C       COMPUTE RECL UNITS (DIFFERS WITH OS & COMPILER FLAGS)
         LENOPN = LENOPENFILE(LENREC)
@@ -180,7 +207,7 @@ C                FORCE OUTPUT TO LITTLE_ENDIAN
                  OPEN(UNIT=LUN,STATUS=STATVAR,
      &             CONVERT='LITTLE_ENDIAN',
      &             FORM=FORMVAR, ACCESS='STREAM',
-     &             IOSTAT=IRTFLGT)
+     &             IOSTAT=IRTFLGT,IOMSG=MY_IOMSG)
 
               ELSEIF (CONVERT_TO_BIG) THEN
 C                FORCE OUTPUT TO BIG_ENDIAN
@@ -188,13 +215,13 @@ C                FORCE OUTPUT TO BIG_ENDIAN
                  OPEN(UNIT=LUN,STATUS=STATVAR,
      &             CONVERT='BIG_ENDIAN',
      &             FORM=FORMVAR, ACCESS='STREAM',
-     &             IOSTAT=IRTFLGT)
+     &             IOSTAT=IRTFLGT,IOMSG=MY_IOMSG)
 
               ELSE
 
                  OPEN(UNIT=LUN,STATUS=STATVAR,
      &             FORM=FORMVAR, ACCESS='STREAM',
-     &             IOSTAT=IRTFLGT)
+     &             IOSTAT=IRTFLGT,IOMSG=MY_IOMSG)
               ENDIF
 
            ELSE    ! ----------- NOT A SCRATCH FILE -------------
@@ -202,23 +229,10 @@ C                FORCE OUTPUT TO BIG_ENDIAN
               IF (CONVERT_TO_LITTLE) THEN
 C               FORCE OUTPUT TO LITTLE_ENDIAN
 
-#if defined(SP_DBUGIO_NEVER)
-      write(3,*)' In opstreamfile; convert  little:', filnam(1:nchar)
-      write(3,*)' In opstreamfile; statvar:', statvar
-      write(3,*)' In opstreamfile; formvar:', formvar
-#endif
-
                 OPEN(UNIT=LUN,FILE=FILNAM(1:NCHAR),STATUS=STATVAR,
      &             CONVERT='LITTLE_ENDIAN',
      &             FORM=FORMVAR, ACCESS='STREAM', 
-     &             IOSTAT=IRTFLGT,iomsg=my_iomsg)
-
-#if defined(SP_DBUGIO)
-                 if ( irtflgt .ne. 0) then
-                    write (3,*) 'Open failed iostat: ', irtflg, 
-     &                             ' iomsg = '//trim(my_iomsg)
-                  endif
-#endif
+     &             IOSTAT=IRTFLGT,IOMSG=MY_IOMSG)
 
               ELSEIF (CONVERT_TO_BIG) THEN
 C                FORCE OUTPUT TO BIG_ENDIAN
@@ -226,15 +240,14 @@ C                FORCE OUTPUT TO BIG_ENDIAN
                  OPEN(UNIT=LUN,FILE=FILNAM(1:NCHAR),STATUS=STATVAR,
      &             CONVERT='BIG_ENDIAN',
      &             FORM=FORMVAR, ACCESS='STREAM',
-     &             IOSTAT=IRTFLGT)
+     &             IOSTAT=IRTFLGT,IOMSG=MY_IOMSG)
 
               ELSE
                  OPEN(UNIT=LUN,FILE=FILNAM(1:NCHAR),STATUS=STATVAR,
      &             FORM=FORMVAR, ACCESS='STREAM', 
-     &             IOSTAT=IRTFLGT)
+     &             IOSTAT=IRTFLGT,IOMSG=MY_IOMSG)
 
              ENDIF
-
            ENDIF
         ENDIF
 
@@ -243,8 +256,15 @@ C                FORCE OUTPUT TO BIG_ENDIAN
 #endif
 
         IF (IRTFLGT .NE. 0) THEN
-           WRITE(NOUT,90) FORMVAR(1:1), FILNAM(:NCHAR)
+
+#if defined(SP_DBUGIO)
+           write (3,*) ' Open failed iostat: ', irtflgt, 
+     &                 ' iomsg = '//trim(my_iomsg)
+#endif
+ 
+           WRITE(NOUT,90) FORMVAR(1:1), TRIM(FILNAM)
  90        FORMAT(' ERROR OPENING (',A1,'): ',A)
+           WRITE (NOUT,*) ' OPEN FAILED IOMSG: '//TRIM(MY_IOMSG)
            IF (CALLERRT) CALL ERRT(102,'OPSTREAMFILE',IRTFLGT)
            RETURN
         ENDIF

@@ -159,7 +159,6 @@ C***********************************************************************
       CHARACTER (LEN=MAXNAM)   :: FILNAM1,FILNAM2,MRCFILE
       CHARACTER (LEN=2*MAXNAM) :: COMMAN
       LOGICAL                  :: VERBOSE_SAVE,IS_MRC,ASKNAM
-      LOGICAL                  :: IS_BARE_2,IS_BARE_1
       CHARACTER (LEN=1)        :: NULL = CHAR(0)
       CHARACTER (LEN=1)        :: DSP
 
@@ -197,27 +196,22 @@ C     OPEN FIRST SPIDER FILE, DSP = 'E' DOES NOT STOP ON ERROR
      &              PROMPT,
      &             .FALSE., ILIST1,NILMAX, 
      &              NOT_USED,NLIST1,INUM1, IRTFLG) 
+      WRITE(NOUT,*) ' ' 
 
 
 #if defined(SP_DBUGIO)
-      write(3,*)' ------- RETURNED TO: COPYTOMRC --------'
-      write(3,*)' In copytomrc; nx1,ny1,nz1: ',nx1,ny1,nz1
-      write(3,*)' In copytomrc; nstk1:       ',nstk1
-      write(3,*)' In copytomrc; inum1:       ',inum1
+      write(3,*)' ------- BACK IN: COPYTOMRC --------'
+      write(3,*)' In copytomrc; nx1,ny1,nz1:  ', nx1,ny1,nz1
+      write(3,*)' In copytomrc; nstk1:        ', nstk1
+      write(3,*)' in copytomrc; nlist1,inum1: ', nlist1,inum1
       write(3,*)' '
 #endif
 
       CALL LUNGETIS_MRC(LUNSPI,IS_MRC,IRTFLG)      
-      CALL LUNGETISBARE(LUNSPI,IS_BARE_1,IRTFLG)
-
       IF (IS_MRC) THEN
          CALL ERRT(101,'OPERATION DOES NOT READ MRC FILES',IDUM)
          GOTO 999
       ENDIF
-
-#if defined(SP_DBUGIO)
-      !write(3,'(A,4i6)')' In nstk1; NLIST1,INUM1:',nstk1,NLIST1,INUM1
-#endif
 
 C     FIND HEADER VALUES FOR THE MRC FILE
 
@@ -401,8 +395,6 @@ C     OPEN FIRST MRC OUTPUT FILE
      &               NOT_USED,NLIST2,INUM2, IRTFLG) 
 
       CALL LUNGETIS_MRC(LUNMRC,IS_MRC,IRTFLG)      
-      CALL LUNGETISBARE(LUNMRC,IS_BARE_2,IRTFLG)
-
       IF (.NOT. IS_MRC) THEN
          CALL ERRT(101,'OPERATION ONLY CREATES MRC FILES',IDUM)
          GOTO 999
@@ -410,8 +402,8 @@ C     OPEN FIRST MRC OUTPUT FILE
     
 #if defined (SP_DBUGIO)
       write(3,*)' In copytomrc; nx1,ny1,nz1:  ', nx1,ny1,nz1
-      write(3,*)' in copytomrc; nstk2,inum2:  ', nstk2,inum2
-      write(3,*)' in copytomrc; is_bare_2:  ', is_bare_2
+      write(3,*)' In copytomrc; nstk2:        ', nstk2
+      write(3,*)' in copytomrc; nlist2,inum2: ', nlist2,inum2
       write(3,*)' '
 #endif
 
@@ -422,7 +414,7 @@ C     OPEN FIRST MRC OUTPUT FILE
       CALL LUNSET_POS_MRC(LUNMRC,INUM2,IRTFLG)
 
 C     DO NOT REPORT FILE INFO IF WHOLE STACK
-      IF (NSTK1 > 0 .AND. NSTK2 >= 0) VERBOSE = .FALSE. 
+      !!!! IF (NSTK1 > 0 .AND. NSTK2 >= 0) VERBOSE = .FALSE. 
 
       NINDX1 = 1
       NINDX2 = 1
@@ -433,6 +425,8 @@ C     DO NOT REPORT FILE INFO IF WHOLE STACK
 
       DO                ! LOOP OVER ALL IMAGES or IMAGE STACKS
          irep = irep + 1
+
+         WRITE(NOUT,*) '  ' 
 
 C        COPY THE DESIRED NUMBER OF DATA RECORDS FROM EACH FILE
          DO IRECIN = 1,NREC   ! NUMBER OF RECORDS COPIED
@@ -478,10 +472,7 @@ C        OPEN NEXT SET OF I/O FILES, UPDATES NINDX1 & NINDX2
          write(3,*)' In copytomrc; records:', nrec
          write(3,*)' In copytomrc; calling nextfiles:',nindx1,nindx2
          write(3,*) ' ==================  Next set ===================='
-         
-         !if (irep > 1) exit
-         exit
-
+          if (irep > 1) exit
 #endif
  
                    
@@ -492,12 +483,13 @@ C        OPEN NEXT SET OF I/O FILES, UPDATES NINDX1 & NINDX2
      &                  INUM1,INUM2, IRTFLG)
 
 #if defined (SP_DBUGIO)
-         write(3,*)' After nextfiles; NLIST1,nstk1,inum1: ',
-     &                                NLIST1,nstk1,inum1
-         write(3,*)' After nextfiles; NLIST2,nstk2,inum2: ',
-     &                                NLIST2,nstk2,inum2
+         write(3,*)' After nextfiles; nlist1,nstk1,inum1: ',
+     &                                nlist1,nstk1,inum1
+         write(3,*)' After nextfiles; nlist2,nstk2,inum2: ',
+     &                                nlist2,nstk2,inum2
          write(3,*)' After nextfiles; irtflg:           ', irtflg
 #endif
+         WRITE(NOUT,*) ' ' 
 
          IF (IRTFLG .NE. 0) EXIT      ! ERROR / END OF INPUT STACK
       ENDDO

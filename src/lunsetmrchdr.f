@@ -41,7 +41,6 @@ C     ------------------------- LUNRED_HED_MRC ----------------------
 C     ------------------------- LUNWRTHED_MRC ----------------------- 
 C     ------------------------- LUNGETOBJ_MRC ----------------------- 
 C     ------------------------- LUNSAYINFO_MRC -------------?-------- 
-C     ------------------------- LUNSAYINFO2_MRC --------------------- 
 C     ------------------------- LUNGETVALS_R_MRC --------------------
 C     ------------------------- LUNSETVALS_R_MRC --------------------
 C     ------------------------- LUNFLIPORG_MRC ----------------------
@@ -380,8 +379,14 @@ C     CALCULATE NUMBER OF BYTES IN AN IMAGE VALUE (<0 == UNSIGNED)
          NBYT_PER_VAL =  4         ! REAL*4
   
       ELSE
+         IRTFLG       = 1
          NBYT_PER_VAL = 0          ! NOT A VALID MRC FILE
-         IRTFLG = 1
+ 
+#if defined (SP_DBUGIO)
+      write(3,*)' In lunget_posinfo_mrc; mrcmode: ', mrcmode
+      write(3,*)' In lunget_posinfo_mrc; irtflg:  ', irtflg
+#endif
+         CALL ERRT(102, 'UNKNOWN MRCMODE',MRCMODE)
          RETURN
       ENDIF
 
@@ -439,14 +444,31 @@ C     ------------------ LUNSET_POS_MRC ----------------------------
 C     GET AXIS ORIGIN IN FILE
 C     THIS IS NOT A STANDARD MRC DEFINED HEADER POSITION!!
       CALL LUNGET_HAND_MRC(LUN,CAXIS,IRTFLG)
+
+#if defined (SP_DBUGIO)
+      write(3,*)' In lunset_pos_mrc; istk: ', istk
+      write(3,*)' In lunset_pos_mrc; caxis: ', caxis
+      write(3,*)' In lunset_pos_mrc; irtflg: ', irtflg
+#endif
+
       IF (IRTFLG .NE. 0) RETURN
 
 C     GET NUMBER OF BYTES IN AN IMAGE VALUE AND HEADER LENGTH
       CALL LUNGET_POSINFO_MRC(LUN,NBYT_PER_VAL,IHEDLEN,IRTFLG)
+
+#if defined (SP_DBUGIO)
+      write(3,*)' In lunset_pos_mrc; nbyt_per_val: ', nbyt_per_val
+      write(3,*)' In lunset_pos_mrc; ihedlen:      ', ihedlen
+      write(3,*)' In lunset_pos_mrc; irtflg:       ', irtflg
+#endif
       IF (IRTFLG .NE. 0) RETURN
 
 C     NZ IS ADJUSTED FOR RELION .mrcs FILES IF NEEDED
       CALL LUNGET_SIZE_MRC(LUN,NX,NY,NZ,IRTFLG)
+#if defined (SP_DBUGIO)
+      write(3,*)' In lunset_pos_mrc; nx,ny,nz: ', nx,ny,nz
+      write(3,*)' In lunset_pos_mrc; irtflg:       ', irtflg
+#endif
       IF (IRTFLG .NE. 0) RETURN
 
       LUNMRCNBYT(LUN) = NBYT_PER_VAL  ! PRESERVES NEGATIVE FOR SIGN
@@ -2203,7 +2225,7 @@ C     ------------------------- LUNSAYINFO_MRC ------------------------
       INTEGER              :: IVERSION,ISPG,NSYMBT,NLABL
       INTEGER              :: MAXIM,LENT,NLET,LT,MZ,MRCMODE
       INTEGER              :: ICOMM,MYPID,MPIERR
-      INTEGER              :: lnblnkn    ! FUNCTION
+      INTEGER              :: lnblnkn     ! FUNCTION
 
 
       CHARACTER(LEN=1)     :: NULL = CHAR(0)
@@ -2227,8 +2249,7 @@ C     RETRIEVE SPIDER'S ITYPE
 
 
 #if defined(SP_DBUGIO)
-C23456      
-      !write(3,*) 'In lunsayinfo_mrc   0 | type:',itype
+      !write(3,*) 'In lunsayinfo_mrc  0 | type:',itype
 #endif
 
 C     RETRIEVE MRC MODE 
@@ -2249,9 +2270,8 @@ C     RETRIEVE CURRENT HEADER NSTK & IMGNUM
       CALL LUNGET_STK_260_MRC(LUN,MZ,NSTK,IMGNUM,IRTFLG)
 
 #if defined(SP_DBUGIO)
-C23456      
-      write(3,*)' In lunsayinfo_mrc  1 | mz,NSTK,imgnum: ',
-     &                                   mz,NSTK,imgnum
+      write(3,*)' In lunsayinfo_mrc 1 | mz,nstk,imgnum: ',
+     &                                   mz,nstk,imgnum
 #endif
 
 C     RETRIEVE SIZE
@@ -2259,8 +2279,8 @@ C     RETRIEVE SIZE
 
 #if defined(SP_DBUGIO)
 C23456      
-      write(3,*)' In lunsayinfo_mrc   2 | nz,mz,NSTK:     ',
-     &                                    nz,mz,NSTK 
+      write(3,*)' In lunsayinfo_mrc  2 | nz,mz,nstk:     ',
+     &                                   nz,mz,nstk 
 #endif
 
       IF     (ITYPE == 1 .AND. NSTK > 0) THEN
@@ -2285,10 +2305,7 @@ C     RETRIEVE CURRENT FILENAME (INCLUDES IMGNUM IF STACKED IMAGE)
       CALL LUNGET_FILE_MRC(LUN,FILNAM,NLET,DSP,IRTFLG)
 
 #if defined(SP_DBUGIO)
-C23456
-      lenf = lnblnkn(filnam) 
-      write(3,*)' In lunsayinfo_mrc   3 | lenf,filnam: ',
-     &                                    lenf,filnam(1:lenf)
+      write(3,*)' In lunsayinfo_mrc  3 | filnam: ', trim(filnam)
 #endif
       
 C     GET HEADER EXTRA LENGTH = NSYMBT 
@@ -2337,10 +2354,9 @@ C           SIMPLE IMAGE
 
 
 #if defined(SP_DBUGIO)
-      lenf = lnblnkn(filnam) 
-      write(3,*)' In lunsayinfo_mrc   4 | imgnum,NSTK,mz: ',
-     &                                    imgnum,NSTK,mz
-      write(3,*)' In lunsayinfo_mrc   4 | filnam: ',filnam(:lenf)
+      write(3,*)' In lunsayinfo_mrc  4 | imgnum,nstk,mz: ',
+     &                                   imgnum,nstk,mz
+      write(3,*)' In lunsayinfo_mrc  4 | filnam: ',trim(filnam)
       write(3,*) ' '
 #endif
 
@@ -2371,13 +2387,11 @@ C           HAS FILENAME AND LABEL1 THAT DO NOT FIT ON SINGLE LINE
             ENDIF
          ENDIF
 
-
 #if defined(SP_DBUGIO)
          write(3,*) '  '
-         write(3,*)' In lunsayinfo_mrc   5 | imgnum,NSTK,mz:',
-     &                                       imgnum,NSTK,mz
+         write(3,*)' In lunsayinfo_mrc  5 | imgnum,nstk,mz:',
+     &                                      imgnum,nstk,mz
 #endif
-
 
          IF (NSTK >= 0 .AND. IMGNUM == 0 .AND. NZ > 1) THEN
 C           OVERALL STACKED VOLUME FILE
@@ -2410,10 +2424,8 @@ C           STACKED VOLUME
 C           SIMPLE IMAGE
 
 #if defined(SP_DBUGIO)
-            write(3,*)' In lunsayinfo_mrc   6 | nz,mz:',
-     &                                          nz,mz
-            write(3,*)' In lunsayinfo_mrc   6 | imgnum,NSTK:',
-     &                                          imgnum,NSTK
+           write(3,*)' In lunsayinfo_mrc  6 | nz,mz:', nz,mz
+           write(3,*)' In lunsayinfo_mrc  6 | imgnum,nstk:',imgnum,nstk
 #endif
 
             IF (MYPID <= 0) THEN
@@ -2423,17 +2435,13 @@ C           SIMPLE IMAGE
      &                ' HEADER BYTES: ',I0,'  AXIS:(',A,')')
             ENDIF
 
-
-
          ELSE IF (IMGNUM > 0) THEN
 C           STACKED IMAGE
 
 #if defined(SP_DBUGIO)
-            write(3,*)' In lunsayinfo_mrc   7 | nz,mz:',
-     &                                          nz,mz
-            write(3,*)' In lunsayinfo_mrc   7 | imgnum,NSTK:',
-     &                                          imgnum,NSTK
-            write(3,*) ' '
+           write(3,*)' In lunsayinfo_mrc  7 | nz,mz:', nz,mz
+           write(3,*)' In lunsayinfo_mrc  7 | imgnum,nstk:',imgnum,nstk
+           write(3,*) ' '
 #endif
 
             IF (MYPID <= 0) THEN

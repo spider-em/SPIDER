@@ -344,12 +344,13 @@ ELEMENTS =  \
  $(LIB)(getdocdat.o)  \
  $(LIB)(getdoclist.o) \
  $(LIB)(getfilenum.o) \
+ $(LIB)(get_filnam_info.o) \
  $(LIB)(getima_q.o) \
  $(LIB)(getlbno.o)  \
  $(LIB)(getlab.o)   \
  $(LIB)(get_tf_input.o) \
  $(LIB)(getnexttoken.o) \
- $(LIB)(getsym.o)   \
+ $(LIB)(getsym.o)     \
  $(LIB)(getthreads.o) \
  $(LIB)(gnc.o)   \
  $(LIB)(gnc2s.o) \
@@ -524,6 +525,8 @@ ELEMENTS =  \
  $(LIB)(negate.o) \
  $(LIB)(negati.o) \
  $(LIB)(newkmeans.o) \
+ $(LIB)(nextversion.o) \
+ $(LIB)(nextfiles.o) \
  $(LIB)(nextversion.o) \
  $(LIB)(nn4.o) \
  $(LIB)(nn24.o) \
