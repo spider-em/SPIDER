@@ -1,4 +1,5 @@
 
+
 C++*********************************************************************
 C
 C FILERD.F   ADAPTED FROM FILRD AND SPFILE         OCT 88 ArDean Leith
@@ -27,9 +28,9 @@ C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2015  Health Research Inc.,                         *
+C=* Copyright 1985-2026  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@health.ny.gov                                        *
+C=* Email:                                         *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *

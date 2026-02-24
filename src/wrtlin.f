@@ -119,10 +119,15 @@ C       TO IREC TO GET THE CORRECT RECORD NUMBER
         IERR = 0
         IF (MYPID <= 0) THEN
 
-#if defined (SP_DBUG)
-        if (i < 2) then
-          write(3,*)' In wrtlin; lun,lunflip(lun),nb,i:  ', 
-     &                           lun,lunflip(lun),nb,i 
+#if defined (SP_DBUGIO_NEVER)
+          write(3,*)'    ' 
+          write(3,*)' In wrtlin; irec:         ', irec, ' 111111111111' 
+          write(3,*)' In wrtlin; lunara(lun):  ', lunara(lun)
+          write(3,*)' In wrtlin; lunstk(lunt): ', lunstk(lunt) 
+          write(3,*)' In wrtlin; I=:           ', i 
+          write(3,*)'   ' 
+          !write(3,*)' In wrtlin; lun,lunflip(lun),nb,i: ', 
+          !&                      lun,lunflip(lun),nb,i 
         endif
 #endif
            IF (LUNFLIP(LUN) == 0) THEN

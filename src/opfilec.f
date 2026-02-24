@@ -38,19 +38,18 @@ C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
 C **********************************************************************
 C
-C
 C  OPFILEC(LUNT,ASKNAM,FILNAM,LUN,DISPT,ITYPE,
-C          NX,NY,NZ,MAXIM, PROMPT,FOUROK,IRTFLG)
+C          NX,NY,NZ,NSTK_FLG, PROMPT,FOUROK,IRTFLG)
 C
-C  PURPOSE:         SOLICITS SPIDER OR MRC FILE NAME AND OPENS FILE
+C  PURPOSE:        SOLICITS SPIDER OR MRC FILE NAME AND OPENS FILE
 C  
 C  PARAMETERS:
 C 
-C        LUNT       UNIT TO COPY HEADER VALUES FROM              (SENT)
-C        ASKNAM     LOGICAL FLAG TO QUERY NAME                   (SENT)
-C        FILNAM     FILENAME (WITOUT EXTENSION)              (SENT/RET)
-C        LUN        UNIT TO OPEN FILE ON                         (SENT)
-C        DISPT      CHARACTER CONTAINING ONE OF THE              (SENT)
+C        LUNT      UNIT TO COPY HEADER VALUES FROM              (SENT)
+C        ASKNAM    LOGICAL FLAG TO QUERY NAME                   (SENT)
+C        FILNAM    FILENAME (WITOUT EXTENSION)              (SENT/RET)
+C        LUN       UNIT TO OPEN FILE ON                         (SENT)
+C        DISPT     CHARACTER CONTAINING ONE OF THE              (SENT)
 C                   FOLLOWING DISPOSITION SPECIFICATIONS:
 C                   'O'   -  FILE IS ASSUMED TO EXIST.  DIMENSIONS,
 C                            ITYPE AND HEADER INFO (IN COMMON) ARE 
@@ -66,31 +65,40 @@ C                   'U'  -   IT IS NOT KNOWN IF THE FILE EXISTS.
 C                            NX, NY, NZ, AND ITYPE MUST 
 C                            BE SENT.  IF THE FILE ALREADY EXISTS, IT 
 C                            WILL BE REPLACED.
-C                   'K & M'-    NO LONGER USED
+C                   'K & M'-  NO LONGER USED
 C
-C        ITYPE      IFORM FOR FILE                        (SENT OR RET) 
-C        NX         IMAGE SIZE                            (SENT OR RET)
-C        NY         IMAGE SIZE                            (SENT OR RET)
-C        NZ         VOLUME SIZE                           (SENT OR RET)
-C        MAXIM      STACK INDICATOR                          (SENT/RET)
-C                   ON INPUT (IF NEW):
+C        ITYPE     IFORM FOR FILE                        (SENT OR RET) 
+C        NX        IMAGE SIZE                            (SENT OR RET)
+C        NY        IMAGE SIZE                            (SENT OR RET)
+C        NZ        VOLUME SIZE                           (SENT OR RET)
+C
+C        NSTK_FLG  STACK INDICATOR                       (SENT/RET)
+C                  ON INPUT (IF NEW):
 C                        0 IS FOR SPECIFIC IMAGE           
 C                       +1 STACK                               
-C                       -1 INDEXED STACK                               
-C                   ON INPUT (IF EXISTING):
+C                       -1 INDEXED STACK 
+C                              
+C                  ON INPUT (IF EXISTING):
 C                        0 IS FOR SPECIFIC IMAGE ONLY         
-C                       <0 or >0 ALLOWS WHOLE STACK OPERATION            C                  
-C                   ON OUTPUT:
+C                       <0 or >0 ALLOWS WHOLE STACK OPERATION           
+C                  
+C                  ON OUTPUT:
 C                       -2 NON-STACK IMAGE                
 C                       -1 STACKED IMAGE                  
-C                     >= 0 IS CURRENT MAX. IMAGE NO. FOR STACK           C  
-C        PROMPT     PROMPT FOR FILNAME                           (SENT)
-C                       AT END:  ~  SKIPS FILE ON PROMPT
-C                                ~7 CAN OPEN A STACK WITHOUT @
-C                                ~9 KEEPS INCOMING EXTENSION
-C                                ~6 KEEPS OLD DATE/TIME
-C        FOUROK     CAN USE EXISTING FOURIER FILES?              (SENT)
-C        IRTFLG     ERROR FLAG (0 IS NORMAL)                     (RET.)
+C                     >= 0 IS CURRENT MAX. IMAGE NO. FOR STACK  
+C  
+C        PROMPT    PROMPT FOR FILNAME                          (SENT)
+C                    IF NOT (ASKNAM) THIS IS FILE NAME!         
+C                    AT END: ~  SKIPS "FILE" ON PROMPT
+C                            ~6 KEEPS OLD DATE/TIME
+C                            ~7 CAN OPEN A STACK WITHOUT @
+C                            ~8 SETS OPENED FILE AS READ ONLY (R)
+C                            ~9 KEEPS INCOMING EXTENSION
+C                               (OTHERWISE DISCARDED FROM FILNAM)
+C
+C        FOUROK    CAN USE EXISTING FOURIER FILES?             (SENT)
+C
+C        IRTFLG    ERROR FLAG (0 IS NORMAL)                     (RET)
 C                        -1 GOTO PREVIOUS QUESTION
 C                         0 NORMAL RETURN
 C                         2 CAN'T USE AN EXISTING FOURIER FILE
@@ -101,12 +109,12 @@ C  CODING:   BASED ON PARAMETERS NX,NY, & NZ A
 C            NEW FILE IS OPENED WITH IREC RECORDS, EACH NX*4 
 C            BYTES LONG.  IREC ALLOWS SPACE FOR THE 2-D OR 3-D 
 C            IMAGE  PLUS HEADER.  A STACK FILE CONTAINS AN OVERALL
-C            HEADER PLUS MAXIM * IREC RECORDS. EACH IMAGE IN THE
+C            HEADER PLUS NSTK_FLG * IREC RECORDS. EACH IMAGE IN THE
 C            STACK HAS ITS OWN HEADER RECORD(S) WHOSE FORMAT IS THE
 C            SAME AS THE OVERALL HEADER RECORDS
 C
 C  COMMON VARIABLES:
-C            IFORM (TYPE)  FILE TYPE SPECIFIER.              ( RET.)
+C            IFORM (TYPE)  FILE TYPE SPECIFIER                 (RET)
 C             +1    R     2-D IMAGE FILE
 C             +3    R3    3-D IMAGE (VOLUME) FILE
 C             -9    FS    3-D SIMPLE FORMAT FOURIER (MR'S FORMAT)
@@ -140,7 +148,7 @@ C23456789012345678901234567890123456789012345678901234567890123456789012
 C--*********************************************************************
 
         SUBROUTINE OPFILEC(LUNT,ASKNAM,FILNAM,LUN,DISPT,ITYPE,
-     &                  NX,NY,NZ,MAXIM, PROMPT,FOUROK,IRTFLG)
+     &                     NX,NY,NZ,NSTK_FLG, PROMPT,FOUROK,IRTFLG)
 
         IMPLICIT NONE
 
@@ -152,40 +160,53 @@ C--*********************************************************************
 
 
         CHARACTER (LEN=*) :: FILNAM,PROMPT,DISPT
-        INTEGER           :: LUNT,LUN,ITYPE,NX,NY,NZ,MAXIM,IRTFLG
+        INTEGER           :: LUNT,LUN,ITYPE,NX,NY,NZ,NSTK_FLG,IRTFLG
         LOGICAL           :: ASKNAM,FOUROK
 
-        INTEGER           :: LENP,NLETI,NBUFSIZT,IRTFLGT,NE, IRTFLG26
-        INTEGER           :: NSTACK,NSTK_FLG, ilent
+        INTEGER           :: LENP,NLETI,NBUFSIZT,IRTFLGT,NE
+        INTEGER           :: NSTACK
         CHARACTER (LEN=1) :: DSP,DISP
         LOGICAL           :: OPSTKNOAT,KEEPEXT
         CHARACTER (LEN=1) :: NULL = CHAR(0)
 
-        INTEGER           :: lnblnkn,lnblnk
         LOGICAL           :: ISMRCFILE          ! FUNCTION
-        LOGICAL           :: ISMRC            
+        LOGICAL           :: IS_MRC,IS_BARE            
+        INTEGER           :: ISTK,NSTK
+ 
+        INTEGER           :: lnblnkn,lnblnk
 
 C       HACK TO OPEN NEW FILES GREATER THAN NBUFSIZ (DANGEROUS)
         DISP = DISPT
         IF (DISP(1:1) == 'B') DISP = 'U'
 
-C       HACK TO OPEN MRC FILE WITHOUT RESETTING HEADER VALUES
-        IRTFLG26   = 1                    ! NEVER USED!
-        IF (IRTFLG == 26) IRTFLG26 = 26   ! NEVER USED!!
-
-        !write(3,*)' In opfilec; itype: ',itype
+#if defined (SP_DBUGIO)
+        write(3,*)' In opfilec 00; asknam:     ', asknam
+        write(3,*)' In opfilec 00; filnam:     ', trim(filnam)
+        write(3,*)' In opfilec 00; itype,disp: ', itype,' |',disp,'|'
+        !write(3,*)' In opfilec 00; prompt:     ', prompt
+#endif
 
         LENP = lnblnkn(PROMPT)
-C       CAN PASS ~7 AT END OF PROMTP TO OPEN* TO OPEN A STACK WITHOUT @
-        OPSTKNOAT = (PROMPT(LENP-1:LENP) == '~7')
 
-C       CAN PASS ~9 AT END OF PROMTP TO OPEN* TO KEEP INCOMING EXTENSION
-        KEEPEXT = (PROMPT(LENP-1:LENP) == '~9')
+C       HAS ~7 AT END OF PROMPT TO OPEN* TO OPEN A STACK WITHOUT @
+        OPSTKNOAT =  (INDEX (PROMPT(1:LENP),'~7') > 1)
 
-        KEEPEXT = (KEEPEXT      .AND. 
-     &             .NOT. ASKNAM .AND.
-     &             (INDEX(FILNAM,'.',BACK = .TRUE.)) > 
-     &             (INDEX(FILNAM,'/',BACK = .TRUE.)))
+C       HAS ~9 AT END OF PROMPT TO OPEN* TO KEEP INCOMING EXTENSION
+        KEEPEXT = (INDEX(PROMPT(1:LENP),'~9') > 1)
+
+#if defined (SP_DBUGIO)
+        write(3,*)' In opfilec 11; keepext 1: ', keepext
+#endif
+
+        IF ( .NOT. ASKNAM .AND.
+     &         (INDEX(FILNAM,'.',BACK = .TRUE.)) > 
+     &         (INDEX(FILNAM,'/',BACK = .TRUE.))) THEN
+           KEEPEXT = .TRUE.
+        ENDIF
+                     
+#if defined (SP_DBUGIO)
+        write(3,*)' In opfilec 22; keepext 2: ', keepext
+#endif
 
 C       SET DEFAULT ERROR RETURN IRTFLG
         IRTFLG = 1
@@ -195,21 +216,18 @@ C       SET DEFAULT ERROR RETURN IRTFLG
            RETURN
         ENDIF
 
-#if defined (SP_DBUGIO)
-        write(3,*)' In opfilec; asknam,keepext: ', asknam,keepext
-        write(3,*)' In opfilec; itype,disp:     ', itype,disp
-#endif
-
         IF (ASKNAM) THEN
 C          SOLICIT FILE NAME, KEEPS EXTENSION IF PROMPT ENDS WITH: ~9 
+
            CALL FILERD(FILNAM,NLETI,NULL,PROMPT,IRTFLG)
            IF (IRTFLG == -1) RETURN
+
         ELSE
            NLETI = lnblnk(FILNAM)
         ENDIF
 
 #if defined (SP_DBUGIO)
-        write(3,*)' In opfilec; filnam(1:nleti):   ', filnam(1:nleti)
+        write(3,*)' In opfilec 33; Filnam: ', trim(filnam)
 #endif
 
 
@@ -234,45 +252,59 @@ C          CHECK THAT NECESSARY SIZE... INFO IS HERE
            DSP =  'N'
         ENDIF
 
-        ISMRC = ISMRCFILE(FILNAM)
+        IS_MRC = ISMRCFILE(FILNAM)
 
 
-
-        IF (ISMRC) THEN
+        IF (IS_MRC) THEN
 
 C          WANT TO OPEN OLD OR NEW MRC FILE FOR STREAM ACCESS xxxxxxxx
 
 #if defined (SP_DBUGIO)
-           !write(3,*)' In opfilec; nx,ny,nz: ',nx,ny,nz
-           ilent = lnblnkn(filnam)
-           write(3,*)' In opfilec; filnam:   ',filnam(1:ilent)
-           write(3,*)' In opfilec; Calling openfil_mrc --------'
-           write(3,*)' ' 
+          !write(3,*)' In opfilec 44; Nx,ny,nz: ', nx,ny,nz
+           write(3,*)' In opfilec 44; Filnam:   ', trim(filnam)
+           write(3,*)' In opfilec 44; Calling:  openfil_mrc ---------'
 #endif
 
-           NSTK_FLG =  0   ! UNUSED BY OPENFIL_MRC  ON INPUT
-           CALL OPENFIL_MRC(LUN,FILNAM,NLETI,NX,NY,NZ, NSTK_FLG,
-     &                      ITYPE, DSP,IRTFLG)
+C          A ~8 AT END OF PROMPT IS FOR:  OLD NON-WRITEABLE FILE 
+           IF ((INDEX(PROMPT(1:LENP),'~8') > 1) .AND. 
+     &          DSP == 'O') DSP = 'R'        ! READ ONLY!! 
+           IF ((FCHAR(4:9) == 'FROM M') .AND. 
+     &          DSP == 'O') DSP = 'R'        ! READ ONLY!! 
+ 
+C          OPENFIL_MRC CALLS GET_FILNAM_INFO
+           NSTK =  0   ! UNUSED BY OPENFIL_MRC  ON INPUT
+           CALL OPENFIL_MRC(LUN,FILNAM,DSP,
+     &                       NX,NY,NZ, 
+     &                       NSTK,ISTK,IS_BARE,
+     &                       ITYPE, IRTFLG)
            IF (IRTFLG .NE. 0) RETURN
 
-           MAXIM = NSTK_FLG
+           NSTK_FLG = NSTK
 
 #if defined (SP_DBUGIO)
-           write(3,*)' In opfilec; nz,maxim: ', nz,maxim
-           write(3,*)' Finished in opfilc  for MRC , Returning ------ '
+           write(3,*)' In opfilec; nz,nstk:      ', nz,nstk
+           write(3,*)' In opfilec; istk,is_bare: ', istk,is_bare
+           write(3,*)' In opfilec; itype:        ', itype
+           write(3,*)' Finished in opfilec for MRC , Returning ----'
            write(3,*)'   '  
 #endif
            RETURN           ! END OF MRC CODE xxxxxxxxxxxxxxxxxxxxxxx
 
 
+
+
         ELSE
-C          WANT TO OPEN OLD OR NEW SPIDER FILE
-           !write(3,*)' In opfilc Calling: lunnewhdr'
+C          WANT TO OPEN SPIDER FILE xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+#if defined (SP_DBUGIO)
+           write(3,*)' In opfilec 55; Calling: lunnewhdr'
+#endif
 
 C          CREATE A NEW HEADER OBJECT FOR THIS LUN, SET LUN FOR SPIDER
            CALL LUNNEWHDR(LUN,IRTFLGT)
            IF (IRTFLGT .NE. 0) RETURN
-           !write(3,*)' In opfilc after callin: lunnewhdr'
+
+           !write(3,*)' In opfilec; after: lunnewhdr'
 
 C          PUT FILENAME AND DSP IN OFF-FILE AREA OF THE HEADER OBJECT
            CALL LUNSETFILE(LUN,FILNAM,DSP,IRTFLGT)
@@ -282,24 +314,27 @@ C          PUT ISBARE IN STATIC AREA OF HEADER OBJECT
            CALL LUNBAREFILE(LUN,FILNAM,IRTFLGT)
            IF (IRTFLGT .NE. 0) RETURN
 
-           !write(3,*)' In opfilc Callin: lunsetluns: ', lun
+           !write(3,*)' In opfilec; Calling: lunsetluns: ', lun
 
 C          MAKE SURE THE STACK OFFSET IS ALWAYS ZEROED, LUNARB SET ...
            CALL LUNSETLUNS(LUN,0,0,LUN,0,IRTFLGT)
            IF (IRTFLGT .NE. 0) RETURN
 
-           !write(3,*)' In opfilc after set luns; filnam: ',filnam
+           !write(3,*)' In opfilec;  Filnam: ',trim(filnam)
 
            IRTFLG = 0
            IF (INDEX(FILNAM,'@') == 0) THEN
 
-C             NOT AN IMAGE STACK, BUT MAY BE AN INLINE or 'REGULAR'                    SPIDER FILE.
+C             NOT IMAGE STACK, MAY BE INLINE or 'REGULAR' SPIDER FILE
 
 #if defined (SP_DBUGIO)
-              !write(3,*)' In opfilec, B4 openfil itype,nstack:',
-      !&                                           itype,nstack
-              !write(3,*)' In opfilec, B4 openfil disp: ',disp
-              !write(3,*)' In opfilec; B4 openfil  ---------------'
+              write(3,*)' In opfilec 77, B4 openfil  itype,nstack:',
+     &                                               itype,nstack
+              write(3,*)' In opfilec 77, B4 openfil  disp: ',disp
+              write(3,*)' In opfilec 77, B4 openfil  keepext: ',keepext
+              write(3,*)' In opfilec 77, B4 openfil  filnam: ',
+     &                                               trim(filnam)
+              write(3,*)' In opfilec 77, B4 openfil  ---------------'
 #endif
   
               NSTACK = 0
@@ -307,13 +342,13 @@ C             NOT AN IMAGE STACK, BUT MAY BE AN INLINE or 'REGULAR'             
      &                     ITYPE,DISP(1:1),KEEPEXT,IRTFLG)
 
 #if defined (SP_DBUGIO)
-              !write(3,*)' In opfilec; got filnam:',filnam
-              !write(3,*)' In opfilec; nstack,irtflg: ',nstack,irtflg
+              write(3,*)' In opfilec 88; filnam: ',trim(filnam)
+              write(3,*)' In opfilec 88; nstack,irtflg: ',nstack,irtflg
 #endif
 
               IF (IRTFLG .NE. 0) RETURN
 
-C             RETURNS NSTACK -2 FOR NON-STACK or MAXIM
+C             RETURNS NSTACK -2 FOR NON-STACK or NSTK_FLG
 
               IF (NSTACK >= 0 .AND. .NOT. OPSTKNOAT ) THEN 
 C                BARE STACK REF ALLOWED WITHOUT '@' FROM 'ST'& 'LI'
@@ -325,29 +360,27 @@ C                BARE STACK REF NOT ALLOWED WITHOUT '@' NORMALLY
 
            ELSEIF (FILNAM(1:1) == '_') THEN
 C             INLINE IMAGE STACK ACCESS WANTED
-              NSTACK = MAXIM
+              NSTACK = NSTK_FLG
               CALL OPENINSTK(LUNT,FILNAM,LUN,NX,NY,NZ,
      &                     NSTACK,ITYPE,DISP(1:1),IRTFLG)
 
            ELSE
 C             WANT TO ACCESS A FILE BASED SPIDER IMAGE STACK
-              NSTACK = MAXIM
+              NSTACK = NSTK_FLG
 
 #if defined (SP_DBUGIO)
-              !write(3,*)' In opfilc;; lunt,lun,nstack: ',
-              !&     lunt,lun,nstack,itype,'  ',filnam(:33)
+              write(3,*)' In opfildc 10; lunt,lun,nstack: ',
+     &                                   lunt,lun,nstack
 #endif
 
               CALL OPENSTK(LUNT,FILNAM,LUN,NX,NY,NZ,
      &                     NSTACK,ITYPE,DISP(1:1),IRTFLG)
 
 #if defined (SP_DBUGIO)
-              !write(3,*)' In opfilc; filnam: ',filnam
+              write(3,*)' In opfilec 11; filnam: ',trim(filnam)
 #endif
+           ENDIF
 
-            ENDIF
-
-C
 C          RETURN IF THERE IS ANY ERROR OPENING FILE IN OPEN*
            IF (IRTFLG .NE. 0) RETURN
 
@@ -361,22 +394,21 @@ C            CAN NOT USE EXISTING FOURIER FILE
              RETURN
 
            ELSEIF (.NOT. OPSTKNOAT .AND. 
-     &             MAXIM == 0 .AND. NSTACK >= 0) THEN
+     &             NSTK_FLG == 0 .AND. NSTACK >= 0) THEN
 C            THIS OPERATION DOES NOT ACCEPT WHOLE STACKS 
              CALL ERRT(101,'OPERATION DOES NOT WORK ON WHOLE STACKS',NE)
              IRTFLG = 4
              RETURN
            ENDIF
 
-           IFORM = ITYPE
-           MAXIM = NSTACK 
+           IFORM    = ITYPE
+           NSTK_FLG = NSTACK 
 
 #if defined (SP_DBUGIO)
-           !write(3,*)' End opfilc; maxim,nstack: ',maxim,nstack
-           !call lungetflip(lunt,iflip,irtflg)
-           !write(3,*)' In opfilec: lunt,iflip: ',     lunt,iflip
-           !write(3,*)' In opfilec: lunflip(lunt): ',  lunflip(lunt) 
-           !write(3,*)' Leaving opfilc; iform,maxim: ',iform,maxim
+           !write(3,*)' In opfilec; nstk_flg,nstack: ', nstk_flg,nstack
+           !write(3,*)' In opfilec; lunt,iflip:      ', lunt,iflip
+           !write(3,*)' In opfilec; lunflip(lunt):   ', lunflip(lunt) 
+           !write(3,*)' Leaving opfilc; iform,nstk_flg: ',iform,nstk_flg
            !write(3,*)' ------------ LEAVING OPFILC --------'
 #endif
 

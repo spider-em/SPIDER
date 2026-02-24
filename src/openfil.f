@@ -21,7 +21,7 @@ C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
-C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith & Tapu Shaikh * C=*                                                                    *
 C=* Copyright 1985-2025  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email:                                                             *
@@ -40,7 +40,8 @@ C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
 C **********************************************************************
 C
-C    OPENFIL(LUNT,FILNAM,LUN,NX,NY,NZ,NSTACK,DISP,IRTFLG)
+C    OPENFIL(LUNT,FILNAM,LUNSENT,NX,NY,NZ,NSTACK,
+C            ITYPE,DISP,KEEPEXT,IRTFLG)
 C
 C    PURPOSE:       OPEN NEW OR EXISTING DATA FILE FOR RANDOM 
 C                   ACCESS READING/WRITING.  CALLED FOR REGULAR FILES
@@ -63,7 +64,8 @@ C                                   <0 : INDEXED STACK, MAX TOTAL IMAGES
 C                   ON OUTPUT: 
 C                      -2  :  NOT A STACK 
 C                      >=0 :  MAX IMAGE NUMBER NOW IN STACK.
-C 
+C
+C        ITYPE        
 C        DISP       CHARACTER VARIABLE CONTAINING DISPOSITION     (SENT)
 C                   SEE OPFIL.F FOR POSSIBLE VALUES            
 C        KEEPEXT    TO KEEP EXTENSION                             (SENT)
@@ -104,7 +106,7 @@ C                |
 C                ? Inline stack
 C                |-------------> OPNINSTK ----> ...
 C
-C       NOTE: SHOULD NEVER BE CALLED WITH MRC FILES     
+C       NOTE: OPENFIL SHOULD NEVER BE CALLED WITH MRC FILES     
 C
 C23456789 123456789 123456789 123456789 123456789 123456789 123456789 12
 C--*********************************************************************
@@ -121,18 +123,18 @@ C--*********************************************************************
 
         INTEGER                      :: LUNT,LUNSENT
         CHARACTER(LEN=*)             :: FILNAM
-        INTEGER                      :: NX,NY,NZ,NSTACK,ISTACK
+        INTEGER                      :: NX,NY,NZ,NSTACK,ITYPE
         CHARACTER(LEN=1)             :: DISP
         LOGICAL                      :: KEEPEXT
         INTEGER                      :: IRTFLG
 
         CHARACTER(LEN=MAXNAM)        :: FILNM
         CHARACTER(LEN=2*MAXNAM)      :: MSG
-        LOGICAL                      :: EX,CALLERRT,OPENED
+        LOGICAL                      :: EX,CALLERRT,OPENED,GOTEXT
         INTEGER, PARAMETER           :: I_8 = SELECTED_INT_KIND(12)
         INTEGER(KIND=I_8)            :: NWORDS_8
         INTEGER(KIND=I_8), PARAMETER :: ZERO_8 = 0
-        INTEGER                      :: LUN,IFLIP
+        INTEGER                      :: LUN,IFLIP,ISTACK,LOCDOT,LOCSLASH
 
         LOGICAL                      :: IS_MRC
 
@@ -160,23 +162,38 @@ C           USE AN IN-LINE BUFFER.
            FILNM = FILNAM(1:NLET)
 
         ELSE
-C          USE REGULAR FILE
+C          USE REGULAR I/O FILE
            INLNED = 0
            LUNC   = LUN
 
 C          NULLIFY THE INLINE POINTER (CLOSEINLN IS INSIDE OPENINLN.F)
            CALL CLOSEINLN(LUN,IRTFLGT)
 
-           !write(3,*)' In openfil, keepext,filnam:',keepext,filnam
+           LOCDOT   = INDEX(FILNAM,'.',BACK=.TRUE.)
+           LOCSLASH = INDEX(FILNAM,'/',BACK=.TRUE.)
 
-           IF (KEEPEXT) THEN
+           GOTEXT   = (( LOCDOT > 1 ) .AND. ( LOCDOT > LOCSLASH))
+
+#if defined (SP_DBUGIO)
+           write(3,*)' In openfil, filnam: ',trim(filnam)
+           write(3,*)' In openfil, locdot,locslash: ',locdot,locslash
+           write(3,*)' In openfil, gotext,keepext: |',
+     &                             gotext,'|',keepext,'|'
+#endif
+
+           IF (GOTEXT .AND. KEEPEXT) THEN
               FILNM = FILNAM
               NLET  = lnblnk(FILNM)
+
            ELSE
+C             APPEND DATEXC EXTENSION TO FILNAM
               CALL FILNAMANDEXT(FILNAM,DATEXC,FILNM,NLET,.TRUE.,IRTFLGT)
               IF (IRTFLGT .NE.0) RETURN
            ENDIF
-           !write(3,*) ' In openfil, filnm: ',filnm(:nlet),disp
+
+#if defined (SP_DBUGIO)
+           write(3,*)' In openfil, disp,filnm: ',disp,': ',filnm(:nlet) 
+#endif
 
 C          SEE IF FILE EXISTS NOW
            IF (MYPID <= 0) THEN
@@ -335,8 +352,8 @@ C            SEE IF FILE ALREADY OPEN ON DIFFERENT LUN THAN CURRENT
                 !if (opened) then
                 !write(3,*) ' In openfil, Inquired: ',filnm(1:nlet)
                 !write(3,*) ' In openfil, Inquired: ',filnm(1:nlet),
-                !&                     '  Opened:',opened,' On lun:',lunopened,
-                !&                     '  Irtflg: ',irtflg  
+                !&          '  Opened:',opened,' On lun:',lunopened,
+                !&          '  Irtflg: ',irtflg  
                 !endif
                                 
              ENDIF   ! END OF: MYPID <= 0

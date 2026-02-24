@@ -42,7 +42,7 @@ C                    IRTFLG    ERROR FLAG (0 IS NORMAL)           (RET.)
 C
 C--*********************************************************************
 
-	SUBROUTINE FILGET(FILPAT,FILNAM,NLETT,INUM,IRTFLG)
+        SUBROUTINE FILGET(FILPAT,FILNAM,NLETT,INUM,IRTFLG)
 
         IMPLICIT NONE
         INCLUDE 'CMBLOCK.INC'
@@ -106,7 +106,14 @@ C          CHECK FOR FILE NAME LENGTH OVERFLOW
               WRITE(NOUT,*) ' *** ERROR IN FILENAME'
               IRTFLG = 1
            ENDIF
-           !write(6,*) ' filgetat, filnam: ',filnam(:nlet)
+
+#if defined(SP_DBUGIO)
+           write(3,*)' In filget 000; inum:   ', inum
+           write(3,*)' In filget 000; filpat: ', trim(filpat)
+           write(3,*)' In filget 000; filnam: ', trim(filnam)
+           write(3,*)' '
+#endif
+
            RETURN 
 
 
@@ -163,7 +170,14 @@ C       FIND 1ST CHAR IN FILNAM THAT WILL BE ALTERED
            WRITE(NOUT,*) ' *** ERROR IN FILENAME'
            IRTFLG = 1
         ENDIF
-        !write(6,*) ' filget, filnam: ',filnam(:nlet)
+
+#if defined(SP_DBUGIO)
+           write(3,*)' '
+           write(3,*)' In filget 111; inum:   ', inum
+           write(3,*)' In filget 111; filpat: ', trim(filpat)
+           write(3,*)' In filget 111; filnam: ', trim(filnam)
+           write(3,*)' '
+#endif
 
         END
 

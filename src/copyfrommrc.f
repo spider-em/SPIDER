@@ -21,12 +21,13 @@ C              'MRCV'                            DEC 2015 ArDean Leith
 C              REWRITE FOR NATIVE MRC SUPPORT    JAN 2020 ArDean Leith
 C              DEBUG OUTPUT ADDED                SEP 2025 ArDean Leith
 C              LUNCP=0, NO COPY FROM MRC HEADER  SEP 2025 ArDean Leith
+C              STACK BUGS FIXED                  FEB 2026 ArDean Leith
 c
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2025 Health Research Inc.,                          *
+C=* Copyright 1985-2026 Health Research Inc.,                          *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email:                                                             *
 C=*                                                                    *
@@ -82,10 +83,15 @@ C***********************************************************************
         CHARACTER (LEN=4)        :: CAXIS
         CHARACTER (LEN=12)       :: CSTR
         INTEGER                  :: NC,NCC,NE,NOT_USED
-        INTEGER                  :: NILMAX,IRTFLG,NSTACK1,NLET1,NINDX1
-        INTEGER                  :: IFORM1,NX1,NY1,NZ1,NDUM,NGOT1,NGOT2
-        INTEGER                  :: IMG1,NSTACK2,NLET2,IDUM,NINDX2,IMG2
+        INTEGER                  :: NILMAX,IRTFLG,NSTK1,NLET1,NINDX1
+        INTEGER                  :: IFORM1,NX1,NY1,NZ1,NDUM
+        INTEGER                  :: NLIST1,NLIST2
+        INTEGER                  :: IMG1,NSTK2,NLET2,IDUM,NINDX2,IMG2
+
         INTEGER,ALLOCATABLE      :: ILIST1(:),ILIST2(:)
+
+        INTEGER                  :: irep = 0
+
 
         VERBOSE_SAVE = VERBOSE       ! SAVE CURRENT VERBOSITY
 
@@ -98,38 +104,42 @@ C***********************************************************************
            RETURN
         ENDIF
 
-C       OPEN FIRST INPUT MRC FILE 
+C       OPEN FIRST INPUT MRC TYPE FILE (.mrc,.MRC,.map,.MAP,.mrcs,.MRCS)
 
-        PROMPT  = 'MRC INPUT FILE OR TEMPLATE (E.G. *@STK)~~9'
+        PROMPT  = 'MRC INPUT FILE OR TEMPLATE (E.G. *@file.mrc)~~9'
         CALL FILERD(FILNAM1,NLET1,NULL, PROMPT,IRTFLG)
         IF (IRTFLG .NE. 0) GOTO 999
 
 C       APPEND .mrc IF NEEDED
-        IF (INDEX(FILNAM1,'.mrc') <= 0 .AND.
-     &      INDEX(FILNAM1,'.MRC') <= 0 .AND.
-     &      INDEX(FILNAM1,'.map') <= 0 .AND.
-     &      INDEX(FILNAM1,'.MAP') <= 0) THEN
+        IF (INDEX(FILNAM1,'.mrc')  <= 0  .AND.
+     &      INDEX(FILNAM1,'.MRC')  <= 0  .AND.
+     &      INDEX(FILNAM1,'.map')  <= 0  .AND.
+     &      INDEX(FILNAM1,'.MAP')  <= 0  .AND.
+     &      INDEX(FILNAM1,'.mrcs') <= 0  .AND.
+     &      INDEX(FILNAM1,'.MRCS') <= 0) THEN
             FILNAM1 = FILNAM1(1:NLET1) // '.mrc'
             NLET1   = NLET1 + 4
         ENDIF
 
-        NSTACK1 =  1   ! PARAMETER UNUSED ON INPUT
-        DISP    = 'E'  ! DISP = 'E' DOES NOT STOP ON ERROR
-        ASKNAM  = .FALSE.  
+        NSTK1   =  1   ! PARAMETER UNUSED ON INPUT
+        !DISP   = 'E'  ! DISP = 'E' DOES NOT STOP ON ERROR
+        DISP    = 'R'  ! DISP = 'R' OPEN INPUT AS READ-ONLY FILE 
+        ASKNAM  = .FALSE.
+  
         CALL OPFILES(0,LUN1,LUNDOC,LUNXM1,  
      &               ASKNAM,FILNAM1,NLET1, DISP,
-     &               IFORM1,NX1,NY1,NZ1,NSTACK1,
+     &               IFORM1,NX1,NY1,NZ1, NSTK1,
      &               FILNAM1,
      &               FOUROK, ILIST1,NILMAX, 
-     &               NDUM,NGOT1,IMG1, IRTFLG) 
+     &               NDUM,NLIST1,IMG1, IRTFLG) 
         IF (IRTFLG .NE. 0) RETURN
 
-C       NSTACK1 RET:  -2   IS NON-STACK IMAGE,  -1 IS STACKED IMG,                  
-C                    >= 0 IS CURRENT MAX. IMG # FOR STACK             
+#if defined (SP_DBUGIO)
+        write(3,*)' In copyfrommrc'
+        write(3,*)' In copyfrommrc; nstk1,nlist1,img1: ',
+     &                              nstk1,nlist1,img1
+#endif
 
-       !write(6,*)' In copyfrommrc; nstack1,ngot1,img1: ',
-       !&                           nstack1,ngot1,img1
- 
 C       BE SURE INPUT IS MRC
         CALL LUNGETIS_MRC(LUN1,IS_MRC,IRTFLG)
         IF (.NOT. IS_MRC) THEN    
@@ -137,35 +147,34 @@ C       BE SURE INPUT IS MRC
            GOTO 999
         ENDIF
 
-        !write(6,*)' In copyfrommrc, is_mrc:',is_mrc
-
 
 C	OPEN FIRST SPIDER OUTPUT FILE
-        NSTACK2 =  1   ! PARAMETER NOT USED ON INPUT
-        DISP    = 'U'          
-        IMG2    = IMG1
-        LUNCP   = 0    ! CAN NOT COPY FROM MRC HEADER
+        NSTK2  =  1   ! PARAMETER NOT USED ON INPUT
+        DISP   = 'U'          
+        IMG2   = IMG1 ! DEFAULT?
+        LUNCP  = 0    ! CAN NOT COPY FROM MRC HEADER
 
-        IF (NSTACK1 >= 0) THEN
-           PROMPT = 'SPIDER OUTPUT FILE OR TEMPLATE (E.G. STK@*)~~9'
+        IF (NLIST1 >= 0) THEN
+           PROMPT = 'SPIDER OUTPUT FILE OR TEMPLATE (E.G. file@*)~~9'
         ELSE
            PROMPT = 'SPIDER OUTPUT FILE~'
         ENDIF
         CALL FILERD(FILNAM2,NLET2,NULL, PROMPT,IRTFLG)
         IF (IRTFLG .NE. 0) GOTO 999
 
-        CALL LUNGETISBARE_MRC(LUN1,IS_BARE,IRTFLG)
+        CALL LUNGET_ISBARE_MRC(LUN1,IS_BARE,IRTFLG)
         IF (IRTFLG .NE. 0) GOTO 999
 
 C       TREAT THIS IMAGE AS A STACK NOT A VOLUME (WHERE RELEVENT)
         IS_ACTUALLY_A_VOL = .FALSE.
 
-        IF (NSTACK1 >= 0) THEN
+        IF (NSTK1 >= 0) THEN
 C           MAY HAVE ABERRENT MRC HEADER
             IF  (FCHAR(9:12) == 'MRCV') THEN
                IS_ACTUALLY_A_VOL = .TRUE.
 
             ELSEIF (IS_BARE) THEN
+C              COPYING WHOLE MRC STACK
                IMG2   = 1
                CALL RDPRI1S(IMG2,NOT_USED,
      &                  'FIRST IMAGE NUMBER IN SPIDER STACK',IRTFLG)
@@ -177,37 +186,38 @@ C           MAY HAVE ABERRENT MRC HEADER
          ENDIF
 
          IF (IS_ACTUALLY_A_VOL) THEN
-C           TREAT THIS IMAGE AS A VOLUME NOT A STACK
-            NZ1     = NSTACK1
-            NSTACK1 = -2
-            CALL LUNSETNSTACK_MRC(LUN1, NZ1,NSTACK1,IRTFLG)
+C           TREAT THIS MRC FILE AS A VOLUME NOT A STACK
+            NZ1   = NSTK1
+            NSTK1 = -2
+            CALL LUNSET_2014_MRC(LUN1, NZ1,NSTK1, IRTFLG)
         ENDIF
 
         ASKNAM = .FALSE.
         CALL OPFILES(LUNCP,LUN2,LUNDOC,LUNXM2, 
      &             ASKNAM,FILNAM2,NLET2,DISP,
-     &             IFORM1,NX1,NY1,NZ1,NSTACK2,
+     &             IFORM1,NX1,NY1,NZ1,NSTK2,
      &             FILNAM2,
      &             FOUROK, ILIST2,NILMAX, 
-     &             NDUM,NGOT2,IMG2, IRTFLG)
+     &             NDUM,NLIST2,IMG2, IRTFLG)
  
-C       NSTACK2 RET: -2   IS NON-STACK IMAGE,  
-C                    -1   IS STACKED IMG              
-C                    >= 0 IS CURRENT MAX. IMG # FOR STACK             
 
-        !write(6,*)'In opfiles; nstack2,ngot2,img2: ',nstack2,ngot2,img2
+#if defined (SP_DBUGIO)
+       write(3,*)' In copyfrommrc; nstk1,nlist1,img1: ',
+     &                             nstk1,nlist1,img1
+       write(3,*)' In copyfrommrc; nstk2,nlist2,img2: ', 
+     &                             nstk2,nlist2,img2
+       write(3,*)' ' 
+#endif
 
         CALL WHICH_HAND_MRC(LUN1,FILNAM1,CAXIS,IRTFLG)
         IF (IRTFLG .NE. 0) GOTO 999
 
-        !write(6,*) ' Mrc data axis: ',caxis
-
         IF (NZ1 <= 1) THEN       ! IMAGE(S) INPUT
-           CALL RDPRMC(CSTR,NC,.TRUE.,'DATA ORIGIN CORNER (UL/LL)', 
+           CALL RDPRMC(CSTR,NC,.TRUE.,'MRC DATA ORIGIN CORNER (UL/LL)', 
      &              NULL,IRTFLG)
         ELSE                     ! VOLUME(S) INPUT
            CALL RDPRMC(CSTR,NC,.TRUE.,  
-     &              'DATA ORIGIN CORNER (UL/LL) & HANDEDNESS (L/R)',
+     &              'MRC DATA ORIGIN CORNER (UL/LL) & HANDEDNESS (L/R)',
      &              NULL,IRTFLG)
         ENDIF
         IF (IRTFLG .NE. 0)  RETURN
@@ -226,14 +236,15 @@ C                    >= 0 IS CURRENT MAX. IMG # FOR STACK
 C          VOLUME OUTPUT
            CAXIS(4:4) = 'L'
            IF (INDEX(CSTR(3:NC),'R')  > 0) CAXIS(4:4) = 'R'
-
            !WRITE(NOUT,*)' DATA ORIGIN CORNER & HANDEDNESS: (',CAXIS,')'
+
         ELSE
            !WRITE(NOUT,*)' DATA ORIGIN CORNER: (',CAXIS(1:2),')'
         ENDIF
 
-        CALL LUNSETHAND_MRC(LUN1,CAXIS,IRTFLG)
-        CALL LUNSETPOS_MRC (LUN1,NGOT1,IRTFLG)
+        CALL LUNSET_HAND_MRC(LUN1,CAXIS,IRTFLG)
+        !!!!! FEB 2026   CALL LUNSET_POS_MRC (LUN1,NLIST1,IRTFLG)
+        CALL LUNSET_POS_MRC (LUN1,IMG1,IRTFLG)
         IF (IRTFLG .NE. 0) GOTO 999
 
         NINDX1 = 1
@@ -241,34 +252,69 @@ C          VOLUME OUTPUT
         DO                ! LOOP OVER ALL IMAGES/STACKS
 
 C          DO NOT REPORT FILE INFO IF WHOLE STACK (VERBOSE IN COMMON)
-           !!!IF (NSTACK1 > 0 .AND. NSTACK2 >= 0) VERBOSE = .FALSE. 
+           !!!IF (NSTK1 > 0 .AND. NSTK2 >= 0) VERBOSE = .FALSE. 
 
 C          COPY THE DESIRED NUMBER OF DATA RECORDS (MRC OK)
            DO IREC = 1,NY1 * NZ1
               CALL REDLIN(LUN1,BUF,NX1,IREC)
               CALL WRTLIN(LUN2,BUF,NX1,IREC)
+
+#if defined (SP_DBUGIO_NEVER)
+           write(3,*)' In copyfrommrc irec: ',irec
+           if (irec == 1) then
+             write(3,*)' In copyfrommrc irec: ',irec
+             write(3,*)' In copyfrommrc; rrrrrrrrrrrrrrrrrrrrrrr'
+
+             write(3,*)' In copyfrommrc; filnam1:   ',trim(filnam1)
+             write(3,*)' In copyfrommrc; filnam2:   ',trim(filnam2)
+
+             write(3,*)' In copyfrommrc; nstk1,nstk2:   ',nstk1, nstk2
+             write(3,*)' In copyfrommrc; nlist1,nlist2: ',nlist1,nlist2
+             write(3,*)' In copyfrommrc; img1,img2:     ',img1,  img2
+             write(3,*)' In copyfrommrc; nindx1,nindx2: ',nindx1,nindx2
+ 
+             write(3,*)' In copyfrommrc; ilists: ',ilist1(:3),ilist2(:3)
+           endif
+#endif
+
            ENDDO
 
-           !write(6,*)' In copyfrommrc; ilist: ',ilist1(:3),ilist2(:3)
-           !write(6,*)' In copyfrommrc; filnam1:  ',filnam1(:20)
-           !write(6,*)' In copyfrommrc; filnam2:  ',filnam2(:20)
-           !write(6,*)' In copyfrommrc; ngot1..2: ',ngot1,ngot2 
-           !write(6,*)' In copyfrommrc; nindx1..2:',nindx1,nindx2 
-           !write(6,*)' in copyfrommrc; img1..2:  ',img1,img2 
+#if defined (SP_DBUGIO_NEVER)
+           write(3,*)' In copyfrommrc '
+           write(3,*)' In copyfrommrc; ssssssssssssssssssssssss'
+
+           write(3,*)' In copyfrommrc; filnam1:   ',trim(filnam1)
+           write(3,*)' In copyfrommrc; filnam2:   ',trim(filnam2)
+
+           write(3,*)' In copyfrommrc; nstk1,nstk2:   ',nstk1, nstk2
+           write(3,*)' In copyfrommrc; nlist1,nlist2: ',nlist1,nlist2
+           write(3,*)' In copyfrommrc; img1,img2:     ',img1,  img2
+           write(3,*)' In copyfrommrc; nindx1,nindx2: ',nindx1,nindx2
+ 
+           write(3,*)' In copyfrommrc; ilists: ',ilist1(:3),ilist2(:3)
+           irep = irep + 1
+           if (irep .ge. 5)  RETURN
+#endif
+
 
 C          OPEN NEXT SET OF I/O FILES, UPDATES NINDX1 & NINDX2 
            CALL NEXTFILES(NINDX1,NINDX2,  ILIST1,ILIST2, 
      &                    .FALSE., LUNXM1,LUNXM2,
-     &                    NGOT1,NGOT2,    NSTACK1,NSTACK2,  
+     &                    NLIST1,NLIST2,  NSTK1,NSTK2,  
      &                    LUN1,LUN1,LUN2, FILNAM1,FILNAM2,
      &                    IMG1,IMG2, IRTFLG)
 
-           !if (irtflg .ne. 0) then
-           !write(6,'(A,4i6)') 
-           !&        ' Nextfiles; img1,img2,irtflg: ',img1,img2,irtflg
-           !write(6,'(A,4i6)') 
-           !&        ' Nextfiles; nindx1,nindx2: ',nindx1,nindx2
-           !endif
+#if defined (SP_DBUGIO_NEVER)
+           write(3,*)' In copyfrommrc; tttttttttttttttttttttttttt'
+           write(3,*)' In copyfrommrc; irep:          ',irep 
+           write(3,*)' In copyfrommrc; filnam1:       ',trim(filnam1)
+           write(3,*)' In copyfrommrc; filnam2:       ',trim(filnam2)
+           write(3,*)' In copyfrommrc; nstk1,nstk2:   ',nstk1, nstk2
+           write(3,*)' In copyfrommrc; nlist1,nlist2: ',nlist1,nlist2
+           write(3,*)' In copyfrommrc; img1,img2:     ',img1,  img2
+           write(3,*)' In copyfrommrc; nindx1,nindx2: ',nindx1,nindx2
+           write(3,*)' In copyfrommrc; ilists: ',ilist1(:3),ilist2(:3)
+#endif
 
            IF (IRTFLG .NE. 0) EXIT      ! ERROR / END OF INPUT STACK
        ENDDO

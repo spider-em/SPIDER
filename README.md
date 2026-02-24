@@ -36,7 +36,7 @@ See the [SPIDER Github Website](https://spider-em.github.io/SPIDER)  for complet
       
    3. SPIDER has often been used in conjunction with other software e.g. the [iterative helical real space reconstruction methods](http://doi.org/10.1017/S0033583524000155) developed by Edward H. Egelman. 
              
-   4. Maintained since 2007 by: ArDean Leith & Tanvir (Tapu) Shaikh. During these 18  years they have added numerous operations, procedures, parallelizations, and over 500 pages of documentation. No significant contributors since 2007 other than Leith, Shaikh, Kischenko, and Kennedy.
+   4. Maintained since 2007 by: ArDean Leith & Tanvir (Tapu) Shaikh. During these 19  years they have added numerous operations, procedures, parallelizations, and over 500 pages of documentation. No significant contributors since 2007 other than Leith, Shaikh, Kischenko, and Kennedy.
 
    5. Please use following citation when you use SPIDER:            
  [SPIDER and Web: Processing and Visualization of Images in 3D  Electron Microscopy and Related Fields](https://www.ncbi.nlm.nih.gov/pubmed/8742743/)  Frank J, Radermacher M, Penczek P, Zhu J, Li Y, Ladjadj M, and Leith A.  J. Struct. Biol. 116: 190-199 (1996)
