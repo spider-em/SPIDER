@@ -8,12 +8,13 @@ C                 MRC SUPPORT                   JUL 2019  ArDean Leith
 C                 MORE MRC SUPPORT              DEC 2019  ArDean Leith
 C                 FIXED MRC NBYT_PER_VAL BUG    SEP 2025  ArDean Leith
 C                 MRC I1BUF UNSAFE IN THREADS   SEP 2025  ArDean Leith
+C                DEBUG OUTPUT ADDED             APR 2026  ArDean Leith
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2025  Health Research Inc.,                         *
+C=* Copyright 1985-2026  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email:                                                             *
 C=*                                                                    *
@@ -67,6 +68,8 @@ C     ---------------------- WRTLIN ------------------------------------
 C     HAS  IMG PIPING INFO
       USE WRTLIN_PIPE_STUFF
 
+      IMPLICIT NONE
+
 C     USE INLINE BUFFER COMMON AREA
       INCLUDE 'INLN_INFO.INC'
       INCLUDE 'CMLIMIT.INC'
@@ -74,11 +77,18 @@ C     USE INLINE BUFFER COMMON AREA
       INTEGER         :: LUNT,NB,IREC
       REAL            :: BUF(NB)
 
-      INTEGER         :: IERR,LUNC,NIN,NOUT,NECHO,IFOUND,NPROC,NDAT
-      INTEGER         :: LUNARA,LUNSTK,LUNARB,LUNFLIP
+      INTEGER         :: LUN, IRTFLG,I,LENT
 
-      COMMON /IOERR/  IERR
-      COMMON /UNITS/  LUNC,NIN,NOUT,NECHO,IFOUND,NPROC,NDAT
+      INTEGER         :: lnblnkn
+      INTEGER         :: ib6,ib13,ib24,ib26,ib27
+
+      INTEGER         :: IERR
+      COMMON /IOERR/     IERR
+
+      INTEGER         :: LUNC,NIN,NOUT,NECHO,IFOUND,NPROC,NDAT
+      COMMON /UNITS/     LUNC,NIN,NOUT,NECHO,IFOUND,NPROC,NDAT
+
+      INTEGER         :: LUNARA,LUNSTK,LUNARB,LUNFLIP
       COMMON /LUNARA/ LUNARA(100),LUNSTK(100),LUNARB(100),LUNFLIP(100)
 
       INTEGER *8      :: LUNMRCPOS
@@ -109,33 +119,76 @@ C        USE PIPE FOR OUTPUT
 
       LUN = LUNARB(LUNT)
 
+
       IF (LUNMRCPOS(LUN) == 0) THEN
 C       DIRECT ACCESS SPIDER FILE
 
 C       ADD LUNARA(LUN) (FOR LABEL REC) AND LUNSTK (FOR STACK OFFSET)
 C       TO IREC TO GET THE CORRECT RECORD NUMBER
-        I = IREC + LUNARA(LUN) + LUNSTK(LUNT)
+        I    = IREC + LUNARA(LUN) + LUNSTK(LUNT)
 
         IERR = 0
         IF (MYPID <= 0) THEN
 
-#if defined (SP_DBUGIO_NEVER)
-          write(3,*)'    ' 
-          write(3,*)' In wrtlin; irec:         ', irec, ' 111111111111' 
-          write(3,*)' In wrtlin; lunara(lun):  ', lunara(lun)
-          write(3,*)' In wrtlin; lunstk(lunt): ', lunstk(lunt) 
-          write(3,*)' In wrtlin; I=:           ', i 
-          write(3,*)'   ' 
-          !write(3,*)' In wrtlin; lun,lunflip(lun),nb,i: ', 
-          !&                      lun,lunflip(lun),nb,i 
-        endif
-#endif
            IF (LUNFLIP(LUN) == 0) THEN
               WRITE(LUN,REC=I,IOSTAT=IERR) BUF
+
            ELSE
               CALL FLIPBYTES(BUF,FLIPBUF,NB,IRTFLG)
               WRITE(LUN,REC=I,IOSTAT=IERR) FLIPBUF
            ENDIF
+
+cc#define SP_DBUGIO 
+#if defined (SP_DBUGIO)
+         if (nb == 64 .and. (i == 1 .or. i == 5 .or. i == 410)) then
+           ib6  = buf(6)
+           ib13 = buf(13)
+           ib24 = buf(24)
+           ib26 = buf(26)
+           ib27 = buf(27)
+
+           write(3,*)'    ' 
+           write(3,*)' In wrtlin; nb:             ', nb
+           write(3,*)' In wrtlin; irec:           ', irec 
+           write(3,*)' In wrtlin;   --------------- IIII:    ', i 
+           write(3,*)' In wrtlin; lunt:           ', lunt
+         if (lunt .ne. lun) then
+           write(3,*)' In wrtlin; lunara(lunt):   ', lunara(lunt)
+           write(3,*)' In wrtlin; lunarb(lunt):   ', lunarb(lunt)
+           write(3,*)' In wrtlin; lunflip(lunt):  ', lunflip(lunt) 
+           write(3,*)' In wrtlin; lunstk(lunt):   ', lunstk(lunt)
+         endif 
+           write(3,*)' In wrtlin; lun:            ', lun
+           write(3,*)' In wrtlin; lunara(lun):    ', lunara(lun)
+           write(3,*)' In wrtlin; lunarb(lun):    ', lunarb(lun)
+           write(3,*)' In wrtlin; lunflip(lun):   ', lunflip(lun) 
+           write(3,*)' In wrtlin; lunstk(lun):    ', lunstk(lun) 
+           write(3,*)' In wrtlin; buf( 6 i): imami  ', ib6 
+           write(3,*)' In wrtlin; buf( 8 i): fmin  ', buf(8) 
+           write(3,*)' In wrtlin; buf( 7 i): fmax  ', buf(7) 
+           write(3,*)' In wrtlin; buf(13 i): labrec ', ib13 
+           write(3,*)' In wrtlin; buf(24 o): istack ', ib24 
+           write(3,*)' In wrtlin; buf(26 o): maxim  ', ib26 
+           write(3,*)' In wrtlin; buf(27 i): imgnum ', ib27 
+
+           if (lunflip(lun) .ne. 0) then
+             write(3,*)'    ' 
+             write(3,*)' In wrtlin; flipbuf(2):    nx     ', flipbuf(2) 
+             write(3,*)' In wrtlin; flipbuf(24 o): istack ', flipbuf(24)
+             write(3,*)' In wrtlin; flipbuf(26 o): maxim  ', flipbuf(26)
+             write(3,*)' In wrtlin; flipbuf(27 i): imgnum ', flipbuf(27)
+           endif 
+           write(3,*)'   ' 
+         endif
+
+         if (nb == 64 .and. i == 9 ) then
+            write(3,*)' In wrtlin; -------------   IIII:        ', i 
+            write(3,*)' In wrtlin; data buf(1):    ', buf(1)
+            write(3,*)' In wrtlin; data buf(64):   ', buf(64)
+            write(3,*)' Wrote to lun:              ' ,lun
+            write(3,*)'   ' 
+         endif
+#endif
 
            IF (IERR .NE. 0) THEN
               INQUIRE(UNIT=LUN,OPENED=ISOPEN,NAME=FILOPEND)
@@ -144,7 +197,7 @@ C       TO IREC TO GET THE CORRECT RECORD NUMBER
 99            FORMAT( '  *** ERROR(',I4,') WRITING RECORD: ',I6,
      &                ' LENGTH: ', I5,' ON UNIT: ',I3,' TO FILE: ',A)
            ENDIF
-        ENDIF
+         ENDIF
 
       ELSE
 
@@ -158,6 +211,11 @@ C       STREAM ACCESS MRC FILE
          CALL BCAST_MPI('WRTLIN','IERR',IERR,1,'I', ICOMM,MPIERR)
          CALL MPI_BARRIER(ICOMM,MPIERR)
       ENDIF
+#endif
+
+#if defined (SP_DBUGIO_NEVER)
+      write(3,*)'    ' 
+      write(3,*)'  Leaving wrtlin $$$$$$$$$$$$$$$$$$$'
 #endif
 
       END
@@ -346,7 +404,7 @@ C--*********************************************************************
       USE WRTLIN_PIPE_STUFF
       INCLUDE 'CMLIMIT.INC' 
 
-      CHARACTER (LEN=MAXNAM), SAVE :: PIPENAME = CHAR(0)
+      CHARACTER (LEN=MAXNAM), SAVE :: PIPENAME = CHAR(0)  
       CHARACTER (LEN=1)            :: NULL = CHAR(0)
       LOGICAL                      :: ISOPEN = .FALSE.
       LOGICAL, SAVE                :: NEEDOPEN = .TRUE.

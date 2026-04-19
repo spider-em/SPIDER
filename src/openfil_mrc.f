@@ -5,12 +5,13 @@ C OPENFIL_MRC F ADAPTED FROM OPENFIL            MAY 2019 ArDean Leith
 C               BUGS FIXED lnblnkn              SEP 2025 ArDean Leith 
 C               DEBUG OUTPUT                    OCT 2025 ArDean Leith
 C               REWRITTEN                       NOV 2025 ArDean Leith
+C               GET_FILNAM_INFO ADDED           APR 2026 ArDean Leith
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2025  Health Research InC ,                         *
+C=* Copyright 1985-2026  Health Research InC ,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email:                                                             *
 C=*                                                                    *
@@ -141,7 +142,7 @@ C--*********************************************************************
 
       CHARACTER(LEN=MAXNAM)   :: FILNAM
       CHARACTER(LEN=MAXNAM)   :: FIL_NOAT,FIL_DIRS,FIL_BASE,FIL_EXT 
-      LOGICAL                 :: IS_MRC, IS_MRCS
+      LOGICAL                 :: IS_MRC, IS_MRCS, GOT_FILE
 
 
 C     WANT TO OPEN OLD OR NEW MRC FILE FOR STREAM ACCESS
@@ -157,7 +158,7 @@ C     WANT TO OPEN OLD OR NEW MRC FILE FOR STREAM ACCESS
       LIST_VAL = ISTK
       CALL GET_FILNAM_INFO(FILPAT, LIST_VAL, 
      &                     FIL_NOAT,FIL_DIRS,FIL_BASE,FIL_EXT,
-     &                     IS_MRC, IS_MRCS, IS_BARE, 
+     &                     IS_MRC, IS_MRCS, IS_BARE, GOT_FILE, 
      &                     ISTK,   IRTFLG)
 
       FILNAM = FIL_NOAT

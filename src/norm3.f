@@ -78,6 +78,7 @@ C     Sept 2025 al to fix for Gfort warning on threaded use
          RETURN
       ENDIF
 
+cc#define SP_DBUGIO
 #if defined(SP_DBUGIO)
       nynz = ny * nz
       write(3,*) ' In norm3; nx,ny,nz: ',nx,ny,nz
@@ -491,9 +492,6 @@ C          TRAP FOR BLANK IMAGE AREA IMPRECISION
         ENDIF
 
         END
-
-
-
 
 
 

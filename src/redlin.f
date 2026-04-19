@@ -100,17 +100,18 @@ C     FOR LUN EQUIVALENT INPUT == OUTPUT
       LUN = LUNARB(LUNT)
 
 
-#undef SP_DBUGIO
+CC#define SP_DBUGIO_NOT
+#if defined(SP_DBUGIO)
+      if (irec < 2) then
+         write(3,*)'    ' 
+         write(3,*)' In redlin; lun,lunt:       ', lun,lunt 
+         write(3,*)' In redlin; lunflip(lun):   ', lunflip(lun) 
+         write(3,*)' In redlin; lunflip(lunt):  ', lunflip(lunt) 
 
-c#if defined(SP_DBUGIO)
-c       if (irec < 2) then
-c         write(3,'(A,5i10)')'  In redlin; lun,lunt,lunmrcpos(lun):',
-c     &                                    lun,lunt,lunmrcpos(lun)  
-c         write(3,'(A,5i6)') '  In redlin; lun,lunflip(lun):',
-c     &                                    lun,lunflip(lun) 
-c         write(3,'(A,5i6)') '  In redlin; nb,irec: ', nb,irec 
-c       endif
-c#endif
+         write(3,*)' In redlin; lunmrcpos(lun): ', lunmrcpos(lun) 
+         write(3,*)' In redlin; nb,irec:        ', nb,irec 
+      endif
+#endif
 
       IF (LUNMRCPOS(LUN) == 0) THEN  ! -------- For SPIDER input ------
 
@@ -126,9 +127,16 @@ C       OTHERWISE, USING MPI, READS ONLY ON PROCESSOR MYPID = 0
 
         IF (MYPID <= 0) READ(LUN,REC=I,IOSTAT=IERR) BUF
 
-#if defined(SP_DBUGIO)
-        if (irec < 2) then
-          write(3,'(A,5i6)')'  In redlin; lun,nb,i: ',lun,nb,i
+CC#define SP_DBUGIO 
+#if defined (SP_DBUGIO)
+       if (i == 1 .OR. i == 4) then
+          write(3,*)'    ' 
+          write(3,*)' In redlin; I:              ', i 
+          write(3,*)' In redlin; irec:           ', irec
+          write(3,*)' In redlin; lun,lunt:       ', lun,lunt
+          write(3,*)' In redlin; lunara(lun):    ', lunara(lun)
+          write(3,*)' In redlin; lunstk(lunt):   ', lunstk(lunt) 
+          write(3,*)' '
         endif
 #endif
  
@@ -140,23 +148,27 @@ C        DIRECT ACCESS MRC FILE
 
 
       ENDIF  ! ------------------ For SPIDER & MRC input ------------
+
+
+
+#if defined(SP_DBUGIO)
+         !if (irec < 2 ) then
+         if (i == 1 .OR. i == 4) then
+         write(3,*)' In redlin 01 ; lunflip(lun):  ', lunflip(lun) 
+         write(3,*)' In redlin 01 ; lunflip(lunt): ', lunflip(lunt) 
+         write(3,*)' In redlin 01 ; buf(1),buf(7): ', buf(1),buf(7) 
+         endif
+#endif
           
       IF (LUNFLIP(LUN) == 1) THEN
 C        FLIP INPUT BYTES IN BUF ARRAY
 
-#if defined(SP_DBUGIO)
-         if (irec < 2 ) then
-         write(3,'(A,5f16.2)')'  In redlin before flip; buf(1),buf(5):',
-     &                                                  buf(1),buf(5) 
-      endif
-#endif
-
          CALL FLIPBYTESI(BUF,NB,IRTFLG) 
 
 #if defined(SP_DBUGIO)
-         if (irec < 2 ) then
-         write(3,'(A,5f16.2)')'  In redlin  after flip; buf(1),buf(5):',
-     &                                                  buf(1),buf(5) 
+         !if (irec < 2 ) then
+         if (i == 1 .OR. i == 4) then
+         write(3,*)' In redlin 02 ; buf(1),buf(7): ',buf(1),buf(7) 
          endif
 #endif
  
@@ -222,7 +234,7 @@ C        ORIGIN IS UPPER LEFT
          RETURN
       ENDIF
 
-#if defined(SP_DBUGIO)       
+#if defined(SP_DBUGIO_NOT)       
       if (irec < 2 .or. irec .eq. 224) then
 
         write(3,'(A,5i6)')'  In redlin_mrc; nb,irec:',
@@ -233,7 +245,7 @@ C        ORIGIN IS UPPER LEFT
 
 
        write(3,'(A,5i6)')'  In redlin_mrc; nbyt_per_val,nbyt_per_rec:',
-     &                                      nbyt_per_val,nbyt_per_rec 
+     &                                     nbyt_per_val,nbyt_per_rec 
 
         write(3,'(A,5i10)')'  In redlin_mrc; lunmrcpos(lun),iposmrc:',
      &                                       lunmrcpos(lun),iposmrc 
@@ -263,7 +275,7 @@ C        MRC FILE CONTAINS 8 BIT INTEGER*1 VALUES
  
       ENDIF
 
-#if defined(SP_DBUGIO)
+#if defined(SP_DBUGIO_NOT)
       if (irec < 2) then
         write(3,'(A,i5,3f10.3)')'  In redlin_mrc; irec,buf(1),buf(5):',
      &                                            irec,buf(1),buf(5) 

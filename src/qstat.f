@@ -7,11 +7,13 @@ C                      ==,NSAM,IMPLICIT              2016 ArDean Leith
 C                      (IN HEADER) MSG               2019 ArDean Leith
 C                      DEBUG OUTPUT                  2025 ArDean Leith
 C                      FLOWCHART                     2025 ArDean Leith
+C                     SOME DEBUG CHANGES             2026 ArDean Leith
+C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2025  Health Research Inc.,                         *
+C=* Copyright 1985-2026  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email:                                                             *
 C=*                                                                    *
@@ -37,40 +39,42 @@ C                  NX,NY        X & Y DIMENSIONS OF IMAGE
 C                  NZ           Z DIMENSION  OF IMAGE
 C                  NSTACK       STACK/MAXIM INDICATOR
 C
-C     USED BY: FS 
-C     QSTAT
-C        v
-C     OPFILES Uses (E.G. STK@****)~~9  prompt for filename
-C             '~9' in last 3 char. of prompt accepts extension on filename 
-C        v
-C        ` ->  FILERD  
-C        v      ` ->  ECHONAME 
-C        |
-C        ` ->  FILELIST
-C        v 
-C        |  MRC file:       *.MRC or *.MRCS
-C        ` -> OPFILES_MRC
-C                 |
-C                 |  Templated stack:  **@STK.MRC
-C                 ` ---> FILGET_AT --> OPFILEC --> OPENFIL_MRC --> OPENFIL_O_MRC C                 |                                            --> OPENFIL_N_MRC
-C                 |
-C                 |  Whole barestack:  @STK.MRC 
-C                 ` ---> FILGET_AT --> OPFILEC --> OPENFIL_MRC --> OPENFIL_O_MRC
-C                 |                                            --> OPENFIL_N_MRC
-C                 | 
-C                 |  File template:    IMG***.MRC
-C                 ` ---> FILGET_AT --> OPFILEC --> OPENFIL_MRC --> OPENFIL_O_MRC
-C                 |                                            --> OPENFIL_N_MRC
-C                 | 
-C                 |  Simple file:      IMG001.MRC
-C        |        ` -----------------> OPFILEC --> OPENFIL_MRC --> OPENFIL_O_MRC C        |                                                     --> OPENFIL_N_MRC
-C        | 
-C        v
-C      NORM3
-C        ` -> REDLIN
-C        | 
-C        v
-C      REPORTSTAT
+C  USED BY: FS 
+C  QSTAT
+C     v
+C  OPFILES Uses (E.G. STK@****)~~9  prompt for filename
+C          '~9' in last 3 char of prompt keeps extension on filename 
+C     v
+C     ` ->  FILERD  
+C     v      ` ->  ECHONAME 
+C     |
+C     ` ->  FILELIST
+C     v 
+C     |  MRC file:       *.MRC or *.MRCS
+C     ` -> OPFILES_MRC
+C           |
+C           |  Templated stack: **@STK.MRC
+C           ` --> FILGET_AT --> OPFILEC --> OPENFIL_MRC --> OPENFIL_O_MRC
+C           |                                           --> OPENFIL_N_MRC
+C           |
+C           |  Whole barestack: @STK.MRC 
+C           ` --> FILGET_AT --> OPFILEC --> OPENFIL_MRC --> OPENFIL_O_MRC
+C           |                                           --> OPENFIL_N_MRC
+C           | 
+C           |  File template:   IMG***.MRC
+C           ` --> FILGET_AT --> OPFILEC --> OPENFIL_MRC --> OPENFIL_O_MRC
+C           |                                           --> OPENFIL_N_MRC
+C           | 
+C           |  Simple file:     IMG001.MRC
+C     |     ` ----------------> OPFILEC --> OPENFIL_MRC --> OPENFIL_O_MRC 
+C     |                                  --> OPENFIL_N_MRC
+C     | 
+C     v
+C   NORM3
+C     ` -> REDLIN
+C     | 
+C     v
+C   REPORTSTAT
 C
 C--*******************************************************************
 
@@ -89,7 +93,7 @@ C--*******************************************************************
       INTEGER               :: ILIST1(NIMAX)
       INTEGER               :: NILMAX,NLET1,IFORM1,NX1,NY1,NZ1
       INTEGER               :: NDUM,NGOT1,IMG1,IRTFLG
-      INTEGER               :: NXM,NYM,NZM,MAXIMM,npoint
+      INTEGER               :: NXM,NYM,NZM,MAXIMM,NPOINT
 
       INTEGER               :: ICOMM, MYPID, MPIERR
       INTEGER               :: NSTACK1, IMAMI1, IFORMM, NINDX1, NLET 
@@ -100,7 +104,7 @@ C--*******************************************************************
 
       CALL SET_MPI(ICOMM,MYPID,MPIERR) ! SETS ICOMM AND MYPID
 
-      !write(6,*)' In qstat 0; --------- 0'
+      !write(3,*)' In qstat 0; --------- 0'
 
 C     OPEN INPUT FILE
       NILMAX = NIMAX
@@ -112,13 +116,12 @@ C     OPEN INPUT FILE
      &             FOUROK, ILIST1,NILMAX, 
      &             NDUM,NGOT1,IMG1, IRTFLG)
  
-#if defined (SP_DBUGIO)
-      write(3,*)' In qstat; ilist1:',ilist1(1:5)
-      write(3,*)' In qstat; ngot1,nstack1,img1:',ngot1,nstack1,img1
+cc#define SP_DBUGIO
+#if defined (SP_DBUGIO_NEVER)
+      write(3,*)' In qstat; ilist*:',ilist1(1:3)
+      write(3,*)' In qstat; ngot1,nstack1,img1: ', ngot1,nstack1,img1
+      !write(3,*)' In qstat; irtflg:',irtflg
 
-      write(3,*)' In qstat; ngot1,nstack1,img1:',ngot1,nstack1,img1
-
-      write(3,*)' In qstat; irtflg:',irtflg
 #endif
 
       IF (IRTFLG .NE. 0) RETURN
@@ -164,10 +167,23 @@ C        OPEN MASK INPUT FILE
         ELSEIF (IMAMI1 .NE. 1) THEN    ! IMAMI IS FROM CMBLOCK
            NEWCALC = .TRUE.
            CALL NORM3(LUN1,NX1,NY1,NZ1,FMAX,FMIN,AV)
+
         ENDIF
 
         CALL REPORTSTAT(NEWCALC, FMIN,FMAX,AV,SIG)
         IF (VERBOSE) WRITE(NOUT,*) ' '
+
+
+#if defined (SP_DBUGIO)
+        write(3,*)' In qstat; imami1:           ', imami1
+        write(3,*)' In qstat; nindx1,ilist1(1): ', nindx1, ilist1(1)
+        write(3,*)' In qstat; ngot1,nstack1:    ', ngot1,nstack1
+        write(3,*)' In qstat; img1:             ', img1
+        write(3,*)' In qstat; irtflg:           ', irtflg
+        !write(3,*)' In qstat;     STOP'
+        !STOP
+#endif
+
 
 C       OPEN NEXT INPUT FILE, UPDATE NINDX1 
         CALL NEXTFILE(NINDX1,   ILIST1, 
@@ -180,9 +196,10 @@ C       OPEN NEXT INPUT FILE, UPDATE NINDX1
 #if defined (SP_DBUGIO)
         write(3,*)' In qstat; nindx1,ilist1(1): ',nindx1, ilist1(1)
         write(3,*)' In qstat; ngot1,nstack1:    ',ngot1,nstack1
-        write(3,*)' In qstat; img1:             ',img1
+        write(3,*)' In qstat; img1:             ',img1 
         write(3,*)' In qstat; irtflg:           ',irtflg
-        !write(3,*)' In qstat;     stop'
+        !write(3,*)' In qstat;     STOP'
+        !STOP
 #endif
 
         IF (IRTFLG .NE. 0) EXIT      ! ERROR / END OF INPUT STACK

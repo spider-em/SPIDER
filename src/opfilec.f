@@ -15,12 +15,14 @@ C                        KEEPEXT LOGIC           JUN 2014 ArDean Leith
 C                        INDEX(FILNAM,'.' BUG    AUG 2014 ArDean Leith
 C                        MRC SUPPORT             MAY 2019 ArDean Leith
 C                        DEBUG OUTPUT ADDED      SEP 2025 ArDean Leith 
+C                        STK CHANGES             APR 2026 ArDean Leith 
+C                        DEBUG OUTPUT ADDED      APR 2026 ArDean Leith
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2025  Health Research Inc.,                         *
+C=* Copyright 1985-2026  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email:                                                             *
 C=*                                                                    *
@@ -45,10 +47,10 @@ C  PURPOSE:        SOLICITS SPIDER OR MRC FILE NAME AND OPENS FILE
 C  
 C  PARAMETERS:
 C 
-C        LUNT      UNIT TO COPY HEADER VALUES FROM              (SENT)
+C        LUNT      UNIT TO COPY HEADER VALUES FROM  (INPUT)     (SENT)
 C        ASKNAM    LOGICAL FLAG TO QUERY NAME                   (SENT)
 C        FILNAM    FILENAME (WITOUT EXTENSION)              (SENT/RET)
-C        LUN       UNIT TO OPEN FILE ON                         (SENT)
+C        LUN       UNIT TO OPEN FILE ON    (OUTPUT)             (SENT)
 C        DISPT     CHARACTER CONTAINING ONE OF THE              (SENT)
 C                   FOLLOWING DISPOSITION SPECIFICATIONS:
 C                   'O'   -  FILE IS ASSUMED TO EXIST.  DIMENSIONS,
@@ -85,7 +87,7 @@ C
 C                  ON OUTPUT:
 C                       -2 NON-STACK IMAGE                
 C                       -1 STACKED IMAGE                  
-C                     >= 0 IS CURRENT MAX. IMAGE NO. FOR STACK  
+C                     >= 0 IS CURRENT MAX. IMG # IN STACK  
 C  
 C        PROMPT    PROMPT FOR FILNAME                          (SENT)
 C                    IF NOT (ASKNAM) THIS IS FILE NAME!         
@@ -138,10 +140,10 @@ C                |                    Inline    OPENINLN
 C                |                    file  
 C                |
 C                ? Inline stack
-C                |-------------> OPNINSTK -->      
+C                |-------------> OPENINSTK -->      
 C                |
 C                ? File stack
-C                |-------------> OPENSTK  --> OPENFIL -->
+C                |-------------> OPENSTK   --> OPENFIL -->
 C                   
 C
 C23456789012345678901234567890123456789012345678901234567890123456789012
@@ -164,26 +166,36 @@ C--*********************************************************************
         LOGICAL           :: ASKNAM,FOUROK
 
         INTEGER           :: LENP,NLETI,NBUFSIZT,IRTFLGT,NE
-        INTEGER           :: NSTACK
+        INTEGER           :: NSTACK,ISTACK
         CHARACTER (LEN=1) :: DSP,DISP
         LOGICAL           :: OPSTKNOAT,KEEPEXT
         CHARACTER (LEN=1) :: NULL = CHAR(0)
 
         LOGICAL           :: ISMRCFILE          ! FUNCTION
-        LOGICAL           :: IS_MRC,IS_BARE            
         INTEGER           :: ISTK,NSTK
  
         INTEGER           :: lnblnkn,lnblnk
+
+        CHARACTER(LEN=MAXNAM)  :: FIL_NOAT,FIL_DIRS,FIL_BASE,FIL_EXT 
+        LOGICAL                :: IS_MRC, IS_MRCS, IS_BARE,GOT_FILE
+        INTEGER                :: LIST_VAL
+
 
 C       HACK TO OPEN NEW FILES GREATER THAN NBUFSIZ (DANGEROUS)
         DISP = DISPT
         IF (DISP(1:1) == 'B') DISP = 'U'
 
+CC#define SP_DBUGIO 
 #if defined (SP_DBUGIO)
-        write(3,*)' In opfilec 00; asknam:     ', asknam
-        write(3,*)' In opfilec 00; filnam:     ', trim(filnam)
-        write(3,*)' In opfilec 00; itype,disp: ', itype,' |',disp,'|'
-        !write(3,*)' In opfilec 00; prompt:     ', prompt
+        write(3,*)' '
+        write(3,*)' In opfilec  00 ; lunt:       ', lunt
+        write(3,*)' In opfilec  00 ; lun:        ', lun
+        write(3,*)' In opfilec  00 ; asknam:               ', asknam
+       !write(3,*)' In opfilec  00 ; filnam:     ', trim(filnam)
+        write(3,*)' In opfilec  00 ; itype:      ', itype
+        write(3,*)' In opfilec  00 ; disp:              ', ' |',disp,'|'
+       !write(3,*)' In opfilec  00 ; nstk_flg:    ', nstk_flg
+       !write(3,*)' In opfilec  00 ; prompt:      ', prompt
 #endif
 
         LENP = lnblnkn(PROMPT)
@@ -195,7 +207,8 @@ C       HAS ~9 AT END OF PROMPT TO OPEN* TO KEEP INCOMING EXTENSION
         KEEPEXT = (INDEX(PROMPT(1:LENP),'~9') > 1)
 
 #if defined (SP_DBUGIO)
-        write(3,*)' In opfilec 11; keepext 1: ', keepext
+        write(3,*)' '
+        write(3,*)' In opfilec  11 ; keepext 1:           ', keepext
 #endif
 
         IF ( .NOT. ASKNAM .AND.
@@ -205,14 +218,16 @@ C       HAS ~9 AT END OF PROMPT TO OPEN* TO KEEP INCOMING EXTENSION
         ENDIF
                      
 #if defined (SP_DBUGIO)
-        write(3,*)' In opfilec 22; keepext 2: ', keepext
+        write(3,*)' '
+        write(3,*)' In opfilec  22 ; keepext 2:           ', keepext
+        write(3,*)' In opfilec  22 ; nstk_flg:  ',    nstk_flg
 #endif
 
 C       SET DEFAULT ERROR RETURN IRTFLG
         IRTFLG = 1
 
         IF (LUN <= 0 .OR. LUN > 100) THEN
-           CALL ERRT(102,'PGM. ERROR: LUN MUST BE 1...100',LUN)
+           CALL ERRT(102,'PGM. ERROR: LUN MUST BE 1...100',LUN) 
            RETURN
         ENDIF
 
@@ -223,19 +238,30 @@ C          SOLICIT FILE NAME, KEEPS EXTENSION IF PROMPT ENDS WITH: ~9
            IF (IRTFLG == -1) RETURN
 
         ELSE
-           NLETI = lnblnk(FILNAM)
+           NLETI = lnblnkn(FILNAM)
         ENDIF
 
 #if defined (SP_DBUGIO)
-        write(3,*)' In opfilec 33; Filnam: ', trim(filnam)
+        write(3,*)' '
+        write(3,*)' In opfilec  33 ; Filnam:      ', filnam(1:nleti)
+        write(3,*)' '
 #endif
+
+C       FOR FUTURE USE !!
+        LIST_VAL = 1            ! UNUSED
+        CALL GET_FILNAM_INFO(FILNAM, LIST_VAL, 
+     &                       FIL_NOAT,FIL_DIRS,FIL_BASE,FIL_EXT,
+     &                       IS_MRC, IS_MRCS, IS_BARE, GOT_FILE,
+     &                       ISTK,   IRTFLG)
+     
+        IF (ISTK > 0) NSTK_FLG = ISTK
 
 
         DSP = 'O'
         IF (DISP(1:1) .NE. 'O' .AND. 
      &      DISP(1:1) .NE. 'Z' .AND.
      &      DISP(1:1) .NE. 'E') THEN
-C          WILL OPEN A NEW FILE
+C          WILL OPEN A NEW FILE  
 
 C          HACK TO OPEN FILES GREATER THAN NBUFSIZ (DANGEROUS)
            NBUFSIZT = NBUFSIZ
@@ -260,9 +286,9 @@ C          CHECK THAT NECESSARY SIZE... INFO IS HERE
 C          WANT TO OPEN OLD OR NEW MRC FILE FOR STREAM ACCESS xxxxxxxx
 
 #if defined (SP_DBUGIO)
-          !write(3,*)' In opfilec 44; Nx,ny,nz: ', nx,ny,nz
-           write(3,*)' In opfilec 44; Filnam:   ', trim(filnam)
-           write(3,*)' In opfilec 44; Calling:  openfil_mrc ---------'
+          !write(3,*)' In opfilec 44 ; Nx,ny,nz: ', nx,ny,nz
+           write(3,*)' In opfilec 44 ; Filnam:   ', trim(filnam)
+           write(3,*)' In opfilec 44 ; Calling:  openfil_mrc ---------'
 #endif
 
 C          A ~8 AT END OF PROMPT IS FOR:  OLD NON-WRITEABLE FILE 
@@ -282,10 +308,10 @@ C          OPENFIL_MRC CALLS GET_FILNAM_INFO
            NSTK_FLG = NSTK
 
 #if defined (SP_DBUGIO)
-           write(3,*)' In opfilec; nz,nstk:      ', nz,nstk
-           write(3,*)' In opfilec; istk,is_bare: ', istk,is_bare
-           write(3,*)' In opfilec; itype:        ', itype
-           write(3,*)' Finished in opfilec for MRC , Returning ----'
+           write(3,*)' In opfilec  45 ; nz,nstk:      ', nz,nstk
+           write(3,*)' In opfilec  45 ; istk,is_bare: ', istk,is_bare
+           write(3,*)' In opfilec  45 ; itype:        ', itype
+           write(3,*)' In opfilec  45 ; for MRC ---- Returning ----'
            write(3,*)'   '  
 #endif
            RETURN           ! END OF MRC CODE xxxxxxxxxxxxxxxxxxxxxxx
@@ -297,14 +323,12 @@ C          OPENFIL_MRC CALLS GET_FILNAM_INFO
 C          WANT TO OPEN SPIDER FILE xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 #if defined (SP_DBUGIO)
-           write(3,*)' In opfilec 55; Calling: lunnewhdr'
+           write(3,*)' In opfilec  55 ; Calling: lunnewhdr'
 #endif
 
 C          CREATE A NEW HEADER OBJECT FOR THIS LUN, SET LUN FOR SPIDER
            CALL LUNNEWHDR(LUN,IRTFLGT)
            IF (IRTFLGT .NE. 0) RETURN
-
-           !write(3,*)' In opfilec; after: lunnewhdr'
 
 C          PUT FILENAME AND DSP IN OFF-FILE AREA OF THE HEADER OBJECT
            CALL LUNSETFILE(LUN,FILNAM,DSP,IRTFLGT)
@@ -314,13 +338,9 @@ C          PUT ISBARE IN STATIC AREA OF HEADER OBJECT
            CALL LUNBAREFILE(LUN,FILNAM,IRTFLGT)
            IF (IRTFLGT .NE. 0) RETURN
 
-           !write(3,*)' In opfilec; Calling: lunsetluns: ', lun
-
 C          MAKE SURE THE STACK OFFSET IS ALWAYS ZEROED, LUNARB SET ...
            CALL LUNSETLUNS(LUN,0,0,LUN,0,IRTFLGT)
            IF (IRTFLGT .NE. 0) RETURN
-
-           !write(3,*)' In opfilec;  Filnam: ',trim(filnam)
 
            IRTFLG = 0
            IF (INDEX(FILNAM,'@') == 0) THEN
@@ -328,13 +348,14 @@ C          MAKE SURE THE STACK OFFSET IS ALWAYS ZEROED, LUNARB SET ...
 C             NOT IMAGE STACK, MAY BE INLINE or 'REGULAR' SPIDER FILE
 
 #if defined (SP_DBUGIO)
-              write(3,*)' In opfilec 77, B4 openfil  itype,nstack:',
-     &                                               itype,nstack
-              write(3,*)' In opfilec 77, B4 openfil  disp: ',disp
-              write(3,*)' In opfilec 77, B4 openfil  keepext: ',keepext
-              write(3,*)' In opfilec 77, B4 openfil  filnam: ',
-     &                                               trim(filnam)
-              write(3,*)' In opfilec 77, B4 openfil  ---------------'
+              write(3,*)' '
+              write(3,*)' In opfilec  77 ; itype:    ', itype
+              write(3,*)' In opfilec  77 ; nstack:   ', nstack
+              write(3,*)' In opfilec  77 ; disp:        ', disp
+              write(3,*)' In opfilec  77 ; keepext   ', keepext
+              write(3,*)' In opfilec  77 ; filnam:   ', trim(filnam)
+              write(3,*)' In opfilec  77 ; Calling openfil  ---------'
+              write(3,*)' '
 #endif
   
               NSTACK = 0
@@ -342,10 +363,12 @@ C             NOT IMAGE STACK, MAY BE INLINE or 'REGULAR' SPIDER FILE
      &                     ITYPE,DISP(1:1),KEEPEXT,IRTFLG)
 
 #if defined (SP_DBUGIO)
-              write(3,*)' In opfilec 88; filnam: ',trim(filnam)
-              write(3,*)' In opfilec 88; nstack,irtflg: ',nstack,irtflg
+              write(3,*)' '
+              write(3,*)' In opfilec  88 ; filnam:   ', trim(filnam)
+              write(3,*)' In opfilec  88 ; nstack:   ', nstack
+              write(3,*)' In opfilec  88 ; irtflg:   ', irtflg
+              write(3,*)' In opfilec  88 ; opstknoat:    ', opstknoat
 #endif
-
               IF (IRTFLG .NE. 0) RETURN
 
 C             RETURNS NSTACK -2 FOR NON-STACK or NSTK_FLG
@@ -358,28 +381,45 @@ C                BARE STACK REF NOT ALLOWED WITHOUT '@' NORMALLY
                  RETURN
               ENDIF
 
+
            ELSEIF (FILNAM(1:1) == '_') THEN
-C             INLINE IMAGE STACK ACCESS WANTED
+C             INLINE IMAGE STACK ACCESS WANTED -----------------------
+
               NSTACK = NSTK_FLG
               CALL OPENINSTK(LUNT,FILNAM,LUN,NX,NY,NZ,
      &                     NSTACK,ITYPE,DISP(1:1),IRTFLG)
 
+
            ELSE
-C             WANT TO ACCESS A FILE BASED SPIDER IMAGE STACK
-              NSTACK = NSTK_FLG
+C             WANT TO ACCESS A FILE BASED SPIDER IMAGE STACK ---------
+
+              NSTK_FLG = 1  ! REGULAR STACK FILE, NOT INDEXED
 
 #if defined (SP_DBUGIO)
-              write(3,*)' In opfildc 10; lunt,lun,nstack: ',
-     &                                   lunt,lun,nstack
+              write(3,*)'    '
+              write(3,*)' In opfilec  89 ; irtflg:   ', irtflg
+              write(3,*)' In opfilec  89 ; nstk_flg: ', nstk_flg
+              nleti = lnblnkn(filnam)
+              write(3,*)' In opfilec  89 ; filnam:    ', filnam(:nleti)
+              write(3,*)' In opfilec  89 ; disp:                ', disp
+              write(3,*)' In opfilec  89 ; Calling openstk'
 #endif
 
               CALL OPENSTK(LUNT,FILNAM,LUN,NX,NY,NZ,
-     &                     NSTACK,ITYPE,DISP(1:1),IRTFLG)
+     &                     NSTK_FLG,ITYPE,DISP(1:1),IRTFLG)
+              NSTACK = NSTK_FLG
 
 #if defined (SP_DBUGIO)
-              write(3,*)' In opfilec 11; filnam: ',trim(filnam)
+              write(3,*)'   '
+              write(3,*)' Back In opfilec'
+              write(3,*)' In opfilec  90 ; filnam:     ',filnam(:nleti)
+              write(3,*)' In opfilec  90 ; nstk_flg:   ',nstk_flg
+              write(3,*)' In opfilec  90 ; nstack:     ',nstack
+         
 #endif
-           ENDIF
+           ENDIF ! --------------------------------------------------
+
+
 
 C          RETURN IF THERE IS ANY ERROR OPENING FILE IN OPEN*
            IF (IRTFLG .NE. 0) RETURN
@@ -401,15 +441,23 @@ C            THIS OPERATION DOES NOT ACCEPT WHOLE STACKS
              RETURN
            ENDIF
 
-           IFORM    = ITYPE
+           IFORM    = ITYPE 
            NSTK_FLG = NSTACK 
 
 #if defined (SP_DBUGIO)
-           !write(3,*)' In opfilec; nstk_flg,nstack: ', nstk_flg,nstack
-           !write(3,*)' In opfilec; lunt,iflip:      ', lunt,iflip
-           !write(3,*)' In opfilec; lunflip(lunt):   ', lunflip(lunt) 
-           !write(3,*)' Leaving opfilc; iform,nstk_flg: ',iform,nstk_flg
-           !write(3,*)' ------------ LEAVING OPFILC --------'
+           write(3,*)'   '
+           write(3,*)' In opfilec  99 ; nstk_flg: ', nstk_flg
+           write(3,*)' In opfilec  99 ; nstack:   ', nstack
+           write(3,*)' In opfilec  99 ; iform:    ', iform
+           write(3,*)' In opfilec  99 ; iflip:    ', iflip 
+
+           write(3,*)' In opfilec  99 ; lunt:          ', lunt
+           write(3,*)' In opfilec  99 ; lunflip(lunt): ', lunflip(lunt) 
+
+           write(3,*)' In opfilec  99 ; lun:           ', lun
+           write(3,*)' In opfilec  99 ; lunflip(lun):  ', lunflip(lun)
+           write(3,*)' In opfilec  99 ; Leaving opfilec ------- '
+           write(3,*)'   '
 #endif
 
         ENDIF      ! END OF: SPIDER FILE

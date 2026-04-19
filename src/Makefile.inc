@@ -3,10 +3,9 @@
 #        This is the definitive source listing for source files
 #        compiled into SPIDER. Additional objects are also found
 #        within the corresponding source files.
-#        First time run as is, then invert: lunsetmrchdr.o and lunsethdr.o
-#        and run again.  This may work?
 # 
-# $(LIB)(lunsetmrchdr.o) \
+
+#$(LIB)(lunsetmrchdr.o) \  Add this at top when starting from scratch!!
 
 ELEMENTS =  \
  $(LIB)(lunsethdr.o) \

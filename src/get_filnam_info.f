@@ -3,12 +3,12 @@ C++*********************************************************************
 C
 C GET_FILNAM_INFO   NEW OCT 2005                 Oct 2025 ArDean Leith
 C                   ALTERED                      Dec 2025 ArDean Leith
-          
+C                   ADDED GOT_FILE               Apr 2026 ArDean Leith   C  
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors: Joachim Frank & ArDean Leith & Tapu Shaikh  *
-C=* Copyright 1985-2025  Health Research Inc.,                         *
+C=* Copyright 1985-2026  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email:                                                             *
 C=*                                                                    *
@@ -28,7 +28,7 @@ C ************************* GET_FILNAM_INFO ****************************
 C
 C   GET_FILNAM_INFO(FILNAM, LIST_VAL,
 C                   FIL_NOAT,FIL_DIRS,FIL_BASE,FIL_EXT,
-C                   IS_MRC, IS_MRCS, IS_BARE, 
+C                   IS_MRC, IS_MRCS, IS_BARE, GOT_FILE, 
 C                   ISTK,   IRTFLG)
 C
 C   PURPOSE:    FINDS STACKED IMG NUMBER IN FILENAME
@@ -45,7 +45,8 @@ C               FIL_EXT    FILE EXTENSION                       (RET)
 C               IS_MRC     IS A MRC/MRCS/EMD/etc FILE           (RET)
 C               IS_MRCS    IS A MRCS  FILE                      (RET)
 C               IS_BARE    IS A BARESTACK                       (RET)
-C 
+C               GOT_FILE   FILE EXISTS                          (RET)
+C
 C               ISTK       STACK IMG/VOL                        (RET)
 C                             0 : NOT STACK or BARE STACK
 C                            >1 : STACKED IMAGE/VOL NUMBER       
@@ -56,12 +57,14 @@ C     IF PRESENT, EXTRACT STACK FILENAME AND NUMBER e.g. from
 C     056@file.mrcs       or file3321@100.mrcs  or /dir/fileaa@21 or
 C     /dir/fileaa@21.mrcs or /dir/056@file         etc 
 C
+C     CALLED BY: openfil_mrc.f opfilec.f, opfiles.f
+C
 C23456789 123456789 123456789 123456789 123456789 123456789 123456789 12
 C--*********************************************************************
 
       SUBROUTINE GET_FILNAM_INFO(FILNAM, LIST_VAL,
      &                      FIL_NOAT,FIL_DIRS,FIL_BASE,FIL_EXT,
-     &                      IS_MRC, IS_MRCS, IS_BARE, 
+     &                      IS_MRC, IS_MRCS, IS_BARE, GOT_FILE, 
      &                      ISTK,   IRTFLG)
 
       IMPLICIT NONE
@@ -73,12 +76,13 @@ C--*********************************************************************
       INTEGER               :: LIST_VAL
 
       CHARACTER(LEN=*)      :: FIL_NOAT,FIL_DIRS,FIL_BASE,FIL_EXT
-      LOGICAL               :: IS_MRC,IS_MRCS, IS_BARE
+      LOGICAL               :: IS_MRC,IS_MRCS, IS_BARE, GOT_FILE
       INTEGER               :: ISTK, IRTFLG
 
-      CHARACTER(LEN=MAXNAM) :: FIL_NEW
-      INTEGER               :: LOCAT,LOCAST,LOCAST_GO,LOCAST_END
-      LOGICAL               :: GOT_EXT 
+      CHARACTER(LEN=MAXNAM)   :: FIL_NEW
+      CHARACTER(LEN=MAXNAM+4) :: FILNAMPE
+      INTEGER                 :: LOCAT,LOCAST,LOCAST_GO,LOCAST_END
+      LOGICAL                 :: GOT_EXT 
 
       INTEGER               :: LOCSLASH,NLEN,IGO,LOCDOT,IENDB,IASTSB4
 
@@ -140,21 +144,23 @@ C        STRIP OFF EXTENSION FROM FIL_BASE
       IS_BARE = .FALSE.
 
 
+cc#define SP_DBUGIO
 #if defined (SP_DBUGIO)
       write(3,*)'  '
-      write(3,*)' In get_filnam_info  -1-1-1'
-      write(3,*)' In get_filnam_info; filnam:   |', trim(filnam),'||'
-      write(3,*)' In get_filnam_info; locslash:  ', locslash
-      write(3,*)' In get_filnam_info; locdot:    ', locdot
-      write(3,*)' In get_filnam_info; locat:     ', locat
-      write(3,*)' In get_filnam_info; locast:    ', locast
-      write(3,*)' In get_filnam_info; ismrc,ismrcs: ', is_mrc,is_mrcs
+      write(3,*)' In get_filnam_info 0;  -1'
+      write(3,*)' In get_filnam_info 0; filnam:   |', filnam(:nlen),'|'
+      write(3,*)' In get_filnam_info 0; locslash:  ', locslash
+      write(3,*)' In get_filnam_info 0; locdot:    ', locdot
+      write(3,*)' In get_filnam_info 0; locat:     ', locat
+      write(3,*)' In get_filnam_info 0; locast:    ', locast
+      write(3,*)' In get_filnam_info 0; ismrc,ismrcs:  ', is_mrc,is_mrcs
 
-      write(3,*)' In get_filnam_info; list_val:  ', list_val
+      write(3,*)' In get_filnam_info 0; list_val:    ', list_val
  
-      write(3,*)' In get_filnam_info; fil_dirs: |', trim(fil_dirs),'||'
-      write(3,*)' In get_filnam_info; fil_base: |', trim(fil_base),'||'
-      write(3,*)' In get_filnam_info; fil_ext:  |', trim(fil_ext),'||'
+      write(3,*)' In get_filnam_info 0; fil_dirs: |', trim(fil_dirs),'|'
+      write(3,*)' In get_filnam_info 0; fil_base: |', trim(fil_base),'|'
+      write(3,*)' In get_filnam_info 0; fil_ext:  |', trim(fil_ext),'|'
+      write(3,*)'  '
 #endif
 
 
@@ -164,7 +170,7 @@ C        STRIP OFF EXTENSION FROM FIL_BASE
          ISTK      = 0   ! NOT A STACK
 
 #if defined (SP_DBUGIO)
-         write(3,*)' In get_filnam_info 0000; istk:  ',istk      
+         write(3,*)' In get_filnam_info 0; istk:  ',istk      
 #endif
 
          GOTO 999          
@@ -175,7 +181,7 @@ C        STRIP OFF EXTENSION FROM FIL_BASE
          ISTK     = 1      ! MRCS STACK WITHOUT @
 
 #if defined (SP_DBUGIO)
-         write(3,*)' In get_filnam_info 1111; istk:   ',istk    
+         write(3,*)' In get_filnam_info 1; istk:   ',istk    
 #endif
 
          GOTO 999            
@@ -188,7 +194,7 @@ C        BARESTACK AT START OF FILE BASENAME
          FIL_BASE  = TRIM(FIL_BASE(2:)) 
 
 #if defined (SP_DBUGIO)
-      write(3,*)' In get_filnam_info 2222; is_bare,istk: ',is_bare,istk
+      write(3,*)' In get_filnam_info 2; is_bare,istk: ',is_bare,istk
 #endif
 
          GOTO 999   
@@ -201,7 +207,7 @@ C        BARESTACK AT END OF FILE BASENAME
          FIL_BASE  = TRIM(FIL_BASE(1:IENDB-1)) 
 
 #if defined (SP_DBUGIO)
-      write(3,*)' In get_filnam_info 3333; is_bare,istk: ',is_bare,istk      
+      write(3,*)' In get_filnam_info 3; is_bare,istk: ',is_bare,istk      
 #endif
          GOTO 999    
 
@@ -214,14 +220,15 @@ C        BARESTACK AT END OF FILE BASENAME
       IF ((LOCAT > 1) .AND. (IASTSB4 == 0)) THEN   ! --------------
 C        ONLY '*'s BEFORE @ AT START OF FILE BASENAME e.g. (*@..)
 
+         IF (LIST_VAL < 0) GOTO 999
          ISTK     = LIST_VAL
          FIL_BASE = TRIM(FIL_BASE(LOCAT+1:)) 
   
 #if defined (SP_DBUGIO)
          write(3,*)'  '
-         write(3,*)' In get_filnam_info 4444; iastsb4: ',iastsb4  
-         write(3,*)' In get_filnam_info 4444; istk:    ',istk      
-         write(3,*)' In get_filnam_info 4444; fil_base: |',
+         write(3,*)' In get_filnam_info 4; iastsb4: ',iastsb4  
+         write(3,*)' In get_filnam_info 4; istk:    ',istk      
+         write(3,*)' In get_filnam_info 4; fil_base: |',
      &                                      trim(fil_base),'|' 
 #endif
 
@@ -236,13 +243,15 @@ C        ONLY '*'s BEFORE @ AT START OF FILE BASENAME e.g. (*@..)
       IF ((LOCAT > 1) .AND. (IASTSB4 == 0)) THEN     ! --------------
 C        ONLY '*'s  AT END OF FILE BASENAME e.g.(..@*)
 
+         IF (LIST_VAL < 0) GOTO 999
+
          ISTK     = LIST_VAL
          FIL_BASE = TRIM(FIL_BASE(1:LOCAT-1))
 
 #if defined (SP_DBUGIO)
-         write(3,*)' In get_filnam_info 5555; iastsb4: ',iastsb4  
-         write(3,*)' In get_filnam_info 5555; istk:    ',istk      
-         write(3,*)' In get_filnam_info 5555; fil_base: |',
+         write(3,*)' In get_filnam_info 5; iastsb4: ',iastsb4  
+         write(3,*)' In get_filnam_info 5; istk:    ',istk      
+         write(3,*)' In get_filnam_info 5; fil_base: |',
      &                                      trim(fil_base),'|' 
 #endif
 
@@ -267,10 +276,10 @@ C        ONLY DIGITS  AT START OF FILE BASENAME BEFORE @ e.g.(123@..)
          FIL_BASE  = TRIM(FIL_BASE(LOCAT+1:))
 
 #if defined (SP_DBUGIO)
-         write(3,*)' In get_filnam_info 6666; idigs:    ',idigs  
-         write(3,*)' In get_filnam_info 6666; istk:     ',istk      
-         write(3,*)' In get_filnam_info 6666; fil_base: |',
-     &                                      trim(fil_base),'|' 
+         write(3,*)' In get_filnam_info 6; idigs:    ',idigs  
+         write(3,*)' In get_filnam_info 6; istk:     ',istk      
+         write(3,*)' In get_filnam_info 6; fil_base: |',
+     &                                     trim(fil_base),'|' 
 #endif
 
          GOTO 999    
@@ -295,10 +304,10 @@ C        ONLY DIGITS  AT END OF FILE BASENAME AFTER @ e.g.(...@123)
         FIL_BASE  = TRIM(FIL_BASE(1:LOCAT-1))
     
 #if defined (SP_DBUGIO)
-        write(3,*)' In get_filnam_info 7777; idigs:    ',idigs  
-        write(3,*)' In get_filnam_info 7777; istk:     ',istk      
-        write(3,*)' In get_filnam_info 7777; fil_base: |',
-     &                                      trim(fil_base),'|' 
+        write(3,*)' In get_filnam_info 7; idigs:    ',idigs  
+        write(3,*)' In get_filnam_info 7; istk:     ',istk      
+        write(3,*)' In get_filnam_info 7; fil_base: |',
+     &                                    trim(fil_base),'|' 
 #endif
 
          GOTO 999    
@@ -321,10 +330,10 @@ C        SUBSTITUTE LIST_VAL (IMGNUM) INTO FILPAT
          FIL_BASE = TRIM(FIL_NEW)
   
 #if defined (SP_DBUGIO)
-        write(3,*)' In get_filnam_info 8888; list_val:',list_val
-        write(3,*)' In get_filnam_info 8888; fil_base: |',
+        write(3,*)' In get_filnam_info 8; list_val:',list_val
+        write(3,*)' In get_filnam_info 8; fil_base: |',
      &                                       trim(fil_base),'|' 
-        write(3,*)' In get_filnam_info 8888; fil_new: |',
+        write(3,*)' In get_filnam_info 8; fil_new: |',
      &                                      trim(fil_new),'|'
 #endif
          GOTO 999
@@ -357,19 +366,31 @@ C        ENDIF
  
       FIL_NOAT  = TRIM(FIL_NOAT) // TRIM(FIL_BASE) 
 
-      IF (GOT_EXT) FIL_NOAT = TRIM(FIL_NOAT) // '.' // TRIM(FIL_EXT)
+      IF (GOT_EXT) THEN
+         FIL_NOAT = TRIM(FIL_NOAT) // '.' // TRIM(FIL_EXT)
+         INQUIRE(FILE=FIL_NOAT,EXIST=GOT_FILE)
+      ELSE
+         FILNAMPE = TRIM(FIL_NOAT) // '.' // TRIM(DATEXC)
+         INQUIRE(FILE=FILNAMPE,EXIST=GOT_FILE)
+      ENDIF
+
 
 #if defined (SP_DBUGIO)
       write(3,*)' '
-      write(3,*)' In get_filnam_info 9999; fil_dirs: ',trim(fil_dirs)
-      write(3,*)' In get_filnam_info 9999; fil_base: ',trim(fil_base) 
-      write(3,*)' In get_filnam_info 9999; fil_ext:  ',trim(fil_ext) 
-      write(3,*)' In get_filnam_info 9999; fil_noat: ',trim(fil_noat)
+      write(3,*)' In get_filnam_info 9; fil_dirs: |', trim(fil_dirs),'|'
+      write(3,*)' In get_filnam_info 9; fil_base: |', trim(fil_base),'|' 
+      write(3,*)' In get_filnam_info 9; fil_ext:  |', trim(fil_ext),'|' 
+      write(3,*)' In get_filnam_info 9; fil_noat: |', trim(fil_noat),'|'
 
-      c22 = fil_noat(22:22)
-      c23 = fil_noat(23:23)
-      write(3,*)' In get_filnam_info 9999; c22: |',c22,'|'
-      write(3,*)' In get_filnam_info 9999; c23: |',c23,'|'
+      write(3,*)' In get_filnam_info 9; filnampe: |', trim(filnampe),'|'
+
+
+      write(3,*)' In get_filnam_info 9; got_file: |', got_file,'|'
+
+      !c22 = fil_noat(22:22)
+      !c23 = fil_noat(23:23)
+      !write(3,*)' In get_filnam_info 9; c22: |',c22,'|'
+      !write(3,*)' In get_filnam_info 9; c23: |',c23,'|'
 #endif
 
 

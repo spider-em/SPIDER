@@ -17,12 +17,13 @@ C                MAXNAM                         JUL 2014  ArDean Leith
 C                EM2EM BUG RECOVERY SUPPORT     AUG 2014  ArDean Leith
 C                MRC SUPPORT                    MAY 2019  ArDean Leith
 C                MRC SUPPORT FIXED              SEP 2025  ArDean Leith
+C                SOME DEBUG CHANGES             APR 2026  ArDean Leith
 C                    
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2025 Health Research Inc.,                          *
+C=* Copyright 1985-2026 Health Research Inc.,                          *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email:                                                             *
 C=*                                                                    *
@@ -138,7 +139,8 @@ C     ----------- LUNREDHED ---------------------------------------
 
 C     READS IMAGE HEADER INTO HEADER OBJECT 
 C     FOR STACKED IMAGES THIS MUST BE PRECEEDED BY A READ OF THE 
-C     OVERALL HEADER TO ENSURE THAT LUNGETHEDOFF SUCCEEDS
+C     OVERALL HEADER (WITH IMGNUM = 0) TO ENSURE THAT 
+C     LUNGETHEDOFF SUCCEEDS
 
 #include "LUNHDR.INC"
 
@@ -152,23 +154,38 @@ C     OVERALL HEADER TO ENSURE THAT LUNGETHEDOFF SUCCEEDS
 
       LOGICAL      :: CALLERRT
  
+      INTEGER      :: LUNSTKSAV,LUNARASAV,IRECT,ILOC,LENT
+
       IRTFLG      = 0
      
 C     SET PROPER  OFFSET IN LUNSTK
       LUNSTKSAV   = LUNSTK(LUN)
-      LABRECSAV   = LUNARA(LUN)
-      !write(6,*) ' In labrecsav:',lunstksav,labrecsav,lun
+      LUNARASAV   = LUNARA(LUN)
+
+      !write(3,*) ' In lunredhed:',lunstksav,lunarasav,lun
 
 C     FIND PROPER IMGNUM OFFSET 
       CALL LUNGETHEDOFF(LUN,NX,IMGNUM,
      &                  LUNARA(LUN),LUNSTK(LUN),IRTFLG)
 
-      !write(6,*) ' In lunredhdr, imgnum--------:',imgnum
+
+CC#define SP_DBUGIO
+#if defined (SP_DBUGIO_NEVER)
+      write(3,*)' In lunredhed 0 ; lun   ---------------: ', lun
+      write(3,*)' In lunredhed 0 ; lunarasav---------ara: ', lunarasav
+      write(3,*)' In lunredhed 0 ; lunstksav---------stk: ', lunstksav
+      write(3,*)' In lunredhed 0 ; nx    ---------------: ', nx
+      write(3,*)' In lunredhed 0 ; imgnum---------------: ', imgnum
+      write(3,*)' In lunredhed 0 ; lunara(lun) ---------: ', lunara(lun)
+      write(3,*)' In lunredhed 0 ; lunstk(lun) ---------: ', lunstk(lun)
+      write(3,*)' In lunredhed 0 ; lunflip(lun) --------: ',lunflip(lun)
+#endif
 
       IF (IRTFLG .NE. 0) RETURN
 
 C     POINT TO HEADER OBJECT
       CALL LUNGETOBJ(LUN,HEADER,IRTFLG)
+ 
       IF (IRTFLG .NE. 0) RETURN
 
 C     READ HEADER RECORDS FROM FILE INTO HEADER OBJECT
@@ -182,6 +199,16 @@ C        LENT IS REMAINING LENGTH OF HEADER TO BE FILLED
          LENT = MIN(NX,LENBUF - ILOC + 1)
 
          CALL REDLIN(LUN,HEADER(ILOC),LENT,IRECT)
+
+CC#define SP_DBUGIO
+#if defined (SP_DBUGIO_NEVER)
+         write(3,*)'  '
+         write(3,*)' In lunredhed 2 ; iloc,lent -----------:',iloc,lent
+         write(3,*)' In lunredhed 2 ; irect ---------------:',irect
+         write(3,*)' In lunredhed 2 ; ierr ----------------:',ierr
+#endif
+
+
          IF (IERR .NE. 0) THEN
              IF (CALLERRT) THEN
                 CALL ERRT(102,'I/O ERROR ON FILE HEADER',IERR)
@@ -194,11 +221,21 @@ C        LENT IS REMAINING LENGTH OF HEADER TO BE FILLED
       ENDDO
 
 C     REPLACE OFFSETS IN LUNARA & LUNSTK    
-      LUNARA(LUN) = LABRECSAV
+      LUNARA(LUN) = LUNARASAV
       LUNSTK(LUN) = LUNSTKSAV
  
-      ! write(6,*) ' In lunredhed:',lun,header(27)
-
+CC#define SP_DBUGIO
+#if defined (SP_DBUGIO_NEVER)
+      write(3,*)'  '
+      write(3,*)' In lunredhed 9 ; header(2)-----nx-------: ',header(2)
+      write(3,*)' In lunredhed 9 ; header(6)-----imami----: ',header(6)
+      write(3,*)' In lunredhed 9 ; header(13)----labrec---: ',header(13)
+      write(3,*)' In lunredhed 9 ; header(24)----istack--O: ',header(24)
+      write(3,*)' In lunredhed 9 ; header(26)----maxim---O: ',header(26)
+      write(3,*)' In lunredhed 9 ; header(27)----imgnum--+: ',header(27)
+      write(3,*) '  '
+#endif
+ 
       END
 
 C     ------------------------- LUNGETHEDOFF -------------------------
@@ -213,12 +250,13 @@ C     SUPPORT ROUTINE TO RETURN RECORD OFFSET FOR HEADER REDLIN/WRTLIN
       IRTFLG = 0
 
       IF (IMGNUM == 0) THEN
-C        OVERALL HEADER
+C        OVERALL HEADER BEING READ
          LUNARAOFF = 0
          LUNSTKOFF = 0
          IRTFLG    = 0
          RETURN
       ENDIF
+
 
 C     GET RECORD INFO (CAN BE FROM OVERALL HEADER)
       CALL LUNGETLAB(LUN,LABREC,INDXREC,NRECS,NDUM1,NDUM2,IRTFLG)
@@ -295,7 +333,7 @@ C        ALLOCATE SPACE FOR THIS HEADER OBJECT
          LUNHDRBUF(LUN)%IPT => IPOINTER
       ENDIF
 
-C     TEMPORARY SETTING TO ENSURE LUN POINTS TO SPIDER BEFORE LENGTH KNOWN
+C     TEMP SETTING TO ENSURE LUN POINTS TO SPIDER BEFORE LENGTH KNOWN
 C     NEEDED BY REDLIN/WRTLIN TO DISTINGUISH MRC FILES!!
 
       LUNMRCPOS(LUN) = 0
@@ -385,13 +423,12 @@ C           NORMAL STACKS HAVE ADDITIONAL OVERALL HEADER AT BEGINNING
       LUNSTK(LUN) = LUNSTKOFF
 
 #if defined (SP_DBUGIO)
-      write(3,*)' '
-      write(3,*)' In lunsetimgoff ================================='
-      write(3,*)' In lunsetimgoff: imgnum,nrecs,labrec: ',
-     &                             imgnum,nrecs,labrec 
+      write(3,*)'   ' 
+      write(3,*)' In lunsetimgoff: labrec:              ', labrec 
+      write(3,*)' In lunsetimgoff: imgnum,nrecs:        ', imgnum,nrecs
       write(3,*)' In lunsetimgoff: lunaraoff,lunstkoff: ',
      &                             lunaraoff,lunstkoff 
-      write(3,*)' '
+      write(3,*)'   ' 
 #endif
 
 
@@ -443,7 +480,7 @@ C     SET VALUES
       IRTFLG = 0
       END
 
-C     ------------------------- LUNGETISTACK ----------------------------
+C     ------------------------- LUNGETISTACK --------------------------
 
       SUBROUTINE LUNGETISTACK(LUN,ISTACK,IRTFLG)
 
@@ -458,7 +495,7 @@ C     POINT TO HEADER OBJECT
       IRTFLG = 0
       END
 
-C     ------------------------- LUNSETISTACK ----------------------------
+C     ------------------------- LUNSETISTACK --------------------------
 
       SUBROUTINE LUNSETISTACK(LUN,ISTACK,IRTFLG)
 
@@ -637,6 +674,15 @@ C     WRITE HEADER RECORDS FROM LUNHDR INTO FILE
       IRECT  = 1
       ILOC   = 1
       IRTFLG = 0
+cc#define SP_DBUGIO
+#if defined (SP_DBUGIO)
+      write(3,*)' '
+      write(3,*)' In lunwrthed ; lun:        ', lun
+      write(3,*)' In lunwrthed ; imgnum:     ', imgnum
+      write(3,*)' In lunwrthed ; iloc:       ', iloc
+      write(3,*)' In lunwrthed ; lenbuf:     ', lenbuf
+      write(3,*)'       Calling wrtlin '
+#endif
 
       DO WHILE (ILOC <= LENBUF)
 C        LENT IS REMAINING LENGTH OF HEADER TO BE WRITTEN
@@ -696,8 +742,6 @@ C     POINT TO HEADER OBJECT
 C     GET STACK RELATED LOCATIONS
       INUSE = HEADER(27) 
 
-C      write(6,*)' In getinuse, lun,hd27--99:',
-C     &            lun,header(27),iwas,' -->',inuse 
       IRTFLG = 0
       END
 
@@ -2285,7 +2329,7 @@ C     SETS DUPLICATE LUN OPEN  IN LUNARB(LUN)
 
       LUNARB(LUN) = LUNB
 
-      !write(6,*) ' In lunsetlunb, lun,lunb: ',lun,lunb,lunarb(lun)
+      !write(6,*) ' In lunsetlunb; lun,lunb: ',lun,lunb,lunarb(lun)
 
       IRTFLG      = 0
       END
@@ -2319,8 +2363,14 @@ C     SETS FLIP IN LUNFLIP(LUN)
       INTEGER  :: LUNARA,LUNSTK,LUNARB,LUNFLIP
       COMMON /LUNARA/ LUNARA(100),LUNSTK(100),LUNARB(100),LUNFLIP(100)
 
+CC#define SP_DBUGIO
+#if defined (SP_DBUGIO_NEVER)
+      write(3,*)' ' 
+      write(3,*)' In lunsetflip; lun,iflip: ', lun,iflip
+#endif
+
       LUNFLIP(LUN) = IFLIP
-      
+
       IRTFLG       = 0
       END
 

@@ -7,12 +7,13 @@ C                  WORKS ON VOLUME SLICES NOW      JAN 18 ArDean Leith
 C                  WORKS ON MRC IMAGES NOW         DEC 19 ArDean Leith
 C                  EXTRACTED DISP()                JAN 20 ArDean Leith
 C                  RENAMED GRAY                    OCT 25 ArDean Leith
+C                  Magick INSTEAD OF convert now   FEB 26 ArDean Leith
 C
 C **********************************************************************
 C=* AUTHOR: A. LEITH                                                   *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
-C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2020  Health Research Inc.,                         *
+C=* SPIDER System Authors:  Joachim Frank & ArDean Leith & Tapu Shaikh *
+C=* Copyright 1985-2026  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email:                                                             *
 C=*                                                                    *
@@ -131,33 +132,37 @@ C          GET NAME FOR JPEG FILE
         CALL INTTOCHAR(NX, STRNX, NC2,1)
         CALL INTTOCHAR(NY, STRNY, NC3,1)
 
-        ENDIAN = ENDIANMSB
-        !!!IF (
-        ENDIAN = ENDIANLSB
+        !!ENDIAN = ENDIANMSB
+        !!ENDIAN = ENDIANLSB
+
+C       2026   Use magick instead of Imagick deprecated convert 
+!           WRITE(COMLIN,8005) STRNX(:NC2),STRNY(:NC3),ENDIAN,
+!    &                        FILTMP,FILNEW(1:NLETN) 
+!8005       FORMAT( 
+!    &     ' magick -verbose -depth 32 -size ',A,'x',A, 
+!    &     ' -define quantum:format=floating-point ',
+!    &     '-define quantum:scale=65536.0 -endian ',A,
+!    &     ' ',A,' ',A )
 
         IF (VERBOSET) THEN
-           WRITE(COMLIN,8005) STRNX(:NC2),STRNY(:NC3),ENDIAN,
+           WRITE(COMLIN,8005) STRNX(:NC2),STRNY(:NC3),
      &                        FILTMP,FILNEW(1:NLETN)
-     
+
 8005       FORMAT( 
-     &     ' convert -verbose -depth 32 -size ',A,'x',A, 
+     &     ' magick -verbose -depth 32 -size ',A,'x',A, 
      &     ' -define quantum:format=floating-point ',
-     &     '-define quantum:scale=65536.0 -endian ',A,
+     &     '-define quantum:scale=65536.0  '
      &     ' ',A,' ',A )
 
-cc 2025   &     '-define quantum:scale=65536.0 -endian msb ',
-
         ELSE
-           WRITE(COMLIN,8006) STRNX(:NC2),STRNY(:NC3),ENDIAN,
+           WRITE(COMLIN,8006) STRNX(:NC2),STRNY(:NC3),
      &                        FILTMP,FILNEW(1:NLETN)
      
 8006       FORMAT( 
-     &     ' convert -depth 32 -size ',A,'x',A, 
+     &     ' magick -depth 32 -size ',A,'x',A, 
      &     ' -define quantum:format=floating-point ',
-     &     '-define quantum:scale=65536.0 -endian',A,' ',
-     &     A,' ',A, '  >& /dev/null' )
-
-cc 2025   &     '-define quantum:scale=65536.0 -endian msb ',
+     &     '-define quantum:scale=65536.0  '
+     &     ' ',A,' ',A )
 
         ENDIF
 

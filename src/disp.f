@@ -5,12 +5,13 @@ C
 C  DISP.F  -- EXTRACTED FROM COPYTOJPED           Jan 2020 ArDean Leith
 C          -- IRTFLG 654321                       Oct 2025 ArDean Leith
 C          -- REMOVE MRC EXTENSION                Oct 2025 ArDean Leith
+C          -- DEBUG OUTPUT ADDED                  Feb 2026 ArDean Leith
 C
 C **********************************************************************
 C=* AUTHOR: A. LEITH                                                   *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2025  Health Research Inc.,                         *
+C=* Copyright 1985-2026  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email:                                                             *
 C=*                                                                    *
@@ -80,8 +81,8 @@ C       OPEN INPUT FILE, WHOLE STACK NOT ALLOWED
         ENDIF
 
 #if defined (SP_DBUGIO)
-        nletc = lnblnkn(filold)
-        write(3,*)' In disp; nletc,filold: ',nletc,filold(:nletc)
+        write(3,*)' In disp; ny,nz: ', ny,nz
+        write(3,*)' In disp; filold: ', trim(filold)
 #endif
 
         IF (IMAMI .NE. 1) 
@@ -96,7 +97,7 @@ C       CREATE JPEG OUTPUT FILE NAME
         IF(IGOEXT > 0 .AND. IGOEXT < NLET) NLET = IGOEXT - 1
 
 #if defined (SP_DBUGIO)
-        write(3,*)' In disp; nlet,filold(:nlet): ',nlet,filold(:nlet)
+        write(3,*)' In disp; nlet,filold(:nlet):  ',nlet,filold(:nlet)
 #endif
 
         FILNEW = FILOLD(:NLET) // '.jpg'
@@ -106,6 +107,7 @@ C       CREATE JPEG OUTPUT FILE NAME
        ! NLET   = lnblnkn(FILNEW)
 
 #if defined (SP_DBUGIO)
+        write(3,*)' In disp; fmin,fmax:          ', fmin,fmax
         write(3,*)' In disp; nlet,filnew(:nlet): ', nlet,filnew(:nlet)
 #endif
 
@@ -113,7 +115,7 @@ C       CONVERT IMAGE FILE INTO JPG FILE
 C       COPYTOJPG HAS A DELAY NEAR END SINCE AN INTERMEDIATE FILE .gray
 C       IS CREATED TO HANDLE FLOATING POINTS AND NEGATIVE VALUES
 
-        !!!!!!!!!!!!!VERBOSET = .FALSE.
+        !VERBOSET = .FALSE.
         VERBOSET = .TRUE.
         CALL COPYTOJPG(LUN1,LUN2,FILNEW,NX,NY,NZ, VERBOSET,IDELAY)
 
@@ -125,7 +127,7 @@ C       IS CREATED TO HANDLE FLOATING POINTS AND NEGATIVE VALUES
 90      FORMAT( ' display ', A,' ',A, ' &' )
 
 #if defined (SP_DBUGIO)
-        write(3,*)' In disp; comlin: ',comlin
+        write(3,*)' In disp; comlin: ',trim(comlin)
         !sayit = .TRUE.
 #endif
 

@@ -6,6 +6,8 @@ C                  NO LONGER ALTERS FILPAT FOR {***?} JAN 2001 A. LEITH
 C                  FILNAMSUB PARAMETERS CHANGED       DEC 2005 A. LEITH
 C                  XMIPP SELFILE                      DEC 2010 A. LEITH
 C                  NAME@* SUB                         AUG 2011 A. LEITH
+C                  DEBUG OUTPUT ADDED                 APR 2026 A. LEITH
+C
 C **********************************************************************
 C=* AUTHOR: A. LEITH
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
@@ -27,7 +29,7 @@ C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
 C **********************************************************************
 C
-C    FILGET(FILPAT,FILNAM,NLET,INUM,IRTFLG)
+C    FILGET(FILPAT,FILNAM,NLETT,INUM,IRTFLG)
 C
 C    PURPOSE:        USED AFTER FILSEQ TO CREATE NEXT FILENAME FROM 
 C                    FILE-NAME TEMPLATE AND ARRAY OF FILE NUMBERS.

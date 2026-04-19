@@ -10,7 +10,7 @@ C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
 C=* Copyright 1985-2012  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
-C=* Email: spider@wadsworth.org                                        *
+C=* Email:                                                             *
 C=*                                                                    *
 C=* SPIDER is free software; you can redistribute it and/or            *
 C=* modify it under the terms of the GNU General Public License as     *
@@ -41,10 +41,11 @@ C        OPT=' '      DEFAULT:NO DOCUMENT OUTPUT
 C        OPT='X'      I.E.,REGISTER LIST FOLLOWING):NO DOCUMENT OUTPUT
 C                       BUT OUTPUT OF POSITION & VALUE OF PEAK IN REGISTERS)
 C        OPT='D'      DOCUMENT OUTPUT:NUMBER,POSITION, AND VALUE
-C                       OF PEAK ARE WRITTEN INTO A DOCUMENT FILE
+C                     OF PEAK ARE WRITTEN INTO A DOCUMENT FILE
 C        NDOCOUT      I/O UNIT NUMBER FOR DOCUMENT FILE
 C
-C        REGISTER POSITIONS 1= INTEGER X-SHIFT
+C        REGISTER POSITIONS 
+C          1= INTEGER X-SHIFT 
 C          2= INTEGER Y-SHIFT
 C          3= ABSOLUTE PEAK HEIGHT
 C
@@ -60,7 +61,7 @@ C--*********************************************************************
          INCLUDE 'CMBLOCK.INC'
          INCLUDE 'CMLIMIT.INC'
 
-         COMMON  BUF(1)
+         COMMON  BUF(NBUFSIZ)
 
          CHARACTER (LEN=*)      :: FILNAM
          INTEGER                :: LUN,NX,NY,MAXDIM

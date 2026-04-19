@@ -1,22 +1,24 @@
 
 C++*********************************************************************
 C
-C COPYD.F      CREATED                        23 DEC 87 ARDEAN LEITH
-C              USED GETOLDSTACK, GETNEWSTACK  APRIL 99  ARDEAN LEITH
-C              GETNEWSTACK PARAM.             FEB 03    ARDEAN LEITH
-C              FLIPEND                        FEB 03    ARDEAN LEITH
+C COPYD.F      CREATED                        23 DEC 87 ArDean Leith
+C              USED GETOLDSTACK, GETNEWSTACK  APRIL 99  ArDean Leith
+C              GETNEWSTACK PARAM.             FEB 03    ArDean Leith
+C              FLIPEND                        FEB 03    ArDean Leith
 C              MPI                            FEB 04    Chao Yang
-C              OPFILES                        DEC 10    ARDEAN LEITH
-C              INDEXED STACK BUG              JAN 11    ARDEAN LEITH
-C              INDEXED STACK BUG              FEB 11    ARDEAN LEITH
-C              NON SPIDER IMAGE COPY          MAY 14    ARDEAN LEITH
+C              OPFILES                        DEC 10    ArDean Leith
+C              INDEXED STACK BUG              JAN 11    ArDean Leith
+C              INDEXED STACK BUG              FEB 11    ArDean Leith
+C              NON SPIDER IMAGE COPY          MAY 14    ArDean Leith
 C              DEBUG OUTPUT ADDED             SEP 20    ArDean Leith
+C              FLIP OUTPUT ADDED              MAR 26    ArDean Leith
+C              DEBUG OUTPUT ADDED             APR 26    ArDean Leith
 C
 C **********************************************************************
 C=*                                                                    *
 C=* This file is part of:   SPIDER - Modular Image Processing System.  *
 C=* SPIDER System Authors:  Joachim Frank & ArDean Leith               *
-C=* Copyright 1985-2025  Health Research Inc.,                         *
+C=* Copyright 1985-2026  Health Research Inc.,                         *
 C=* Riverview Center, 150 Broadway, Suite 560, Menands, NY 12204.      *
 C=* Email:                                                             *
 C=*                                                                    *
@@ -34,32 +36,39 @@ C=* along with this program. If not, see <http://www.gnu.org/licenses> *
 C=*                                                                    *
 C **********************************************************************
 C
-C  COPYD(LUN1,LUN2,LUNDOC,LUNXM1,LUNXM2,INDXD,FLIPOUT)
+C  COPYD(LUN1,LUN2,LUNDOC,LUNXM1,LUNXM2,INDXD,FLIPEND)
 C
 C  PURPOSE:  COPY SPIDER IMAGE/VOL TO ANOTHER FILE INCLUDING MRC FIL
 C 
 C  PARAMETERS: LUN1,LUN2      READ & WRITE UNIT                 (SENT)
 C              LUNDOC         READ & WRITE UNIT                 (SENT)
 C              LUNXM1,LUNXM2  READ & WRITE UNIT                 (SENT)
-C              INDXD          CREATE INDXD STACK                (SENT)
-C              FLIPOUT        CHANGE BYTE ORDER                 (SENT)
+C              INDXD          CREATE INDEXED STACK              (SENT)
+C              FLIPEND        CHANGE BYTE ORDER                 (SENT)
 C
 C23456789 123456789 123456789 123456789 123456789 123456789 123456789 12
 C--*********************************************************************
 
-        SUBROUTINE COPYD(LUN1,LUN2,LUNDOC,LUNXM1,LUNXM2,INDXD,FLIPOUT)
+        SUBROUTINE COPYD(LUN1,LUN2,LUNDOC,LUNXM1,LUNXM2,INDXD,FLIPEND)
+
+        IMPLICIT NONE
 
         INCLUDE 'CMBLOCK.INC'
         INCLUDE 'CMLIMIT.INC'
+
+        REAL            :: BUF
+        INTEGER         :: IERR
+        INTEGER         :: LUNARA,LUNSTK,LUNARB,LUNFLIP
 
         COMMON /IOERR/  IERR
         COMMON /IOBUF/  BUF(NBUFSIZ)
 
         common /lunara/ lunara(100),lunstk(100),lunarb(100),lunflip(100)
-        INTEGER                  :: LUN1,LUN2,LUNDOC,LUNXM1,LUNXM2
-        LOGICAL                  :: INDXD,FLIPOUT
 
-        INTEGER                  :: IFLIPOUT
+        INTEGER                  :: LUN1,LUN2,LUNDOC,LUNXM1,LUNXM2
+        LOGICAL                  :: INDXD,FLIPEND
+
+        INTEGER                  :: IFLIPIN, IFLIPOUT
         CHARACTER (LEN=MAXNAM)   :: PROMPT 
         CHARACTER (LEN=MAXNAM)   :: FILNAM1,FILNAM2
         CHARACTER (LEN=2*MAXNAM) :: COMMAN
@@ -67,6 +76,13 @@ C--*********************************************************************
         INTEGER,ALLOCATABLE      :: ILIST1(:),ILIST2(:)
         CHARACTER (LEN=1)        :: NULL = CHAR(0)
         CHARACTER (LEN=1)        :: DISP
+        INTEGER                  :: NE,LOCDOT1,LOCDOT2,NLET1,NLET2,IRET
+        INTEGER                  :: NINDX1,NINDX2,NLIST1,NLIST2,NSTACK1
+        INTEGER                  :: NSTACK2,IMG1,IMG2,NDUM,NX1,NY1,NZ1
+        INTEGER                  :: MAXIM1,MAXIM2,IRTFLG,NILMAX,MPIERR
+        INTEGER                  :: IFORM1,IFORM2,ICOMM,MYPID
+
+        integer                  :: lnblnkn,system
 
         CALL SET_MPI(ICOMM,MYPID,MPIERR) ! SETS ICOMM AND MYPID
 
@@ -81,8 +97,6 @@ C--*********************************************************************
            RETURN
         ENDIF
 
-        !write(3,*)' In copyd 0: lun1,iflipin: ',lun1,iflipin 
-        !write(3,*)' In copyd 0 calling opfiles: lun1: ',lun1 
 
 C       OPEN FIRST INPUT FILE, DISP = 'E' DOES NOT STOP ON ERROR
         MAXIM1 = 0
@@ -92,18 +106,10 @@ C       OPEN FIRST INPUT FILE, DISP = 'E' DOES NOT STOP ON ERROR
      &               IFORM1,NX1,NY1,NZ1,NSTACK1,
      &               PROMPT,
      &              .TRUE., ILIST1,NILMAX, 
-     &               NDUM,NGOT1,IMG1, IRTFLG) 
-
-	
-        !write(3,*)' Back in copyd   ------------ 1 ----------' 
-        !write(3,*)' In copyd 1: lun1,iflipin:  ', lun1,iflipin 
-        !write(3,*)' In copyd 1: lunflip(lun1): ', lunflip(lun1) 
-        !write(3,*)' In copyd 1, lun1,flipout:',   lun1,flipout
-        !write(3,*)' In copyd 1: irtflg,filnam1: ',irtflg,filnam1 
-
+     &               NDUM,NLIST1,IMG1, IRTFLG) 
 
         IF (IRTFLG == 5) THEN
-C          NOT A VALID SPIDER OR MRC INPUT DATA FILE
+C          NOT A VALID SPIDER OR MRC INPUT DATA FILE ---------------
 
            CALL FILERD(FILNAM2,NLET2,NULL,'OUTPUT FILE NAME',IRTFLG)
            IF (IRTFLG .NE. 0) RETURN 
@@ -128,97 +134,96 @@ C          USE SYSTEM COPY
            IRET = system(COMMAN)
            GOTO 999
 	   
-	ENDIF
+	ENDIF      ! END OF:  IF (IRTFLG == 5) -------------------
 	
-        IF (IRTFLG .NE. 0) GOTO 999
-
-        !write(3,'(a,8i5)')' In copyd; nstack1,ngot1,img1:', 
-        !&                             nstack1,ngot1,img1
-
-C       FIND NATIVE-ENDDEDNESS OF SPIDER INPUT     
-        CALL LUNGETFLIP(LUN1,IFLIPIN,IRTFLG)
+        IF (IRTFLG .NE. 0) GOTO 999   ! ABORT OPERATION ----------
 
         NSTACK2 =  1 ! UNUSED
         DISP    = 'U'          
-        IF (NSTACK1 .GT. 0 .AND. INDXD) THEN
+        IF (NSTACK1 > 0 .AND. INDXD) THEN
 C          INPUT IS A WHOLE STACK AND WANT INDEXED OUTPUT STACK
            DISP    = 'I'
-           NSTACK2 = NSTACK1  ! MAX SIZE
+           NSTACK2 = NSTACK1  ! MAX IMAGE IN STACK
         ENDIF
-	
-        !write(3,*)' In copyd --------------- 0 --------'
-        !write(3,'(A,L5)') ' In copyd 0, flipout:',   flipout
-        !write(3,'(A,4i6)')' In copyd 0: iflipin,: ', iflipin 
-        !write(3,'(A,4i6)')' In copyd 0: lunflip(lun1): ',lunflip(lun1) 
-        !write(3,*)' --------------- END OF 0 --------' 
 
-C       FIND NATIVE-ENDDEDNESS OF INPUT     
+C       FIND CURRENT ENDIAN FLIP OF SPIDER INPUT     
         CALL LUNGETFLIP(LUN1,IFLIPIN,IRTFLG)
 
-C       FIND NATIVE-ENDDEDNESS OF INPUT     
-        IFLIPOUT = 0    ; 
-        IF     (IFLIPIN .EQ. 0 .AND.       FLIPOUT) THEN
-	   IFILPOUT = 1
-        ELSEIF (IFLIPIN .EQ. 0 .AND. .NOT. FLIPOUT) THEN
+
+C       FIND ENDIANESS FLIP OF INPUT
+     
+        IF (FLIPEND) THEN
+           IF ((NSTACK2 > -2) .AND.  (IFLIPOUT .NE. IFLIPIN)) THEN
+C             WANT TO FLIP ENDIANESS BUT OUTPUT IS A STACKED IMAGE 
+C             OR SERIES OF IMAGES. FLIP MUST MATCH CURRENT STACK FLIP
+              CALL ERRT(101,
+     &           'EXISTING OUTPUT STACK NEEDS SAME ENDIANESS',NE)
+              RETURN
+           ELSE
+
+C             TELL WRTLIN TO FLIP FILE CONTENTS OUTPUT
+C             FLIP ENDIANESS FOR THE WHOLE FILE
+
+             IFLIPOUT = 1  
+           ENDIF
+
+        ELSE
+C          NORMAL COPY. DO NOT FLIP ENDIANESS
            IFLIPOUT = 0
-        ELSEIF (IFLIPIN .EQ. 1 .AND.       FLIPOUT) THEN
-           IFLIPOUT = 0
-        ELSEIF (IFLIPIN .EQ. 1 .AND. .NOT. FLIPOUT) THEN
-           IFLIPOUT = 1
-	ENDIF
-	
+        ENDIF
+
         CALL LUNSETFLIP(LUN2,IFLIPOUT,IRTFLG)
-		
-        !write(3,*)'  '
-        !write(3,*)' In copyd --------------- 0 --------'
-        !write(3,'(A,4i6)')'  In copyd: iflipin,iflipout: ',
-        !&                              iflipin,iflipout 
-        !write(3,'(A,4i6)')'  In copyd: lunflip(lun1),lunflip(lun2): ',
-        !&                              lunflip(lun1),lunflip(lun2) 
-        !write(3,*)' -------------- END OF 0 CALLING OPFILES -------' 
-      	    	
-C	OPEN FIRST OUTPUT FILE
-        IMG2 = IMG1
+
+c    !!!!!!!!!!!!!!!!!!!!!!!!! REMOVE
+cc#undef SP_DBUGIO
+cc#define SP_DBUGIO
+#if defined (SP_DBUGIO)
+        write(3,*)' ' 
+        write(3,*)' In copyd 0; lun2:          ', lun2 
+        write(3,*)' In copyd 0; lunflip(lun2): ', lunflip(lun2)
+        write(3,*)' In copyd 0; iflipout:      ', iflipout 
+        write(3,*)' ' 
+#endif
+
+C	OPEN FIRST OUTPUT FILE.  OUTPUT STACK FILE MAY EXIST!!
+        IMG2   = IMG1
+        NLIST2 = 0
         CALL OPFILES(LUN1,LUN2,LUNDOC,LUNXM2, 
      &             .TRUE.,FILNAM2,NLET2,DISP,
      &             IFORM1,NX1,NY1,NZ1,NSTACK2,
      &             NULL,
      &             .TRUE., ILIST2,NILMAX, 
-     &             NDUM,NGOT2,IMG2, IRTFLG) 
-
-        !write(3,*)'  '
-        !write(3,*)' In copyd --------------- 1 --------'
-        !write(3,'(A,4i6)')'  In copyd: nstack2,ngot2,img2:',
-        !&                              nstack2,ngot2,img2
-        !write(3,'(A,4i6)')'  In copyd: iflipin,iflipout: ',
-        !&                              iflipin,iflipout 
-        !write(3,'(A,4i6)')'  In copyd: lun1,lun2: ',
-        !&                              lun1,lun2 
-        !write(3,'(A,4i6)')'  In copyd: lunflip(lun1),lunflip(lun2): ',
-        !&                              lunflip(lun1),lunflip(lun2) 
-        !write(3,*)' --------------- END OF 1 --------' 
-    
-       IF (IFLIPOUT == 1) THEN
-C          TELL WRTLIN TO FLIP CONTENTS DURING I/O
-           CALL LUNSETFLIP(LUN2,IFLIPOUT,IRTFLG)
-
-C          REPLACE HEADER WITH BYTE-FLIPPED HEADER
-           CALL LUNWRTHED(LUN2,NX1,0,IRTFLG)
-        ENDIF
+     &             NDUM,NLIST2,IMG2, IRTFLG) 
 	
-        !write(3,*)'  '
-        !write(3,*)' In copyd --------------- 2 --------'
-        !call lungetstat(lun2,imamit,fmint,fmaxt,avt,sigt,irtflg)
-        !write(3,*)' In copyd, stats3:',imamit,fmint,fmaxt,avt,sigt 
-        !write(3,*)' --------------- END OF 2 --------' 
+#if defined (SP_DBUGIO)
+        write(3,*)' ' 
+        write(3,*)' In copyd 1; flipend:       ', flipend 
 
+        write(3,*)' In copyd 1; lun1:          ', lun1
+        write(3,*)' In copyd 1; lunflip(lun1): ', lunflip(lun1)
+        write(3,*)' In copyd 1; iflipin:       ', iflipin
+        write(3,*)' In copyd 1; nstack1:       ', nstack1
+        write(3,*)' In copyd 1; nlist1:        ', nlist1
+        write(3,*)' In copyd 1; img1:          ', img1
+        write(3,*)' ' 
+        write(3,*)' In copyd 1; lun2:          ', lun2
+        write(3,*)' In copyd 1; lunflip(lun2): ', lunflip(lun2)
+        write(3,*)' In copyd 1; iflipout:      ', iflipout 
+        write(3,*)' In copyd 1; nstack2:       ', nstack2
+        write(3,*)' In copyd 1; nlist2:        ', nlist2
+        write(3,*)' In copyd 1; img2:          ', img2
+        write(3,*)' In copyd 1; irtflg         ', irtflg
+        write(3,*)' -------------- COPYING NOW -----------------------'
+        write(3,*)' '
+#endif
+	
         NINDX1 = 1
         NINDX2 = 1
 
         DO       ! LOOP OVER ALL IMAGES/STACKS
 
 C          DO NOT REPORT FILE INFO IF WHOLE STACK (VERBOSE IN COMMON)
-	   IF (NSTACK1 > 0 .AND. NSTACK2 >= 0) VERBOSE = .FALSE. 
+	   !!!!!!!IF (NSTACK1 > 0 .AND. NSTACK2 >= 0) VERBOSE = .FALSE. 
 
 C          COPY THE DESIRED NUMBER OF DATA RECORDS
            DO IREC = 1,NY1 * NZ1
@@ -226,22 +231,34 @@ C          COPY THE DESIRED NUMBER OF DATA RECORDS
               CALL WRTLIN(LUN2,BUF,NX1,IREC)
            ENDDO
 
+
 C          OPEN NEXT SET OF I/O FILES, UPDATES NINDX1 & NINDX2 
-           !write(3,*)' In copyd, Calling nextfiles:',nindx1,nindx2 
+#if defined (SP_DBUGIO)  
+           write(3,*)'   ' 
+           write(3,*)' In copyd 6; nindx1,nindx2: ',nindx1,nindx2 
+           write(3,*)' In copyd 6; nlist1,nlist2: ',nlist1,nlist2 
+           write(3,*)' In copyd 6; img1,img2:     ',img1,img2 
+           write(3,*)' In copyd 6; CALLING NEXTFILES NOW NNNNNNNNNNNNNN'
+#endif
 
            CALL NEXTFILES(NINDX1,NINDX2,  ILIST1,ILIST2, 
      &                    .FALSE., LUNXM1,LUNXM2,
-     &                    NGOT1,NGOT2,    NSTACK1,NSTACK2,  
+     &                    NLIST1,NLIST2,    NSTACK1,NSTACK2,  
      &                    LUN1,LUN1,LUN2, FILNAM1,FILNAM2,
      &                    IMG1,IMG2, IRTFLG)
 
-           !write(3,*) ' In copyd, After nextfiles, irtflg',irtflg
-           !if (irtflg .ne. 0) then
-           !write(3,'(A,4i6)') 
-           !&        ' Nextfiles img1,img2,irtflg:',img1,img2,irtflg
-           !write(3,'(A,4i6)') 
-           !&        ' Nextfiles nindx1,nindx2:',nindx1,nindx2
-           !endif
+#if defined (SP_DBUGIO)
+           write(3,*)'   ' 
+           write(3,*)' In copyd 7; irtflg   ', irtflg
+           write(3,*)' In copyd 7; img1:    ', img1
+           write(3,*)' In copyd 7; img2:    ', img2
+           write(3,*)' In copyd 7; nlist1:  ', nlist1
+           write(3,*)' In copyd 7; nlist2:  ', nlist2
+           write(3,*)' In copyd 7; nstack1: ', nstack1
+           write(3,*)' In copyd 7; nstack2: ', nstack2
+           write(3,*)' In copyd 7; LOOPING NOW -----------------------'
+           write(3,*)'   '
+#endif
 
            IF (IRTFLG .NE. 0) EXIT      ! ERROR / END OF INPUT STACK
        ENDDO
